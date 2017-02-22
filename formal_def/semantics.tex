@@ -1,0 +1,301 @@
+
+\section{blablabla\label{sec:semantics}}
+
+Assume that heap and stack are initialised to zero.
+
+\[
+    \begin{rclarray}
+        \loc \in \Loc & \defeq & \Nat \\
+        \val \in \Val & \defeq & \Nat \uplus \Loc \\
+        \Var & \defeq & \Set{ \vx, \vy, \dots } \\
+        \ts \in \Timestamp & \defeq & \Nat \\
+        \hp \in \Heap & \defeq & \Loc \parfun \Val \\
+        \stk \in \Stack & \defeq & \Var \to \Val \\
+        \lstt = (\hp, \stk, \rs, \ws ) \in \Localstate & \defeq & \Stack \times \Heap \times \powerset{\Loc} \times \powerset{\Loc} \\
+        \tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \Val ) \\
+        \ThreadID & \defeq & \Set{ i , j, \dots } \\
+        (\tshp, \stk, \ts) \in \Threadstate & \defeq & \Timestampheap \times \Stack \times \Timestamp \\
+        \tdpl \in \Threadpool & \defeq & \ThreadID \parfun \Stack \times \Timestamp \times \prog \\
+        \stt \in \State & \defeq & \Timestampheap \times \Threadpool \\
+    \end{rclarray}
+\]
+
+No side effect of evaluation of arithmetic expression.
+
+\[
+    \begin{syntax}{\texpr}
+              \val \quad            |
+        \quad \var \quad            |
+        \quad \texpr + \texpr \quad |
+        \quad \texpr * \texpr \quad |
+        \quad \dots 
+    \end{syntax}
+\]
+
+No side effect of evaluation of boolean expression.
+
+\[
+    \begin{rclarray}
+        \eval[\stk]{\val} & \defeq & \val \\
+        \eval[\stk]{\var} & \defeq & \stk(\val) \\
+        \eval[\stk]{\texpr[1] + \texpr[2]} & \defeq & \eval[\stk,\hp]{\texpr[1]} + \eval[\stk,\hp]{\texpr[2]}   \\
+        \eval[\stk]{\texpr[1] * \texpr[2]} & \defeq & \eval[\stk,\hp]{\texpr[1]} * \eval[\stk,\hp]{\texpr[2]}  
+    \end{rclarray}
+\]
+
+\[
+    \begin{syntax}{\tbool}
+              \true \quad                  |
+        \quad \false \quad                 |
+        \quad \texpr = \texpr \quad        |
+        \quad \texpr < \texpr \quad        |
+        \quad \boolnot \tbool \quad        |
+        \quad \tbool \booland \tbool \quad |
+        \quad \tbool \boolor \tbool \quad  |
+        \quad \dots 
+    \end{syntax}
+\]
+
+\[
+    \begin{rclarray}
+        \eval[\stk]{\true} & \defeq & \true \\
+        \eval[\stk]{\false} & \defeq & \false \\
+        \eval[\stk]{\texpr[1] = \texpr[2]} & \defeq & \eval[\stk,\hp]{\texpr[1]} = \eval[\stk,\hp]{\texpr[2]}   \\
+        \eval[\stk]{\texpr[1] < \texpr[2]} & \defeq & \eval[\stk,\hp]{\texpr[1]} < \eval[\stk,\hp]{\texpr[2]}   \\
+        \eval[\stk]{\boolnot \tbool} & \defeq & \neg \eval[\stk,\hp]{\tbool} \\
+        \eval[\stk]{\tbool[1] \booland \tbool[2]} & \defeq & \eval[\stk,\hp]{\tbool[1]} \land \eval[\stk,\hp]{\tbool[2]}  \\
+        \eval[\stk]{\tbool[1] \boolor \tbool[2]} & \defeq & \eval[\stk,\hp]{\tbool[1]} \lor \eval[\stk,\hp]{\tbool[2]}  
+    \end{rclarray}
+\]
+
+\[
+    \begin{syntax}{\tcmd}
+              \tskip \quad                     |
+        \quad \tass{\vx}{\texpr} \quad         |
+        \quad \tmutate{\texpr}{\texpr} \quad   |
+        \quad \tderef{\vx}{\texpr} \quad       |
+        \quad \tif{\tbool}{\tcmd}{\tcmd} \quad | \\
+              \tloop{\tbool}{\tcmd} \quad      |
+        \quad \tcmd \tseq \tcmd
+    \end{syntax}
+\]
+
+\[
+    \begin{rclarray}
+        \dontcare, \dontcare, \dontcare, \dontcare, \dontcare \ \localtransfer \ \dontcare, \dontcare, \dontcare, \dontcare, \dontcare & \defeq & \Localstate \times \tcmd \times \Localstate \times \tcmd \\
+    \end{rclarray}
+\]
+
+\[
+    \infer[ass]{%
+        \stk, \hp, \rs, \ws, \tass{\var}{\texpr} \ \localtransfer \  \stk \remapsto{\var}{\val}, \hp, \rs, \ws, \tskip
+    }{%
+    \eval[\stk]{\texpr} = \val
+    }
+\]
+
+\[
+    \infer[mutate]{%
+        \stk, \hp, \rs, \ws, \tmutate{\texpr[1]}{\texpr[2]} \ \localtransfer \  \stk, \hp \remapsto{\loc}{\val}, \rs, \ws \cup \Set{\loc}, \tskip
+    }{%
+        \eval[\stk]{\texpr[1]} = \loc \quad 
+        \eval[\stk]{\texpr[2]} = \val \quad 
+    }
+\]
+
+\[
+    \infer[deref]{%
+        \stk, \hp, \rs, \ws, \tderef{\var}{\texpr} \ \localtransfer \  \stk \remapsto{\var}{\val}, \hp, \rs \cup \Set{\loc}, \ws, \tskip
+    }{%
+        \eval[\stk]{\texpr} = \loc \quad 
+        \val = \hp(\loc)
+    }
+\]
+
+\[
+    \infer[ifelsetrue]{%
+        \stk, \hp, \tif{\tbool}{\tcmd[1]}{\tcmd[2]} \ \localtransfer \  \stk, \hp, \tcmd[1]
+    }{%
+        \eval[\stk]{\tbool} = \true
+    }
+\]
+
+\[
+    \infer[ifelsefalse]{%
+        \stk, \hp, \tif{\tbool}{\tcmd[1]}{\tcmd[2]} \ \localtransfer \  \stk, \hp, \tcmd[2]
+    }{%
+        \eval[\stk]{\tbool} = \false
+    }
+\]
+
+\[
+    \infer[whiletrue]{%
+        \stk, \hp, \tloop{\tbool} \tcmd \ \localtransfer \  \stk, \hp,  \tcmd \tseq \tloop{\tbool} \tcmd
+    }{%
+        \eval[\stk]{\tbool} = \true
+        %\stk, \hp, \tcmd \ \localtransfer \  \stk', \hp', \tskip
+    }
+\]
+
+\[
+    \infer[whilefalse]{%
+        \stk, \hp, \tloop{\tbool} \tcmd \ \localtransfer \  \stk, \hp, \tskip
+    }{%
+        \eval[\stk]{\tbool} = \false \quad
+    }
+\]
+
+\[
+    \infer[seqskip]{%
+        \stk, \hp, \tskip \tseq \tcmd[2] \ \localtransfer \  \stk, \hp, \tcmd[2]
+    }{%
+    }
+\]
+
+\[
+    \infer[seqnonskip]{%
+        \stk, \hp, \tcmd[1] \tseq \tcmd[2] \ \localtransfer \  \stk', \hp', \tcmd[1]' \tseq \tcmd[2]
+    }{%
+        \stk, \hp, \tcmd[1] \ \localtransfer \  \stk', \hp', \tcmd[1]'
+    }
+\]
+
+The semantics of transaction are interleaving of start, commit, and restart.
+
+\[
+    \begin{syntax}{\prog}
+              \pemp \quad               |
+        \quad \ptrans{\tcmd} \quad      |
+        \quad \prog \pcond \prog \quad  |
+        \quad \prept{\prog} \quad       |
+        \quad \prog \pseq \prog \quad   |
+        \quad \pfork{\var}{\prog} \quad |
+        \quad \pjoin{\texpr}   
+    \end{syntax}
+\]
+
+\[
+    \begin{rclarray}
+        \tll \in \Translabel & \defeq & 
+              \lid \quad                |
+              \quad \lfork{\prog} \quad |
+        \quad \ljoin{\tid,\ts} \\
+        \dontcare, \dontcare, \dontcare, \dontcare \ \threadtransfer{ \dontcare } \ \dontcare, \dontcare, \dontcare, \dontcare & \defeq & \Threadstate \times \prog \times \Translabel \times \Threadstate \times \prog \\
+    \end{rclarray}
+\]
+
+\[
+    \begin{rclarray}
+        \func{startstate}(\tshp,\ts) & \defeq & \lambda \loc \ldotp \tshp(\loc)(\max(\Set{\ \ts' \ \middle| \ \ts' \leq \ts \land \ts' \in \dom(\tshp(\loc)) }))
+    \end{rclarray}
+\]
+
+\[
+    \begin{rclarray}
+            \pred{allowcommit}(\tshp,\ws,\ts[s]) & \defeq & \forall \loc \in \ws, \ts \geq \ts[s] \ldotp \tshp(\loc)(\ts)\undef
+    \end{rclarray}
+\]
+
+\[
+    \begin{rclarray}
+        \func{commit}(\tshp,\hp,\ws,\ts[e]) & \defeq &
+        \lambda \loc \ldotp
+        \begin{funcarray}
+            \tshp(\loc) & \loc \notin \ws \\
+            \tshp(\loc) \uplus \Set{ \ts[e] \mapsto \hp(\loc)} & \loc \in \ws \\
+        \end{funcarray}
+    \end{rclarray}
+\]
+
+\[
+    \infer[commit]{%
+        \tshp, \stk, \ts, \ptrans{\tcmd} \ \threadtransfer{\lid} \  \tshp', \stk', \ts[e], \pemp
+    }{%
+        \begin{array}{c}
+            \ts[s] \geq \ts \quad \stk, \func{statestate}(\tshp, \ts[s]), \emptyset, \emptyset \localtransfer^{*} \stk', \hp, \rs, \ws \\
+            \pred{allowcommit}(\tshp,\ws,\ts[s]) \quad \ts[e] > \ts[s] \quad \tshp' = \func{commit}(\tshp,\hp,\ws,\ts[e])
+        \end{array}
+    }
+\]
+
+\[
+    \infer[choiceleft]{%
+        \tshp, \stk, \ts, \prog[1] \pcond \prog[2] \ \threadtransfer{\lid} \  \tshp, \stk, \ts, \prog[1]
+    }{%
+    }
+\]
+
+\[
+    \infer[choiceright]{%
+        \tshp, \stk, \ts, \prog[1] \pcond \prog[2] \ \threadtransfer{\lid} \  \tshp, \stk, \ts, \prog[2]
+    }{%
+    }
+\]
+
+\[
+    \infer[rep]{%
+        \tshp, \stk, \ts, \prept{\prog} \ \threadtransfer{\lid} \  \tshp, \stk, \ts, \prog \pseq \prept{\prog}
+    }{%
+    }
+\]
+
+\[
+    \infer[seqskip]{%
+        \tshp, \stk, \ts, \pemp \pseq \prog \ \threadtransfer{\lid} \  \tshp, \stk, \ts, \prog
+    }{%
+    }
+\]
+
+\[
+    \infer[seqnoskip]{%
+        \tshp, \stk, \ts, \prog[1] \pseq \prog[2] \ \threadtransfer{\tll} \  \tshp', \stk', \ts', \prog[1]' \pseq \prog[2]
+    }{%
+        \tshp, \stk, \ts, \prog[1] \ \threadtransfer{\tll} \  \tshp', \stk', \ts', \prog[1]' 
+    }
+\]
+
+\[
+    \infer[fork]{%
+        \tshp, \stk, \ts, \pfork{\var}{\prog} \ \threadtransfer{\lfork{\tid,\prog}} \  \tshp, \stk\remapsto{\var}{\tid}, \ts, \pemp 
+    }{%
+    }
+\]
+
+\[
+    \infer[join]{%
+        \tshp, \ts, \pjoin{\texpr} \ \threadtransfer{\ljoin{\eval[\stk]{\texpr},\ts'}} \  \tshp, \max\Set{\ts,\ts'}, \pemp 
+    }{%
+    }
+\]
+
+\[
+    \begin{rclarray}
+        \dontcare, \dontcare \ \globaltransfer{ \dontcare } \ \dontcare, \dontcare & \defeq & \State \times \Translabel \times \State  \\
+    \end{rclarray}
+\]
+
+\[
+    \infer[single]{%
+        \tshp, \tdpl \uplus \Set{ \tid \mapsto (\stk, \ts, \prog) } \ \globaltransfer{\tll} \  \tshp', \tdpl \uplus \Set{ \tid \mapsto (\stk', \ts', \prog') }
+    }{%
+        \tshp, \stk, \ts, \prog \ \threadtransfer{\tll} \  \tshp', \stk', \ts', \prog' 
+        \quad \tll \notin \Set{\lfork{\dontcare,\dontcare},\ljoin{\dontcare,\dontcare}}
+    }
+\]
+
+\[
+    \infer[fork]{%
+        \tshp, \tdpl \uplus \Set{ \tid \mapsto (\stk, \ts, \prog) } \ \globaltransfer{\lfork{\tid',\prog''}} \  \tshp', \tdpl \uplus \Set{ \tid \mapsto (\stk', \ts', \prog'), \tid' \mapsto (\lambda \var \ldotp 0, \ts', \prog'') }
+    }{%
+        \tshp, \stk, \ts, \prog \ \threadtransfer{\lfork{\tid',\prog''}} \  \tshp', \stk', \ts', \prog' 
+    }
+\]
+
+\[
+    \infer[join]{%
+        \tshp, \tdpl \uplus \Set{ \tid \mapsto (\stk, \ts, \prog), \tid' \mapsto (\stk', \ts'', \pemp) } \ \globaltransfer{\ljoin{\tid',\ts''}} \  \tshp', \tdpl \uplus \Set{ \tid \mapsto (\stk', \ts', \prog')}
+    }{%
+        \tshp, \stk, \ts, \prog \ \threadtransfer{\ljoin{\tid',\ts''}} \  \tshp', \stk', \ts', \prog' 
+    }
+\]
+
