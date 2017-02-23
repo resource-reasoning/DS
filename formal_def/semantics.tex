@@ -14,7 +14,8 @@ Assume that heap and stack are initialised to zero.
         \rs \in \Readset, \ws \in \Writeset & \defeq & \powerset{\Loc} \\
         \lstt = (\hp, \stk, \rs, \ws ) \in \Localstate & \defeq & \Stack \times \Heap \times \Readset \times \Writeset \\
         \op \in \Operation & \defeq & \Set{\opr, \opw} \\
-        \tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \Val \times \Operation) \\
+        \TransID & \defeq & \Set{ \alpha , \beta, \dots } \\
+        \tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \Val \times \Operation \times \TransID) \\
         \ThreadID & \defeq & \Set{ i , j, \dots } \\
         (\tshp, \stk, \ts) \in \Threadstate & \defeq & \Timestampheap \times \Stack \times \Timestamp \\
         \tdpl \in \Threadpool & \defeq & \ThreadID \parfun \Stack \times \Timestamp \times \prog \\
@@ -182,14 +183,14 @@ The semantics of transaction are interleaving of start, commit, and restart.
         \tll \in \Translabel & \defeq & 
               \lid \quad                |
               \quad \lfork{\prog} \quad |
-        \quad \ljoin{\tid,\ts} \\
+        \quad \ljoin{\thid,\ts} \\
         \dontcare, \dontcare, \dontcare, \dontcare \ \threadtransfer{ \dontcare } \ \dontcare, \dontcare, \dontcare, \dontcare & \defeq & \Threadstate \times \prog \times \Translabel \times \Threadstate \times \prog \\
     \end{rclarray}
 \]
 
 \[
     \begin{rclarray}
-        \func{startstate}(\tshp,\ts) & \defeq & \lambda \loc \ldotp \tshp(\loc)(\max(\Set{\ \ts' \ \middle| \ \ts' \leq \ts \land \tshp(\ts') = (\dontcare,\wop) }))
+        \func{startstate}(\tshp,\ts) & \defeq & \lambda \loc \ldotp \tshp(\loc)(\max(\Set{\ \ts' \ \middle| \ \ts' \leq \ts \land \tshp(\ts') = (\dontcare,\wop, \dontcare) }))
     \end{rclarray}
 \]
 
@@ -197,25 +198,19 @@ The semantics of transaction are interleaving of start, commit, and restart.
     \begin{rclarray}
         \pred{allowcommit}(\tshp,\ws,\rs,\ts[s],\ts[e]) & \defeq & 
         \pred{atomicreadwrite}(\tshp,\ws,\rs,\ts[s],\ts[e]) \land {} \\
-        & &
-        \begin{formulea}
-        \end{formulea}  \\
+        & & \pred{consistent}(\tshp,\ws,\rs,\ts[s],\ts[e]) \\
         \pred{atomicweadrrite}(\tshp,\ws,\rs,\ts[s],\ts[e]) & \defeq  & \forall \loc \in \ws \cup \rs \ldotp \tshp(\loc)(\ts[s])\undef \land \tshp(\loc)(\ts[s])\undef \\
-        \pred{consistent}(\tshp,\ws,\rs,\ts[s],\ts[e]) & \defeq & \forall \ts \in [\ts[s],\ts[e]], \loc \in \ws \ldotp \tshp(\loc)(\ts) \neq (\dontcare, \wop) \land {} \\
+        \pred{consistent}(\tshp,\ws,\rs,\ts[s],\ts[e]) & \defeq & \forall \ts \in [\ts[s],\ts[e]], \loc \in \ws \ldotp \tshp(\loc)(\ts) \neq (\dontcare, \wop, \dontcare) \land {} \\
                                                        & & \exists \ts[min] = \min(\Set{\ts'' \ \middle| \ \ts'' \geq \ts[e] \land \tshp(l)(\ts'')\isdef}) \ldotp \\
-                                                       & & \ts[min] \neq \bot \implies \tshp(\loc)(\ts[min]) = (\dontcare, \wop) 
-    \end{rclarray}
-\]
-
-\[
-    \begin{rclarray}
+                                                       & & \ts[min] \neq \bot \implies \tshp(\loc)(\ts[min]) = (\dontcare, \wop, \dontcare) \\
         \func{commit}(\tshp,\hp,\ws,\rs,\ts[s],\ts[e]) & \defeq &
         \lambda \loc \ldotp
         \begin{funcarray}
             \tshp(\loc) & \loc \notin \ws \cup \rs \\
-            \tshp(\loc) \uplus \Set{ \ts[e] \mapsto (\hp(\loc),\wop)} & \loc \in \ws \\
-            \tshp(\loc) \uplus \Set{ \ts[s] \mapsto (\hp(\loc),\rop)} & \loc \in \rs \\
-        \end{funcarray}
+            \tshp(\loc) \uplus \Set{ \ts[e] \mapsto (\hp(\loc),\wop,\tsid)} & \loc \in \ws \\
+            \tshp(\loc) \uplus \Set{ \ts[s] \mapsto (\hp(\loc),\rop,\tsid)} & \loc \in \rs \\
+        \end{funcarray} \\
+        & & \texttt{where} \  \tsid \notin \Set{\tshp(\loc)(\ts)\projection{3} \ \middle| \ \loc \in \dom(\tshp) \land \ts \in \dom(\tshp(\loc))} \\
     \end{rclarray}
 \]
 
@@ -275,7 +270,7 @@ The semantics of transaction are interleaving of start, commit, and restart.
 
 \[
     \infer[fork]{%
-        \tshp, \stk, \ts, \pfork{\var}{\prog} \ \threadtransfer{\lfork{\tid,\prog}} \  \tshp, \stk\remapsto{\var}{\tid}, \ts, \pemp 
+        \tshp, \stk, \ts, \pfork{\var}{\prog} \ \threadtransfer{\lfork{\thid,\prog}} \  \tshp, \stk\remapsto{\var}{\thid}, \ts, \pemp 
     }{%
     }
 \]
@@ -295,7 +290,7 @@ The semantics of transaction are interleaving of start, commit, and restart.
 
 \[
     \infer[single]{%
-        \tshp, \tdpl \uplus \Set{ \tid \mapsto (\stk, \ts, \prog) } \ \globaltransfer{\tll} \  \tshp', \tdpl \uplus \Set{ \tid \mapsto (\stk', \ts', \prog') }
+        \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \prog) } \ \globaltransfer{\tll} \  \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', \prog') }
     }{%
         \tshp, \stk, \ts, \prog \ \threadtransfer{\tll} \  \tshp', \stk', \ts', \prog' 
         \quad \tll \notin \Set{\lfork{\dontcare,\dontcare},\ljoin{\dontcare,\dontcare}}
@@ -304,17 +299,25 @@ The semantics of transaction are interleaving of start, commit, and restart.
 
 \[
     \infer[fork]{%
-        \tshp, \tdpl \uplus \Set{ \tid \mapsto (\stk, \ts, \prog) } \ \globaltransfer{\lfork{\tid',\prog''}} \  \tshp', \tdpl \uplus \Set{ \tid \mapsto (\stk', \ts', \prog'), \tid' \mapsto (\lambda \var \ldotp 0, \ts', \prog'') }
+        \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \prog) } \ \globaltransfer{\lfork{\thid',\prog''}} \  \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', \prog'), \thid' \mapsto (\lambda \var \ldotp 0, \ts', \prog'') }
     }{%
-        \tshp, \stk, \ts, \prog \ \threadtransfer{\lfork{\tid',\prog''}} \  \tshp', \stk', \ts', \prog' 
+        \tshp, \stk, \ts, \prog \ \threadtransfer{\lfork{\thid',\prog''}} \  \tshp', \stk', \ts', \prog' 
     }
 \]
 
 \[
     \infer[join]{%
-        \tshp, \tdpl \uplus \Set{ \tid \mapsto (\stk, \ts, \prog), \tid' \mapsto (\stk', \ts'', \pemp) } \ \globaltransfer{\ljoin{\tid',\ts''}} \  \tshp', \tdpl \uplus \Set{ \tid \mapsto (\stk', \ts', \prog')}
+        \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \prog), \thid' \mapsto (\stk', \ts'', \pemp) } \ \globaltransfer{\ljoin{\thid',\ts''}} \  \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', \prog')}
     }{%
-        \tshp, \stk, \ts, \prog \ \threadtransfer{\ljoin{\tid',\ts''}} \  \tshp', \stk', \ts', \prog' 
+        \tshp, \stk, \ts, \prog \ \threadtransfer{\ljoin{\thid',\ts''}} \  \tshp', \stk', \ts', \prog' 
     }
 \]
 
+\begin{lem}
+    All the reads of a transaction happen in the same time, so do all the writes. This is 
+    \( \forall \tshp, \loc, \loc', \ts, \ts', \tsid, \op \in \Set{\rop, \wop} \ldotp \tshp(\loc)(\ts) =  \tshp(\loc')(\ts') = (\dontcare, \op, \tsid) \implies \ts = \ts' \).
+\end{lem}
+
+\begin{lem}
+    No 
+\end{lem}
