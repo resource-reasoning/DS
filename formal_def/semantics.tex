@@ -1,4 +1,3 @@
-
 \section{semantics\label{sec:semantics}}
 
 Assume that heap and stack are initialised to zero.
@@ -278,7 +277,7 @@ The semantics of transaction are interleaving of start, commit, and restart.
 
 \[
     \infer[join]{%
-        \tshp, \ts, \pjoin{\texpr} \ \threadtransfer{\ljoin{\eval{\texpr}_{\stk},\ts'}} \  \tshp, \max\Set{\ts,\ts'}, \pemp 
+        \tshp, \stk, \ts, \pjoin{\texpr} \ \threadtransfer{\ljoin{\eval{\texpr}_{\stk},\ts'}} \  \tshp, \max\Set{\ts,\ts'}, \pemp 
     }{%
     }
 \]
@@ -314,20 +313,11 @@ The semantics of transaction are interleaving of start, commit, and restart.
     }
 \]
 
-\begin{rclarray}
-    (\settrans, \tvis, \tar) = \func{graph}(\tshp) & \defeq & (\Set{ \tsid \ \middle| \ \forall \loc \ldotp \tshp(\loc) = (\dontcare, \tsid, \dontcare)}, \\
-                                                   & & \Set{(\tsid, \tsid') \ \middle| \ \forall \loc, \ts, \ts' \ldotp \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \wop) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \rop)}, \\
-                        & & \Set{(\tsid, \tsid') \ \middle| \ \forall \loc, \ts, \ts' \ldotp \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \wop) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \wop)}) \\
-\end{rclarray}
-
-
 \begin{lem}
-    \label{lem:atoic-rw}
-    All the reads of a transaction happen in the same time, so do all the writes. This is 
-    \( \forall \tshp, \loc, \loc', \ts, \ts', \tsid, \op \in \Set{\rop, \wop} \ldotp \tshp(\loc)(\ts) =  \tshp(\loc')(\ts') = (\dontcare, \op, \tsid) \implies \ts = \ts' \).
+    A history cannot be overwritten, i.e.\ \( \forall \tshp, \tshp', \loc,\ts \ldotp \tshp, \dontcare \globaltransfer{\dontcare} \tshp', \dontcare \land \tshp(\loc)(\ts)\isdef \implies \tshp(\loc)(\ts) = \tshp'(\loc)(\ts)\)
 \end{lem}
 \begin{proof}
-    From the semantics.
+    From the \( \pred{allowcommit} \).
 \end{proof}
 
 \begin{lem}
@@ -336,19 +326,112 @@ The semantics of transaction are interleaving of start, commit, and restart.
     \( \forall \tshp, \loc, \loc', \ts, \ts', \tsid \ldotp \tshp(\loc)(\ts) = (\dontcare, \rop, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \wop, \tsid) \implies \ts < \ts' \).
 \end{lem}
 \begin{proof}
-    From the semantics.
+    From the semantics that \( \ts_{s} < \ts_{e} \).
 \end{proof}
 
 \begin{lem}
-    Both \tvis\ and \tar\ have no circle.
+    \label{lem:atoic-rw}
+    All the reads of a transaction happen in the same time, so do all the writes. This is 
+    \( \forall \tshp, \loc, \loc', \ts, \ts', \tsid, \op \in \Set{\rop, \wop} \ldotp \tshp(\loc)(\ts) =  \tshp(\loc')(\ts') = (\dontcare, \op, \tsid) \implies \ts = \ts' \).
 \end{lem}
 \begin{proof}
-    Assume there is a circle in \(\rtvis\), says, \( \tsid_{1} \rtvis \tsid_{2} \rtvis \dots \rtvis \tsid_{n} \rtvis \tsid_{n+1} \), where \( \tsid_{1} = \tsid_{n+1} \).
-    Therefore, \( \exists \loc_{1}, \loc_{2}, \dots, \loc_{n}, \loc_{n+1} \ldotp \loc_{1} = \loc_{n+1} \land \bigwedge\limits_{ 1 \leq i \leq n} \exists \ts, \ts' \ldotp \ts < \ts' \land \tshp(\loc_{i})(\ts) = (\dontcare, \tsid_{i}, \wop) \land \tshp(\loc_{i})(\ts') = (\dontcare, \tsid_{i+1}, \rop)\).
-    By Lemma \ref{lem:atoic-rw}, we can defined a list of reads and writes events that is order by time: \( \List{ (\tsid_{1},\wop), (\tsid_{2},\rop), (\tsid_{2},\wop), \dots, (\tsid_{n},\wop), (\tsid_{n+1},\rop) } \).
-    By the assumption, we have \( \tsid_{1} = \tsid_{n+1} \), thus this contradict Lemma \ref{lem:read-before-write}.
+    From the \( \func{commit} \).
+\end{proof}
 
-    Similarly for \(\rtar\), the list of write events  \( \List{ (\tsid_{1},\wop), (\tsid_{2},\wop), (\tsid_{2},\wop), \dots, (\tsid_{n},\wop), (\tsid_{n+1},\wop) } \) contradict Lemma \ref{lem:atoic-rw}.
+Now we need to recover \( \vis \) and \( \ar \) from \( \tshp \).
+First we need to extend the \( \tshp \) because there are some transactions that only have reads or writes.
+We stretch the time by 3, and add extra operation for those transactions.
+For a transaction \( \tsid \) that only has reads event, says in time \( \ts \), we add end operations \( (\bot, \tsid, \eop ) \) to the heap cells it reads in time \( (\ts + 1 ) \).
+Similarly for a transaction that only has writes event, we add end operations \( (\bot, \tsid, \sop ) \) in time \( (\ts-1) \).
+
+\[
+\begin{rclarray}
+    \func{stretch}(\tshp) & \defeq & \lambda \loc \ldotp \lambda \ts \ldotp
+    \begin{funcarray}
+        \tshp(\loc)(\ts') & \ts = 3 * \ts' \\
+        \texttt{undef} & o.w. \\
+    \end{funcarray} \\
+    \func{extend}(\tshp) & \defeq & \lambda \loc \ldotp \tshp(\loc) \uplus \Set{\ts + 1 \mapsto (\bot, \tsid, \eop ) \ \middle| \ \tshp(\loc)(\ts) = (\dontcare, \tsid, \rop) \land \forall \loc', \ts' \ldotp \tshp(\loc')(\ts') = (\dontcare, \tsid, \wop)} \\
+                         & & \quad \quad \quad \uplus \Set{\ts - 1 \mapsto (\bot, \tsid, \sop ) \ \middle| \ \tshp(\loc)(\ts) = (\dontcare, \tsid, \wop) \land \forall \loc', \ts' \ldotp \tshp(\loc')(\ts') = (\dontcare, \tsid, \rop)}
+\end{rclarray}
+\]
+
+\begin{lem}
+    After stretching the time by 3, there is no record in time \( 3 * \nat + 1 \) and \( 3 * \nat - 1 \).
+    Therefore after extending, there are only \( (\dontcare, \tsid, \eop) \) in time \( 3 * \ts + 1 \) and only \( (\dontcare, \tsid, \sop) \) in time \( 3 * \ts - 1 \).
+    This is \( \forall \tshp \ldotp \exists \tshp' = \func{extend} \circ \func{stetch}(\tshp) \ldotp \forall \loc, \ts \ldotp (\tshp'(\loc)(3 * \ts + 1)\isdef \implies \tshp'(\loc)(3 * \ts + 1) = (\dontacre, \dontcare, \eop) ) \land (\tshp'(\loc)(3 * \ts - 1)\isdef \implies \tshp'(\loc)(3 * \ts - 1) = (\dontacre, \dontcare, \sop) ) \).
+\end{lem}
+\begin{proof}
+    trivial.
+\end{proof}
+
+\begin{lem}
+    \label{lem:start-before-end}
+    In the extended heap, all the reads or starts of a transaction happen before all the writes or end. This is 
+    \( \forall \tshp, \loc, \loc', \ts, \ts', \op \in \Set{\rop, \sop}, \op' \in \Set{\wop, \eop}, \tsid \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \implies \ts < \ts' \).
+\end{lem}
+\begin{proof}
+    From Lemma \ref{lem:read-before-write} and the definition of \func{strech} and \func{extend}.
+\end{proof}
+
+\begin{lem}
+    \label{lem:happen-in-same-time}
+    For an extended heap, all the reads of a transaction happen in the same time, so do all the writes, starts and ends. This is 
+    \( \forall \tshp, \loc, \loc', \ts, \ts', \tsid, \op \ldotp \tshp(\loc)(\ts) =  \tshp(\loc')(\ts') = (\dontcare, \op, \tsid) \implies \ts = \ts' \).
+\end{lem}
+\begin{proof}
+    From Lemma \ref{lem:atoic-rw} and the definition of \func{strech} and \func{extend}.
+\end{proof}
+
+\begin{lem}
+    \label{lem:unique-label}
+    A transaction in an extended heap, must have either starts or reads, and either ends or writes.
+\end{lem}
+\begin{proof}
+    From the definition of \func{extend}.
+\end{proof}
+
+\[
+\begin{rclarray}
+    (\settrans, \tvis, \tar) = \func{graph}(\tshp) & \defeq & (\Set{ \tsid \ \middle| \ \forall \loc \ldotp \tshp(\loc) = (\dontcare, \tsid, \dontcare)}, \\
+                                                   & & \Set{(\tsid, \tsid') \ \middle| \ 
+    \begin{array}{@{}l@{}}
+        \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop, \eop}, \op' \in \Set{\rop, \sop} \ldotp \\
+        \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \op')
+    \end{array}
+}, \\
+                                                   & & \Set{(\tsid, \tsid') \ \middle| \ 
+    \begin{array}{@{}l@{}}
+        \exists \loc, \loc', \ts, \ts', \op, \op' \in \Set{\wop, \eop} \ldotp \\
+        \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \op')
+    \end{array}
+}, \\
+\end{rclarray}
+\]
+
+\begin{lem}
+    For an extended heap, the corresponding \tvis\ and \tar\ have no circle.
+\end{lem}
+\begin{proof}
+    Assume there is a circle in \(\rvis\), says, \( \tsid_{1} \rvis \tsid_{2} \rvis \dots \rvis \tsid_{n} \rvis \tsid_{n+1} \), where \( \tsid_{1} = \tsid_{n+1} \).
+    Therefore, \( \bigwedge\limits_{ 1 \leq i \leq n} \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop, \eop}, \op' \in \Set{\rop, \sop} \ldotp \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid_{i}, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid_{i+1}, \op')\).
+    By Lemma \ref{lem:unique-label} we can relabel read to start and write to end.
+    Then by Lemma \ref{lem:happen-in-same-time}, we can define a list of starts and ends events that is ordered by time: \( \List{ (\tsid_{1},\eop), (\tsid_{2},\sop), (\tsid_{2},\eop), \dots, (\tsid_{n},\eop), (\tsid_{n+1},\sop) } \).
+    By the assumption, we have \( \tsid_{1} = \tsid_{n+1} \), thus this contradict Lemma \ref{lem:start-before-end}.
+
+    Similarly for \(\rtar\), the list of write events  \( \List{ (\tsid_{1},\eop), (\tsid_{2},\eop), (\tsid_{2},\eop), \dots, (\tsid_{n},\eop), (\tsid_{n+1},\eop) } \) contradict Lemma \ref{lem:happen-in-same-time}.
+\end{proof}
+
+\begin{lem}
+    Given a \( \tshp \), the corresponding \((\settrans, \tvis, \tar)\) can be extended so that it satisfies snapshot isolation.
+\end{lem}
+\begin{proof}
+    First, we extend the relations \( \tar \) to a total order.
+    \begin{itemize}
+        \item Two write happens in the same time.
+        \item Two ends happens in the same time.
+    \end{itemize}
+    !!Inductively pick a order.!!
 \end{proof}
 
 A better proof is first to flatten the heap into a list of read write events. for those events happen in the same time, we need to prove we can order then in anyway without change the result because they are complete disjointed. 
