@@ -6,7 +6,7 @@ A event is a triple consisting of the value being read or written, the operation
 We use thread pool to model the concurrency.
 Each thread has a local stack and a local time, but a globally shared time stamp heap.
 Therefore a thread pool is a partial functions from thread identifiers to the corresponding stack, time and transactions.
-The state of each transaction, i.e.\ local state, are a stack which is shared between transactions in the same thread, a heap that is a  snapshot of the time stamp heap, and fingerprints that are the heap locations being read and written.
+The state of each transaction, i.e.\ local state, are a stack which is shared between transactions from the same thread, a heap that is a  snapshot of the time stamp heap, and fingerprints that are the heap locations being read and written.
 
 \[
     \begin{rclarray}
@@ -28,7 +28,7 @@ The state of each transaction, i.e.\ local state, are a stack which is shared be
     \end{rclarray}
 \]
 
-No side effect of evaluation of arithmetic expression.
+The arithmetic expression and boolean expression are standard and have no side effect.
 
 \[
     \begin{syntax}{\expr}
@@ -39,8 +39,6 @@ No side effect of evaluation of arithmetic expression.
         \quad \dots 
     \end{syntax}
 \]
-
-No side effect of evaluation of boolean expression.
 
 \[
     \begin{rclarray}
@@ -87,6 +85,10 @@ No side effect of evaluation of boolean expression.
         \quad \cmd \pseq \cmd
     \end{syntax}
 \]
+
+The syntax and semantics of a single transaction are standard except \emph{mutate} and \emph{deref}.
+The \emph{mutate} also adds the location being written to the write fingerprint set \( \ws \) and the \emph{deref} adds the location to \( \rs \).
+Note that there is no parallel composition, because it is within a transaction.
 
 \[
     \begin{rclarray}
@@ -169,7 +171,9 @@ No side effect of evaluation of boolean expression.
     }
 \]
 
-The semantics of transaction are interleaving of start, commit, and restart.
+A program is sequential and parallel composition of transactions.
+To give semantics for a program, we extend the syntax by adding an extra waiting command, \( \pwait{\thid} \), as suffix.
+Intuitively, this \( \pwait{\thid} \) indicates that current thread is waiting another thread identified by \( \thid \) until it commits all its transactions and then join the thread.
 
 \[
     \begin{syntax}{\prog}
@@ -190,10 +194,20 @@ The semantics of transaction are interleaving of start, commit, and restart.
     \end{syntax}
 \]
 
+We will explain the \emph{commit}, \emph{par} and \emph{wait}, and the rest are straightforward.
+We give label to each transition, and these labels are only usefully for parallel composition.
+
+The \emph{commit} rule says that a transaction prophesies a starting time when this transaction takes a snapshot \( \hp_{s} \) and runs locally, and an ending time when it successfully commits ensured by the \pred{allowcommit}.
+
+The \emph{par} rule forks a new thread and appends a \( \pwait{\thid} \), parametrised by the new thread identifier \( \thid \), at the merging point.
+The \emph{wait} rule waits the thread \( \thid \) until it finishes, then joins the thread and updates the time to the maximum between the two threads.
+Note that these two rules are labelled with \( \lfork{\thid, \prog} \) or \( \ljoin{\thid, \ts} \) which are used by the semantics of a top level theadpool.
+
 \[
     \begin{rclarray}
         \tll \in \Translabel & \defeq & 
               \lid \quad              |
+        \quad \lcmt{\tsid} \quad |
         \quad \lfork{\thid,\prog} \quad |
         \quad \ljoin{\thid,\ts} \\
         ( \dontcare, \dontcare ) \ \threadtransfer{ \dontcare } \ ( \dontcare, \dontcare ) & \defeq &  ( \Threadstate \times \progext ) \times \Translabel \times  ( \Threadstate \times \progext )  \\
@@ -203,27 +217,27 @@ The semantics of transaction are interleaving of start, commit, and restart.
 \[
     \begin{rclarray}
         \func{startstate}(\tshp,\ts) & \defeq & \lambda \loc \ldotp \val \\
-                                     & & \texttt{where} \ \exists \ts' \leq \ts \ldotp \tshp(\loc)(\ts') = \Set{(\val,\wop, \dontcare) } \land \forall \ts'' \in ( \ts', \ts''] \ldotp (\dontcare,\wop,\dontcare) \notin \tshp(\loc)(\ts') \\
+                                     & & \texttt{where} \ \exists \ts' \leq \ts \ldotp \tshp(\loc)(\ts') = \Set{(\val,\wop, \dontcare) } \land \forall \ts'' \in ( \ts', \ts) \ldotp (\dontcare,\wop,\dontcare) \notin \tshp(\loc)(\ts'') \\
         \pred{allowcommit}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq & 
         \pred{atomicop}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) \land \pred{consistent}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) \\
         \pred{atomicop}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq  & \forall \loc_{w} \in \ws \ldotp \tshp(\loc_{w})(\ts_{e})\undef \land \forall \loc_{r} \in \rs \ldotp (\dontcare,\wop,\dontcare) \notin \tshp(\loc_{r})(\ts_{s})\\
-        \pred{consistent}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq & \forall \ts \in (\ts_{s},\ts_{e}], \loc_{w} \in \ws \ldotp (\dontcare, \wop, \dontcare)  \notin \tshp(\loc_{w})(\ts) \land {} \\
-                                                         & & \forall \tsid \ldotp \nexists \ts_{\tsid s} < \ts_{e}, \ts_{\tsid e} > \ts_{e} \ldotp \tshp(\loc)(\ts_{\tsid s}) = (\dontcare, \rop, \tsid) \land \tshp(\loc)(\ts_{\tsid e}) = (\dontcare, \wop, \tsid) \land {} \\
-                                                         & & \exists \ts_{min} = \min(\Set{\ts'' \ \middle| \ \ts'' \geq \ts_{e} \land \tshp(l)(\ts'')\isdef}) \ldotp (\dontcare, \rop, \dontcare) \notin \tshp(\loc)(\ts_{min}) \\
-        \func{commit}(\tshp,\hp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq &
+        \pred{consistent}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq & \forall \loc_{w} \in \ws , \ts \in (\ts_{s},\ts_{e}) \ldotp (\dontcare, \wop, \dontcare)  \notin \tshp(\loc_{w})(\ts) \land {} \\
+                                                         & & \forall \tsid \ldotp \nexists \ts_{\tsid s} < \ts_{e}, \ts_{\tsid e} > \ts_{e} \ldotp \tshp(\loc_{w})(\ts_{\tsid s}) = (\dontcare, \rop, \tsid) \land \tshp(\loc_{w})(\ts_{\tsid e}) = (\dontcare, \wop, \tsid) \land {} \\
+                                                         & & \exists \ts_{min} = \min(\Set{\ts'' \ \middle| \ \ts'' > \ts_{e} \land \tshp(\loc_{w})(\ts'')\isdef}) \ldotp (\dontcare, \rop, \dontcare) \notin \tshp(\loc_{w})(\ts_{min}) \\
+        \func{commit}(\tshp,\hp,\ws,\rs, \tsid, \ts_{s},\ts_{e}) & \defeq &
         \lambda \loc \ldotp
         \begin{funcarray}
             \tshp(\loc) & \loc \notin \ws \cup \rs \\
             \tshp(\loc)\remapsto{\ts_{e}}{\tshp(\loc)(\ts_{e}) \uplus \Set{(\hp(\loc),\wop,\tsid)}} & \loc \in \ws \\
             \tshp(\loc)\remapsto{\ts_{s}}{\tshp(\loc)(\ts_{s}) \uplus \Set{(\hp(\loc),\rop,\tsid)}} & \loc \in \rs \\
         \end{funcarray} \\
-        & & \texttt{where} \  \tsid \notin \Set{\tsid' \ \middle| \ (\dontcare,\dontcare,\tsid') \in \bigcup\limits_{\loc,\ts}\tshp(\loc)(\ts)} \\
+        \func{freshTransId}(\tshp)  & \defeq & \tsid \ \texttt{where} \ \tsid \notin \Set{\tsid' \ \middle| \ (\dontcare,\dontcare,\tsid') \in \bigcup\limits_{\loc,\ts}\tshp(\loc)(\ts)} \\
     \end{rclarray}
 \]
 
 \[
     \infer[commit]{%
-        ( \stk, \tshp, \ts ) , \ptrans{\cmd} \ \threadtransfer{\lid} \ ( \stk', \tshp', \ts_{e} ) , \pskip
+        ( \stk, \tshp, \ts ) , \ptrans{\cmd} \ \threadtransfer{\lcmt{\tsid}} \ ( \stk', \tshp', \ts_{e} ) , \pskip
     }{%
         \begin{array}{c}
             \ts_{s} \geq \ts
@@ -231,7 +245,8 @@ The semantics of transaction are interleaving of start, commit, and restart.
             \quad \hp_{s} = \func{startstate}(\tshp, \ts_{s}) 
             \quad ( \stk, \hp_{s}, \emptyset, \emptyset ) , \cmd \localtransfer^{*} ( \stk', \hp_{e}, \rs, \ws ) , \pskip \\
             \pred{allowcommit}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) 
-            \quad \tshp' = \func{commit}(\tshp,\hp_{e},\ws,\rs,\ts_{s},\ts_{e})
+            \quad \tsid = \func{freshTransId}(\tshp)
+            \quad \tshp' = \func{commit}(\tshp,\hp_{e},\ws,\rs,\tsid,\ts_{s},\ts_{e})
         \end{array}
     }
 \]
@@ -299,41 +314,53 @@ The semantics of transaction are interleaving of start, commit, and restart.
 
 \[
     \begin{rclarray}
-        \dontcare \ \globaltransfer \ \dontcare & \defeq & \State \times \State  \\
+        \dontcare \ \globaltransfer{\dontcare} \ \dontcare & \defeq & \State \times \Translabel \times \State  \\
     \end{rclarray}
 \]
 
+The semantics of theadpool picks a thread to runs one step.
+If the step is a fork, it generates a new thread with a new stack and a local time that is the same as its parent thread.
+If it is a join, the threadpool passes the child's local time to its parent thread.
+
 \[
     \infer[single]{%
-        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext) } ) \ \globaltransfer \  ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}') } ) 
+        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext) } ) \ \globaltransfer{\tll} \  ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}') } ) 
     }{%
-    ( \stk, \tshp, \ts ) , \progext \ \threadtransfer{\tll} \  ( \stk', \tshp', \ts' ) , {\progext}' 
-        \quad \tll = \lid
+        ( \stk, \tshp, \ts ) , \progext \ \threadtransfer{\tll} \  ( \stk', \tshp', \ts' ) , {\progext}' 
+        \quad \tll \in \Set{ \lid, \lcmt{\dontcare} }
     }
 \]
 
 \[
     \infer[par]{%
-        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext) } ) \ \globaltransfer \  ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}'), \thid' \mapsto (\lambda \var \ldotp 0, \ts', \prog'') } )
+        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext) } ) \ \globaltransfer{\lfork{\thid', \prog''}} \  ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}'), \thid' \mapsto (\lambda \var \ldotp 0, \ts', \prog'') } )
     }{%
-        ( \tshp, \stk, \ts ) , \progext \ \threadtransfer{\lfork{\thid', \prog''}} \  ( \tshp', \stk', \ts' ) , {\progext}' 
+        ( \stk, \tshp, \ts ) , \progext \ \threadtransfer{\lfork{\thid', \prog''}} \  ( \stk', \tshp', \ts' ) , {\progext}' 
     }
 \]
 
 \[
     \infer[wait]{%
-        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext), \thid' \mapsto (\stk', \ts'', \pskip) } )  \ \globaltransfer \ ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}')} )
+        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext), \thid' \mapsto (\stk', \ts'', \pskip) } )  \ \globaltransfer{\ljoin{\thid',\ts''}} \ ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}')} )
     }{%
-        ( \tshp, \stk, \ts ) , \progext \ \threadtransfer{\ljoin{\thid',\ts''}} \  ( \tshp', \stk', \ts' ) , {\progext}' 
+        ( \stk, \tshp, \ts ) , \progext \ \threadtransfer{\ljoin{\thid',\ts''}} \  ( \stk', \tshp', \ts' ) , {\progext}' 
     }
 \]
 
 \begin{lem}
-    A history cannot be overwritten, i.e.\ \( \forall \tshp, \tshp', \loc,\ts \ldotp \tshp, \dontcare \globaltransfer{\dontcare} \tshp', \dontcare \land \tshp(\loc)(\ts)\isdef \implies \tshp(\loc)(\ts) = \tshp'(\loc)(\ts)\)
+    A history cannot be overwritten, i.e.\ \( \forall \tshp, \tshp', \loc, \ts \ldotp ( \tshp, \dontcare ) \globaltransfer{\dontcare} ( \tshp', \dontcare ) \implies \tshp(\loc)(\ts) \subseteq \tshp'(\loc)(\ts)\)
 \end{lem}
 \begin{proof}
     From the \( \pred{allowcommit} \).
 \end{proof}
+
+\begin{lem}
+    For any time, it can have at most one write event and, if it has then no read events happen in the same time. This is \ \( \forall \tshp, \loc, \ts \ldotp ( \dontcare, \wop, \dontcare ) \in \tshp(\loc)(\ts) \implies \tshp(\loc)(\ts) =  \Set{( \dontcare, \wop, \dontcare )} \)
+\end{lem}
+\begin{proof}
+    From the \( \pred{allowcommit} \).
+\end{proof}
+
 
 \begin{lem}
     \label{lem:read-before-write}
@@ -353,106 +380,145 @@ The semantics of transaction are interleaving of start, commit, and restart.
     From the \( \func{commit} \).
 \end{proof}
 
-Now we need to recover \( \vis \) and \( \ar \) from \( \tshp \).
-First we need to extend the \( \tshp \) because there are some transactions that only have reads or writes.
-We stretch the time by 3, and add extra operation for those transactions.
-For a transaction \( \tsid \) that only has reads event, says in time \( \ts \), we add end operations \( (\bot, \tsid, \eop ) \) to the heap cells it reads in time \( (\ts + 1 ) \).
-Similarly for a transaction that only has writes event, we add end operations \( (\bot, \tsid, \sop ) \) in time \( (\ts-1) \).
+First we define session order \( \so \), or program order.
 
-\[
-\begin{rclarray}
-    \func{stretch}(\tshp) & \defeq & \lambda \loc \ldotp \lambda \ts \ldotp
-    \begin{funcarray}
-        \tshp(\loc)(\ts') & \ts = 3 * \ts' \\
-        \texttt{undef} & o.w. \\
-    \end{funcarray} \\
-    \func{extend}(\tshp) & \defeq & \lambda \loc \ldotp \tshp(\loc) \uplus \Set{\ts + 1 \mapsto (\bot, \tsid, \eop ) \ \middle| \ \tshp(\loc)(\ts) = (\dontcare, \tsid, \rop) \land \forall \loc', \ts' \ldotp \tshp(\loc')(\ts') = (\dontcare, \tsid, \wop)} \\
-                         & & \quad \quad \quad \uplus \Set{\ts - 1 \mapsto (\bot, \tsid, \sop ) \ \middle| \ \tshp(\loc)(\ts) = (\dontcare, \tsid, \wop) \land \forall \loc', \ts' \ldotp \tshp(\loc')(\ts') = (\dontcare, \tsid, \rop)}
-\end{rclarray}
+\[ 
+    \begin{rclarray}
+        lc \in \texttt{LastCommit} & \defeq & \Threadid \parfun \powerset{\Transid} \\
+        \func{sessionOrder}^{0}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set{(\emptyset, \emptyset, \tshp_{init}, \tdpl_{init}, \emptyset)} \\
+        \func{sessionOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) & \defeq & 
+        \Set{(\settrans, \so, \tshp, \tdpl \uplus \Set{\thid \mapsto \dontcare}, lc) \middle|
+            \begin{array}{@{}l@{}}
+                \exists \settrans', \so', \tshp', \tdpl', lc' \ldotp \\
+                (\settrans', \so', \tshp', \tdpl' \uplus \Set{\thid \mapsto \dontcare}, lc') \in {} \\
+                \qquad \func{sessionOrder}^{\nat -1}(\tdpl_{init}, \tshp_{init}) \land {} \\
+                ( \tshp', \tdpl' \uplus \Set{\thid \mapsto \dontcare}) \globaltransfer{\tll} ( \tshp, \tdpl \uplus \Set{\thid \mapsto \dontcare}) \land {} \\
+                \tll = \lid \implies \\
+                \begin{formulea}
+                    \settrans = \settrans' \land \so = \so' \land \tdpl = \tdpl' \land lc = lc'
+                \end{formulea} \land {} \\
+                \exists \tsid \ldotp \tll = \lcmt{\tsid} \implies  \\
+                \begin{formulea}
+                    \settrans = \settrans' \uplus \Set{\tsid} \land {} \\
+                    \so = \so' \uplus \Set{(\tsid', \tsid) \middle| \tsid' \in lc'(\thid)} \land {} \\
+                    \tdpl = \tdpl' \land lc = lc'\remapsto{\thid}{\Set{\tsid}}
+                \end{formulea} \land {} \\
+                \exists \thid' \ldotp \tll = \lfork{\thid', \dontcare} \implies  \\
+                \begin{formulea}
+                    \settrans = \settrans' \land \so = \so' \land \tdpl = \tdpl' \uplus \Set{\thid' \mapsto \dontcare } \land {} \\
+                    lc = lc' \uplus \Set{\thid' \mapsto lc'(\thid)}
+                \end{formulea} \land {} \\
+                \exists \thid'' \ldotp \tll = \ljoin{\thid'', \dontcare} \implies  \\
+                \begin{formulea}
+                    \settrans = \settrans' \land \so = \so' \land \tdpl = \tdpl' \uplus \Set{\thid'' \mapsto \dontcare } \land {} \\
+                    lc = lc'\remapsto{\thid}{lc'(\thid) \uplus lc'(\thid'')} \setminus \Set{\thid'' \mapsto \dontcare}
+                \end{formulea} \land {} \\
+            \end{array}
+        } \\
+        \func{histories}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set { (\settrans,\so,\tshp) \middle| (\settrans,\so,\tshp, \dontcare, \dontcare) \in  \bigcup\limits_{\nat \in \Nat } \func{sessionOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) }
+    \end{rclarray}
 \]
 
-\begin{lem}
-    After stretching the time by 3, there is no record in time \( 3 * \nat + 1 \) and \( 3 * \nat - 1 \).
-    Therefore after extending, there are only \( (\dontcare, \tsid, \eop) \) in time \( 3 * \ts + 1 \) and only \( (\dontcare, \tsid, \sop) \) in time \( 3 * \ts - 1 \).
-    This is \( \forall \tshp \ldotp \exists \tshp' = \func{extend} \circ \func{stetch}(\tshp) \ldotp \forall \loc, \ts \ldotp (\tshp'(\loc)(3 * \ts + 1)\isdef \implies \tshp'(\loc)(3 * \ts + 1) = (\dontcare, \dontcare, \eop) ) \land (\tshp'(\loc)(2 * \ts - 1)\isdef \implies \tshp'(\loc)(3 * \ts - 1) = (\dontcare, \dontcare, \sop) ) \).
-\end{lem}
-\begin{proof}
-    trivial.
-\end{proof}
+Now we need to recover \( \ww \), \( \wr \) and \( \rw \) from \( \tshp \).
+We need to prove that there is no circle that does not contain contain adjacent \( \rw \).
+By contradiction, if such circle exists, we can prove that the time goes backward in the circle.
 
-\begin{lem}
-    \label{lem:start-before-end}
-    In the extended heap, all the reads or starts of a transaction happen before all the writes or end. This is 
-    \( \forall \tshp, \loc, \loc', \ts, \ts', \op \in \Set{\rop, \sop}, \op' \in \Set{\wop, \eop}, \tsid \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \implies \ts < \ts' \).
-\end{lem}
-\begin{proof}
-    From Lemma \ref{lem:read-before-write} and the definition of \func{strech} and \func{extend}.
-\end{proof}
+%Similarly for a transaction that only has writes event, we add end operations \( (\bot, \tsid, \sop ) \) in time \( (\ts-1) \).
 
-\begin{lem}
-    \label{lem:happen-in-same-time}
-    For an extended heap, all the reads of a transaction happen in the same time, so do all the writes, starts and ends. This is 
-    \( \forall \tshp, \loc, \loc', \ts, \ts', \tsid, \op \ldotp \tshp(\loc)(\ts) =  \tshp(\loc')(\ts') = (\dontcare, \op, \tsid) \implies \ts = \ts' \).
-\end{lem}
-\begin{proof}
-    From Lemma \ref{lem:atoic-rw} and the definition of \func{strech} and \func{extend}.
-\end{proof}
+%\[
+%\begin{rclarray}
+    %\func{stretch}(\tshp) & \defeq & \lambda \loc \ldotp \lambda \ts \ldotp
+    %\begin{funcarray}
+        %\tshp(\loc)(\ts') & \ts = 3 * \ts' \\
+        %\texttt{undef} & o.w. \\
+    %\end{funcarray} \\
+    %\func{extend}(\tshp) & \defeq & \lambda \loc \ldotp \tshp(\loc) \uplus \Set{\ts + 1 \mapsto (\bot, \tsid, \eop ) \ \middle| \ \tshp(\loc)(\ts) = (\dontcare, \tsid, \rop) \land \forall \loc', \ts' \ldotp \tshp(\loc')(\ts') = (\dontcare, \tsid, \wop)} \\
+                         %& & \quad \quad \quad \uplus \Set{\ts - 1 \mapsto (\bot, \tsid, \sop ) \ \middle| \ \tshp(\loc)(\ts) = (\dontcare, \tsid, \wop) \land \forall \loc', \ts' \ldotp \tshp(\loc')(\ts') = (\dontcare, \tsid, \rop)}
+%\end{rclarray}
+%\]
 
-\begin{lem}
-    \label{lem:unique-label}
-    A transaction in an extended heap, must have either starts or reads, and either ends or writes.
-\end{lem}
-\begin{proof}
-    From the definition of \func{extend}.
-\end{proof}
+%\begin{lem}
+    %After stretching the time by 3, there is no record in time \( 3 * \nat + 1 \) and \( 3 * \nat - 1 \).
+    %Therefore after extending, there are only \( (\dontcare, \tsid, \eop) \) in time \( 3 * \ts + 1 \) and only \( (\dontcare, \tsid, \sop) \) in time \( 3 * \ts - 1 \).
+    %This is \( \forall \tshp \ldotp \exists \tshp' = \func{extend} \circ \func{stetch}(\tshp) \ldotp \forall \loc, \ts \ldotp (\tshp'(\loc)(3 * \ts + 1)\isdef \implies \tshp'(\loc)(3 * \ts + 1) = (\dontcare, \dontcare, \eop) ) \land (\tshp'(\loc)(2 * \ts - 1)\isdef \implies \tshp'(\loc)(3 * \ts - 1) = (\dontcare, \dontcare, \sop) ) \).
+%\end{lem}
+%\begin{proof}
+    %trivial.
+%\end{proof}
 
-\[
-\begin{rclarray}
-    (\settrans, \tvis, \tar) = \func{graph}(\tshp) & \defeq & (\Set{ \tsid \ \middle| \ \forall \loc \ldotp \tshp(\loc) = (\dontcare, \tsid, \dontcare)}, \\
-                                                   & & \Set{(\tsid, \tsid') \ \middle| \ 
-    \begin{array}{@{}l@{}}
-        \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop, \eop}, \op' \in \Set{\rop, \sop} \ldotp \\
-        \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \op')
-    \end{array}
-}, \\
-                                                   & & \Set{(\tsid, \tsid') \ \middle| \ 
-    \begin{array}{@{}l@{}}
-        \exists \loc, \loc', \ts, \ts', \op, \op' \in \Set{\wop, \eop} \ldotp \\
-        \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \op')
-    \end{array}
-}, \\
-\end{rclarray}
-\]
+%\begin{lem}
+    %\label{lem:start-before-end}
+    %In the extended heap, all the reads or starts of a transaction happen before all the writes or end. This is 
+    %\( \forall \tshp, \loc, \loc', \ts, \ts', \op \in \Set{\rop, \sop}, \op' \in \Set{\wop, \eop}, \tsid \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \implies \ts < \ts' \).
+%\end{lem}
+%\begin{proof}
+    %From Lemma \ref{lem:read-before-write} and the definition of \func{strech} and \func{extend}.
+%\end{proof}
 
-\begin{lem}
-    For an extended heap, the corresponding \tvis\ and \tar\ have no circle.
-\end{lem}
-\begin{proof}
-    Assume there is a circle in \(\rvis\), says, \( \tsid_{1} \rvis \tsid_{2} \rvis \dots \rvis \tsid_{n} \rvis \tsid_{n+1} \), where \( \tsid_{1} = \tsid_{n+1} \).
-    Therefore, \( \bigwedge\limits_{ 1 \leq i \leq n} \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop, \eop}, \op' \in \Set{\rop, \sop} \ldotp \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid_{i}, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid_{i+1}, \op')\).
-    By Lemma \ref{lem:unique-label} we can relabel read to start and write to end.
-    Then by Lemma \ref{lem:happen-in-same-time}, we can define a list of starts and ends events that is ordered by time: \( \List{ (\tsid_{1},\eop), (\tsid_{2},\sop), (\tsid_{2},\eop), \dots, (\tsid_{n},\eop), (\tsid_{n+1},\sop) } \).
-    By the assumption, we have \( \tsid_{1} = \tsid_{n+1} \), thus this contradict Lemma \ref{lem:start-before-end}.
+%\begin{lem}
+    %\label{lem:happen-in-same-time}
+    %For an extended heap, all the reads of a transaction happen in the same time, so do all the writes, starts and ends. This is 
+    %\( \forall \tshp, \loc, \loc', \ts, \ts', \tsid, \op \ldotp \tshp(\loc)(\ts) =  \tshp(\loc')(\ts') = (\dontcare, \op, \tsid) \implies \ts = \ts' \).
+%\end{lem}
+%\begin{proof}
+    %From Lemma \ref{lem:atoic-rw} and the definition of \func{strech} and \func{extend}.
+%\end{proof}
 
-    Similarly for \(\rtar\), the list of write events  \( \List{ (\tsid_{1},\eop), (\tsid_{2},\eop), (\tsid_{2},\eop), \dots, (\tsid_{n},\eop), (\tsid_{n+1},\eop) } \) contradict Lemma \ref{lem:happen-in-same-time}.
-\end{proof}
+%\begin{lem}
+    %\label{lem:unique-label}
+    %A transaction in an extended heap, must have either starts or reads, and either ends or writes.
+%\end{lem}
+%\begin{proof}
+    %From the definition of \func{extend}.
+%\end{proof}
 
-\begin{lem}
-    Given a \( \tshp \), the corresponding \((\settrans, \tvis, \tar)\) can be extended to \((\settrans, \vis, \ar)\) so that it is a valid dependency graph of snapshot isolation.
-\end{lem}
-\begin{proof}
-    First, we extend the relations \( \tar \) to a total order \( \ar \).
-    Initially, \( \ar \) includes all relations in \( \tar \).
-    Given the definition, only if the ends or writes of transactions happen in the same time, those transactions are not ordered by \( \tar \).
-    To simplify, we introduce an initial event, i.e.\ \( \forall \tsid \in \settrans \ldotp \tsid_{init} \rar \tsid \).
-    From \( \tsid_{init} \), we pick the first two transactions \( \tsid_{1} \) and \( \tsid_{2} \) that are not ordered, this is, \( \forall \tsid, \tsid' \in \Set{\tsid'' \ \middle| \ \tsid'' \rar \tsid_{1} \lor \tsid'' \rar \tsid_{2} } \ldotp \tsid \rar \tsid' \lor \tsid' \rar \tsid \).
-    We can add either \( \tsid_{1} \rar \tsid_{2} \) or \( \tsid_{2} \rar \tsid_{1} \), without introducing any circle.
-\end{proof}
+%\[
+%\begin{rclarray}
+    %(\settrans, \tvis, \tar) = \func{graph}(\tshp) & \defeq & (\Set{ \tsid \ \middle| \ \forall \loc \ldotp \tshp(\loc) = (\dontcare, \tsid, \dontcare)}, \\
+                                                   %& & \Set{(\tsid, \tsid') \ \middle| \ 
+    %\begin{array}{@{}l@{}}
+        %\exists \loc, \loc', \ts, \ts', \op \in \Set{\wop, \eop}, \op' \in \Set{\rop, \sop} \ldotp \\
+        %\ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \op')
+    %\end{array}
+%}, \\
+                                                   %& & \Set{(\tsid, \tsid') \ \middle| \ 
+    %\begin{array}{@{}l@{}}
+        %\exists \loc, \loc', \ts, \ts', \op, \op' \in \Set{\wop, \eop} \ldotp \\
+        %\ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid', \op')
+    %\end{array}
+%}, \\
+%\end{rclarray}
+%\]
 
-\begin{lem}
-    For the first two transactions \( \tsid_{1} \) and \( \tsid_{2} \) in a given \( \ar \) that are not ordered, we can add either \( \tsid_{1} \rar \tsid_{2} \) or \( \tsid_{2} \rar \tsid_{1} \), without introducing any circle.
-\end{lem}
-\begin{proof}
-    Since \( \tsid_{1} \) and \( \tsid_{2} \) are the first two that are not ordered, there exists an unique \( \tsid_{pre} \) where branching happens, i.e.\ \( \tsid_{pre} \rar \tsid_{1} \land \tsid_{pre} \rar \tsid_{2} \land \nexists \tsid \ldotp \tsid_{pre} \rar \tsid \rar \tsid_{1} \lor \tsid_{pre} \rar \tsid \rar \tsid_{2} \).
-    Assume we choose \( \tsid_{1} \rar \tsid_{2} \) and introduce a circle, says, \( \List{\tsid, \dots, \tsid_{1}, \tsid_{2}, \dots, \tsid' } \).
-\end{proof}
+%\begin{lem}
+    %For an extended heap, the corresponding \tvis\ and \tar\ have no circle.
+%\end{lem}
+%\begin{proof}
+    %Assume there is a circle in \(\rvis\), says, \( \tsid_{1} \rvis \tsid_{2} \rvis \dots \rvis \tsid_{n} \rvis \tsid_{n+1} \), where \( \tsid_{1} = \tsid_{n+1} \).
+    %Therefore, \( \bigwedge\limits_{ 1 \leq i \leq n} \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop, \eop}, \op' \in \Set{\rop, \sop} \ldotp \ts < \ts' \land \tshp(\loc)(\ts) = (\dontcare, \tsid_{i}, \op) \land \tshp(\loc')(\ts') = (\dontcare, \tsid_{i+1}, \op')\).
+    %By Lemma \ref{lem:unique-label} we can relabel read to start and write to end.
+    %Then by Lemma \ref{lem:happen-in-same-time}, we can define a list of starts and ends events that is ordered by time: \( \List{ (\tsid_{1},\eop), (\tsid_{2},\sop), (\tsid_{2},\eop), \dots, (\tsid_{n},\eop), (\tsid_{n+1},\sop) } \).
+    %By the assumption, we have \( \tsid_{1} = \tsid_{n+1} \), thus this contradict Lemma \ref{lem:start-before-end}.
+
+    %Similarly for \(\rtar\), the list of write events  \( \List{ (\tsid_{1},\eop), (\tsid_{2},\eop), (\tsid_{2},\eop), \dots, (\tsid_{n},\eop), (\tsid_{n+1},\eop) } \) contradict Lemma \ref{lem:happen-in-same-time}.
+%\end{proof}
+
+%\begin{lem}
+    %Given a \( \tshp \), the corresponding \((\settrans, \tvis, \tar)\) can be extended to \((\settrans, \vis, \ar)\) so that it is a valid dependency graph of snapshot isolation.
+%\end{lem}
+%\begin{proof}
+    %First, we extend the relations \( \tar \) to a total order \( \ar \).
+    %Initially, \( \ar \) includes all relations in \( \tar \).
+    %Given the definition, only if the ends or writes of transactions happen in the same time, those transactions are not ordered by \( \tar \).
+    %To simplify, we introduce an initial event, i.e.\ \( \forall \tsid \in \settrans \ldotp \tsid_{init} \rar \tsid \).
+    %From \( \tsid_{init} \), we pick the first two transactions \( \tsid_{1} \) and \( \tsid_{2} \) that are not ordered, this is, \( \forall \tsid, \tsid' \in \Set{\tsid'' \ \middle| \ \tsid'' \rar \tsid_{1} \lor \tsid'' \rar \tsid_{2} } \ldotp \tsid \rar \tsid' \lor \tsid' \rar \tsid \).
+    %We can add either \( \tsid_{1} \rar \tsid_{2} \) or \( \tsid_{2} \rar \tsid_{1} \), without introducing any circle.
+%\end{proof}
+
+%\begin{lem}
+    %For the first two transactions \( \tsid_{1} \) and \( \tsid_{2} \) in a given \( \ar \) that are not ordered, we can add either \( \tsid_{1} \rar \tsid_{2} \) or \( \tsid_{2} \rar \tsid_{1} \), without introducing any circle.
+%\end{lem}
+%\begin{proof}
+    %Since \( \tsid_{1} \) and \( \tsid_{2} \) are the first two that are not ordered, there exists an unique \( \tsid_{pre} \) where branching happens, i.e.\ \( \tsid_{pre} \rar \tsid_{1} \land \tsid_{pre} \rar \tsid_{2} \land \nexists \tsid \ldotp \tsid_{pre} \rar \tsid \rar \tsid_{1} \lor \tsid_{pre} \rar \tsid \rar \tsid_{2} \).
+    %Assume we choose \( \tsid_{1} \rar \tsid_{2} \) and introduce a circle, says, \( \List{\tsid, \dots, \tsid_{1}, \tsid_{2}, \dots, \tsid' } \).
+%\end{proof}
