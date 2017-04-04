@@ -1,0 +1,43 @@
+\section{Lock Injection}
+
+Under the \textsc{2pl} protocol, all accesses to shared memory cells must be protected by a corresponding lock. The latter can be in one of three modes that come from the set $\mathsf{Lock} \triangleq \{ \textsc{u}, \textsc{s}, \textsc{x} \}$ and it is ranged over by $\kappa, \kappa_1, \kappa_2, \ldots$ We define a total order relation between the modes as $>\ \triangleq \{ (\textsc{x}, \textsc{u}), (\textsc{x}, \textsc{s}), (\textsc{s}, \textsc{u}) \}$. It is possible to informally name each of the set entries as \textit{unlocked}, \textit{shared} and \textit{exclusive} respectively which reflect that either no transaction is accessing a cell, one or more transactions are reading the cell's content or a single transaction is writing to the cell.
+
+Transactions' code coming from clients does not explicitly include lock related code which is instead injected at runtime in order to comply to the protocol's rules. This gives rise to the set of locked transactions $\textsf{LTrans}$, locked commands $\textsf{LCmd}$ and unlock commands $\textsf{UCmd}$ ranged over by $\mathds{L}, \mathds{K}$ and $\mathds{U}$ respectively.
+\begin{align*}
+\mathds{L} ::=&
+\ \mathtt{begin}\ \mathds{K}\ \mathds{U}\ \mathtt{end} \\
+\mathds{K} ::=&
+\ \pfuncallnr{lock}{\mathds{E}, \kappa} \\
+|&\ \mathds{C} \\
+|&\ \mathds{K}_1; \mathds{K}_2 \\
+\mathds{U} ::=&
+\ \pskip \\
+|&\ \pfuncallnr{unlock}{\mathds{E}} \\
+|&\ \mathds{U}_1; \mathds{U}_2
+\end{align*}
+
+We can now formally define a function $\textsf{inject} : \mathds{T} \rightarrow \mathds{L}$ which given a standard transaction, returns its corresponding locked version and internally uses two helper functions, namely $\textsf{injectC} : \mathds{C} \rightarrow (\mathds{K}, \{\mathds{E}\})$ and $\textsf{injectU} : \{\mathds{E}\} \rightarrow \mathds{U}$.
+\begin{align*}
+\textsf{inject}(\mathtt{begin}\ \mathds{C}\ \mathtt{end}) &= \mathtt{begin}\ k\ \textsf{injectU}(u)\ \mathtt{end} \\
+\text{where } & (k, u) = \textsf{injectC}(\mathds{C}) \\
+\\
+\textsf{injectC}(\pderef{\pvar{x}}{\mathds{E}}) &= (\pfuncallnr{lock}{\mathds{E}, \textsc{s}}; \pderef{\pvar{x}}{\mathds{E}}, \{ \mathds{E} \}) \\
+\\
+\textsf{injectC}(\pmutate{\mathds{E}_1}{\mathds{E}_2}) &= (\pfuncallnr{lock}{\mathds{E}_1, \textsc{x}}; \pmutate{\mathds{E}_1}{\mathds{E}_2}, \{ \mathds{E}_1 \}) \\
+\\
+\textsf{injectC}(\mathds{C}_1; \mathds{C}_2) &= (k_1; k_2, u_1 \cup u_2) \\
+\text{where } & (k_1, u_1) = \textsf{injectC}(\mathds{C}_1) \\
+& (k_2, u_2) = \textsf{injectC}(\mathds{C}_2) \\
+\\
+\textsf{injectC}(\pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2}) &= (\pif{\mathds{B}}{k_1}{k_2}, u_1 \cup u_2) \\
+\text{where } & (k_1, u_1) = \textsf{injectC}(\mathds{C}_1) \\
+& (k_2, u_2) = \textsf{injectC}(\mathds{C}_2) \\
+\\
+\textsf{injectC}(\ploop{\mathds{B}}{\mathds{C}}) &= (\ploop{\mathds{B}}{k}, u) \\
+\text{where } & (k, u) = \textsf{injectC}(\mathds{C}) \\
+\\
+\textsf{injectC}(\mathds{C}) &= (\mathds{C}, \emptyset) \\
+\\
+\textsf{injectU}(\emptyset) &= \pskip \\ 
+\textsf{injectU}(\{\mathds{E}\} \cup u) &= \pfuncallnr{unlock}{\mathds{E}}; \textsf{injectU}(u)
+\end{align*}
