@@ -27,3 +27,218 @@ A lock manager is defined as a total function from a set of storage keys to tran
 \subsubsection{Transactions State}
 
 The state of all transactions running as part of a program is a total function $\mathsf{TState} : \mathsf{Tid} \rightarrow \mathsf{Track} \times \mathsf{Stack}$ which is ranged over by $\nu, \nu_1, \nu_2, \ldots$
+
+\subsection{Numerical Expressions}
+
+We define the semantics of expressions with respect to a transaction stack, $\llbracket - \rrbracket_- : \mathsf{Expr} \times \mathsf{Stack} \rightarrow \mathsf{Val}$, as follows.
+\begin{align*}
+\llbracket v \rrbracket_s &\triangleq v \\
+\llbracket \pvar{x} \rrbracket_s &\triangleq
+\bigg\{ \begin{array}{l l}
+s(\pvar{x}) &\text{if } \pvar{x} \in \textsf{dom}(s)\\
+0&\text{otherwise}
+\end{array} \\
+\llbracket \mathds{E}_1 + \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s + \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 - \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s - \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 \times \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \times \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 \div \mathds{E}_2 \rrbracket_s &\triangleq 
+\Bigg\{ \begin{array}{l l}
+1 &\text{ if } \llbracket \mathds{E}_2 \rrbracket_s = 0 \\
+\llbracket \mathds{E}_1 \rrbracket_s \div \llbracket \mathds{E}_2 \rrbracket_s &\text{ otherwise} \\
+\end{array}
+\end{align*}
+
+\subsection{Boolean Expressions}
+
+We define the semantics of boolean expressions with respect to a transaction stack, $\llbracket - \rrbracket_-^B : \mathsf{BExpr} \times \mathsf{Stack} \rightarrow \{ \bot, \top \}$, as follows.
+\begin{align*}
+\llbracket \true \rrbracket_s^B &\triangleq \top \\
+\llbracket \false \rrbracket_s^B &\triangleq \bot \\
+\llbracket \mathds{B}_1 \land \mathds{B}_2 \rrbracket_s^B &\triangleq \llbracket \mathds{B}_1 \rrbracket_s^B \land \llbracket \mathds{B}_2 \rrbracket_s^B \\
+\llbracket \mathds{B}_1 \lor \mathds{B}_2 \rrbracket_s^B &\triangleq \llbracket \mathds{B}_1 \rrbracket_s^B \lor \llbracket \mathds{B}_2 \rrbracket_s^B \\
+\llbracket \mathds{E}_1 > \mathds{E}_2 \rrbracket_s^B &\triangleq \llbracket \mathds{E}_1 \rrbracket_s > \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 < \mathds{E}_2 \rrbracket_s^B &\triangleq \llbracket \mathds{E}_1 \rrbracket_s < \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 \geq \mathds{E}_2 \rrbracket_s^B &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \geq \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 \leq \mathds{E}_2 \rrbracket_s^B &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \leq \llbracket \mathds{E}_2 \rrbracket_s \\
+\end{align*}
+
+\subsection{Locked Commands}
+
+The operational semantics of commands are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed.
+\begin{gather*}
+(-, -, -, -) \rightsquigarrow (-, -, -, -) \\
+: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Cmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Cmd}
+\end{gather*}
+
+\[
+\infer[\textsc{Assign}]
+{
+	\iota \vdash (h, \Phi, s, \passign{\pvar{x}}{\mathds{E}})
+	\rightsquigarrow
+	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
+}
+{
+	v = \llbracket \mathds{E} \rrbracket_s
+}
+\]
+
+\[
+\infer[\textsc{Read}]
+{
+	\iota \vdash (h, \Phi, s, \pderef{\pvar{x}}{\mathds{E}})
+	\rightsquigarrow
+	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	v = h(k)\ \
+	(I, \textsc{s}) = \Phi(k)\ \
+	\iota \in I
+}
+\]
+
+\[
+\infer[\textsc{ReadX}]
+{
+	\iota \vdash (h, \Phi, s, \pderef{\pvar{x}}{\mathds{E}})
+	\rightsquigarrow
+	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	v = h(k)\ \
+	(\{\iota\}, \textsc{x}) = \Phi(k)
+}
+\]
+
+\[
+\infer[\textsc{Write}]
+{
+	\iota \vdash (h, \Phi, s, \pmutate{\mathds{E}_1}{\mathds{E}_2})
+	\rightsquigarrow
+	(h[k \mapsto v], \Phi, s, \pskip)
+}
+{
+	k = \llbracket \mathds{E}_1 \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	v = \llbracket \mathds{E}_2 \rrbracket_s\ \
+	(\{ \iota \}, \textsc{x}) = \Phi(k)
+}
+\]
+
+\[
+\infer[\textsc{CondT}]
+{
+	\iota \vdash (h, \Phi, s, \pif{\mathds{B}}{\mathds{K}_1}{\mathds{K}_2})
+	\rightsquigarrow
+	(h, \Phi, s, \mathds{K}_1)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^B = \top
+}
+\]
+
+\[
+\infer[\textsc{CondF}]
+{
+	\iota \vdash (h, \Phi, s, \pif{\mathds{B}}{\mathds{K}_1}{\mathds{K}_2})
+	\rightsquigarrow
+	(h, \Phi, s, \mathds{K}_2)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^B = \bot
+}
+\]
+
+\[
+\infer[\textsc{LoopT}]
+{
+	\iota \vdash (h, \Phi, s, \ploop{\mathds{B}}{\mathds{K}})
+	\rightsquigarrow
+	(h, \Phi, s, \mathds{K}; \ploop{\mathds{B}}{\mathds{K}})
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^B = \top
+}
+\]
+
+\[
+\infer[\textsc{LoopF}]
+{
+	\iota \vdash (h, \Phi, s, \ploop{\mathds{B}}{\mathds{K}})
+	\rightsquigarrow
+	(h, \Phi, s, \pskip)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^B = \bot
+}
+\]
+
+\[
+\infer[\textsc{SeqSkip}]
+{
+	\iota \vdash (h, \Phi, s, \pskip ; \mathds{K})
+	\rightsquigarrow
+	(h, \Phi, s, \mathds{K})
+}
+{}
+\]
+
+\[
+\infer[\textsc{Seq}]
+{
+	\iota \vdash (h, \Phi, s, \mathds{K}_1 ; \mathds{K}_2)
+	\rightsquigarrow
+	(h', \Phi', s', \mathds{K}_1' ; \mathds{K}_2)
+}
+{
+	\iota \vdash (h, \Phi, s, \mathds{K}_1)
+	\rightsquigarrow
+	(h', \Phi', s', \mathds{K}_1')
+}
+\]
+
+\[
+\infer[\textsc{LockU}]
+{
+	\iota \vdash (h, \Phi, s, \pfuncallnr{lock}{\mathds{E}, \kappa})
+	\rightsquigarrow
+	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	(\emptyset, \textsc{u}) = \Phi(k)
+}
+\]
+
+\[
+\infer[\textsc{LockS}]
+{
+	\iota \vdash (h, \Phi, s, \pfuncallnr{lock}{\mathds{E}, \textsc{s}})
+	\rightsquigarrow
+	(h, \Phi[k \mapsto (\{\iota\} \cup I, \kappa)], s, \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	(I, \kappa) = \Phi(k)\ \
+	(\kappa = \textsc{s} \lor \iota \in I)
+}
+\]
+
+\[
+\infer[\textsc{LockX}]
+{
+	\iota \vdash (h, \Phi, s, \pfuncallnr{lock}{\mathds{E}, \textsc{x}})
+	\rightsquigarrow
+	(h, \Phi[k \mapsto (\{\iota\}, \textsc{x})], s, \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	(\{\iota\}, \kappa) = \Phi(k)
+}
+\]
