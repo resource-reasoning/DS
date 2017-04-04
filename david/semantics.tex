@@ -26,7 +26,7 @@ A lock manager is defined as a total function from a set of storage keys to tran
 
 \subsubsection{Transactions State}
 
-The state of all transactions running as part of a program is a total function $\mathsf{TState} : \mathsf{Tid} \rightarrow \mathsf{Track} \times \mathsf{Stack}$ which is ranged over by $\nu, \nu_1, \nu_2, \ldots$
+The state of all transactions running as part of a program is a total function $\mathsf{TState} : \mathsf{Tid} \rightarrow \mathsf{Stack}$ which is ranged over by $S$.
 
 \subsection{Numerical Expressions}
 
@@ -67,7 +67,7 @@ We define the semantics of boolean expressions with respect to a transaction sta
 The operational semantics of commands are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed.
 \begin{gather*}
 (-, -, -, -) \rightsquigarrow (-, -, -, -) \\
-: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Cmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Cmd}
+: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{LCmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{LCmd}
 \end{gather*}
 
 \[
@@ -225,7 +225,7 @@ The operational semantics of commands are defined as a transition relation throu
 	k = \llbracket \mathds{E} \rrbracket_s\ \
 	k \in \pred{dom}{h}\ \
 	(I, \kappa) = \Phi(k)\ \
-	(\kappa = \textsc{s} \lor \iota \in I)
+	(\kappa = \textsc{s} \lor I \equiv \{\iota\})
 }
 \]
 
@@ -241,4 +241,145 @@ The operational semantics of commands are defined as a transition relation throu
 	k \in \pred{dom}{h}\ \
 	(\{\iota\}, \kappa) = \Phi(k)
 }
+\]
+
+\[
+\infer[\textsc{Unlock}]
+{
+	\iota \vdash (h, \Phi, s, \pfuncallnr{unlock}{\mathds{E}})
+	\rightsquigarrow
+	(h, \Phi[k \mapsto (\emptyset, \textsc{u})], s, \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	(\{\iota\}, \kappa) = \Phi(k)
+}
+\]
+
+\[
+\infer[\textsc{UnlockS}]
+{
+	\iota \vdash (h, \Phi, s, \pfuncallnr{unlock}{\mathds{E}})
+	\rightsquigarrow
+	(h, \Phi[k \mapsto (I, \textsc{s})], s, \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	(\{\iota\} \cup I, \textsc{s}) = \Phi(k)\ \
+	I \not\equiv \emptyset
+}
+\]
+
+\subsection{Programs \& Transactions}
+The operational semantics of programs are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction which is being executed.
+\begin{gather*}
+(-, -, -, -) \twoheadrightarrow (-, -, -, -) \\: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Prog} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Prog}
+\end{gather*}
+
+\[
+\infer[\textsc{Step}]
+{
+	\iota \vdash (h, \Phi, s, \mathtt{begin}\ \mathds{K}\ \mathtt{end})
+	\twoheadrightarrow
+	(h', \Phi', s', \mathtt{begin}\ \mathds{K}'\ \mathtt{end})
+}
+{
+	\iota \vdash (h, \Phi, s, \mathds{K})
+	\rightsquigarrow
+	(h', \Phi', s', \mathds{K}')
+}
+\]
+
+\[
+\infer[\textsc{SeqSkipT}]
+{
+	\iota \vdash (h, \Phi, s, \mathtt{begin}\ \pskip\ \mathtt{end}; \mathds{P})
+	\twoheadrightarrow
+	(h', \Phi', s', \mathds{P})
+}
+{}
+\]
+
+\[
+\infer[\textsc{SeqT}]
+{
+	\iota \vdash (h, \Phi, s, \mathds{L}; \mathds{P})
+	\twoheadrightarrow
+	(h', \Phi', s', \mathds{L}'; \mathds{P})
+}
+{
+	\iota \vdash (h, \Phi, s, \mathds{L})
+	\rightsquigarrow
+	(h', \Phi', s', \mathds{L}')
+}
+\]
+
+\subsection{Executions}
+
+The operational semantics of executions are defined as a transition relation through the following rules.
+\[ (-, -, -, -) \rightarrowtail (-, -, -, -) : \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Exec} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Exec} \]
+
+\[
+\infer[\textsc{Exec}]
+{
+	\vdash (h, \Phi, S, \mathds{P}_\iota)
+	\rightarrowtail
+	(h', \Phi', S[\iota \mapsto s'], \mathds{P}_\iota')
+}
+{
+	s = S(\iota)\ \
+	\iota \vdash (h, \Phi, s, \mathds{P}_\iota)
+	\twoheadrightarrow
+	(h', \Phi', s', \mathds{P}_\iota')
+}
+\]
+
+\[
+\infer[\textsc{ParL}]
+{
+	\vdash (h, \Phi, S, \mathds{X}_1\ ||\ \mathds{X}_2)
+	\rightarrowtail
+	(h', \Phi', S', \mathds{X}_1'\ ||\ \mathds{X}_2)
+}
+{
+	\vdash (h, \Phi, S, \mathds{X}_1)
+	\rightarrowtail
+	(h', \Phi', S', \mathds{X}_1')
+}
+\]
+
+\[
+\infer[\textsc{ParR}]
+{
+	\vdash (h, \Phi, S, \mathds{X}_1\ ||\ \mathds{X}_2)
+	\rightarrowtail
+	(h', \Phi', S', \mathds{X}_1\ ||\ \mathds{X}_2')
+}
+{
+	\vdash (h, \Phi, S, \mathds{X}_2)
+	\rightarrowtail
+	(h', \Phi', S', \mathds{X}_2')
+}
+\]
+
+\[
+\infer[\textsc{ParEndL}]
+{
+	\vdash (h, \Phi, S, \mathds{X}\ ||\ \mathtt{begin}\ \pskip\ \mathtt{end})
+	\rightarrowtail
+	(h, \Phi, S, \mathds{X})
+}
+{}
+\]
+
+\[
+\infer[\textsc{ParEndR}]
+{
+	\vdash (h, \Phi, S, \mathtt{begin}\ \pskip\ \mathtt{end}\ ||\ \mathds{X})
+	\rightarrowtail
+	(h, \Phi, S, \mathds{X})
+}
+{}
 \]
