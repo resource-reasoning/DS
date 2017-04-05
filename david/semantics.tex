@@ -18,7 +18,7 @@ A storage is defined to be a partial function from storage keys to values and it
 
 \subsubsection{Transaction Identifiers}
 
-Every transaction that is executed as part of a program is associated with a numerical and unique identifier. The set of identifiers \textsf{Tid} is defined to be the set of positive integers $\mathds{Z}^+$. We denote a transaction with identifier $k$ as $\mathds{T}_k$.
+Every transaction that is executed as part of a program is associated with a numerical and unique identifier. The set of identifiers \textsf{Tid} is defined to be the set of positive integers $\mathds{Z}^+$. We denote a transaction with identifier $\iota$ as $\mathds{T}_\iota$.
 
 \subsubsection{Lock Manager}
 
@@ -70,6 +70,7 @@ The operational semantics of commands are defined as a transition relation throu
 : \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{LCmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{LCmd}
 \end{gather*}
 
+The \textsc{Assign} rule works in a standard way, by updating the value associated to a variable in the transaction's stack with the assigned expression evaluated under $s$. It then resolves into a $\pskip$ command without touching the global storage or the lock manager.
 \[
 \infer[\textsc{Assign}]
 {
@@ -82,51 +83,7 @@ The operational semantics of commands are defined as a transition relation throu
 }
 \]
 
-\[
-\infer[\textsc{Read}]
-{
-	\iota \vdash (h, \Phi, s, \pderef{\pvar{x}}{\mathds{E}})
-	\rightsquigarrow
-	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
-}
-{
-	k = \llbracket \mathds{E} \rrbracket_s\ \
-	k \in \pred{dom}{h}\ \
-	v = h(k)\ \
-	(I, \textsc{s}) = \Phi(k)\ \
-	\iota \in I
-}
-\]
-
-\[
-\infer[\textsc{ReadX}]
-{
-	\iota \vdash (h, \Phi, s, \pderef{\pvar{x}}{\mathds{E}})
-	\rightsquigarrow
-	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
-}
-{
-	k = \llbracket \mathds{E} \rrbracket_s\ \
-	k \in \pred{dom}{h}\ \
-	v = h(k)\ \
-	(\{\iota\}, \textsc{x}) = \Phi(k)
-}
-\]
-
-\[
-\infer[\textsc{Write}]
-{
-	\iota \vdash (h, \Phi, s, \pmutate{\mathds{E}_1}{\mathds{E}_2})
-	\rightsquigarrow
-	(h[k \mapsto v], \Phi, s, \pskip)
-}
-{
-	k = \llbracket \mathds{E}_1 \rrbracket_s\ \
-	k \in \pred{dom}{h}\ \
-	v = \llbracket \mathds{E}_2 \rrbracket_s\ \
-	(\{ \iota \}, \textsc{x}) = \Phi(k)
-}
-\]
+The two conditional rules cope with the two cases where the boolean condition $\mathds{B}$ is evaluated to $\top$ or $\bot$ under the current stack $s$. In the first case, the execution will proceed to the $\mathds{K}_1$ body while in the second one to $\mathds{K}_2$.
 
 \[
 \infer[\textsc{CondT}]
@@ -152,6 +109,8 @@ The operational semantics of commands are defined as a transition relation throu
 }
 \]
 
+Loops are supported in a similar way to the if statement, with the \textsc{LoopT} and \textsc{LoopF} rules that either unroll the loop for an iteration at a time, or get out of the loop in the case where $\mathds{B}$ is semantically evaluated to $\bot$.
+
 \[
 \infer[\textsc{LoopT}]
 {
@@ -175,6 +134,8 @@ The operational semantics of commands are defined as a transition relation throu
 	\llbracket \mathds{B} \rrbracket_s^B = \bot
 }
 \]
+
+The \textsc{Seq} rules cope with sequential composition of commands inside a transaction. The first command in a composition is ran one step at a time until it is eventually resolved to $\pskip$ and at that point, the execution proceeds to the next command $\mathds{K}$.
 
 \[
 \infer[\textsc{SeqSkip}]
@@ -200,6 +161,43 @@ The operational semantics of commands are defined as a transition relation throu
 }
 \]
 
+In order to read a value from a storage cell we require the current transaction to hold the corresponding lock in a mode $\kappa$ such that $\kappa \geq \textsc{s}$. We indicate this by making sure that the transaction identifier $\iota$ is in the set of owners $I$ as recorded by the lock manager $\Phi$. In fact, there are two scenarios to consider: either $\kappa = \textsc{s}$ and all it's needed is for $\iota$ to already be in the set $I$, or $\kappa = \textsc{x}$ and we require that $I \equiv \{ \iota \}$, since in the exclusive case $I$ is a singleton set, which also implies that $\iota \in I$.
+
+\[
+\infer[\textsc{Read}]
+{
+	\iota \vdash (h, \Phi, s, \pderef{\pvar{x}}{\mathds{E}})
+	\rightsquigarrow
+	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	v = h(k)\ \
+	(I, \kappa) = \Phi(k)\ \
+	\iota \in I
+}
+\]
+
+In order to write a value to a storage cell, it is mandatory for the transaction to be the sole owner of an exclusive lock to the cell, as described by the \textsc{Write} rule's premiss.
+
+\[
+\infer[\textsc{Write}]
+{
+	\iota \vdash (h, \Phi, s, \pmutate{\mathds{E}_1}{\mathds{E}_2})
+	\rightsquigarrow
+	(h[k \mapsto v], \Phi, s, \pskip)
+}
+{
+	k = \llbracket \mathds{E}_1 \rrbracket_s\ \
+	k \in \pred{dom}{h}\ \
+	v = \llbracket \mathds{E}_2 \rrbracket_s\ \
+	(\{ \iota \}, \textsc{x}) = \Phi(k)
+}
+\]
+
+Whenever the lock manager's entry associated to a cell is in the unlocked mode, a transaction can acquire that lock in shared or exclusive mode and set its identifier as the owner in a singleton set through the \textsc{LockU} rule.
+
 \[
 \infer[\textsc{LockU}]
 {
@@ -208,11 +206,14 @@ The operational semantics of commands are defined as a transition relation throu
 	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \pskip)
 }
 {
+	\kappa \in \{ \textsc{s}, \textsc{x} \}\ \	
 	k = \llbracket \mathds{E} \rrbracket_s\ \
 	k \in \pred{dom}{h}\ \
 	(\emptyset, \textsc{u}) = \Phi(k)
 }
 \]
+
+The \textsc{LockS} rule deals with the situation where a transaction needs to lock a cell $k$ in shared mode and the lock manager already contains a locked entry for $k$. At this point, the transaction can proceed either if the current lock mode $\kappa$ is \textsc{s} or if it is \textsc{x} and the owners set only includes the transaction itself. The latter requirements are expressed through the $(\kappa = \textsc{s} \lor I \equiv \{\iota\})$ disjunction.
 
 \[
 \infer[\textsc{LockS}]
@@ -229,6 +230,8 @@ The operational semantics of commands are defined as a transition relation throu
 }
 \]
 
+A transaction can \textit{upgrade} a shared lock it is currently holding on a cell $k$, into an exclusive one, if there are no other transactions in the owners set $I$ associated to $k$. This is allowed by the \textsc{LockX} rule which also extends the locking behaviour to a reentrant one by permitting a single transaction to lock the same cell multiple times as long as it is its sole owner.
+
 \[
 \infer[\textsc{LockX}]
 {
@@ -242,6 +245,8 @@ The operational semantics of commands are defined as a transition relation throu
 	(\{\iota\}, \kappa) = \Phi(k)
 }
 \]
+
+The two unlock rules have the effect of releasing any cells previously acquired by a transaction with identifier $\iota$. In the first case, \textsc{Unlock} will set the mode to \textsc{u} and clear the owners set when its only member is $\iota$ while \textsc{UnlockS} deals with releasing a shared lock that still has transactions holding the same lock. In this situation, we simply remove $\iota$ from the owners set.
 
 \[
 \infer[\textsc{Unlock}]
@@ -319,7 +324,10 @@ The operational semantics of programs are defined as a transition relation throu
 \subsection{Executions}
 
 The operational semantics of executions are defined as a transition relation through the following rules.
-\[ (-, -, -, -) \rightarrowtail (-, -, -, -) : \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Exec} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Exec} \]
+\begin{gather*}
+(-, -, -, -) \rightarrowtail (-, -, -, -) \\
+: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Exec} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Exec}
+\end{gather*}
 
 \[
 \infer[\textsc{Exec}]
