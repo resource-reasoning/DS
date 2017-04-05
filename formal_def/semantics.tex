@@ -11,16 +11,17 @@ The state of each transaction, i.e.\ local state, are a stack which is shared be
 \[
     \begin{rclarray}
         \loc \in \Loc & \defeq & \Nat \\
-        \val \in \Val & \defeq & \Nat \uplus \Loc \\
+        \val \in \Val & \defeq & \Nat \cup \Loc \\
         \Var & \defeq & \Set{ \vx, \vy, \dots } \\
-        \ts \in \Timestamp & \defeq & \Nat \\
+        \ts \in \Timestamp & \defeq & \texttt{rational number or real number} \\
         \hp \in \Heap & \defeq & \Loc \parfun \Val \\
         \stk \in \Stack & \defeq & \Var \to \Val \\
-        \op \in \Operation & \defeq & \Set{\opr, \opw} \\
+        \op \in \Operation & \defeq & \Set{\opr, \opw, \ops, \ope} \\
         \settrans \subseteq \TransID & \defeq & \Set{ \alpha , \beta, \dots } \\
         \ThreadID & \defeq & \Set{ i , j, \dots } \\
         \rs \in \Readset, \ws \in \Writeset & \defeq & \powerset{\Loc} \\
-        \tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \powerset{\Val \times \Operation \times \TransID}) \\
+        %\tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \powerset{\Val \times \Operation \times \TransID}) \\
+        \tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun ( \Val \times \Operation \times \TransID ) ) \\
         (\stk, \tshp, \ts) \in \Threadstate & \defeq & \Stack \times \Timestampheap \times \Timestamp \\
         \tdpl \in \Threadpool & \defeq & \ThreadID \parfun \Stack \times \Timestamp \times \prog \\
         \stt \in \State & \defeq & \Timestampheap \times \Threadpool \\
@@ -197,7 +198,7 @@ Intuitively, this \( \pwait{\thid} \) indicates that current thread is waiting a
 We will explain the \emph{commit}, \emph{par} and \emph{wait}, and the rest are straightforward.
 We give label to each transition, and these labels are only usefully for parallel composition.
 
-The \emph{commit} rule says that a transaction prophesies a starting time when this transaction takes a snapshot \( \hp_{s} \) and runs locally, and an ending time when it successfully commits ensured by the \pred{allowcommit}.
+The \emph{commit} rule says that a transaction prophesies a starting time when this transaction takes a snapshot \( \hp_{s} \) and runs locally, and an ending time when it successfully commits ensured by the \texttt{allowcommit}.
 
 The \emph{par} rule forks a new thread and appends a \( \pwait{\thid} \), parametrised by the new thread identifier \( \thid \), at the merging point.
 The \emph{wait} rule waits the thread \( \thid \) until it finishes, then joins the thread and updates the time to the maximum between the two threads.
@@ -206,8 +207,8 @@ Note that these two rules are labelled with \( \lfork{\thid, \prog} \) or \( \lj
 \[
     \begin{rclarray}
         \tll \in \Translabel & \defeq & 
-              \lid \quad              |
-        \quad \lcmt{\tsid} \quad |
+              \lid \quad                |
+        \quad \lcmt{\tsid} \quad        |
         \quad \lfork{\thid,\prog} \quad |
         \quad \ljoin{\thid,\ts} \\
         ( \dontcare, \dontcare ) \ \threadtransfer{ \dontcare } \ ( \dontcare, \dontcare ) & \defeq &  ( \Threadstate \times \progext ) \times \Translabel \times  ( \Threadstate \times \progext )  \\
@@ -217,19 +218,20 @@ Note that these two rules are labelled with \( \lfork{\thid, \prog} \) or \( \lj
 \[
     \begin{rclarray}
         \func{startstate}(\tshp,\ts) & \defeq & \lambda \loc \ldotp \val \\
-                                     & & \texttt{where} \ \exists \ts' \leq \ts \ldotp \tshp(\loc)(\ts') = \Set{(\val,\wop, \dontcare) } \land \forall \ts'' \in ( \ts', \ts) \ldotp (\dontcare,\wop,\dontcare) \notin \tshp(\loc)(\ts'') \\
-        \pred{allowcommit}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq & 
-        \pred{atomicop}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) \land \pred{consistent}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) \\
-        \pred{atomicop}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq  & \forall \loc_{w} \in \ws \ldotp \tshp(\loc_{w})(\ts_{e})\undef \land \forall \loc_{r} \in \rs \ldotp (\dontcare,\wop,\dontcare) \notin \tshp(\loc_{r})(\ts_{s})\\
-        \pred{consistent}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) & \defeq & \forall \loc_{w} \in \ws , \ts \in (\ts_{s},\ts_{e}) \ldotp (\dontcare, \wop, \dontcare)  \notin \tshp(\loc_{w})(\ts) \land {} \\
-                                                         & & \forall \tsid \ldotp \nexists \ts_{\tsid s} < \ts_{e}, \ts_{\tsid e} > \ts_{e} \ldotp \tshp(\loc_{w})(\ts_{\tsid s}) = (\dontcare, \rop, \tsid) \land \tshp(\loc_{w})(\ts_{\tsid e}) = (\dontcare, \wop, \tsid) \land {} \\
-                                                         & & \exists \ts_{min} = \min(\Set{\ts'' \ \middle| \ \ts'' > \ts_{e} \land \tshp(\loc_{w})(\ts'')\isdef}) \ldotp (\dontcare, \rop, \dontcare) \notin \tshp(\loc_{w})(\ts_{min}) \\
-        \func{commit}(\tshp,\hp,\ws,\rs, \tsid, \ts_{s},\ts_{e}) & \defeq &
+                                     & & \texttt{where} \ \exists \ts' \leq \ts \ldotp \tshp(\loc)(\ts') = (\val,\wop, \dontcare) \land \forall \ts'' \in ( \ts', \ts) \ldotp \tshp(\loc)(\ts'') = (\dontcare,\wop,\dontcare) \\
+        \pred{allowcommit}{\tshp,\ws,\rs,\ts_{s},\ts_{e}} & \defeq & 
+        \pred{wellformhist}{\tshp,\ws,\rs,\ts_{s},\ts_{e}} \land \pred{consistent}{\tshp,\ws,\rs,\ts_{s},\ts_{e}} \\
+        \pred{wellformhist}{\tshp,\ws,\rs,\ts_{s},\ts_{e}} & \defeq  & \forall \ts \in \Set{\ts_{s},\ts_{e}}, \loc \in \ws \cup \rs \ldotp \tshp(\loc)(\ts)\undef \\
+        \pred{consistent}{\tshp,\ws,\rs,\ts_{s},\ts_{e}} & \defeq & \forall \loc_{w} \in \ws , \ts \in (\ts_{s},\ts_{e}) \ldotp \tshp(\loc_{w})(\ts) \neq (\dontcare, \wop, \dontcare) \land {} \\
+                                                         & & \forall \tsid \ldotp \nexists \ts_{\tsid s} < \ts_{e}, \ts_{\tsid e} > \ts_{e} \ldotp \tshp(\loc_{w})(\ts_{\tsid s}) = (\dontcare, \dontcare, \tsid) \land \tshp(\loc_{w})(\ts_{\tsid e}) = (\dontcare, \wop, \tsid) \land {} \\
+                                                         & & \exists \ts_{min} = \min(\Set{\ts'' \ \middle| \ \ts'' > \ts_{e} \land \tshp(\loc_{w})(\ts'')\isdef}) \ldotp  \tshp(\loc_{w})(\ts_{min}) \neq (\dontcare, \rop, \dontcare) \\
+        \func{commit}(\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}) & \defeq &
         \lambda \loc \ldotp
         \begin{funcarray}
             \tshp(\loc) & \loc \notin \ws \cup \rs \\
-            \tshp(\loc)\remapsto{\ts_{e}}{\tshp(\loc)(\ts_{e}) \uplus \Set{(\hp(\loc),\wop,\tsid)}} & \loc \in \ws \\
-            \tshp(\loc)\remapsto{\ts_{s}}{\tshp(\loc)(\ts_{s}) \uplus \Set{(\hp(\loc),\rop,\tsid)}} & \loc \in \rs \\
+            \tshp(\loc)\remapsto{\ts_{s}}{(\hp_{s}(\loc),\sop,\tsid)}\remapsto{\ts_{e}}{(\hp_{e}(\loc),\wop,\tsid)} & \loc \in \ws \setminus \rs \\
+            \tshp(\loc)\remapsto{\ts_{s}}{(\hp_{s}(\loc),\rop,\tsid)} & \loc \in \rs \setminus \ws \\
+            \tshp(\loc)\remapsto{\ts_{s}}{(\hp_{s}(\loc),\rop,\tsid)}\remapsto{\ts_{e}}{(\hp_{e}(\loc),\wop,\tsid)} & \loc \in \rs \cap \ws \\
         \end{funcarray} \\
         \func{freshTransId}(\tshp)  & \defeq & \tsid \ \texttt{where} \ \tsid \notin \Set{\tsid' \ \middle| \ (\dontcare,\dontcare,\tsid') \in \bigcup\limits_{\loc,\ts}\tshp(\loc)(\ts)} \\
     \end{rclarray}
@@ -244,9 +246,9 @@ Note that these two rules are labelled with \( \lfork{\thid, \prog} \) or \( \lj
             \quad \ts_{e} > \ts_{s} 
             \quad \hp_{s} = \func{startstate}(\tshp, \ts_{s}) 
             \quad ( \stk, \hp_{s}, \emptyset, \emptyset ) , \cmd \localtransfer^{*} ( \stk', \hp_{e}, \rs, \ws ) , \pskip \\
-            \pred{allowcommit}(\tshp,\ws,\rs,\ts_{s},\ts_{e}) 
+            \pred{allowcommit}{\tshp,\ws,\rs,\ts_{s},\ts_{e}} 
             \quad \tsid = \func{freshTransId}(\tshp)
-            \quad \tshp' = \func{commit}(\tshp,\hp_{e},\ws,\rs,\tsid,\ts_{s},\ts_{e})
+            \quad \tshp' = \func{commit}(\tshp,\hp_{s},\hp_{e},\ws,\rs,\tsid,\ts_{s},\ts_{e})
         \end{array}
     }
 \]
@@ -347,3 +349,28 @@ If it is a join, the threadpool passes the child's local time to its parent thre
     }
 \]
 
+
+A program to check 
+
+\[
+    \begin{session}
+        \begin{array}{@{}c || c || c || c@{}}
+            \begin{transaction}
+                \pderef{\vx}{\loc_x}; \\
+                \pifs{\vx=0} \\
+                \quad \pmutate{\loc_y}{1}
+            \end{transaction} & 
+            \begin{transaction}
+                \pderef{\vy}{\loc_y}; \\
+                \pifs{\vx=0} \\
+                \quad \pmutate{\loc_x}{1}
+            \end{transaction} & 
+            \begin{transaction}
+                \pmutate{\loc_x}{2}
+            \end{transaction} & 
+            \begin{transaction}
+                \pmutate{\loc_y}{2}
+            \end{transaction} \\
+        \end{array}
+    \end{session}
+\]
