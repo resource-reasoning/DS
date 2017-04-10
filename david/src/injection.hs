@@ -1,4 +1,5 @@
-import Data.HashMap.Strict
+import Data.List as List
+import Data.HashMap.Strict as Map
 
 -- Program variable names.
 type Var  = String
@@ -60,49 +61,52 @@ instance Show LCmd where
 
 inject :: Cmd -> LCmd
 inject c
-  = u
-  where (l, m) = injectLocks c empty
-        (u, _, _) = injectUnlocks l m False
+  = LSkip
 
+scanLocks c
+  = Prelude.map (\(k, mode) -> (Lock k mode)) (toList m)
+  where m = scanAccesses c empty
 
-injectLocks Skip m
-  = (LSkip, m)
+scanAccesses (Read _ k) m
+  = modeInsert k S m
 
-injectLocks (Assign x v) m
-  = (LAssign x v, m)
+scanAccesses (Write k _) m
+  = modeInsert k X m
 
-injectLocks (Read x k) m
-  = case entry of
-      Nothing -> (LSeq (Lock k S) (LRead x k), insert k S m)
-      Just _  -> (LRead x k, m)
-  where entry = Data.HashMap.Strict.lookup k m
+scanAccesses (Seq c1 c2) m
+  = m2
+  where m1 = scanAccesses c1 m
+        m2 = scanAccesses c2 m1
 
-injectLocks (Write k v) m
-  = case entry of
-      Just X -> (LWrite k v, m)
-      _      -> (LSeq (Lock k X) (LWrite k v), insert k X m)
-  where entry = Data.HashMap.Strict.lookup k m
+scanAccesses (Cond _ c1 c2) m
+  = m2
+  where m1 = scanAccesses c1 m
+        m2 = scanAccesses c2 m1
 
-injectLocks (Seq c1 c2) m
-  = (LSeq k1 k2, m2)
-  where (k1, m1) = injectLocks c1 m
-        (k2, m2) = injectLocks c2 m1
+scanAccesses (Loop _ c) m
+  = scanAccesses c m
 
-injectLocks (Cond b c1 c2) m
-  = (LCond b k1 k2, union m1 m2)
-  where (k1, m1) = injectLocks c1 m
-        (k2, m2) = injectLocks c2 m
+scanAccesses _ m
+  = m
 
-injectLocks (Loop b c) m
-  = (LLoop b k, mUp)
-  where (k, mUp) = injectLocks c m
+modeInsert k mode m
+  = if mode > curr then (insert k mode m) else m
+  where entry = Map.lookup k m
+        curr  = case entry of
+                  Just mo -> mo
+                  Nothing -> U
 
+injectLocks c trans []
+  = [LSeq trans c]
+
+injectLocks c trans (l:ls)
+  = (LSeq trans (LSeq l c)):(injectLocks c (LSeq trans l) ls)++(injectLocks c trans ls)
 
 injectUnlocks (LRead x k) m phase
   = case entry of
       Nothing -> (LRead x k, m, phase)
       Just _  -> (cmd, delete k m, phase)
-  where entry = Data.HashMap.Strict.lookup k m
+  where entry = Map.lookup k m
         cmd   = if phase -- Still in the growing phase so don't unlock.
                 then (LRead x k)
                 else (LSeq (LRead x k) (Unlock k))
@@ -111,7 +115,7 @@ injectUnlocks (LWrite k v) m phase
   = case entry of
       Nothing -> (LWrite k v, m, phase)
       Just _  -> (cmd, delete k m, phase)
-      where entry = Data.HashMap.Strict.lookup k m
+      where entry = Map.lookup k m
             cmd   = if phase
                     then (LWrite k v)
                     else (LSeq (LWrite k v) (Unlock k))
