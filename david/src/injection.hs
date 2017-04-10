@@ -27,6 +27,9 @@ data Cmd  = Skip
           deriving Show
 
 -- Locked commands.
+--
+-- Here, ``Lseq [LCmd]'' is a better idea SHALE :)
+--
 data LCmd = LSkip
           | LAssign Var Val
           | LRead Var Key
@@ -105,6 +108,10 @@ injectLocks c trans (l:ls)
 injectUnlocks (LRead x k) m phase
   = case entry of
       Nothing -> (LRead x k, m, phase)
+      --
+      -- Here it looks like cmd might not include Unlock.
+      -- but ``delete k m'' is still called SHALE
+      --
       Just _  -> (cmd, delete k m, phase)
   where entry = Map.lookup k m
         cmd   = if phase -- Still in the growing phase so don't unlock.
