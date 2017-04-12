@@ -179,70 +179,52 @@ In order to read a value from a storage cell we require the current transaction 
 }
 \]
 
-In order to write a value to a storage cell, it is mandatory for the transaction to be the sole owner of an exclusive lock to the cell, as described by the \textsc{Write} rule's premiss.
+In order to write a value to a storage cell, it is mandatory for the transaction to be holding an exclusive lock to the cell or to be the sole owner of a shared one, as described by the \textsc{Write} rule's premiss. The latter case allows a transaction to \textit{upgrade} the shared lock it is currently holding on a cell $k$.
 
 \[
 \infer[\textsc{Write}]
 {
 	\iota \vdash (h, \Phi, s, \pmutate{\mathds{E}_1}{\mathds{E}_2})
 	\rightsquigarrow
-	(h[k \mapsto v], \Phi, s, \pskip)
+	(h[k \mapsto v], \Phi[k \mapsto (\{\iota\}, \textsc{x})], s, \pskip)
 }
 {
 	k = \llbracket \mathds{E}_1 \rrbracket_s\ \
 	k \in \pred{dom}{h}\ \
 	v = \llbracket \mathds{E}_2 \rrbracket_s\ \
-	(\{ \iota \}, \textsc{x}) = \Phi(k)
+	(\{ \iota \}, \kappa) = \Phi(k)\ \
+	\kappa \geq \textsc{s}
 }
 \]
 
-Whenever the lock manager's entry associated to a cell is in the unlocked mode, a transaction can acquire that lock in shared or exclusive mode and set its identifier as the owner in a singleton set through the \textsc{LockU} rule.
+Whenever the lock manager's entry associated to a cell is in the unlocked mode, a transaction can acquire that lock in shared or exclusive mode and set its identifier as the owner in a singleton set through the \textsc{Lock} rule.
 
 \[
-\infer[\textsc{LockU}]
+\infer[\textsc{Lock}]
 {
-	\iota \vdash (h, \Phi, s, \pfuncallnr{lock}{\mathds{E}, \kappa})
+	\iota \vdash (h, \Phi, s, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \pskip)
+	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \mathds{C})
 }
 {
-	\kappa \in \{ \textsc{s}, \textsc{x} \}\ \	
-	k = \llbracket \mathds{E} \rrbracket_s\ \
 	k \in \pred{dom}{h}\ \
+	\kappa \geq \textsc{s}\ \
 	(\emptyset, \textsc{u}) = \Phi(k)
 }
 \]
 
-The \textsc{LockS} rule deals with the situation where a transaction needs to lock a cell $k$ in shared mode and the lock manager already contains a locked entry for $k$. At this point, the transaction can proceed either if the current lock mode $\kappa$ is \textsc{s} or if it is \textsc{x} and the owners set only includes the transaction itself. The latter requirements are expressed through the $(\kappa = \textsc{s} \lor I \equiv \{\iota\})$ disjunction.
+The \textsc{LockS} rule deals with the situation where a transaction needs to lock a cell $k$ in shared mode and the lock manager already contains a locked entry for $k$. At this point, the transaction can proceed only if the current lock mode $\kappa$ is \textsc{s}.
 
 \[
 \infer[\textsc{LockS}]
 {
-	\iota \vdash (h, \Phi, s, \pfuncallnr{lock}{\mathds{E}, \textsc{s}})
+	\iota \vdash (h, \Phi, s, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\{\iota\} \cup I, \kappa)], s, \pskip)
+	(h, \Phi[k \mapsto (\{\iota\} \cup I, \textsc{s})], s, \mathds{C})
 }
 {
-	k = \llbracket \mathds{E} \rrbracket_s\ \
 	k \in \pred{dom}{h}\ \
-	(I, \kappa) = \Phi(k)\ \
-	(\kappa = \textsc{s} \lor I \equiv \{\iota\})
-}
-\]
-
-A transaction can \textit{upgrade} a shared lock it is currently holding on a cell $k$, into an exclusive one, if there are no other transactions in the owners set $I$ associated to $k$. This is allowed by the \textsc{LockX} rule which also extends the locking behaviour to a reentrant one by permitting a single transaction to lock the same cell multiple times as long as it is its sole owner.
-
-\[
-\infer[\textsc{LockX}]
-{
-	\iota \vdash (h, \Phi, s, \pfuncallnr{lock}{\mathds{E}, \textsc{x}})
-	\rightsquigarrow
-	(h, \Phi[k \mapsto (\{\iota\}, \textsc{x})], s, \pskip)
-}
-{
-	k = \llbracket \mathds{E} \rrbracket_s\ \
-	k \in \pred{dom}{h}\ \
-	(\{\iota\}, \kappa) = \Phi(k)
+	(I, \textsc{s}) = \Phi(k)
 }
 \]
 
