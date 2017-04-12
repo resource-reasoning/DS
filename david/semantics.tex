@@ -12,6 +12,10 @@ The set of keys used to index the storage is defined as \textsf{Key} and it is e
 
 Every transaction is free to assign and use local variables as part of its body. They are defined as a partial function $\mathsf{Stack} \triangleq \mathsf{Var} \rightharpoonup \mathsf{Val}$ and ranged over by $s, s_1, s_2, \ldots$
 
+\subsubsection{Locking Phase}
+
+Under the \textsc{2pl} protocol a running transaction $\mathds{T}$ is initially in the \textit{growing} phase ($\curlywedge$), where it is free to lock any cell it needs. Once it releases a lock, the transaction enters the \textit{shrinking} phase ($\curlyvee$). Here $\mathds{T}$ is denied any new lock acquisitions while it is allowed to gradually release the locks that are still being held. Phases come from the set $\mathsf{Phase} \triangleq \{ \curlywedge, \curlyvee \}$ and are ranged over by $p$.
+
 \subsubsection{Storage}
 
 A storage is defined to be a partial function from storage keys to values and it is denoted by $\mathsf{Storage} \triangleq \mathsf{Key} \rightharpoonup \mathsf{Val}$. We use $h, h_1, h_2$ to range over it.
@@ -26,7 +30,7 @@ A lock manager is defined as a total function from a set of storage keys to tran
 
 \subsubsection{Transactions State}
 
-The state of all transactions running as part of a program is a total function $\mathsf{TState} : \mathsf{Tid} \rightarrow (\mathsf{Stack}, \mathsf{Bool})$ which is ranged over by $S$.
+The state of all transactions running as part of a program is a total function $\mathsf{TState} : \mathsf{Tid} \rightarrow (\mathsf{Stack}, \mathsf{Phase})$ which is ranged over by $S$. Informally, it associates each transaction which is currently being executed to its own stack and locking phase.
 
 \subsection{Numerical Expressions}
 
@@ -62,12 +66,12 @@ We define the semantics of boolean expressions with respect to a transaction sta
 \llbracket \mathds{E}_1 \leq \mathds{E}_2 \rrbracket_s^B &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \leq \llbracket \mathds{E}_2 \rrbracket_s \\
 \end{align*}
 
-\subsection{Locked Commands}
+\subsection{Commands}
 
 The operational semantics of commands are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed.
 \begin{gather*}
 (-, -, -, -, -) \rightsquigarrow (-, -, -, -, -) \\
-: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Cmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Cmd}
+: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
 \end{gather*}
 
 The \textsc{Assign} rule works in a standard way, by updating the value associated to a variable in the transaction's stack with the assigned expression evaluated under $s$. It then resolves into a $\pskip$ command without touching the global storage or the lock manager.
@@ -116,7 +120,7 @@ Loops are supported in a similar way to the if statement, with the \textsc{LoopT
 {
 	\iota \vdash (h, \Phi, s, p, \ploop{\mathds{B}}{\mathds{C}})
 	\rightsquigarrow
-	(h, \Phi, s, p, \mathds{K}; \ploop{\mathds{B}}{\mathds{C}})
+	(h, \Phi, s, p, \mathds{C}; \ploop{\mathds{B}}{\mathds{C}})
 }
 {
 	\llbracket \mathds{B} \rrbracket_s^B = \top
@@ -197,14 +201,14 @@ In order to write a value to a storage cell, it is mandatory for the transaction
 }
 \]
 
-Whenever the lock manager's entry associated to a cell is in the unlocked mode, a transaction can acquire that lock in shared or exclusive mode and set its identifier as the owner in a singleton set through the \textsc{Lock} rule.
+Whenever the lock manager's entry associated to a cell is in the unlocked mode, a transaction can acquire that lock in shared or exclusive mode and set its identifier as the owner in a singleton set through the \textsc{Lock} rule. Note that this rule applies nondeterministically with any rule for a given command $\mathds{C}$. This means that at any point in time a transaction will either try and reduce command $\mathds{C}$ or acquire a lock for some cell $k$ in the domain of the storage $h$.
 
 \[
 \infer[\textsc{Lock}]
 {
-	\iota \vdash (h, \Phi, s, \bot, \mathds{C})
+	\iota \vdash (h, \Phi, s, \curlywedge, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \bot, \mathds{C})
+	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \curlywedge, \mathds{C})
 }
 {
 	k \in \pred{dom}{h}\ \
@@ -218,9 +222,9 @@ The \textsc{LockS} rule deals with the situation where a transaction needs to lo
 \[
 \infer[\textsc{LockS}]
 {
-	\iota \vdash (h, \Phi, s, \bot, \mathds{C})
+	\iota \vdash (h, \Phi, s, \curlywedge, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\{\iota\} \cup I, \textsc{s})], s, \bot, \mathds{C})
+	(h, \Phi[k \mapsto (\{\iota\} \cup I, \textsc{s})], s, \curlywedge, \mathds{C})
 }
 {
 	k \in \pred{dom}{h}\ \
@@ -235,7 +239,7 @@ The two unlock rules have the effect of releasing any cells previously acquired 
 {
 	\iota \vdash (h, \Phi, s, p, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\emptyset, \textsc{u})], s, \top, \mathds{C})
+	(h, \Phi[k \mapsto (\emptyset, \textsc{u})], s, \curlyvee, \mathds{C})
 }
 {
 	k = \llbracket \mathds{E} \rrbracket_s\ \
@@ -249,7 +253,7 @@ The two unlock rules have the effect of releasing any cells previously acquired 
 {
 	\iota \vdash (h, \Phi, s, p, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (I, \textsc{s})], s, \top, \mathds{C})
+	(h, \Phi[k \mapsto (I, \textsc{s})], s, \curlyvee, \mathds{C})
 }
 {
 	k = \llbracket \mathds{E} \rrbracket_s\ \
@@ -262,7 +266,7 @@ The two unlock rules have the effect of releasing any cells previously acquired 
 \subsection{Programs \& Transactions}
 The operational semantics of programs are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction which is being executed.
 \begin{gather*}
-(-, -, -, -, -) \twoheadrightarrow (-, -, -, -, -) \\: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Prog} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Prog}
+(-, -, -, -, -) \twoheadrightarrow (-, -, -, -, -) \\: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Prog} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Prog}
 \end{gather*}
 
 \[
