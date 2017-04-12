@@ -26,7 +26,7 @@ A lock manager is defined as a total function from a set of storage keys to tran
 
 \subsubsection{Transactions State}
 
-The state of all transactions running as part of a program is a total function $\mathsf{TState} : \mathsf{Tid} \rightarrow \mathsf{Stack}$ which is ranged over by $S$.
+The state of all transactions running as part of a program is a total function $\mathsf{TState} : \mathsf{Tid} \rightarrow (\mathsf{Stack}, \mathsf{Bool})$ which is ranged over by $S$.
 
 \subsection{Numerical Expressions}
 
@@ -50,7 +50,7 @@ s(\pvar{x}) &\text{if } \pvar{x} \in \textsf{dom}(s)\\
 
 \subsection{Boolean Expressions}
 
-We define the semantics of boolean expressions with respect to a transaction stack, $\llbracket - \rrbracket_-^B : \mathsf{BExpr} \times \mathsf{Stack} \rightarrow \{ \bot, \top \}$, as follows.
+We define the semantics of boolean expressions with respect to a transaction stack, $\llbracket - \rrbracket_-^B : \mathsf{BExpr} \times \mathsf{Stack} \rightarrow \mathsf{Bool}$, as follows.
 \begin{align*}
 \llbracket \true \rrbracket_s^B &\triangleq \top \\
 \llbracket \false \rrbracket_s^B &\triangleq \bot \\
@@ -66,17 +66,17 @@ We define the semantics of boolean expressions with respect to a transaction sta
 
 The operational semantics of commands are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed.
 \begin{gather*}
-(-, -, -, -) \rightsquigarrow (-, -, -, -) \\
-: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{LCmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{LCmd}
+(-, -, -, -, -) \rightsquigarrow (-, -, -, -, -) \\
+: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Cmd} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Cmd}
 \end{gather*}
 
 The \textsc{Assign} rule works in a standard way, by updating the value associated to a variable in the transaction's stack with the assigned expression evaluated under $s$. It then resolves into a $\pskip$ command without touching the global storage or the lock manager.
 \[
 \infer[\textsc{Assign}]
 {
-	\iota \vdash (h, \Phi, s, \passign{\pvar{x}}{\mathds{E}})
+	\iota \vdash (h, \Phi, s, p, \passign{\pvar{x}}{\mathds{E}})
 	\rightsquigarrow
-	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
+	(h, \Phi, s[\pvar{x} \mapsto v], p, \pskip)
 }
 {
 	v = \llbracket \mathds{E} \rrbracket_s
@@ -88,9 +88,9 @@ The two conditional rules cope with the two cases where the boolean condition $\
 \[
 \infer[\textsc{CondT}]
 {
-	\iota \vdash (h, \Phi, s, \pif{\mathds{B}}{\mathds{K}_1}{\mathds{K}_2})
+	\iota \vdash (h, \Phi, s, p, \pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2})
 	\rightsquigarrow
-	(h, \Phi, s, \mathds{K}_1)
+	(h, \Phi, s, p, \mathds{C}_1)
 }
 {
 	\llbracket \mathds{B} \rrbracket_s^B = \top
@@ -100,9 +100,9 @@ The two conditional rules cope with the two cases where the boolean condition $\
 \[
 \infer[\textsc{CondF}]
 {
-	\iota \vdash (h, \Phi, s, \pif{\mathds{B}}{\mathds{K}_1}{\mathds{K}_2})
+	\iota \vdash (h, \Phi, s, p, \pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2})
 	\rightsquigarrow
-	(h, \Phi, s, \mathds{K}_2)
+	(h, \Phi, s, p, \mathds{C}_2)
 }
 {
 	\llbracket \mathds{B} \rrbracket_s^B = \bot
@@ -114,9 +114,9 @@ Loops are supported in a similar way to the if statement, with the \textsc{LoopT
 \[
 \infer[\textsc{LoopT}]
 {
-	\iota \vdash (h, \Phi, s, \ploop{\mathds{B}}{\mathds{K}})
+	\iota \vdash (h, \Phi, s, p, \ploop{\mathds{B}}{\mathds{C}})
 	\rightsquigarrow
-	(h, \Phi, s, \mathds{K}; \ploop{\mathds{B}}{\mathds{K}})
+	(h, \Phi, s, p, \mathds{K}; \ploop{\mathds{B}}{\mathds{C}})
 }
 {
 	\llbracket \mathds{B} \rrbracket_s^B = \top
@@ -126,9 +126,9 @@ Loops are supported in a similar way to the if statement, with the \textsc{LoopT
 \[
 \infer[\textsc{LoopF}]
 {
-	\iota \vdash (h, \Phi, s, \ploop{\mathds{B}}{\mathds{K}})
+	\iota \vdash (h, \Phi, s, p, \ploop{\mathds{B}}{\mathds{C}})
 	\rightsquigarrow
-	(h, \Phi, s, \pskip)
+	(h, \Phi, s, p, \pskip)
 }
 {
 	\llbracket \mathds{B} \rrbracket_s^B = \bot
@@ -140,9 +140,9 @@ The \textsc{Seq} rules cope with sequential composition of commands inside a tra
 \[
 \infer[\textsc{SeqSkip}]
 {
-	\iota \vdash (h, \Phi, s, \pskip ; \mathds{K})
+	\iota \vdash (h, \Phi, s, p, \pskip ; \mathds{C})
 	\rightsquigarrow
-	(h, \Phi, s, \mathds{K})
+	(h, \Phi, s, p, \mathds{C})
 }
 {}
 \]
@@ -150,14 +150,14 @@ The \textsc{Seq} rules cope with sequential composition of commands inside a tra
 \[
 \infer[\textsc{Seq}]
 {
-	\iota \vdash (h, \Phi, s, \mathds{K}_1 ; \mathds{K}_2)
+	\iota \vdash (h, \Phi, s, p, \mathds{C}_1 ; \mathds{C}_2)
 	\rightsquigarrow
-	(h', \Phi', s', \mathds{K}_1' ; \mathds{K}_2)
+	(h', \Phi', s', p', \mathds{C}_1' ; \mathds{C}_2)
 }
 {
-	\iota \vdash (h, \Phi, s, \mathds{K}_1)
+	\iota \vdash (h, \Phi, s, p, \mathds{C}_1)
 	\rightsquigarrow
-	(h', \Phi', s', \mathds{K}_1')
+	(h', \Phi', s', p', \mathds{C}_1')
 }
 \]
 
@@ -166,9 +166,9 @@ In order to read a value from a storage cell we require the current transaction 
 \[
 \infer[\textsc{Read}]
 {
-	\iota \vdash (h, \Phi, s, \pderef{\pvar{x}}{\mathds{E}})
+	\iota \vdash (h, \Phi, s, p, \pderef{\pvar{x}}{\mathds{E}})
 	\rightsquigarrow
-	(h, \Phi, s[\pvar{x} \mapsto v], \pskip)
+	(h, \Phi, s[\pvar{x} \mapsto v], p, \pskip)
 }
 {
 	k = \llbracket \mathds{E} \rrbracket_s\ \
@@ -184,9 +184,9 @@ In order to write a value to a storage cell, it is mandatory for the transaction
 \[
 \infer[\textsc{Write}]
 {
-	\iota \vdash (h, \Phi, s, \pmutate{\mathds{E}_1}{\mathds{E}_2})
+	\iota \vdash (h, \Phi, s, p, \pmutate{\mathds{E}_1}{\mathds{E}_2})
 	\rightsquigarrow
-	(h[k \mapsto v], \Phi[k \mapsto (\{\iota\}, \textsc{x})], s, \pskip)
+	(h[k \mapsto v], \Phi[k \mapsto (\{\iota\}, \textsc{x})], s, p, \pskip)
 }
 {
 	k = \llbracket \mathds{E}_1 \rrbracket_s\ \
@@ -202,9 +202,9 @@ Whenever the lock manager's entry associated to a cell is in the unlocked mode, 
 \[
 \infer[\textsc{Lock}]
 {
-	\iota \vdash (h, \Phi, s, \mathds{C})
+	\iota \vdash (h, \Phi, s, \bot, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \mathds{C})
+	(h, \Phi[k \mapsto (\{\iota\}, \kappa)], s, \bot, \mathds{C})
 }
 {
 	k \in \pred{dom}{h}\ \
@@ -218,9 +218,9 @@ The \textsc{LockS} rule deals with the situation where a transaction needs to lo
 \[
 \infer[\textsc{LockS}]
 {
-	\iota \vdash (h, \Phi, s, \mathds{C})
+	\iota \vdash (h, \Phi, s, \bot, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\{\iota\} \cup I, \textsc{s})], s, \mathds{C})
+	(h, \Phi[k \mapsto (\{\iota\} \cup I, \textsc{s})], s, \bot, \mathds{C})
 }
 {
 	k \in \pred{dom}{h}\ \
@@ -233,9 +233,9 @@ The two unlock rules have the effect of releasing any cells previously acquired 
 \[
 \infer[\textsc{Unlock}]
 {
-	\iota \vdash (h, \Phi, s, \pfuncallnr{unlock}{\mathds{E}})
+	\iota \vdash (h, \Phi, s, p, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (\emptyset, \textsc{u})], s, \pskip)
+	(h, \Phi[k \mapsto (\emptyset, \textsc{u})], s, \top, \mathds{C})
 }
 {
 	k = \llbracket \mathds{E} \rrbracket_s\ \
@@ -247,9 +247,9 @@ The two unlock rules have the effect of releasing any cells previously acquired 
 \[
 \infer[\textsc{UnlockS}]
 {
-	\iota \vdash (h, \Phi, s, \pfuncallnr{unlock}{\mathds{E}})
+	\iota \vdash (h, \Phi, s, p, \mathds{C})
 	\rightsquigarrow
-	(h, \Phi[k \mapsto (I, \textsc{s})], s, \pskip)
+	(h, \Phi[k \mapsto (I, \textsc{s})], s, \top, \mathds{C})
 }
 {
 	k = \llbracket \mathds{E} \rrbracket_s\ \
@@ -262,29 +262,29 @@ The two unlock rules have the effect of releasing any cells previously acquired 
 \subsection{Programs \& Transactions}
 The operational semantics of programs are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction which is being executed.
 \begin{gather*}
-(-, -, -, -) \twoheadrightarrow (-, -, -, -) \\: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Prog} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Prog}
+(-, -, -, -, -) \twoheadrightarrow (-, -, -, -, -) \\: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Prog} \times \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Bool} \times \mathsf{Prog}
 \end{gather*}
 
 \[
 \infer[\textsc{Step}]
 {
-	\iota \vdash (h, \Phi, s, \mathtt{begin}\ \mathds{K}\ \mathtt{end})
+	\iota \vdash (h, \Phi, s, p, \mathtt{begin}\ \mathds{C}\ \mathtt{end})
 	\twoheadrightarrow
-	(h', \Phi', s', \mathtt{begin}\ \mathds{K}'\ \mathtt{end})
+	(h', \Phi', s', p', \mathtt{begin}\ \mathds{C}'\ \mathtt{end})
 }
 {
-	\iota \vdash (h, \Phi, s, \mathds{K})
+	\iota \vdash (h, \Phi, s, \mathds{C})
 	\rightsquigarrow
-	(h', \Phi', s', \mathds{K}')
+	(h', \Phi', s', \mathds{C}')
 }
 \]
 
 \[
 \infer[\textsc{SeqSkipT}]
 {
-	\iota \vdash (h, \Phi, s, \mathtt{begin}\ \pskip\ \mathtt{end}; \mathds{P})
+	\iota \vdash (h, \Phi, s, p, \mathtt{begin}\ \pskip\ \mathtt{end}; \mathds{P})
 	\twoheadrightarrow
-	(h', \Phi', s', \mathds{P})
+	(h', \Phi', s', p', \mathds{P})
 }
 {}
 \]
@@ -292,14 +292,14 @@ The operational semantics of programs are defined as a transition relation throu
 \[
 \infer[\textsc{SeqT}]
 {
-	\iota \vdash (h, \Phi, s, \mathds{L}; \mathds{P})
+	\iota \vdash (h, \Phi, s, p, \mathds{T}; \mathds{P})
 	\twoheadrightarrow
-	(h', \Phi', s', \mathds{L}'; \mathds{P})
+	(h', \Phi', s', p', \mathds{T}'; \mathds{P})
 }
 {
-	\iota \vdash (h, \Phi, s, \mathds{L})
+	\iota \vdash (h, \Phi, s, \mathds{T})
 	\rightsquigarrow
-	(h', \Phi', s', \mathds{L}')
+	(h', \Phi', s', \mathds{T}')
 }
 \]
 
@@ -316,13 +316,13 @@ The operational semantics of executions are defined as a transition relation thr
 {
 	\vdash (h, \Phi, S, \mathds{P}_\iota)
 	\rightarrowtail
-	(h', \Phi', S[\iota \mapsto s'], \mathds{P}_\iota')
+	(h', \Phi', S[\iota \mapsto (s', p')], \mathds{P}_\iota')
 }
 {
-	s = S(\iota)\ \
-	\iota \vdash (h, \Phi, s, \mathds{P}_\iota)
+	(s, p) = S(\iota)\ \
+	\iota \vdash (h, \Phi, s, p, \mathds{P}_\iota)
 	\twoheadrightarrow
-	(h', \Phi', s', \mathds{P}_\iota')
+	(h', \Phi', s', p', \mathds{P}_\iota')
 }
 \]
 
