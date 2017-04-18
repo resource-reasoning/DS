@@ -1,20 +1,32 @@
 \section{Assertions}
 
+We assume the presence of logical variables, $x \in \mathsf{LVar}$, logical values, $l \in \mathsf{LVal}$ and logical expressions, $E \in \mathsf{LExpr}$. We define logical environment, $e \in \mathsf{LEnv}$, as a function $\mathsf{LVar} \rightarrow \mathsf{LVal}$.
+
 \subsection{Syntax}
 
 \begin{align*}
 P, P' \in \mathsf{Ass} ::=&
 \ \mathtt{false} \\
+|&\ \mathtt{true} \\
 |&\ \mathtt{emp} \\
-|&\ \pvar{x} = \mathds{E} \\
-|&\ \mathds{E}_1 \mapsto \mathds{E}_2 \\
-|&\ \boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r \\
+|&\ \pvar{x} = E \\
+|&\ E_1 \mapsto E_2 \\
+|&\ \boxed{E_1 \mapsto E_2}^r \\
 |&\ P \land P' \\
 |&\ P \lor P' \\
 |&\ P \sep P' \\
 |&\ P \Rightarrow P' \\
 |&\ \exists x \ldotp P \\
 |&\ \circledast x \ldotp P
+\end{align*}
+
+\subsection{Semantics}
+
+\begin{align*}
+\llbracket \mathtt{false} \rrbracket &\triangleq \emptyset \\
+\llbracket \mathtt{true} \rrbracket &\triangleq \mathsf{Storage} \times \mathsf{Storage} \\
+\llbracket \mathtt{emp} \rrbracket &\triangleq \{ (\emptyset, \emptyset) \} \\
+\llbracket \passign{\pvar{x}}{\mathds{E}} \rrbracket &\triangleq 
 \end{align*}
 
 \subsection{Proof System}
@@ -112,6 +124,42 @@ P, P' \in \mathsf{Ass} ::=&
 	\vdash \triple
 	{R}
 	{\mathds{C}_2}
+	{Q}
+}
+\]
+
+\[
+\infer[\textsc{Cond}]
+{
+	\vdash \triple
+	{P}
+	{\pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2}}
+	{Q}
+}
+{
+	\vdash \triple
+	{P \land \mathds{B}}
+	{\mathds{C}_1}
+	{Q}\ \
+	\vdash \triple
+	{P \land \lnot \mathds{B}}
+	{\mathds{C}_2}
+	{Q}
+}
+\]
+
+\[
+\infer[\textsc{Loop}]
+{
+	\vdash \triple
+	{P}
+	{\ploop{\mathds{B}}{\mathds{C}}}
+	{Q \land \lnot \mathds{B}}
+}
+{
+	\vdash \triple
+	{P \land \mathds{B}}
+	{\mathds{C}}
 	{Q}
 }
 \]
@@ -224,7 +272,7 @@ P, P' \in \mathsf{Ass} ::=&
 \pred{apply}{Q \Rightarrow Q', t} \triangleq&\ \pred{apply}{Q, t} \Rightarrow \pred{apply}{Q', t} \\
 \pred{apply}{\exists x \ldotp Q, t} \triangleq&\ \exists x \ldotp \pred{apply}{Q, t} \\
 \pred{apply}{\circledast x \ldotp Q, t} \triangleq&\ \circledast x \ldotp \pred{apply}{Q, t} \\
-\pred{apply}{Q, t} \triangleq&\ P
+\pred{apply}{Q, t} \triangleq&\ Q
 \end{align*}
 
 \begin{align*}
@@ -236,24 +284,31 @@ P, P' \in \mathsf{Ass} ::=&
 \begin{align*}
 \mathsf{join} :&\ [\mathsf{Ass}] \rightarrow \mathsf{Ass} \\
 \pred{join}{Qs} \triangleq&\ \pred{fold}{\lor, qs} \\
-	\text{where }& (ps, ts) = \pred{extract}{Qs} \\
+	\text{where }& ts = \pred{map}{\lambda q \ldotp (q, \pred{fingerprint}{q}), Qs} \\
 		& perms = \pred{permutations}{ts} \\
 		& qs = \pred{map}{\mathsf{combine}, perms} \\
 \end{align*}
 
 \begin{align*}
-\mathsf{combine} :&\ [\mathsf{Ass}] \rightarrow [\mathsf{Ass}] \\
-\pred{combine}{[]} \triangleq&\ [] \\
+\mathsf{combine} :&\ [\mathsf{Ass}] \rightarrow \mathsf{Ass} \\
+\pred{combine}{[]} \triangleq&\ \mathtt{false} \\
+\pred{combine}{[q]} \triangleq&\ \mathtt{false} \\
 \pred{combine}{p : ps} \triangleq&\ \pred{update}{p, ps}
 \end{align*}
 
 \begin{align*}
 \mathsf{fingerprint} :&\ \mathsf{Ass} \rightarrow (\mathsf{Key} \rightarrow \mathsf{Expr}) \\
-\pred{combine}{[]} \triangleq&\ [] \\
-\pred{combine}{p : ps} \triangleq&\ \pred{update}{p, ps}
+\pred{fingerprint}{\boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r} \triangleq&\ \emptyset[r \mapsto \mathds{E}_2] \\
+\pred{fingerprint}{Q \lor Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
+\pred{fingerprint}{Q \land Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
+\pred{fingerprint}{Q \sep Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
+\pred{fingerprint}{Q \Rightarrow Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
+\pred{fingerprint}{\exists x \ldotp Q} \triangleq&\ \exists x \ldotp \pred{fingerprint}{Q} \\
+\pred{fingerprint}{\circledast x \ldotp Q} \triangleq&\ \circledast x \ldotp \pred{fingerprint}{Q} \\
+\pred{fingerprint}{Q} \triangleq&\ \emptyset
 \end{align*}
 
-\iftrue
+\iffalse
 \begin{gather*}
 \color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 0}^r \right\rbrace \\
 \color{blue} \left\lbrace \boxed{\pvar{a} \mapsto v_r}^r \right\rbrace \\
