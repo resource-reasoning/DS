@@ -1,0 +1,301 @@
+\section{Assertions}
+
+\subsection{Syntax}
+
+\begin{align*}
+P, P' \in \mathsf{Ass} ::=&
+\ \mathtt{false} \\
+|&\ \mathtt{emp} \\
+|&\ \pvar{x} = \mathds{E} \\
+|&\ \mathds{E}_1 \mapsto \mathds{E}_2 \\
+|&\ \boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r \\
+|&\ P \land P' \\
+|&\ P \lor P' \\
+|&\ P \sep P' \\
+|&\ P \Rightarrow P' \\
+|&\ \exists x \ldotp P \\
+|&\ \circledast x \ldotp P
+\end{align*}
+
+\subsection{Proof System}
+
+\[
+\infer[\textsc{Assign}]
+{
+	\vdash \triple
+	{P}
+	{\passign{\pvar{x}}{\mathds{E}}}
+	{\exists x\ldotp P[x/\pvar{x}] \land \pvar{x} = \mathds{E}[x/\pvar{x}]}
+}
+{}
+\]
+
+\[
+\infer[\textsc{Read}]
+{
+	\vdash \triple
+	{\cell{\mathds{E}}{n}}
+	{\pderef{\pvar{x}}{\mathds{E}}}
+	{\pvar{x} = n \land \cell{\mathds{E}}{n}}
+}
+{}
+\]
+
+\[
+\infer[\textsc{ReadS}]
+{
+	\vdash \triple
+	{\boxed{\cell{\mathds{E}}{\mathds{E}_r}}^r}
+	{\pderef{\pvar{x}}{\mathds{E}}}
+	{\pvar{x} = \mathds{E}_r \land \boxed{\cell{\mathds{E}}{\mathds{E}_r}}^r}
+}
+{}
+\]
+
+\[
+\infer[\textsc{Write}]
+{
+	\vdash \triple
+	{\cell{\mathds{E}_1}{-}}
+	{\pmutate{\mathds{E}_1}{\mathds{E}_2}}
+	{\cell{\mathds{E}_1}{\mathds{E}_2}}
+}
+{}
+\]
+
+\[
+\infer[\textsc{WriteS}]
+{
+	\vdash \triple
+	{\boxed{\cell{\mathds{E}_1}{-}}^r}
+	{\pmutate{\mathds{E}_1}{\mathds{E}_2}}
+	{\boxed{\cell{\mathds{E}_1}{\mathds{E}_2}}^r}
+}
+{}
+\]
+
+\[
+\infer[\textsc{Alloc}]
+{
+	\vdash \triple
+	{\mathtt{emp}}
+	{\palloc{\pvar{x}}{\mathds{E}}}
+	{\circledast_{0 \leq i < \mathds{E}}\cell{(\pvar{x} + i)}{0}}
+}
+{}
+\]
+
+\[
+\infer[\textsc{AllocS}]
+{
+	\vdash \triple
+	{\mathtt{emp}}
+	{\palloc{\pvar{x}}{\mathds{1}}}
+	{\exists r \ldotp \boxed{\cell{\pvar{x}}{0}}^r}
+}
+{}
+\]
+
+\[
+\infer[\textsc{CmdSeq}]
+{
+	\vdash \triple
+	{P}
+	{\mathds{C}_1; \mathds{C}_2}
+	{Q}
+}
+{
+	\vdash \triple
+	{P}
+	{\mathds{C}_1}
+	{R}\ \
+	\vdash \triple
+	{R}
+	{\mathds{C}_2}
+	{Q}
+}
+\]
+
+\[
+\infer[\textsc{Trans}]
+{
+	\vdash \triple
+	{P}
+	{\mathtt{begin}\ \mathds{C}\ \mathtt{end}}
+	{Q}
+}
+{
+	\vdash \triple
+	{P}
+	{\mathds{C}}
+	{Q}
+}
+\]
+
+\[
+\infer[\textsc{Par}]
+{
+	\vdash \triple
+	{P_1 \sep \ldots \sep P_n}
+	{\mathds{T}_1 \| \ldots \| \mathds{T}_n}
+	{Q}
+}
+{
+	\vdash \triple
+	{P_1}
+	{\mathds{T}_1}
+	{Q_1}\ \
+	\ldots\ \
+	\vdash \triple
+	{P_n}
+	{\mathds{T}_n}
+	{Q_n}\
+	Q = \pred{join}{[Q_1, \ldots, Q_n]}
+}
+\]
+
+\[
+\infer[\textsc{Seq}]
+{
+	\vdash \triple
+	{P}
+	{\mathds{P}_1; \mathds{P}_2}
+	{Q}
+}
+{
+	\vdash \triple
+	{P}
+	{\mathds{P}_1}
+	{P'}\ \
+	\vdash \triple
+	{P'}
+	{\mathds{P}_2}
+	{Q}
+}
+\]
+
+\[
+\infer[\textsc{Lift}]
+{
+	\vdash \triple
+	{p}
+	{\mathds{P}}
+	{q}
+}
+{
+	(P, t) = \pred{lift}{p}\
+	\vdash \triple
+	{P}
+	{\mathds{P}}
+	{Q}\
+	q = \pred{apply}{Q, t}
+}
+\]
+
+\begin{align*}
+\mathsf{lift} :&\ \mathsf{Ass} \rightarrow \mathsf{Ass} \times (\mathsf{Key} \rightarrow \mathsf{Expr}) \\
+\pred{lift}{\boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r} \triangleq&\ \left( \boxed{\mathds{E}_1 \mapsto v_r}^r, \emptyset[r \mapsto \mathds{E}_2] \right) \\
+\pred{lift}{P \lor P'} \triangleq&\ (p \lor p', t \uplus t') \\
+	\text{where }& (p, t) = \pred{lift}{P} \\
+		& (p', t') = \pred{lift}{P'} \\
+\pred{lift}{P \land P'} \triangleq&\ (p \land p', t \uplus t') \\
+	\text{where }& (p, t) = \pred{lift}{P} \\
+		& (p', t') = \pred{lift}{P'} \\
+\pred{lift}{P \sep P'} \triangleq&\ (p \sep p', t \uplus t') \\
+	\text{where }& (p, t) = \pred{lift}{P} \\
+		& (p', t') = \pred{lift}{P'} \\
+\pred{lift}{P \Rightarrow P'} \triangleq&\ (p \Rightarrow p', t \uplus t') \\
+	\text{where }& (p, t) = \pred{lift}{P} \\
+		& (p', t') = \pred{lift}{P'} \\
+\pred{lift}{\exists x \ldotp P} \triangleq&\ \exists x \ldotp \pred{lift}{P} \\
+\pred{lift}{\circledast x \ldotp P} \triangleq&\ \circledast x \ldotp \pred{lift}{P} \\
+\pred{lift}{P} \triangleq&\ P
+\end{align*}
+
+\begin{align*}
+\mathsf{apply} :&\ \mathsf{Ass} \times (\mathsf{Key} \rightarrow \mathsf{Expr}) \rightarrow \mathsf{Ass} \\
+\pred{apply}{\boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r, t} \triangleq&\ \boxed{\mathds{E}_1[\mathds{E}/v_r] \mapsto \mathds{E}_2[\mathds{E}/v_r]}^r \\
+\text{where }& \mathds{E} = t(r) \\
+\pred{apply}{\pvar{x} = \mathds{E}, t} \triangleq&\ \pvar{x} = \pred{suball}{\mathds{E}, t} \\
+\pred{apply}{\mathds{E}_1 \mapsto \mathds{E}_2, t} \triangleq&\ \pred{suball}{\mathds{E}_1, t} \mapsto \pred{suball}{\mathds{E}_2, t} \\
+\pred{apply}{Q \lor Q', t} \triangleq&\ \pred{apply}{Q, t} \lor \pred{apply}{Q', t} \\
+\pred{apply}{Q \land Q', t} \triangleq&\ \pred{apply}{Q, t} \land \pred{apply}{Q', t} \\
+\pred{apply}{Q \sep Q', t} \triangleq&\ \pred{apply}{Q, t} \sep \pred{apply}{Q', t} \\
+\pred{apply}{Q \Rightarrow Q', t} \triangleq&\ \pred{apply}{Q, t} \Rightarrow \pred{apply}{Q', t} \\
+\pred{apply}{\exists x \ldotp Q, t} \triangleq&\ \exists x \ldotp \pred{apply}{Q, t} \\
+\pred{apply}{\circledast x \ldotp Q, t} \triangleq&\ \circledast x \ldotp \pred{apply}{Q, t} \\
+\pred{apply}{Q, t} \triangleq&\ P
+\end{align*}
+
+\begin{align*}
+\mathsf{suball} :&\ \mathsf{Expr} \times (\mathsf{Key} \rightarrow \mathsf{Expr}) \rightarrow \mathsf{Expr} \\
+\pred{suball}{\mathds{E}, \emptyset} \triangleq&\ \mathds{E} \\
+\pred{suball}{\mathds{E}, t[r \mapsto \mathds{E}_r]} \triangleq&\ \pred{suball}{\mathds{E}, t}[\mathds{E}_r / v_r]
+\end{align*}
+
+\begin{align*}
+\mathsf{join} :&\ [\mathsf{Ass}] \rightarrow \mathsf{Ass} \\
+\pred{join}{Qs} \triangleq&\ \pred{fold}{\lor, qs} \\
+	\text{where }& (ps, ts) = \pred{extract}{Qs} \\
+		& perms = \pred{permutations}{ts} \\
+		& qs = \pred{map}{\mathsf{combine}, perms} \\
+\end{align*}
+
+\begin{align*}
+\mathsf{combine} :&\ [\mathsf{Ass}] \rightarrow [\mathsf{Ass}] \\
+\pred{combine}{[]} \triangleq&\ [] \\
+\pred{combine}{p : ps} \triangleq&\ \pred{update}{p, ps}
+\end{align*}
+
+\begin{align*}
+\mathsf{fingerprint} :&\ \mathsf{Ass} \rightarrow (\mathsf{Key} \rightarrow \mathsf{Expr}) \\
+\pred{combine}{[]} \triangleq&\ [] \\
+\pred{combine}{p : ps} \triangleq&\ \pred{update}{p, ps}
+\end{align*}
+
+\iftrue
+\begin{gather*}
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 0}^r \right\rbrace \\
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto v_r}^r \right\rbrace \\
+\begin{array}{c || c}
+\begin{array}{l}
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto v_r}^r \right\rbrace \\
+\pderef{\pvar{x}}{\pvar{a}}; \\
+\pmutate{\pvar{a}}{\pvar{x} + 1} \\
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto v_r + 1}^r \right\rbrace
+\end{array}
+&
+\begin{array}{l}
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto v_r}^r \right\rbrace \\
+\pmutate{\pvar{a}}{2} \\
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 2}^r \right\rbrace
+\end{array}
+\end{array} \\
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 2 \lor \pvar{a} \mapsto 3}^r \right\rbrace
+\end{gather*}
+
+\begin{gather*}
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 0}^r \right\rbrace \\
+\begin{array}{c || c || c}
+\begin{array}{l}
+\color{blue} \left\lbrace \pvar{a} \mapsto n_r \right\rbrace \\
+\pderef{\pvar{x}}{\pvar{a}}; \\
+\pmutate{\pvar{a}}{\pvar{x} + 1} \\
+\color{blue} \left\lbrace \pvar{a} \mapsto n_r + 1 \right\rbrace
+\end{array}
+&
+\begin{array}{l}
+\color{blue} \left\lbrace \pvar{a} \mapsto n_r \right\rbrace \\
+\pmutate{\pvar{a}}{2} \\
+\color{blue} \left\lbrace \pvar{a} \mapsto 2 \right\rbrace
+\end{array}
+&
+\begin{array}{l}
+\color{blue} \left\lbrace \pvar{a} \mapsto n_r \right\rbrace \\
+\pmutate{\pvar{a}}{5} \\
+\color{blue} \left\lbrace \pvar{a} \mapsto 5 \right\rbrace
+\end{array}
+\end{array} \\
+\color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 2 \lor \pvar{a} \mapsto 3 \lor \pvar{a} \mapsto 5 \lor \pvar{a} \mapsto 6}^r \right\rbrace
+\end{gather*}
+\fi
