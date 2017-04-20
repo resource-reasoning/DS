@@ -1,22 +1,89 @@
 \section{Assertions}
 
+\subsection{Example}
+
+Let's assume a bank database that holds accounts for customers. We abstract the latter as predicates of the shape $\pred{Account}{x, m}$ signifying a storage location at $x$ with dollar amount $m$. As the bank allows no overdraft, we enforce $m$ to be a non-negative number.
+\[
+\pred{Account}{x, m} \equiv \exists r \ldotp \boxed{x \mapsto m \land m \geq 0}^r_{I(r, x, m)}
+\]
+
+We now consider the scenario where a customer Bob owns an account at $\pvar{b}$ containing some $n$ dollars. At the same time, he has to pay rent which takes \$10 out of his balance (only if available) and receives his salary of \$15, therefore two transactions ($T_1$ and $T_2$) run concurrently to perform the tasks. The actions on the storage allowed and performed by each of the transactions is described in $I(r, x, m)$.
+\[
+I(r, x, m) \triangleq \left( 
+\begin{array}{r l}
+T_1: & \cell{x}{m} \sep m \geq 10 \transfersto \cell{x}{m - 10} \sep m \geq 0 \\
+T_2: & \cell{x}{m} \transfersto \cell{x}{m + 15}
+\end{array}
+ \right)
+\]
+
+A sketch proof of the two transactions running under \textsc{2pl} follows.
+\begin{gather*}
+\specline{\pred{Account}{\pvar{b}, n}} \\
+\specline{\exists r \ldotp \boxed{\cell{\pvar{b}}{n} \sep n \geq 0}^r_{I} \sep [T_1]^r \sep [T_2]^r} \\
+\begin{array}{c || c}\
+\begin{array}{l}
+\mathtt{begin} \\
+	\quad \specline{n \geq 0 \sep \left( \cell{\pvar{b}}{n} \lor \cell{\pvar{b}}{n + 15} \right)} \\
+	\quad \pderef{\pvar{x}}{\pvar{b}}; \\
+	\quad \pifs{\pvar{x} \geq 10} \\
+	\quad \quad \pmutate{\pvar{b}}{\pvar{x} - 10} \\
+	\quad \specline{\left( n \geq 10 \sep \cell{\pvar{b}}{n - 10} \right) \lor \\ \left( n \geq 0 \sep \cell{\pvar{b}}{n + 5} \right) \lor \\ \left( 0 \leq n < 10 \sep \cell{\pvar{b}}{n} \right)} \\
+\mathtt{end}
+\end{array}
+&
+\begin{array}{l}
+\mathtt{begin} \\
+	\quad \specline{\left( 0 \leq n < 10 \sep \cell{\pvar{b}}{n} \right) \lor \\ (n \geq 10 \sep \cell{\pvar{b}}{n - 10})} \\
+	\quad \pderef{\pvar{y}}{\pvar{b}}; \\
+	\quad \pmutate{\pvar{b}}{\pvar{y} + 15} \\
+	\quad \specline{\left( 0 \leq n < 10 \sep \cell{\pvar{b}}{n + 15} \right) \lor \\ (n \geq 10 \land \cell{\pvar{b}}{n + 5})} \\
+\mathtt{end}
+\end{array}
+\end{array} \\
+\specline{\left( 0 \leq n < 10 \sep \cell{\pvar{b}}{n + 15} \right) \lor \left( n \geq 0 \sep \cell{\pvar{b}}{n + 5} \right)} \\
+\vdots \\
+\specline{\pred{Account}{\pvar{b}, n + 15} \lor \pred{Account}{\pvar{b}, n + 5}}
+\end{gather*}
+
+\iffalse
+
 We assume the presence of logical variables, $x \in \mathsf{LVar}$, logical values, $l \in \mathsf{LVal}$ and logical expressions, $E \in \mathsf{LExpr}$. We define a logical environment, $e \in \mathsf{LEnv}$, as a function $\mathsf{LVar} \rightarrow \mathsf{LVal}$.
 
 \subsection{Syntax}
 
 \begin{align*}
 P, P' \in \mathsf{Ass} ::=&
-\ \mathtt{false} \\
-|&\ \mathtt{true} \\
-|&\ \mathtt{emp} \\
-|&\ E_1 = E_2 \\
-|&\ E_1 \mapsto E_2 \\
-|&\ \boxed{E_1 \mapsto E_2}^r \\
-|&\ P \land P' \\
-|&\ P \lor P' \\
-|&\ P \sep P' \\
-|&\ P \Rightarrow P' \\
-|&\ \exists x \ldotp P
+\ \mathtt{false}\
+|\ \mathtt{true}\
+|\ \mathtt{emp}\
+|\ E_1 = E_2\
+|\ E_1 \mapsto E_2\
+|\ P \land P' \\
+|&\ P \lor P'\
+|\ P \sep P'\
+|\ P \sepimp P'\
+|\ P \Rightarrow P'\
+|\ \exists x \ldotp P\
+|\ \circledast x \ldotp P \\
+|&\ \boxed{P}^r_I\
+|\ \left[ \gamma(E_1, \ldots, E_n) \right]^r
+|\ \alpha(E_1, \ldots, E_n) \\
+p, p' \in \mathsf{BAss} ::=&
+\ \mathtt{false}\
+|\ \mathtt{true}\
+|\ \mathtt{emp}\
+|\ E_1 = E_2\
+|\ E_1 \mapsto E_2\
+|\ p \land p' \\
+|&\ p \lor p'\
+|\ p \sep p'\
+|\ p \sepimp p'\
+|\ p \Rightarrow p'\
+|\ \exists x \ldotp p\
+|\ \circledast x \ldotp p \\
+I \in \mathsf{IAss} ::=&
+\ \gamma(\vec{x}): \exists \vec{y} \ldotp (P \transfersto P')\ |\ I_1, I_2 \\
 \end{align*}
 
 \subsection{Semantics}
@@ -257,75 +324,6 @@ P, P' \in \mathsf{Ass} ::=&
 }
 \]
 
-\begin{align*}
-\mathsf{lift} :&\ \mathsf{Ass} \rightarrow \mathsf{Ass} \times (\mathsf{Key} \rightarrow \mathsf{Expr}) \\
-\pred{lift}{\boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r} \triangleq&\ \left( \boxed{\mathds{E}_1 \mapsto v_r}^r, \emptyset[r \mapsto \mathds{E}_2] \right) \\
-\pred{lift}{P \lor P'} \triangleq&\ (p \lor p', t \uplus t') \\
-	\text{where }& (p, t) = \pred{lift}{P} \\
-		& (p', t') = \pred{lift}{P'} \\
-\pred{lift}{P \land P'} \triangleq&\ (p \land p', t \uplus t') \\
-	\text{where }& (p, t) = \pred{lift}{P} \\
-		& (p', t') = \pred{lift}{P'} \\
-\pred{lift}{P \sep P'} \triangleq&\ (p \sep p', t \uplus t') \\
-	\text{where }& (p, t) = \pred{lift}{P} \\
-		& (p', t') = \pred{lift}{P'} \\
-\pred{lift}{P \Rightarrow P'} \triangleq&\ (p \Rightarrow p', t \uplus t') \\
-	\text{where }& (p, t) = \pred{lift}{P} \\
-		& (p', t') = \pred{lift}{P'} \\
-\pred{lift}{\exists x \ldotp P} \triangleq&\ \exists x \ldotp \pred{lift}{P} \\
-\pred{lift}{\circledast x \ldotp P} \triangleq&\ \circledast x \ldotp \pred{lift}{P} \\
-\pred{lift}{P} \triangleq&\ P
-\end{align*}
-
-\begin{align*}
-\mathsf{apply} :&\ \mathsf{Ass} \times (\mathsf{Key} \rightarrow \mathsf{Expr}) \rightarrow \mathsf{Ass} \\
-\pred{apply}{\boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r, t} \triangleq&\ \boxed{\mathds{E}_1[\mathds{E}/v_r] \mapsto \mathds{E}_2[\mathds{E}/v_r]}^r \\
-\text{where }& \mathds{E} = t(r) \\
-\pred{apply}{\pvar{x} = \mathds{E}, t} \triangleq&\ \pvar{x} = \pred{suball}{\mathds{E}, t} \\
-\pred{apply}{\mathds{E}_1 \mapsto \mathds{E}_2, t} \triangleq&\ \pred{suball}{\mathds{E}_1, t} \mapsto \pred{suball}{\mathds{E}_2, t} \\
-\pred{apply}{Q \lor Q', t} \triangleq&\ \pred{apply}{Q, t} \lor \pred{apply}{Q', t} \\
-\pred{apply}{Q \land Q', t} \triangleq&\ \pred{apply}{Q, t} \land \pred{apply}{Q', t} \\
-\pred{apply}{Q \sep Q', t} \triangleq&\ \pred{apply}{Q, t} \sep \pred{apply}{Q', t} \\
-\pred{apply}{Q \Rightarrow Q', t} \triangleq&\ \pred{apply}{Q, t} \Rightarrow \pred{apply}{Q', t} \\
-\pred{apply}{\exists x \ldotp Q, t} \triangleq&\ \exists x \ldotp \pred{apply}{Q, t} \\
-\pred{apply}{\circledast x \ldotp Q, t} \triangleq&\ \circledast x \ldotp \pred{apply}{Q, t} \\
-\pred{apply}{Q, t} \triangleq&\ Q
-\end{align*}
-
-\begin{align*}
-\mathsf{suball} :&\ \mathsf{Expr} \times (\mathsf{Key} \rightarrow \mathsf{Expr}) \rightarrow \mathsf{Expr} \\
-\pred{suball}{\mathds{E}, \emptyset} \triangleq&\ \mathds{E} \\
-\pred{suball}{\mathds{E}, t[r \mapsto \mathds{E}_r]} \triangleq&\ \pred{suball}{\mathds{E}, t}[\mathds{E}_r / v_r]
-\end{align*}
-
-\begin{align*}
-\mathsf{join} :&\ [\mathsf{Ass}] \rightarrow \mathsf{Ass} \\
-\pred{join}{Qs} \triangleq&\ \pred{fold}{\lor, qs} \\
-	\text{where }& ts = \pred{map}{\lambda q \ldotp (q, \pred{fingerprint}{q}), Qs} \\
-		& perms = \pred{permutations}{ts} \\
-		& qs = \pred{map}{\mathsf{combine}, perms} \\
-\end{align*}
-
-\begin{align*}
-\mathsf{combine} :&\ [\mathsf{Ass}] \rightarrow \mathsf{Ass} \\
-\pred{combine}{[]} \triangleq&\ \mathtt{false} \\
-\pred{combine}{[q]} \triangleq&\ \mathtt{false} \\
-\pred{combine}{p : ps} \triangleq&\ \pred{update}{p, ps}
-\end{align*}
-
-\begin{align*}
-\mathsf{fingerprint} :&\ \mathsf{Ass} \rightarrow (\mathsf{Key} \rightarrow \mathsf{Expr}) \\
-\pred{fingerprint}{\boxed{\mathds{E}_1 \mapsto \mathds{E}_2}^r} \triangleq&\ \emptyset[r \mapsto \mathds{E}_2] \\
-\pred{fingerprint}{Q \lor Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
-\pred{fingerprint}{Q \land Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
-\pred{fingerprint}{Q \sep Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
-\pred{fingerprint}{Q \Rightarrow Q'} \triangleq&\ \pred{fingerprint}{Q} \uplus \pred{fingerprint}{Q'} \\
-\pred{fingerprint}{\exists x \ldotp Q} \triangleq&\ \exists x \ldotp \pred{fingerprint}{Q} \\
-\pred{fingerprint}{\circledast x \ldotp Q} \triangleq&\ \circledast x \ldotp \pred{fingerprint}{Q} \\
-\pred{fingerprint}{Q} \triangleq&\ \emptyset
-\end{align*}
-
-\iffalse
 \begin{gather*}
 \color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 0}^r \right\rbrace \\
 \color{blue} \left\lbrace \boxed{\pvar{a} \mapsto v_r}^r \right\rbrace \\

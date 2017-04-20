@@ -73,7 +73,7 @@ We define the semantics of boolean expressions with respect to a transaction sta
 The operational semantics of commands are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed.
 \begin{gather*}
 (-, -, -, -, -) \rightsquigarrow (-, -, -, -, -) 
-: \mathcal{P}(\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd})
+: (\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd})^2
 \end{gather*}
 
 The \textsc{Assign} rule works in a standard way, by updating the value associated to a variable in the transaction's stack with the assigned expression evaluated under $s$. It then resolves into a $\pskip$ command without touching the global storage or the lock manager.
@@ -173,12 +173,12 @@ A transaction can allocate fresh storage cells through the use of the $\mathtt{a
 {
 	\iota \vdash (h, \Phi, s, p, \palloc{\pvar{x}}{\mathds{E}})
 	\rightsquigarrow
-	(h[l \mapsto 0] \ldots [l + n - 1 \mapsto 0], \Phi, s[\pvar{x} \mapsto l], p, \pskip)
+	(h[l \mapsto 0] \ldots [l + n - 1 \mapsto 0], \Phi', s[\pvar{x} \mapsto l], p, \pskip)
 }
 {
 	n = \llbracket \mathds{E} \rrbracket_s\ \
-	n \in \mathds{N}\ \
-	l, \ldots, l + n - 1 \not\in \pred{dom}{h}
+	l, \ldots, l + n - 1 \not\in \pred{dom}{h}\ \
+	\Phi' = \Phi[l \mapsto (\emptyset, \textsc{u})]\ldots[l + n - 1 \mapsto (\emptyset, \textsc{u})]
 }
 \]
 
@@ -196,7 +196,8 @@ In order to read a value from a storage cell we require the current transaction 
 	k \in \pred{dom}{h}\ \
 	v = h(k)\ \
 	(I, \kappa) = \Phi(k)\ \
-	\iota \in I
+	\iota \in I\ \
+	\kappa \geq \textsc{s}
 }
 \]
 
@@ -283,7 +284,7 @@ The two unlock rules have the effect of releasing any cells previously acquired 
 \subsection{Transactions}
 The operational semantics of transactions are defined as a transition relation through the following rule, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction which is being executed.
 \begin{gather*}
-(-, -, -, -, -) \twoheadrightarrow (-, -, -, -, -) : \mathcal{P}(\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Trans})
+(-, -, -, -, -) \twoheadrightarrow (-, -, -, -, -) : (\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Trans})^2
 \end{gather*}
 
 \[
@@ -305,7 +306,7 @@ The operational semantics of transactions are defined as a transition relation t
 The operational semantics of programs are defined as a transition relation through the following rules.
 \begin{gather*}
 (-, -, -, -) \rightarrowtail (-, -, -, -) 
-: \mathcal{P}(\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog})
+: (\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog})^2
 \end{gather*}
 
 \[
@@ -330,7 +331,9 @@ The operational semantics of programs are defined as a transition relation throu
 	\rightarrowtail
 	(h, \Phi, S \setminus \{\iota\}, \mathds{P})
 }
-{}
+{
+	\{ k\ |\ (I, \kappa) = \Phi(k) \land \iota \in I \} \equiv \emptyset
+}
 \]
 
 \[
@@ -348,28 +351,53 @@ The operational semantics of programs are defined as a transition relation throu
 \]
 
 \[
-\infer[\textsc{Par}]
+\infer[\textsc{ParL}]
 {
-	\vdash (h, \Phi, S, \mathds{T}_1 \| \ldots \| \mathds{T}_i \| \ldots \| \mathds{T}_n)
+	\vdash (h, \Phi, S, \mathds{P}_1 \| \mathds{P}_2)
 	\rightarrowtail
-	(h', \Phi', S', \mathds{T}_1 \| \ldots \| \mathds{T}_i' \| \ldots \| \mathds{T}_n)
+	(h', \Phi', S', \mathds{P}_1' \| \mathds{P}_2)
 }
 {
-	1 \leq i \leq n\ \
-	\vdash (h, \Phi, S, \mathds{T}_i)
+	\vdash (h, \Phi, S, \mathds{P}_1)
 	\rightarrowtail
-	(h', \Phi', S', \mathds{T}_i')
+	(h', \Phi', S', \mathds{P}_1')
 }
 \]
 
 \[
-\infer[\textsc{ParEnd}]
+\infer[\textsc{ParR}]
 {
-	\vdash (h, \Phi, S, \mathds{T}_1 \| \ldots \| \mathtt{begin}\ \pskip\ \mathtt{end}_i \| \ldots \| \mathds{T}_n)
+	\vdash (h, \Phi, S, \mathds{P}_1 \| \mathds{P}_2)
 	\rightarrowtail
-	(h, \Phi, S, \mathds{T}_1 \| \ldots \| \mathds{T}_n)
+	(h', \Phi', S', \mathds{P}_1 \| \mathds{P}_2')
 }
 {
-	1 \leq i \leq n
+	\vdash (h, \Phi, S, \mathds{P}_2)
+	\rightarrowtail
+	(h', \Phi', S', \mathds{P}_2')
+}
+\]
+
+\[
+\infer[\textsc{ParEndL}]
+{
+	\vdash (h, \Phi, S, \mathtt{begin}\ \pskip\ \mathtt{end}_\iota \| \mathds{P})
+	\rightarrowtail
+	(h, \Phi, S, \mathds{P})
+}
+{
+	\{ k\ |\ (I, \kappa) = \Phi(k) \land \iota \in I \} \equiv \emptyset
+}
+\]
+
+\[
+\infer[\textsc{ParEndR}]
+{
+	\vdash (h, \Phi, S, \mathds{P} \| \mathtt{begin}\ \pskip\ \mathtt{end}_\iota)
+	\rightarrowtail
+	(h, \Phi, S, \mathds{P})
+}
+{
+	\{ k\ |\ (I, \kappa) = \Phi(k) \land \iota \in I \} \equiv \emptyset
 }
 \]
