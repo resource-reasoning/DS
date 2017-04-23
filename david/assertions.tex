@@ -4,15 +4,15 @@
 
 Let's assume a bank database that holds accounts for customers. We abstract the latter as predicates of the shape $\pred{Account}{x, m}$ signifying a storage location at $x$ with dollar amount $m$. As the bank allows no overdraft, we enforce $m$ to be a non-negative number.
 \[
-\pred{Account}{x, m} \equiv \exists r \ldotp \boxed{x \mapsto m \land m \geq 0}^r_{I(r, x, m)}
+\pred{Account}{x, m} \equiv \exists r \ldotp \boxed{x \mapsto m \land m \geq 0}^r_{I(r, x)}
 \]
 
 We now consider the scenario where a customer Bob owns an account at $\pvar{b}$ containing some $n$ dollars. At the same time, he has to pay rent which takes \$10 out of his balance (only if available) and receives his salary of \$15, therefore two transactions ($T_1$ and $T_2$) run concurrently to perform the tasks. The actions on the storage allowed and performed by each of the transactions is described in $I(r, x, m)$.
 \[
-I(r, x, m) \triangleq \left( 
+I(r, x) \triangleq \left( 
 \begin{array}{r l}
-T_1: & \cell{x}{m} \sep m \geq 10 \transfersto \cell{x}{m - 10} \sep m \geq 0 \\
-T_2: & \cell{x}{m} \transfersto \cell{x}{m + 15}
+T_1(m): & \cell{x}{m} \sep m \geq 10 \transfersto \cell{x}{m - 10} \sep m \geq 0 \\
+T_2(m): & \cell{x}{m} \transfersto \cell{x}{m + 15}
 \end{array}
  \right)
 \]
@@ -20,7 +20,7 @@ T_2: & \cell{x}{m} \transfersto \cell{x}{m + 15}
 A sketch proof of the two transactions running under \textsc{2pl} follows.
 \begin{gather*}
 \specline{\pred{Account}{\pvar{b}, n}} \\
-\specline{\exists r \ldotp \boxed{\cell{\pvar{b}}{n} \sep n \geq 0}^r_{I} \sep [T_1]^r \sep [T_2]^r} \\
+\specline{\exists r \ldotp \boxed{\cell{\pvar{b}}{n} \sep n \geq 0}^r_{I} \sep [T_1(n)]^r \sep [T_2(n)]^r} \\
 \begin{array}{c || c}\
 \begin{array}{l}
 \mathtt{begin} \\
@@ -34,10 +34,10 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 &
 \begin{array}{l}
 \mathtt{begin} \\
-	\quad \specline{\left( 0 \leq n < 10 \sep \cell{\pvar{b}}{n} \right) \lor \\ (n \geq 10 \sep \cell{\pvar{b}}{n - 10})} \\
+	\quad \specline{\left( n \geq 0 \sep \cell{\pvar{b}}{n} \right) \lor \\ (n \geq 10 \sep \cell{\pvar{b}}{n - 10})} \\
 	\quad \pderef{\pvar{y}}{\pvar{b}}; \\
 	\quad \pmutate{\pvar{b}}{\pvar{y} + 15} \\
-	\quad \specline{\left( 0 \leq n < 10 \sep \cell{\pvar{b}}{n + 15} \right) \lor \\ (n \geq 10 \land \cell{\pvar{b}}{n + 5})} \\
+	\quad \specline{\left( n \geq 0 \sep \cell{\pvar{b}}{n + 15} \right) \lor \\ (n \geq 10 \land \cell{\pvar{b}}{n + 5})} \\
 \mathtt{end}
 \end{array}
 \end{array} \\
@@ -46,11 +46,9 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 \specline{\pred{Account}{\pvar{b}, n + 15} \lor \pred{Account}{\pvar{b}, n + 5}}
 \end{gather*}
 
-\iffalse
+\subsection{Syntax}
 
 We assume the presence of logical variables, $x \in \mathsf{LVar}$, logical values, $l \in \mathsf{LVal}$ and logical expressions, $E \in \mathsf{LExpr}$. We define a logical environment, $e \in \mathsf{LEnv}$, as a function $\mathsf{LVar} \rightarrow \mathsf{LVal}$.
-
-\subsection{Syntax}
 
 \begin{align*}
 P, P' \in \mathsf{Ass} ::=&
@@ -86,6 +84,7 @@ I \in \mathsf{IAss} ::=&
 \ \gamma(\vec{x}): \exists \vec{y} \ldotp (P \transfersto P')\ |\ I_1, I_2 \\
 \end{align*}
 
+\iffalse
 \subsection{Semantics}
 
 \begin{align*}
@@ -112,85 +111,9 @@ I \in \mathsf{IAss} ::=&
 \llbracket P \Rightarrow P' \rrbracket_{e, s} &\triangleq \{ h\ |\ h \in \llbracket P \rrbracket_{e, s} \Rightarrow h \in \llbracket P' \rrbracket_{e, s} \} \\
 \llbracket \exists x \ldotp P \rrbracket_{e, s} &\triangleq \llbracket P \rrbracket_{e[x \mapsto v], s}
 \end{align*}
+\fi
 
 \subsection{Proof System}
-
-\[
-\infer[\textsc{Assign}]
-{
-	\vdash \triple
-	{P}
-	{\passign{\pvar{x}}{E}}
-	{\exists x\ldotp P[x/\pvar{x}] \land \pvar{x} = E[x/\pvar{x}]}
-}
-{}
-\]
-
-\[
-\infer[\textsc{Read}]
-{
-	\vdash \triple
-	{\cell{E}{n}}
-	{\pderef{\pvar{x}}{E}}
-	{\pvar{x} = n \land \cell{E}{n}}
-}
-{}
-\]
-
-\[
-\infer[\textsc{ReadS}]
-{
-	\vdash \triple
-	{\boxed{\cell{E}{E_r}}^r}
-	{\pderef{\pvar{x}}{E}}
-	{\pvar{x} = E_r \land \boxed{\cell{E}{E_r}}^r}
-}
-{}
-\]
-
-\[
-\infer[\textsc{Write}]
-{
-	\vdash \triple
-	{\cell{E_1}{-}}
-	{\pmutate{E_1}{E_2}}
-	{\cell{E_1}{E_2}}
-}
-{}
-\]
-
-\[
-\infer[\textsc{WriteS}]
-{
-	\vdash \triple
-	{\boxed{\cell{E_1}{-}}^r}
-	{\pmutate{E_1}{E_2}}
-	{\boxed{\cell{E_1}{E_2}}^r}
-}
-{}
-\]
-
-\[
-\infer[\textsc{Alloc}]
-{
-	\vdash \triple
-	{\mathtt{emp}}
-	{\palloc{\pvar{x}}{E}}
-	{\circledast_{0 \leq i < E}\cell{(\pvar{x} + i)}{0}}
-}
-{}
-\]
-
-\[
-\infer[\textsc{AllocS}]
-{
-	\vdash \triple
-	{\mathtt{emp}}
-	{\palloc{\pvar{x}}{\mathds{1}}}
-	{\exists r \ldotp \boxed{\cell{\pvar{x}}{0}}^r}
-}
-{}
-\]
 
 \[
 \infer[\textsc{CmdSeq}]
@@ -257,10 +180,10 @@ I \in \mathsf{IAss} ::=&
 	{Q}
 }
 {
-	\vdash \triple
-	{P}
+	\vdash_{\textsc{SL}} \triple
+	{p}
 	{\mathds{C}}
-	{Q}
+	{q}
 }
 \]
 
@@ -268,21 +191,19 @@ I \in \mathsf{IAss} ::=&
 \infer[\textsc{Par}]
 {
 	\vdash \triple
-	{P_1 \sep \ldots \sep P_n}
-	{\mathds{T}_1 \| \ldots \| \mathds{T}_n}
+	{P_1 \sep P_2}
+	{\mathds{P}_1 \| \mathds{P}_2}
 	{Q}
 }
 {
 	\vdash \triple
 	{P_1}
-	{\mathds{T}_1}
+	{\mathds{P}_1}
 	{Q_1}\ \
-	\ldots\ \
 	\vdash \triple
-	{P_n}
-	{\mathds{T}_n}
-	{Q_n}\
-	Q = \pred{join}{[Q_1, \ldots, Q_n]}
+	{P_2}
+	{\mathds{P}_2}
+	{Q_2}
 }
 \]
 
@@ -323,6 +244,8 @@ I \in \mathsf{IAss} ::=&
 	q = \pred{apply}{Q, t}
 }
 \]
+
+\iffalse
 
 \begin{gather*}
 \color{blue} \left\lbrace \boxed{\pvar{a} \mapsto 0}^r \right\rbrace \\
