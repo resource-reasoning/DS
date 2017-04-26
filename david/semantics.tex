@@ -32,13 +32,13 @@ A lock manager is defined as a total function from a set of storage keys to tran
 
 The state of all transactions running as part of a program is a partial function $\mathsf{TState} : \mathsf{Tid} \rightharpoonup \mathsf{Stack} \times \mathsf{Phase}$ which is ranged over by $S$. Informally, it associates each transaction which is currently being executed to its own stack and locking phase. We also define a total function $\hat{-}(-) : \mathsf{TState} \times \mathsf{Tid} \rightarrow \mathsf{Stack} \times \mathsf{Phase}$ that overrides the original function lookup in order to cope with newly created transactions with an empty stack starting on the growing phase.
 \[
-\hat{S}(\iota) \triangleq \bigg\{ \begin{array}{l l}
-S(\iota) & \text{if } \iota \in \pred{dom}{S} \\
-(\emptyset, \curlywedge) & \text{otherwise}
-\end{array}
+\hat{S}(\iota) \triangleq \begin{cases}
+S(\iota), & \text{if } \iota \in \pred{dom}{S} \\
+(\emptyset, \curlywedge), & \text{otherwise}
+\end{cases}
 \]
 
-\subsubsection{Actions}
+\subsubsection{Action Labels}
 
 Actions performed by transactions are represented using transition labels from the set \textsf{Act} which is ranged over by $\alpha$ and comes from the following grammar, where $k, l, n \in \mathsf{Key}, v \in \mathsf{Val}, \kappa \in \mathsf{Lock}$.
 \begin{align*}
@@ -48,7 +48,8 @@ Actions performed by transactions are represented using transition labels from t
 |&\ \actread{k}{v} \\
 |&\ \actwrite{k}{v} \\
 |&\ \actlock{k}{\kappa} \\
-|&\ \actunlock{k}
+|&\ \actunlock{k} \\
+|&\ \lightning
 \end{align*}
 
 \subsection{Numerical Expressions}
@@ -57,18 +58,18 @@ We define the semantics of expressions with respect to a transaction stack, $\ll
 \begin{align*}
 \llbracket v \rrbracket_s &\triangleq v \\
 \llbracket \pvar{x} \rrbracket_s &\triangleq
-\bigg\{ \begin{array}{l l}
-s(\pvar{x}) &\text{if } \pvar{x} \in \textsf{dom}(s)\\
-0&\text{otherwise}
-\end{array} \\
+\begin{cases}
+s(\pvar{x}), &\text{if } \pvar{x} \in \textsf{dom}(s)\\
+0,&\text{otherwise}
+\end{cases} \\
 \llbracket \mathds{E}_1 + \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s + \llbracket \mathds{E}_2 \rrbracket_s \\
 \llbracket \mathds{E}_1 - \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s - \llbracket \mathds{E}_2 \rrbracket_s \\
 \llbracket \mathds{E}_1 \times \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \times \llbracket \mathds{E}_2 \rrbracket_s \\
 \llbracket \mathds{E}_1 \div \mathds{E}_2 \rrbracket_s &\triangleq 
-\Bigg\{ \begin{array}{l l}
-1 &\text{ if } \llbracket \mathds{E}_2 \rrbracket_s = 0 \\
-\llbracket \mathds{E}_1 \rrbracket_s \div \llbracket \mathds{E}_2 \rrbracket_s &\text{ otherwise} \\
-\end{array}
+\begin{cases}
+1, &\text{ if } \llbracket \mathds{E}_2 \rrbracket_s = 0 \\
+\llbracket \mathds{E}_1 \rrbracket_s \div \llbracket \mathds{E}_2 \rrbracket_s, &\text{ otherwise} \\
+\end{cases}
 \end{align*}
 
 \subsection{Boolean Expressions}
@@ -85,6 +86,50 @@ We define the semantics of boolean expressions with respect to a transaction sta
 \llbracket \mathds{E}_1 < \mathds{E}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{E}_1 \rrbracket_s < \llbracket \mathds{E}_2 \rrbracket_s \\
 \llbracket \mathds{E}_1 \geq \mathds{E}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \geq \llbracket \mathds{E}_2 \rrbracket_s \\
 \llbracket \mathds{E}_1 \leq \mathds{E}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \leq \llbracket \mathds{E}_2 \rrbracket_s \\
+\end{align*}
+
+\subsection{Actions}
+
+We give a semantic interpretation to action labels through the following function.
+\[
+\llbracket - \rrbracket : \mathsf{Act} \rightarrow \mathsf{Storage} \rightarrow \mathcal{P}(\mathsf{Storage} \uplus \{ \lightning \})
+\]
+\begin{align*}
+\llbracket \actid \rrbracket &\triangleq \lambda h \ldotp \{h\} \\
+\llbracket \actalloc{n}{l} \rrbracket &\triangleq \lambda h \ldotp
+\begin{cases}
+\{ h[\vec{a} \mapsto \vec{z}]\ |\ \forall 0 \leq i < n \ldotp \vec{z}_i = 0 \},
+&
+\text{if } n > 0 \text{ and } l \in \mathsf{Key} \text{ and } \\
+& \vec{a} = (l, \ldots, l + n - 1) \text{ and } \\
+& \{ l, \ldots, l + n - 1 \} \cap \pred{dom}{h} \equiv \emptyset \\
+\emptyset, & \text{if } n > 0 \text{ and } l \in \mathsf{Key} \text{ and } \\
+& \{ l, \ldots, l + n - 1 \} \cap \pred{dom}{h} \not\equiv \emptyset \\
+& \text{ or } n > 0 \text{ and } k \not\in \mathsf{Key} \\
+\{ \lightning \}, & \text{otherwise}
+\end{cases} \\
+\llbracket \actread{k}{v} \rrbracket &\triangleq \lambda h \ldotp
+\begin{cases}
+\{ h \}, & \text{if } k \in \pred{dom}{h} \text{ and } h(k) = v \\
+\emptyset, & \text{if } k \in \pred{dom}{h} \text{ and } h(k) \neq v \\
+\{ \lightning \}, & \text{otherwise}
+\end{cases} \\
+\llbracket \actwrite{k}{v} \rrbracket &\triangleq \lambda h \ldotp
+\begin{cases}
+\{ h[k \mapsto v] \}, & \text{if } k \in \pred{dom}{h} \\
+\{ \lightning \}, & \text{otherwise}
+\end{cases} \\
+\llbracket \actlock{k}{\kappa} \rrbracket &\triangleq \lambda h \ldotp
+\begin{cases}
+h & \text{if } k \in \pred{dom}{h} \text{ and } \kappa \in \{ \textsc{s}, \textsc{x} \} \\
+\{ \lightning \}, & \text{otherwise}
+\end{cases} \\
+\llbracket \actunlock{k} \rrbracket &\triangleq \lambda h \ldotp
+\begin{cases}
+h & \text{if } k \in \pred{dom}{h} \\
+\{ \lightning \}, & \text{otherwise}
+\end{cases} \\
+\llbracket \lightning \rrbracket &\triangleq \lambda h \ldotp \{ \lightning \}
 \end{align*}
 
 \subsection{Commands}
@@ -320,10 +365,10 @@ The operational semantics of transactions are defined as a transition relation t
 
 \sx{Here the grammar of \(\mathsf{Prog}\) does not have the form like \( (\mathtt{begin}\ - \mathtt{end})_\iota \), you can say, we extend the grammar when we give the semantics. }
 
-The operational semantics of programs are defined as a transition relation through the following rules.
+The operational semantics of programs are defined as a transition relation through the following rules. Let $\mathsf{State} \triangleq \mathsf{Storage} \uplus \{\lightning\}$ in:
 \begin{gather*}
 (-, -, -, -) \xrightarrow{-} (-, -, -, -) 
-: \mathsf{Act} \times (\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog})^2
+: \mathsf{Act} \times (\mathsf{State} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog})^2
 \end{gather*}
 
 \[
