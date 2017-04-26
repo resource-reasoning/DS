@@ -1,29 +1,47 @@
 \section{Proof of Serializability}
 
-\lem All reads are only succesfully reduced when the appropriate shared lock is held by the running transaction.
 \begin{gather*}
-\forall \iota, h, h', \Phi, \Phi', s, s', p, p' \ldotp \\ (h, \Phi, s, p, \pderef{\pvar{x}}{\mathds{E}}) \overset{\iota}{\rightsquigarrow} (h', \Phi', s', p', \pskip) \Rightarrow \Phi(\llbracket \mathds{E} \rrbracket_s) = (\{\iota\} \cup I, \kappa) \land \kappa \geq \textsc{s}
+a \rightarrow^*_\alpha b \overset{\text{def}}{\iff} \exists a', b' \ldotp a \rightarrow^* a' \xrightarrow{\alpha} b' \rightarrow^* b
+\\
+A(h, \mathds{P}) \triangleq \{ \alpha\ |\ \exists h', S' \ldotp (h, \emptyset, \emptyset, \mathds{P}) \rightarrow_\alpha^* (h', \emptyset, S', \pskip) \} 
+\\
+h, \mathds{P} \vDash \alpha < \alpha' \overset{\text{def}}{\iff} \exists b, h', S' \ldotp (h, \emptyset, \emptyset, \mathds{P}) \rightarrow_\alpha^* b \rightarrow^*_{\alpha'} (h', \emptyset, S', \pskip)
+\\
+\alpha(\iota, k) \triangleq \alpha \text{ s.t. } \alpha \in \{ \actread{\iota}{k}{v}, \actwrite{\iota}{k}{v}\ |\ v \in \mathsf{Val} \}
+\end{gather*}
+\begin{align*}
+\pred{conflict}{\actwrite{i}{k}{v}, \actwrite{j}{k}{v'}} &\triangleq i \neq j
+\\
+\pred{conflict}{\actwrite{i}{k}{v}, \actread{j}{k}{v'}} &\triangleq i \neq j
+\\
+\pred{conflict}{\actread{i}{k}{v}, \actwrite{j}{k}{v'}} &\triangleq i \neq j
+\\
+\pred{conflict}{\alpha, \alpha'} &\triangleq \bot 
+\end{align*}
+
+\lem All reads are preceded by the appropriate shared lock acquisition which is later released.
+\begin{gather*}
+\forall h, \iota, k, v, \kappa \ldotp \\
+\actread{\iota}{k}{v} \in A(h, \mathds{P}) \implies \left( h, \mathds{P} \vDash \actlock{\iota}{k}{\kappa} < \actread{\iota}{k}{v} < \actunlock{\iota}{k} \land \kappa \geq \textsc{s} \right)
 \end{gather*}
 
-\lem All writes are only succesfully reduced when the appropriate exclusive lock is held by the running transaction or if a shared lock is held and no other transaction is holding the same lock.
+\lem All writes are preceded by the appropriate exclusive lock acquisition which is later released.
 \begin{gather*}
-\forall \iota, h, h', \Phi, \Phi', s, s', p, p' \ldotp \\ (h, \Phi, s, p, \pmutate{\mathds{E}_1}{\mathds{E}_2}) \overset{\iota}{\rightsquigarrow} (h', \Phi', s', p', \pskip) \Rightarrow \Phi(\llbracket \mathds{E}_1 \rrbracket_s) = (\{\iota\}, \kappa) \land \kappa \geq \textsc{s}
+\forall h, \iota, k, v \ldotp \\
+\actwrite{\iota}{k}{v} \in A(h, \mathds{P}) \implies \left( h, \mathds{P} \vDash \actlock{\iota}{k}{\textsc{x}} < \actwrite{\iota}{k}{v} < \actunlock{\iota}{k} \right)
 \end{gather*}
 
-\lem Locks can only be acquired while the running transaction is in the growing phase.
+\lem If two transactions run conflicting operations on the same item, either one releases its lock before the other acquires it or vice versa.
 \begin{gather*}
-\forall k, I, \iota, \kappa, \kappa', h, h', \Phi, \Phi', s, s', p, p' \ldotp \\ 
-k \in \pred{dom}{h} \land \iota \not\in I \land (h, \Phi[k \mapsto (I, \kappa)], s, p, \mathds{C}) \overset{\iota}{\rightsquigarrow} (h', \Phi[k \mapsto (\{\iota\} \cup I, \kappa')], s', p', \mathds{C}) \\
-\Rightarrow p = \pgrow
+\forall h, i, j, k, \kappa \ldotp 
+\{ \alpha(i, k), \alpha(j, k) \} \subseteq A(h, \mathds{P}) \land \pred{conflict}{\alpha(i, k), \alpha(j, k)} 
+\\
+\implies \left( h, \mathds{P} \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa} \right) \lor \left( h, \mathds{P} \vDash \actunlock{j}{k} < \actlock{i}{k}{\kappa} \right)
 \end{gather*}
 
-\lem Locks can only be released while the running transaction is in the shrinking phase.
+\lem No lock is acquired by a transaction after one gets released by the same transaction.
 \begin{gather*}
-\forall k, I, \iota, \kappa, \kappa', h, h', \Phi, \Phi', s, s', p, p' \ldotp \\ 
-k \in \pred{dom}{h} \land \iota \not\in I \land (h, \Phi[k \mapsto (\{\iota\} \cup I, \kappa)], s, p, \mathds{C}) \overset{\iota}{\rightsquigarrow} (h', \Phi[k \mapsto (I, \kappa')], s', p', \mathds{C}) \\
-\Rightarrow p' = \pshrink
-\end{gather*}
-
-\begin{gather*}
-\forall \mathds{P} \in \mathsf{Prog}, h, h' \in \mathsf{Heap}, \Phi, \Phi' \in \mathsf{LMan}, S, S' \in \mathsf{TState} \ldotp \\ (h, \Phi, S, \mathds{P}) \rightarrowtail^* (h', \Phi', S', \pskip) \Rightarrow (h, \mathds{P}) \rightarrow^* (h', \pskip)
+\forall h, \iota, k, k', \kappa \ldotp 
+\{ \alpha(\iota, k), \alpha(\iota, k') \} \subseteq A(h, \mathds{P})
+\implies \left( h, \mathds{P} \vDash \actlock{i}{k}{\kappa} < \actunlock{j}{k'} \right)
 \end{gather*}
