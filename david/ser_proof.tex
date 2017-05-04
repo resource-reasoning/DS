@@ -1,26 +1,30 @@
 \section{Proof of Serializability}
 
+\begin{align*}
+\mathsf{trace} &: (\mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog}) \rightarrow [\mathsf{Act}] \\
+\pred{trace}{h, \emptyset, S, \pskip} &\triangleq [] \\
+\pred{trace}{h, \Phi, S, \mathds{P}} &\triangleq \alpha : \pred{trace}{h', \Phi', S', \mathds{P}'}
+\\
+\text{s.t. }& (h, \Phi, S, \mathds{P}) \xrightarrow{\alpha} (h', \Phi', S', \mathds{P}') \rightarrow^* (h'', \emptyset, S'', \pskip)
+\end{align*}
+\begin{align*}
+\mathsf{idx} &: [\mathsf{Act}] \times \mathsf{Act} \rightarrow \mathds{Z} \\
+\pred{idx}{\tau, \alpha} &\triangleq \pred{idx'}{\tau, \alpha, 0} \\
+\mathsf{idx}' &: [\mathsf{Act}] \times \mathsf{Act} \times \mathds{Z} \rightarrow \mathds{Z} \\
+\pred{idx'}{[], -, -} &\triangleq -1 \\
+\pred{idx'}{\alpha:as, \alpha, i} &\triangleq i \\
+\pred{idx'}{-:as, \alpha, i} &\triangleq \pred{idx}{as, \alpha, i + 1}
+\end{align*}
 \begin{gather*}
-a \rightarrow^*_\alpha b \overset{\text{def}}{\iff} \exists a', b' \ldotp a \rightarrow^* a' \xrightarrow{\alpha} b' \rightarrow^* b
-\\
 \begin{array}{l l}
-	A(h, \mathds{P}) \triangleq &
-	\{ \alpha\ |\ \forall h', S' \ldotp (h, \emptyset, \emptyset, \mathds{P}) \rightarrow^* (h', \emptyset, S', \pskip) \\
-	& \implies (h, \emptyset, \emptyset, \mathds{P}) \rightarrow_\alpha^* (h', \emptyset, S', \pskip)
-	\}
-\end{array}
-\\
-\begin{array}{l l}
-h, \mathds{P} \vDash \alpha < \alpha' \overset{\text{def}}{\iff}
+\tau \vDash \alpha < \alpha' \overset{\text{def}}{\iff}
 &
-\forall h', S' \ldotp (h, \emptyset, \emptyset, \mathds{P}) \rightarrow^* (h', \emptyset, S', \pskip) \implies
-\\
-& \exists b \ldotp (h, \emptyset, \emptyset, \mathds{P}) \rightarrow_\alpha^* b \rightarrow^*_{\alpha'} (h', \emptyset, S', \pskip)
+\pred{idx}{\tau, \alpha} < \pred{idx}{\tau, \alpha'}
 \end{array}
 \\
-\alpha_\iota \triangleq \alpha \text{ s.t. } \alpha \in \{ \actalloc{\iota}{n}{l}, \actlock{\iota}{k}{\kappa}, \actunlock{\iota}{k}, \\ \actread{\iota}{k}{v}, \actwrite{\iota}{k}{v}\ |\ k, v, n, l \in \mathsf{Val}, \kappa \in \mathsf{Lock} \}
+\alpha_\iota \triangleq \alpha \text{ s.t. } \alpha \in \{ \actalloc{\iota}{n}{l}, \actlock{\iota}{k}{\kappa}, \actunlock{\iota}{k}, \actread{\iota}{k}{v}, \\ \actwrite{\iota}{k}{v}\ |\ k, v, n, l \in \mathsf{Val}, \kappa \in \mathsf{Lock} \}
 \\
-\alpha(\iota, k) \triangleq \alpha \text{ s.t. } \alpha \in \{ \actread{\iota}{k}{v}, \actwrite{\iota}{k}{v}\ |\ v \in \mathsf{Val} \}
+\alpha_\iota(k) \triangleq \alpha \text{ s.t. } \alpha \in \{ \actread{\iota}{k}{v}, \actwrite{\iota}{k}{v}\ |\ v \in \mathsf{Val} \}
 \end{gather*}
 \begin{align*}
 \pred{conflict}{\actwrite{i}{k}{v}, \actwrite{j}{k}{v'}} &\triangleq i \neq j
@@ -32,30 +36,44 @@ h, \mathds{P} \vDash \alpha < \alpha' \overset{\text{def}}{\iff}
 \pred{conflict}{\alpha, \alpha'} &\triangleq \bot 
 \end{align*}
 \begin{align*}
-\pred{SG}{h, \mathds{P}} &\triangleq (N, E) \\
-\text{where } N &\triangleq \{ \iota\ |\ \exists \alpha_\iota \ldotp \alpha_\iota \in A(h, \mathds{P}) \} \\
-E &\triangleq \{ (i, j)\ |\ \pred{conflict}{\alpha(i, k), \alpha(j, k)} \land h, P \vDash \alpha(i, k) < \alpha(j, k) \}
+\pred{SG}{\tau} &\triangleq (N, E) \\
+\text{where } N &\triangleq \{ \iota\ |\ \exists \alpha_\iota \ldotp \alpha_\iota \in \tau \} \\
+E &\triangleq \{ (i, j)\ |\ \pred{conflict}{\alpha_i(k), \alpha_j(k)} \land \tau \vDash \alpha_i(k) < \alpha_j(k) \}
 \end{align*}
 
-\lem \label{lem:read} All reads are preceded by the appropriate shared lock acquisition which is later released.
+\lem \label{lem:unlock} All reads are preceded by the appropriate shared lock acquisition which is later released.
 \begin{gather*}
-\forall h, \iota, k, v, \kappa \ldotp \\
-\actread{\iota}{k}{v} \in A(h, \mathds{P}) \implies \left( h, \mathds{P} \vDash \actlock{\iota}{k}{\kappa} < \actread{\iota}{k}{v} < \actunlock{\iota}{k} \land \kappa \geq \textsc{s} \right)
+\forall \tau, \iota, k, \kappa \ldotp \\
+\alpha_\iota(k) \in \tau \implies \left( \tau \vDash \alpha_\iota(k) < \actunlock{\iota}{k} \right)
 \end{gather*}
 
 \begin{proof}
-Let's pick an arbitrary storage $h \in \mathsf{Storage}$, transaction identifier $\iota \in \mathsf{Tid}$, storage key $k \in \mathsf{Key}$, storage value $v \in \mathsf{Val}$ and lock mode $\kappa \in \mathsf{Lock}$. Now we assume that there exists an action label $\alpha = \actread{\iota}{k}{v}$ such that $\alpha \in A(h, \mathds{P})$ (\textsc{i}). So $\alpha$ labels one of the transitions which is part of the sequence that reduces $\mathds{P}$ to $\pskip$ starting with storage $h$ (reduced to $h_{end}$), empty lock manager $\Phi_0 \equiv \emptyset$ (reduced to another empty one $\Phi_{end} \equiv \emptyset$) and empty transactions' state (reduced to $S_{end}$). It must be the case that the $\alpha$ action label was produced by the following \textsc{Read} reduction rule $(h', \Phi', S', \mathds{P}') \xrightarrow{\alpha} (h', \Phi', S'', \mathds{P}'')$, which, in order to succeed, requires that $\hat{\Phi}'(k) = (\{ \iota \} \cup I, \kappa)$ for some set of transaction identifiers $I$ and lock mode $\kappa \geq \textsc{s}$.
+Let's pick an arbitrary storage $\tau \in \mathsf{[Act]}$, such that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for some $h \in \mathsf{Storage}$ and $\mathds{P} \in \mathsf{Prog}$, transaction identifier $\iota \in \mathsf{Tid}$, storage key $k \in \mathsf{Key}$ and lock mode $\kappa \in \mathsf{Lock}$. Now we assume that there exists an action label $\alpha = \alpha_\iota(k)$ such that $\alpha \in \tau$ (\textsc{i}). So $\alpha$ labels one of the transitions which is part of the sequence that reduces $\mathds{P}$ to $\pskip$ starting with storage $h$ (reduced to $h_{end}$), empty lock manager $\Phi_0 \equiv \emptyset$ (reduced to another empty one $\Phi_{end} \equiv \emptyset$) and empty transactions' state (reduced to $S_{end}$) from the definition of $\mathsf{trace}$. There are now two cases to consider, for some storage value $v \in \mathsf{Val}$.
+\begin{enumerate}
+\item If $\alpha = \actread{\iota}{k}{v}$, then it must be the case that the $\alpha$ action label was produced by the following \textsc{Read} reduction rule $(h, \emptyset, \emptyset, \mathds{P}) \rightarrow^* (h', \Phi', S', \mathds{P}') \xrightarrow{\alpha} (h', \Phi'', S'', \mathds{P}'') \rightarrow^* (h_{end}, \emptyset, S_{end}, \pskip)$, which, in order to succeed, requires that $\hat{\Phi}'(k) = \hat{\Phi}''(k) = (\{ \iota \} \cup I, \kappa)$ for some set of transaction identifiers $I$ and lock mode $\kappa \geq \textsc{s}$, meaning that $\Phi'' \not\equiv \emptyset$.
+\item If $\alpha = \actwrite{\iota}{k}{v}$, then it must be the case that the $\alpha$ action label was produced by the following \textsc{Write} reduction rule $(h, \emptyset, \emptyset, \mathds{P}) \rightarrow^* (h', \Phi', S', \mathds{P}') \xrightarrow{\alpha} (h', \Phi'', S'', \mathds{P}'') \rightarrow^* (h_{end}, \emptyset, S_{end}, \pskip)$, which, in order to succeed, requires that $\hat{\Phi}'(k) = (\{ \iota \}, \kappa)$ for lock mode $\kappa \geq \textsc{s}$ and $\Phi'' = \Phi'[k \mapsto (\{\iota\}, \textsc{x})]$, meaning that $\Phi'' \not\equiv \emptyset$.
+\end{enumerate}
 
-Then we assume that there is no action $\alpha' = \actlock{\iota}{k}{\kappa}$ such that $h, \mathds{P} \vDash \alpha' < \alpha$, and given that the lock manager is only updated for acquisition through reductions labelled with \textsf{lock} as part of the explicit \textsc{Lock} rule, then there is no possible way that the state $(h', \Phi', S', \mathds{P}')$ succesfully reduced through $\alpha$ since $\hat{\Phi}'(k) = (I'
-, \kappa)$ would be such that $\iota \not\in I'$. By contradiction, this means that we must have an $\alpha' = \actlock{\iota}{k}{\kappa}$ such that $h, \mathds{P} \vDash \alpha' < \alpha$.
+Now we assume that there is no action $\alpha'' = \actunlock{\iota}{k}$ such that $\tau \vDash \alpha < \alpha ''$. We know that for both cases $\alpha$ makes $\Phi'' \not\equiv \emptyset$ but then by assumption (\textsc{i}) we know that $\mathds{P}''$ succesfully reduces to $\pskip$ with $\Phi_{end} \equiv \emptyset$. This means that along the chain of reductions that brought $\Phi''$ to $\Phi_{end}$ there has been an update to the lock manager which removed the entry associated with $k$. This can only happen explicitly through actions labelled with \textsf{unlock} that are exclusively produced by the \textsc{Unlock} rule. This means that there is no possible way that $\mathds{P}''$ reduces to $\pskip$ with $\Phi_{end} \equiv \emptyset$, therefore by contradiction we must have an $\alpha'' = \actunlock{\iota}{k}$ such that $\tau \vDash \alpha < \alpha ''$.
+\end{proof}
 
-Now we assume that there is no action $\alpha'' = \actunlock{\iota}{k}$ such that $h, \mathds{P} \vDash \alpha < \alpha ''$. We know $\alpha$ required $\hat{\Phi}'(k) = (\{ \iota \} \cup I, \kappa)$ which means that $\Phi' \not\equiv \emptyset$ but then by assumption (\textsc{i}) we know that $\mathds{P}''$ succesfully reduces to $\pskip$ with $\Phi_{end} \equiv \emptyset$. This means that along the chain of reductions that brought $\Phi'$ to $\Phi_{end}$ there has been an update to the lock manager which removed the entry associated with $k$. This can only happen explicitly through actions labelled with \textsf{unlock} that are only produced by the \textsc{Unlock} rule. This means that there is no possible way that $\mathds{P}''$ reduces to $\pskip$ with $\Phi_{end} \equiv \emptyset$, therefore by contradiction we must have an $\alpha'' = \actunlock{\iota}{k}$ such that $h, \mathds{P} \vDash \alpha < \alpha ''$.
+\lem \label{lem:read} All reads are preceded by the appropriate shared lock acquisition which is later released.
+\begin{gather*}
+\forall \tau, \iota, k, v, \kappa \ldotp \\
+\actread{\iota}{k}{v} \in \tau \implies \left( \tau \vDash \actlock{\iota}{k}{\kappa} < \actread{\iota}{k}{v} \land \kappa \geq \textsc{s} \right)
+\end{gather*}
+
+\begin{proof}
+Let's pick an arbitrary trace $\tau \in \mathsf{[Act]}$, such that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for some $h \in \mathsf{Storage}$ and $\mathds{P} \in \mathsf{Prog}$, transaction identifier $\iota \in \mathsf{Tid}$, storage key $k \in \mathsf{Key}$, storage value $v \in \mathsf{Val}$ and lock mode $\kappa \in \mathsf{Lock}$. Now we assume that there exists an action label $\alpha = \actread{\iota}{k}{v}$ such that $\alpha \in \tau$ (\textsc{i}). So $\alpha$ labels one of the transitions which is part of the sequence that reduces $\mathds{P}$ to $\pskip$ starting with storage $h$ (reduced to $h_{end}$), empty lock manager $\Phi_0 \equiv \emptyset$ (reduced to another empty one $\Phi_{end} \equiv \emptyset$) and empty transactions' state (reduced to $S_{end}$) from the definition of $\mathsf{trace}$. It must be the case that the $\alpha$ action label was produced by the following \textsc{Read} reduction rule $(h, \emptyset, \emptyset, \mathds{P}) \rightarrow^* (h', \Phi', S', \mathds{P}') \xrightarrow{\alpha} (h', \Phi', S'', \mathds{P}'') \rightarrow^* (h_{end}, \emptyset, S_{end}, \pskip)$, which, in order to succeed, requires that $\hat{\Phi}'(k) = (\{ \iota \} \cup I, \kappa)$ for some set of transaction identifiers $I$ and lock mode $\kappa \geq \textsc{s}$.
+
+Then we assume that there is no action $\alpha' = \actlock{\iota}{k}{\kappa}$ such that $\tau \vDash \alpha' < \alpha$, and given that the lock manager is only updated for acquisition through reductions labelled with \textsf{lock} as part of the explicit \textsc{Lock} rule, then there is no possible way that the state $(h', \Phi', S', \mathds{P}')$ succesfully reduced through $\alpha$ since $\hat{\Phi}'(k) = (I'
+, \kappa)$ would be such that $\iota \not\in I'$. By contradiction, this means that we must have an $\alpha' = \actlock{\iota}{k}{\kappa}$ such that $\tau \vDash \alpha' < \alpha$.
 \end{proof}
 
 \lem \label{lem:write} All writes are preceded by the appropriate exclusive lock acquisition which is later released.
 \begin{gather*}
 \forall h, \iota, k, v \ldotp \\
-\actwrite{\iota}{k}{v} \in A(h, \mathds{P}) \implies \left( h, \mathds{P} \vDash \actlock{\iota}{k}{\textsc{x}} < \actwrite{\iota}{k}{v} < \actunlock{\iota}{k} \right)
+\actwrite{\iota}{k}{v} \in A(h, \mathds{P}) \implies \left( \tau \vDash \actlock{\iota}{k}{\textsc{x}} < \actwrite{\iota}{k}{v} \lor \tau \right)
 \end{gather*}
 
 \lem If two transactions run conflicting operations on the same item, either one releases its lock before the other acquires it or vice versa.
@@ -72,17 +90,17 @@ Let's pick an arbitrary storage $h \in \mathsf{Storage}$, transaction identifier
 
 \lem No lock is acquired by a transaction after one gets released by the same transaction.
 \begin{gather*}
-\forall h, \iota, k, k', \kappa \ldotp 
-\{ \alpha(\iota, k), \alpha(\iota, k') \} \subseteq A(h, \mathds{P})
-\implies \left( h, \mathds{P} \vDash \actlock{\iota}{k}{\kappa} < \actunlock{\iota}{k'} \right)
+\forall \tau, \iota, k, k', \kappa \ldotp 
+\left( \alpha_\iota(k) \in \tau \land \alpha_\iota(k') \in \tau \right)
+\implies \left( \tau \vDash \actlock{\iota}{k}{\kappa} < \actunlock{\iota}{k'} \right)
 \end{gather*}
 
 \begin{proof}
-Let's pick an arbitrary storage $h \in \mathsf{Storage}$, transaction identifier $\iota \in \mathsf{Tid}$, storage keys $k, k' \in \mathsf{Key}$ and lock mode $\kappa \in \mathsf{Lock}$. Now we assume that  $\alpha \in A(h, \mathds{P})$ and $\alpha' \in A(h, \mathds{P})$ (\textsc{i}), where $\alpha = \alpha(\iota, k)$ and $\alpha' = \alpha(\iota, k')$ are two read or write operations performed by the same transaction identified with $\iota$.
+Let's pick an arbitrary trace $\tau \in \mathsf{[Act]}$, such that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for some $h \in \mathsf{Storage}$ and $\mathds{P} \in \mathsf{Prog}$, transaction identifier $\iota \in \mathsf{Tid}$, storage keys $k, k' \in \mathsf{Key}$ and lock mode $\kappa \in \mathsf{Lock}$. Now we assume that  $\alpha \in \tau$ and $\alpha' \in \tau$ (\textsc{i}), where $\alpha = \alpha_\iota(k)$ and $\alpha' = \alpha_\iota(k')$ are two read or write operations performed by the same transaction identified with $\iota$ as part of trace $\tau$.
 
-In the case of $k = k'$ then the result is easily obtained as a consequence of Lemma \ref{lem:read} and Lemma \ref{lem:write}, since a thread cannot acquire the same lock twice due to the premiss of rule \textsc{Lock}.
+In the case of $k = k'$ then the result is easily obtained as a consequence of Lemma \ref{lem:unlock}, Lemma \ref{lem:read} and Lemma \ref{lem:write}, and because a thread cannot acquire the same lock twice due to the premiss of rule \textsc{Lock}.
 
-We can instead assume that $k \neq k'$. Let $\alpha_l = \actlock{\iota}{k}{\kappa}$ and $\alpha_u = \actunlock{\iota}{k'}$. Using Lemma \ref{lem:read}, Lemma \ref{lem:write} and our original assumption (\textsc{i}) we obtain that $\alpha_l \in A(h, \mathds{P}) \land \alpha_u \in A(h, \mathds{P})$ (\textsc{ii}) must hold. Let's assume that $h, \mathds{P} \vDash \alpha_u < \alpha_l$ (\textsc{iii}). The action label \textsf{unlock} is only generated by the reduction rule \textsc{Unlock}. Therefore it must be the case that $(h, \emptyset, \emptyset, \mathds{P}) \rightarrow^* (h', \Phi', S', \mathds{P}') \xrightarrow{\alpha_u} (h'', \Phi'', S'', \mathds{P}'')$ (\textsc{iv}), for some $h', h'', \Phi', \Phi'', S', S'', \mathds{P}', \mathds{P}''$, which only reduces when $(s', p', \mathds{C}) \xrightarrow{\alpha_u} (s', \pshrink, \mathds{C})$, for some command $\mathds{C}$ in $\mathds{P}'$, where $(s', p') = S'(\iota)$ and $S'' = S'[\iota \mapsto (s', \pshrink)]$.
+We can instead assume that $k \neq k'$. Let $\alpha_l = \actlock{\iota}{k}{\kappa}$ and $\alpha_u = \actunlock{\iota}{k'}$. Using Lemma \ref{lem:unlock}, Lemma \ref{lem:read}, Lemma \ref{lem:write} and our original assumption (\textsc{i}) we obtain that $\alpha_l \in \tau \land \alpha_u \in \tau$ (\textsc{ii}) must hold. Let's assume that $\tau \vDash \alpha_u < \alpha_l$ (\textsc{iii}). The action label \textsf{unlock} is only generated by the reduction rule \textsc{Unlock}. Therefore it must be the case that $(h, \emptyset, \emptyset, \mathds{P}) \rightarrow^* (h', \Phi', S', \mathds{P}') \xrightarrow{\alpha_u} (h', \Phi'', S'', \mathds{P}')$ (\textsc{iv}), for some $h', \Phi', \Phi'', S', S'', \mathds{P}'$, which only reduces when $(s', p', \mathds{C}) \xrightarrow{\alpha_u} (s', \pshrink, \mathds{C})$, for some command $\mathds{C}$ in $\mathds{P}'$, where $(s', p') = S'(\iota)$ and $S'' = S'[\iota \mapsto (s', \pshrink)]$.
 
-The action label \textsf{lock} is only generated by the reduction rule \textsc{Lock}. By (\textsc{iii}) and (\textsc{iv}), it must be the case that $(h'', \Phi'', S'', \mathds{P}'') \rightarrow^* (h_l, \Phi_l, S_l, \mathds{P}_l) \xrightarrow{\alpha_l} (h_l', \Phi_l', S_l', \mathds{P}_l)$, for some $h_l, h_l', S_l, S_l', \Phi_l, \Phi_l', \mathds{P}_l, \mathds{P}_l'$, that reduces only when $(s_l, \pgrow, \mathds{C}') \xrightarrow{\alpha_l} (s_l, \pgrow, \mathds{C}')$, for some $\mathds{C}'$ in $\mathds{P}_l'$, where $(s_l, \pgrow) = S_l(\iota)$. The latter condition is impossible since there is no semantic rule that allows a transaction phase to go from shrinking to growing, and $(s', \pshrink) = S''(\iota)$ which is set before $S_l$. By contradiction, we obtain that $h, \mathds{P} \vDash \alpha_l < \alpha_u$ must hold.
+The action label \textsf{lock} is only generated by the reduction rule \textsc{Lock}. By (\textsc{iii}) and (\textsc{iv}), it must be the case that $(h', \Phi'', S'', \mathds{P}') \rightarrow^* (h_l, \Phi_l, S_l, \mathds{P}_l) \xrightarrow{\alpha_l} (h_l, \Phi_l', S_l', \mathds{P}_l)$, for some $h_l, S_l, S_l', \Phi_l, \Phi_l', \mathds{P}_l$, that reduces only when $(s_l, \pgrow, \mathds{C}') \xrightarrow{\alpha_l} (s_l, \pgrow, \mathds{C}')$, for some $\mathds{C}'$ in $\mathds{P}_l$, where $(s_l, \pgrow) = S_l(\iota)$. The latter condition is impossible since there is no semantic rule that allows a transaction phase to go from shrinking to growing, and $(s', \pshrink) = S''(\iota)$ which is set before $S_l$. By contradiction, we obtain that $\tau \vDash \alpha_l < \alpha_u$ must hold.
 \end{proof}
