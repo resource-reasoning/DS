@@ -88,7 +88,7 @@ We write $w_\mathsf{L}, w_\mathsf{S}$ and $w_\mathsf{A}$ for the first, second a
 
 \subsection{Assertions}
 
-We assume the presence of an infinite set of logical variables, $x \in \mathsf{LVar}$, logical expressions, $E \in \mathsf{LExpr}$, and logical environments, $\mathsf{LEnv}$, such that $e \in \mathsf{LEnv} : \mathcal{P}(\mathsf{LVar} \rightarrow \mathsf{Val})$. Logical environments associate logical variables with their values.
+We assume the presence of an infinite set of logical variables, $x \in \mathsf{LVar}$, logical expressions, $E \in \mathsf{LExpr}$, and logical environments, $\mathsf{LEnv}$, such that $e \in \mathsf{LEnv} : \mathsf{LVar} \rightarrow \mathsf{Val}$. Logical environments associate logical variables with their values.
 
 \param (Machine state assertions). We define the set of machine state assertions $\mathsf{MAssn}$, ranged over by $\mathcal{M}, \mathcal{M}_1, \ldots, \mathcal{M}_n$ as:
 \[
@@ -269,6 +269,8 @@ Where the $\lceil - \rceil : \left( \mathbb{K} \rightarrow \mathcal{P}(\mathsf{A
 %\end{array}
 %\]
 
+\defn (Stability). An assertion $P$ is said to be stable, $\pred{stable}{P}$, if, for all $e \in \mathsf{LEnv}$ and $w, w' \in \mathsf{World}$, if $w, e \vDash P$ and $(w, w') \in R$, then $w', e \vDash P$.
+
 \defn (Guarantee region construction). The guarantee construction relation $R^c$ between worlds, models how a thread can create a new region. In order to model how a thread can destroy an existing region, we define $G^d = (G^c)^{-1}$ to be the inverse relation of the construction one.
 \[
 \begin{array}{r | l}
@@ -320,9 +322,47 @@ Where the $\lceil - \rceil : \left( \mathbb{K} \rightarrow \mathcal{P}(\mathsf{A
 \subsection{Rest}
 
 \param (Elementary command axioms). Given the separation algebra of machine states $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M})$ we define the set of axioms $\textsc{Ax}_{\hat{\mathsf{C}}} : \mathcal{P}(\mathbb{M}) \times \mathsf{Cmd} \times \mathcal{P}(\mathbb{M})$ as follows.
-\[
-	TO\ BE\ DEFINED
-\]
+\begin{gather*}
+	\infer[\textsc{Write}]
+	{
+		\vdash
+		\triple
+			{E_1 \mapsto -}
+			{\pmutate{E_1}{E_2}}
+			{E_1 \mapsto E_2}
+	}
+	{}
+	\\
+	\infer[\textsc{Read}]
+	{
+		\vdash
+		\triple
+			{\pvar{x} \doteq E_1 \sep \cell{E}{E_2}}
+			{\pderef{\pvar{x}}{E}}
+			{\pvar{x} \doteq E_2[E_1/\pvar{x}] \sep \cell{E[E_1/\pvar{x}]}{E_2[E_1/\pvar{x}]}}
+	}
+	{}
+	\\
+	\infer[\textsc{Assign}]
+	{
+		\vdash
+		\triple
+			{P}
+			{\passign{\pvar{x}}{E}}
+			{\exists x \ldotp \pvar{x} \doteq E[x/\pvar{x}] \sep P[x/\pvar{x}]}	
+	}
+	{}
+	\\
+	\infer[\textsc{Alloc}]
+	{
+		\vdash
+		\triple
+			{\mathtt{emp}}
+			{\palloc{\pvar{x}}{E}}
+			{\exists y \ldotp \pvar{x} \doteq y \sep \circledast_{0 \leq i < E} \left(\cell{y + i}{0}\right)}
+	}
+	{}
+\end{gather*}
 
 \param (Sequential command axioms). Given the axiomatisation of elementary commands $\textsc{Ax}_{\hat{\mathsf{C}}}$, we now define the axioms of sequential commands, formally $\textsc{Ax}_\mathsf{C} : \mathcal{P}(\mathbb{M}) \times \mathsf{Cmd} \times \mathcal{P}(\mathbb{M})$.
 \begin{align*}
@@ -445,16 +485,19 @@ We also lift the interpretation function to a set of concrete state such that fo
 	\tsem{\mathds{T}}_\mathsf{T}(S) \triangleq \bigcup_{h \in S}  \tsem{\mathds{T}}_\mathsf{T}(h)
 \]	
 
-\param (Machine state reification).
+\param (Machine state reification). Given that we defined the set $\mathcal{S}$ to be $\mathsf{Storage}$, and instantiated $\mathbb{M}$ to also be $\mathsf{Storage}$, the machine state reification function $\lfloor - \rfloor_\mathbb{M} : \mathbb{M} \rightarrow \mathcal{P}(\mathcal{S})$ will be defined as:
+\[
+	\lfloor m \rfloor_\mathbb{M} \triangleq \{ m \}
+\]
 
 \defn (Reification). The reification of worlds, $\lfloor - \rfloor_W : \mathsf{World} \rightarrow \mathcal{P}(\mathcal{S})$, is defined as follows.
 \[
-	\lfloor (l, g, \mathcal{J}) \rfloor_W \triangleq \lfloor (l \circ g)_\mathsf{M} \rfloor_\mathbb{M}
+	\lfloor (l, g, \mathcal{J}) \rfloor_W \triangleq \lfloor l_\mathsf{M} \circ \llfloor g \rrfloor_\mathsf{M} \rfloor_\mathbb{M}
 \]
 
 \thm (Transaction soundness). For all $\mathds{T} \in \mathsf{Trans}, (W_1, \mathds{T}, W_2) \in \textsc{Ax}_\mathsf{T}$ and $w \in \mathsf{World}$:
 \[
-	\tsem{\mathds{T}}_\mathsf{T}(\lfloor W_1 \bullet \{ w \} \rfloor) \subseteq \lfloor W_2 \bullet_\mathbb{M} \mathcal{R}(\{ w \}) \rfloor_W
+	\tsem{\mathds{T}}_\mathsf{T}(\lfloor W_1 \bullet_\mathbb{M} \{ w \} \rfloor) \subseteq \lfloor W_2 \bullet_\mathbb{M} R(\{ w \}) \rfloor_W
 \]
 
 \iffalse
