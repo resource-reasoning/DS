@@ -2,7 +2,7 @@
 
 Individual project as part of an MEng in Computing.
 
-## Feel free to edit it but do NOT delete any things :)
+## Feel free to add new papers, but do NOT delete any :)
 
 # Related Papers
 
