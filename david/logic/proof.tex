@@ -1,1 +1,173 @@
 \subsection{Proof System}
+
+The proof system for the programming language in \ref{language} that we illustrate here is also an instantiation of the views framework \cite{views}. We start by providing axioms for elementary commands, sequential commands and later transactions.
+
+\defn (Elementary command axioms). Given the separation algebra of machine states $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M})$ we define the set of axioms $\textsc{Ax}_{\hat{\mathsf{C}}} : \mathcal{P}(\mathbb{M}) \times \mathsf{Cmd} \times \mathcal{P}(\mathbb{M})$ as follows. For every rule's triple $\Delta \vdash \triple{P}{\hat{\mathds{C}}}{Q}$, logical environment $e \in \mathsf{LEnv}$ and predicate environment $\delta \in \mathsf{PEnv}$, we define the corresponding axiom as $\tsem{P}_{e, \delta} \times \hat{\mathds{C}} \times \tsem{Q}_{e, \delta}$.
+\begin{gather*}
+	\infer[\textsc{Write}]
+	{
+		\vdash
+		\triple
+			{\mathds{E}_1 \mapsto -}
+			{\pmutate{\mathds{E}_1}{\mathds{E}_2}}
+			{\mathds{E}_1 \mapsto \mathds{E}_2}
+	}
+	{}
+	\\
+	\infer[\textsc{Read}]
+	{
+		\vdash
+		\triple
+			{\pvar{x} \doteq \mathds{E}_1 \sep \cell{\mathds{E}}{\mathds{E}_2}}
+			{\pderef{\pvar{x}}{\mathds{E}}}
+			{\pvar{x} \doteq \mathds{E}_2[\mathds{E}_1/\pvar{x}] \sep \cell{\mathds{E}[\mathds{E}_1/\pvar{x}]}{\mathds{E}_2[\mathds{E}_1/\pvar{x}]}}
+	}
+	{}
+	\\
+	\infer[\textsc{Assign}]
+	{
+		\vdash
+		\triple
+			{P}
+			{\passign{\pvar{x}}{\mathds{E}}}
+			{\exists x \ldotp \pvar{x} \doteq \mathds{E}[x/\pvar{x}] \sep P[x/\pvar{x}]}	
+	}
+	{}
+	\\
+	\infer[\textsc{Alloc}]
+	{
+		\vdash
+		\triple
+			{\mathtt{emp}}
+			{\palloc{\pvar{x}}{\mathds{E}}}
+			{\exists y \ldotp \pvar{x} \doteq y \sep \circledast_{0 \leq i < \mathds{E}} \left(\cell{y + i}{0}\right)}
+	}
+	{}
+\end{gather*}
+The listed axioms come directly from the ones in standard separation logic.
+
+\param (Sequential command axioms). Given the axiomatisation of elementary commands $\textsc{Ax}_{\hat{\mathsf{C}}}$, we now define the axioms of sequential commands, formally $\textsc{Ax}_\mathsf{C} : \mathcal{P}(\mathbb{M}) \times \mathsf{Cmd} \times \mathcal{P}(\mathbb{M})$.
+\begin{align*}
+	\textsc{Ax}_\mathsf{C} &\triangleq \textsc{Ax}_{\hat{\mathsf{C}}} \cup \textsc{Ax}_{\textsc{skip}} \cup \textsc{Ax}_{\textsc{seq}} \cup \textsc{Ax}_{\textsc{cond}} \cup \textsc{Ax}_{\textsc{loop}}
+	\\
+	\textsc{Ax}_{\textsc{skip}} &\triangleq \{ (M, \pskip, M)\ |\ M \in \mathcal{P}(\mathbb{M}) \}
+	\\
+	\textsc{Ax}_{\textsc{seq}} &\triangleq \{ (M, \mathds{C}_1 ; \mathds{C}_2, M')\ |\ (M, \mathds{C}_1, M'') \in \textsc{Ax}_\mathsf{C} \land (M'', \mathds{C}_2, M') \in \textsc{Ax}_\mathsf{C} \}
+	\\
+	\textsc{Ax}_{\textsc{cond}} &\triangleq \{ (M, \pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2}, M')\ |\ (M, \mathds{C}_1, M') \in \textsc{Ax}_\mathsf{C} \land (M, \mathds{C}_2, M') \in \textsc{Ax}_\mathsf{C} \}
+	\\
+	\textsc{Ax}_{\textsc{loop}} &\triangleq \{ (M, \ploop{\mathds{B}}{\mathds{C}}, M)\ |\ (M, \mathds{C}, M) \in \textsc{Ax}_\mathsf{C}) \}
+\end{align*}
+Where $M, M'$ and $M''$ are used to quantify over elements of $\mathcal{P}(\mathbb{M})$.
+
+\param (Transaction axioms). Given the axiomatisation of sequential commands $\textsc{Ax}_\mathsf{C}$, we define the set of transactions axioms, $\textsc{Ax}_\mathsf{T} : \mathcal{P}(\mathsf{World}) \times \mathsf{Trans} \times \mathcal{P}(\mathsf{World})$ as:
+\[
+	\textsc{Ax}_\mathsf{T} \triangleq \{ (W, \ptdef{\mathds{C}}_\iota, W')\ |\ (M_1, \mathds{C}, M_2) \in \textsc{Ax}_\mathsf{C} \land W \Rrightarrow^{\{M_1\}\{M_2\}} W' \}
+\]
+Where $W$ and $W'$ are used to quantify over elements of $\mathcal{P}(\mathsf{World})$.
+
+\defn (Proof rules). All proof rules that follow carry the implicit assumption that the preconditions and postcondition of their judgements are stable.
+\begin{gather*}
+\begin{array}{c c}
+	\infer[\textsc{Skip}]
+	{
+		\Delta \vdash \triple{P}{\pskip}{P}
+	}
+	{}
+&
+	\infer[\textsc{Trans}]
+	{
+		\Delta \vdash \triple{P}{\mathds{T}}{Q}
+	}
+	{
+		\forall e, \delta \ldotp (\tsem{P}_{e, \delta}, \mathds{T}, \tsem{Q}_{e, \delta}) \in \textsc{Ax}_\mathsf{T}
+	}
+\end{array}
+\\ \\
+\begin{array}{c c}
+	\infer[\textsc{Seq}]
+	{
+		\Delta \vdash \triple{P}{\mathds{P}_1 ; \mathds{P}_2}{Q}
+	}
+	{
+		\Delta \vdash \triple{P}{\mathds{P}_1}{R}
+		&
+		\Delta \vdash \triple{R}{\mathds{P}_2}{Q}	
+	}
+&
+	\infer[\textsc{Par}]
+	{
+		\Delta \vdash \triple{P_1 \sep P_2}{\mathds{P}_1 \| \mathds{P}_2}{Q_1 \sep Q_2}	
+	}
+	{
+		\Delta \vdash \triple{P_1}{\mathds{P}_1}{Q_1}
+		&
+		\Delta \vdash \triple{P_2}{\mathds{P}_2}{Q_2}	
+	}
+\end{array}
+\\ \\
+\begin{array}{c c}
+	\infer[\textsc{Frame}]
+	{
+		\Delta \vdash \triple{P \sep R}{\mathds{P}}{Q \sep R}	
+	}
+	{
+		\Delta \vdash \triple{P}{\mathds{P}}{Q}
+	}
+&
+	\infer[\textsc{Conseq}]
+	{
+		\Delta \vdash \triple{P}{\mathds{P}}{Q}	
+	}
+	{
+		\Delta \vdash P \Rrightarrow P'
+		&
+		\Delta \vdash \triple{P'}{\mathds{P}}{Q'}
+		&
+		\Delta \vdash Q' \Rrightarrow Q	
+	}
+\end{array}
+\\ \\
+\begin{array}{c c}
+	\infer[\textsc{Choice}]
+	{
+		\Delta \vdash \triple{P}{\mathds{P}_1 + \mathds{P}_2}{Q}	
+	}
+	{
+		\Delta \vdash \triple{P}{\mathds{P}_1}{Q}
+		&
+		\Delta \vdash \triple{P}{\mathds{P}_2}{Q}
+	}
+&
+	\infer[\textsc{Loop}]
+	{
+		\Delta \vdash \triple{P}{\mathds{P}^*}{P}	
+	}
+	{
+		\Delta \vdash \triple{P}{\mathds{P}}{P}
+	}
+\end{array}
+\\ \\
+	\infer[\textsc{Pred-I}]
+	{
+		\Delta \vdash \triple{P}{\mathds{P}}{Q}
+	}
+	{
+		\tsem{\Delta}^\textsc{p} \subseteq \tsem{\Delta'}^\textsc{p}
+		&
+		\Delta' \vdash \triple{P}{\mathds{P}}{Q}
+	}
+\\ \\
+	\infer[\textsc{Pred-E}]
+	{
+		\Delta \vdash \triple{P}{\mathds{P}}{Q}
+	}
+	{
+		\tsem{\Delta}^\textsc{p} \subseteq \pred{stable}{R}
+		&
+		\alpha \not\in \Delta, P, Q
+		&
+		\Delta, (\forall \vec{x} \ldotp \alpha(\vec{x}) \equiv R) \vdash \triple{P}{\mathds{P}}{Q}
+	}
+\end{gather*}
+Most of the rules are standard from disjoint concurrent separation logic \cite{csl}, with the exception of rules \textsc{Pred-I} and \textsc{Pred-E} which are instead derived from CAP \cite{cap}. The first one is used to weaken the assumptions about the predicate definitions, since if we are able to prove a triple with assumptions $\Delta'$ then it must be the case that we can prove the same triple under stronger assumptions $\Delta$. On the other hand, the \textsc{Pred-E} proof rule allows to introduce a new predicate definition. In order to do so, the new predicate must be stable with respect to the environment and its name must not be in the existing definitions or the triple's assertions. As part of the \textsc{Conseq} rule, we use the repartitioning operator as presented in Definition \ref{repartitioning} instead of the classic implication arrow $\implies$.
