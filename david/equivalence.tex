@@ -19,7 +19,7 @@
 		\}
 \]
 
-\lem
+\lem \label{lem:rr} The order of two consecutive reads can be swapped as long as the transactions performing them are distinct.
 \begin{gather*}
 	\forall h, h', \Phi, \Phi', S, S', \mathds{P}, \mathds{P}', i, j, k, k', v, v' \ldotp \\
 	 i \neq j \implies
@@ -30,8 +30,15 @@
 	\exists h_1, \Phi_1, S_1, \mathds{P}_1 \ldotp
 	(h, \Phi, S, \mathds{P}) \xrightarrow{\actread{j}{k'}{v'}} (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\actread{i}{k}{v}} (h', \Phi', S', \mathds{P}'))
 \end{gather*}
+\begin{proof}
+Let's pick arbitrary $h, h' \in \mathsf{Storage}, \Phi, \Phi' \in \mathsf{LMan}, S, S' \in \mathsf{TState}, \mathds{P}, \mathds{P}' \in \mathsf{Prog}, i, j \in \mathsf{Tid}, k, k' \in \mathsf{Key}, v, v' \in \mathsf{Val}$. Now we assume that the two transaction identifiers are distinct, i.e. $i \neq j$. (If case) Let's assume that:
+\begin{gather} \label{lem:rr1}
+	\exists h_0, \Phi_0, S_0, \mathds{P}_0 \ldotp (h, \Phi, S, \mathds{P}) \xrightarrow{\actread{i}{k}{v}} (h_0, \Phi_0, S_0, \mathds{P}_0)  \xrightarrow{\actread{j}{k'}{v'}} (h', \Phi', S', \mathds{P}')
+\end{gather}
+It follows that the two action labels were produced by two transactions running in parallel executing a single step each. Given the effect of the $\mathsf{read}$ action, we know that $h = h_0 = h_1, \Phi = \Phi_0 = \Phi'$. We can immediately find a $h_1 = h = h'$ and a $\Phi_1 = \Phi = \Phi'$. $\mathds{P}_1$ will be the program $\mathds{P}$ that has executed a step in the program where transaction $j$ resides. We know that this will always succeed since the $\mathsf{read}$ action requirements are all satisfied by (\ref{lem:rr1}). From this, $\mathds{P}_1$ can always reduce to $\mathds{P}'$ by chosing to run the program in which transaction $i$ is which is possible thanks to the assumption in (\ref{lem:rr1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the updates to the local variables does not matter. (Only if) This case can be built and proven in the same way as the previous one, with the appropriate substitutions.
+\end{proof}
 
-\lem
+\lem The order of two consecutive read, write, lock or unlock operations can be swapped as long as the transactions performing them are distinct and the keys they refer to are different.
 \begin{gather*}
 	\forall h, h', \Phi, \Phi', S, S', \mathds{P}, \mathds{P}', i, j, k, k', x, y \ldotp \\
 	x = \alpha(i, k) \land y = \alpha(j, k') \land i \neq j \land k \neq k' \implies \\
@@ -41,8 +48,29 @@
 	\exists h_1, \Phi_1, S_1, \mathds{P}_1 \ldotp
 	(h, \Phi, S, \mathds{P}) \xrightarrow{y} (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{x} (h', \Phi', S', \mathds{P}'))
 \end{gather*}
+\begin{proof}
+Let's pick arbitrary $h, h' \in \mathsf{Storage}, \Phi, \Phi' \in \mathsf{LMan}, S, S' \in \mathsf{TState}, \mathds{P}, \mathds{P}' \in \mathsf{Prog}, i, j \in \mathsf{Tid}, k, k' \in \mathsf{Key}, x, y \in \mathsf{Act}$. Now we assume that the two transaction identifiers are distinct, i.e. $i \neq j$, as well as the storage keys $k \neq k'$. We also assume the two operations $x = \alpha(i, k)$ and $y = \alpha(j, k)$ are read, write, lock or unlock operations on $k$ and $k'$ performed by transactions $i$ and $j$ respectively. (If case) Let's assume that:
+\begin{gather} \label{lem:xy1}
+	\exists h_0, \Phi_0, S_0, \mathds{P}_0 \ldotp
+	(h, \Phi, S, \mathds{P}) \xrightarrow{x} (h_0, \Phi_0, S_0, \mathds{P}_0)  \xrightarrow{y} (h', \Phi', S', \mathds{P}')
+\end{gather}
+It follows that the two action labels were produced by two transactions running in parallel executing a single step each. We will proceed with a case-by-case analysis on $x$ and $y$ in order to find suitable $h_1$ and $\Phi_1$.
+\begin{itemize}
+	\item If $x = \actread{i}{k}{v}$ and $y = \actread{j}{k'}{v'}$ for $v, v' \in \mathsf{Val}$ then the result follows directly from Lemma \ref{lem:rr}.
+	\item If $x = \actwrite{i}{k}{v}$ and $y = \actwrite{j}{k'}{v'}$ for $v, v' \in \mathsf{Val}$ then $h' = h[k \mapsto v][k \mapsto v']$ and $\Phi' = \Phi$ meaning we can find $h_1 = h[k \mapsto v']$ and $\Phi_1 = \Phi$.
+	\item If $x = \actread{i}{k}{v}$ and $y = \actwrite{j}{k'}{v'}$ for $v, v' \in \mathsf{Val}$ then $h' = h[k' \mapsto v']$ and $\Phi' = \Phi$ meaning we can find $h_1 = h[k' \mapsto v']$ and $\Phi_1 = \Phi$.
+	\item If $x = \actlock{i}{k}{\kappa}$ and $y = \actunlock{j}{k'}$ for $\kappa \in \mathsf{Lock}$ then $h' = h$ and $\Phi' = \Phi[k \mapsto (I, \kappa)][k' \mapsto (I' \setminus \{j\}, \kappa')]$ for $I, I' \in \mathcal{P}(\mathsf{Tid})$ and $\kappa' \in \mathsf{Lock}$, meaning we can find $h_1 = h$ and $\Phi_1 = \Phi[k' \mapsto (I' \setminus \{j\}, \kappa')]$.
+	\item If $x = \actlock{i}{k}{\kappa}$ and $y = \actread{j}{k}{v}$ for $\kappa \in \mathsf{Lock}$ and $v \in \mathsf{Val}$ then $h' = h$ and $\Phi' = \Phi[k \mapsto (I, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_1 = h$ and $\Phi_1 = \Phi$.
+	\item If $x = \actlock{i}{k}{\kappa}$ and $y = \actwrite{j}{k}{v}$ for $\kappa \in \mathsf{Lock}$ and $v \in \mathsf{Val}$ then $h' = h[k \mapsto v]$ and $\Phi' = \Phi[k \mapsto (I, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_1 = h[k \mapsto v]$ and $\Phi_1 = \Phi$.
+	\item If $x = \actunlock{i}{k}$ and $y = \actread{j}{k}{v}$ for $v \in \mathsf{Val}$ then $h' = h$ and $\Phi' = \Phi[k \mapsto (I \setminus \{j\}, \kappa)]$ for $\kappa \in \{\textsc{u}, \textsc{s}\}$ and $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_1 = h$ and $\Phi_1 = \Phi$.
+	\item If $x = \actunlock{i}{k}$ and $y = \actwrite{j}{k}{v}$ for $v \in \mathsf{Val}$ then $h' = h[k \mapsto v]$ and $\Phi' = \Phi[k \mapsto (I \setminus \{j\}, \kappa)]$ for $\kappa \in \{\textsc{u}, \textsc{s}\}$ and $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_1 = h[k \mapsto v]$ and $\Phi_1 = \Phi$.
+\end{itemize}
+The inverted cases that are not included in the list can be trivially found as a consequence of the presented ones, with the appropriate substitions.
 
-\lem
+$\mathds{P}_1$ will be the program $\mathds{P}$ that has executed a step in the program where transaction $j$ resides. We know that this will always succeed since the actions act on disjoint parts of the global heap and lock manager, meaning that their requirements are all satisfied by (\ref{lem:xy1}). From this, $\mathds{P}_1$ can always reduce to $\mathds{P}'$ by chosing to run the program in which transaction $i$ is which is possible thanks to the assumption in (\ref{lem:xy1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the eventual updates to the local variables does not matter. (Only if) This case can be built and proven in the same way as the previous one, with the appropriate substitutions.
+\end{proof}
+
+\lem The order of two consecutive allocations can be swapped as long as the transactions performing them are distinct.
 \begin{gather*}
 	\forall h, h', \Phi, \Phi', S, S', \mathds{P}, \mathds{P}', i, j, n, n', l, l' \ldotp \\
 	i \neq j \implies \\
@@ -52,8 +80,16 @@
 	\exists h_1, \Phi_1, S_1, \mathds{P}_1 \ldotp
 	(h, \Phi, S, \mathds{P}) \xrightarrow{\actalloc{j}{n'}{l'}} (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\actalloc{i}{n}{l}} (h', \Phi', S', \mathds{P}'))
 \end{gather*}
+\begin{proof}
+Let's pick arbitrary $h, h' \in \mathsf{Storage}, \Phi, \Phi' \in \mathsf{LMan}, S, S' \in \mathsf{TState}, \mathds{P}, \mathds{P}' \in \mathsf{Prog}, i, j \in \mathsf{Tid}, l, l' \in \mathsf{Key}, n, n' \in \mathsf{Val}$. Now we assume that the two transaction identifiers are distinct, i.e. $i \neq j$. (If case) Let's assume that:
+\begin{gather} \label{lem:aa1}
+	\exists h_0, \Phi_0, S_0, \mathds{P}_0 \ldotp 
+	(h, \Phi, S, \mathds{P}) \xrightarrow{\actalloc{i}{n}{l}} (h_0, \Phi_0, S_0, \mathds{P}_0)  \xrightarrow{\actalloc{j}{n'}{l'}} (h', \Phi', S', \mathds{P}')
+\end{gather}
+It follows that the two action labels were produced by two transactions running in parallel executing a single step each. Given the effect of the $\mathsf{alloc}$ action, we know that $\Phi = \Phi_0 = \Phi'$. We can immediately find a $\Phi_1 = \Phi = \Phi'$. We also know that $\{l, \ldots, l + n - 1\} \subseteq \pred{dom}{h_0}$ and in order for $\actalloc{j}{n'}{l'}$ to suceed, which it does by (\ref{lem:aa1}), $\{l', \ldots, l' + n' - 1\} \cap \pred{dom}{h_0} \equiv \emptyset$ which means that the two ranges of memory locations are disjoint. As a consequence the order of allocation does not matter in terms of reaching the final heap $h'$; our $h_1$ will therefore be $h[l' \mapsto 0]\ldots[l' + n' - 1 \mapsto 9]$. $\mathds{P}_1$ will be the program $\mathds{P}$ that has executed a step in the program where transaction $j$ resides. We know that this will always succeed since the $\mathsf{alloc}$ action requirements are all satisfied by (\ref{lem:aa1}). From this, $\mathds{P}_1$ can always reduce to $\mathds{P}'$ by chosing to run the program in which transaction $i$ is which is possible thanks to the assumption in (\ref{lem:aa1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the updates to the local variables does not matter. (Only if) This case can be built and proven in the same way as the previous one, with the appropriate substitutions.
+\end{proof}
 
-\lem
+\lem The order of an allocation followed by a read, write, lock or unlock can be swapped as long as the transactions performing them are distinct and the keys accessed are not part of the ones created by the allocation.
 \begin{gather*}
 	\forall h, h', \Phi, \Phi', S, S', \mathds{P}, \mathds{P}', i, j, n, l, k, x \ldotp \\
 	x = \alpha(j, k) \land i \neq j \land (k < l \lor k \geq l + n) \implies \\
@@ -63,12 +99,27 @@
 	\exists h_1, \Phi_1, S_1, \mathds{P}_1 \ldotp
 	(h, \Phi, S, \mathds{P}) \xrightarrow{x} (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\actalloc{i}{n}{l}} (h', \Phi', S', \mathds{P}'))
 \end{gather*}
+\begin{proof}
+Let's pick arbitrary $h, h' \in \mathsf{Storage}, \Phi, \Phi' \in \mathsf{LMan}, S, S' \in \mathsf{TState}, \mathds{P}, \mathds{P}' \in \mathsf{Prog}, i, j \in \mathsf{Tid}, l, k \in \mathsf{Key}, n \in \mathsf{Val}, x, y \in \mathsf{Act}$. Now we assume that the two transaction identifiers are distinct, i.e. $i \neq j$, that $x = \alpha(j, k)$ is a read, write, lock or unlock action performed by transaction $j$ on item with key $k$ and that $k < l \lor k \geq l + n$ meaning that $k$ is not part of the keys created by the $\mathsf{alloc}$ operation. (If case) Let's assume that:
+\begin{gather} \label{lem:ax1}
+	\exists h_0, \Phi_0, S_0, \mathds{P}_0 \ldotp 
+	(h, \Phi, S, \mathds{P}) \xrightarrow{\actalloc{i}{n}{l}} (h_0, \Phi_0, S_0, \mathds{P}_0)  \xrightarrow{x} (h', \Phi', S', \mathds{P}')
+\end{gather}
+It follows that the two action labels were produced by two transactions running in parallel executing a single step each. Given the effect of the $\mathsf{alloc}$ action, we know that $\Phi = \Phi_0 = \Phi'$ and $h_0 = h[l \mapsto 0]\ldots[l + n - 1 \mapsto 0]$. In order to find $h_1$ and $\Phi_1$, we now proceed with a case-by-case analysis on the kind of action $x$.
+\begin{itemize}
+	\item If $x = \actread{j}{k}{v}$ for $v \in \mathsf{Val}$ then $h' = h_0$ and $\Phi' = \Phi$ meaning we can find $h_1 = h$ and $\Phi_1 = \Phi$.
+	\item If $x = \actwrite{j}{k}{v}$ for $v \in \mathsf{Val}$ then $h' = h_0[k \mapsto v]$ and $\Phi' = \Phi$ meaning we can find $h_1 = h[k \mapsto v]$ and $\Phi_1 = \Phi$.
+	\item If $x = \actlock{j}{k}{\kappa}$ for some $\kappa \in \mathsf{Lock}$ then $h' = h_0$ and $\Phi' = \Phi[k \mapsto (I, \kappa)]$ meaning we can find $h_1 = h$ and $\Phi_1 = \Phi[k \mapsto (I, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$.
+	\item If $x = \actunlock{j}{k}$ then $h' = h_0$ and $\Phi' = \Phi[k \mapsto (I \setminus \{j\}, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$ and $\kappa \in \{\textsc{u}, \textsc{s}\}$ meaning we can find $h_1 = h$ and $\Phi_1 = \Phi[k \mapsto (I \setminus \{j\}, \kappa)]$.
+\end{itemize}
+$\mathds{P}_1$ will be the program $\mathds{P}$ that has executed a step in the program where transaction $j$ resides. We know that this will always succeed since the $\mathsf{alloc}$ action requirements are all satisfied by (\ref{lem:ax1}). From this, $\mathds{P}_1$ can always reduce to $\mathds{P}'$ by chosing to run the program in which transaction $i$ is which is possible thanks to the assumption in (\ref{lem:ax1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the updates to the local variables does not matter.
+\end{proof}
 
 \subsection{Total order}
 
 \begin{align*}
-	\pred{TSG}{\tau} &\triangleq (N, E) \\
-	\text{where } N &= N' \\
-	E &= E' \cup \{ (i, j)\ |\ \lnot \left( i \rightarrow^* j \in E' \land j \rightarrow^* i \in E' \right) \land i < j \} \\
-	(N', E') &= \pred{SG}{\tau}
+	\pred{total}{\tau} &\triangleq (T, \sqsubset) \\
+	\text{where } T &= N \\
+	\sqsubset &= E \cup \{ (i, j)\ |\ \lnot \left( i \rightarrow^* j \in E \land j \rightarrow^* i \in E \right) \land i < j \} \\
+	(N, E) &= \pred{SG}{\tau}
 \end{align*}
