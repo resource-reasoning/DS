@@ -15,3 +15,6 @@ Individual project as part of an MEng in Computing.
 
 ### Non-Serialisibility
 * Analysing Snapshot Isolation
+
+### Logics
+* Owicki-Gries Reasoning for Weak Memory Models, 

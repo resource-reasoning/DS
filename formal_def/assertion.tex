@@ -1,4 +1,4 @@
-\section{Assertion\label{sec:assertion}}
+\section{Assertion and Rules\label{sec:assertion}}
 
 Before introducing assertion, we extend arithmetic expressions with logical variables, ranging over \( \lvar \).
 
@@ -16,7 +16,7 @@ Assume a logical environment \( \lenv \), we extend the evaluation of arithmetic
 \end{rclarray}
 \]
 
-\section{Local/Transaction}
+\subsection{Local/Transaction}
 
 Local assertions, also transaction assertions, describe the state inside transactions.
 
@@ -63,12 +63,22 @@ The semantics of local assertions, where \( \rs \) and \( \ws \) represent the r
 The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
 
 \[
-    \infer[\rl{TRAss}]{%
-        \judgement{}{}{}{}{}{}
+    \infer[\rl{TRDeref}]{%
+        \judgement{}{\var = \dontcare \land \expr_{1} \pt_{\op} \expr_{2} }{ \pderef{\var}{\expr_{1}} }{\var = \expr_{2} \land \expr_{1} \pt_{\op} \expr_{2} }
     }{%
+        \expr_{1} \ \texttt{and} \ \expr_{2} \ \texttt{do not contain} \ \var
     }
 \]
 
+\[
+    \infer[\rl{TRMutate}]{%
+        \judgement{}{\expr_{1} \pt_{\op} \dontcare }{ \pmutate{\expr_{1}}{\expr_{2}} }{ \expr_{1} \pt_{\wop} \expr_{1} }
+    }{}
+\]
+
+\subsection{Global/Program}
+
+How to form a negative assertion?
 
 \[
     \begin{rclarray}
@@ -77,7 +87,7 @@ The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
                   \assfalse \quad                  |
             \quad \asstrue \quad                   |
             \quad \assemp \quad                    |
-            \quad \lvar \pointsto \val \quad       |
+            \quad \expr \pointsto \expr \quad      |
             \quad \gpre \sep \gpost \quad          | \\
                   \gpre \land \gpost \quad         |
             \quad \gpre \lor \gpost \quad          |
@@ -87,81 +97,44 @@ The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
     \end{rclarray}
 \]
 
+The semantics of global assertions.
+How to give semantics to a negative assertion?
+
+
+\[
+    \begin{array}{l c l}
+        \lenv, \stk, \tshp, \ts \models_{g} \assfalse & \iff & \texttt{never} \\
+        \lenv, \stk, \tshp, \ts \models_{g} \asstrue & \iff & \texttt{always} \\
+        \lenv, \stk, \tshp, \ts \models_{g} \assemp & \iff & \hp = \emptyset \\
+        \lenv, \stk, \tshp, \ts \models_{g} \expr_{1} \pt \expr_{2} & \iff & \dom(\tshp) = \Set{ \loc } \land \tshp(\loc)(\ts') =   \\
+                                                             & & \texttt{where} \ \loc = \eval{\expr_{1}}_{\lenv, \stk} \land \val = \eval{\expr_{2}}_{\lenv, \stk} \land \ts' \leq \ts \land {} \\
+                                                             & & \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) \land \forall \ts'' \in ( \ts', \ts) \ldotp \tshp(\loc)(\ts'')\undef \\
+        \lenv, \stk, \tshp, \ts \models_{g} \gpre \sep \gpost & \iff & \exists \tshp_{1}, \tshp_{2} \ldotp \tshp = \tshp_{1} \uplus \tshp_{2} \land ( \lenv, \stk, \tshp_{1}, \ts \models_{g} \gpre ) \land ( \lenv, \stk, \tshp_{2}, \ts \models_{g} \gpost ) \\
+        \lenv, \stk, \tshp, \ts \models_{g} \gpre \land \gpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \gpre ) \land ( \lenv, \stk, \tshp, \ts \models_{g} \gpost ) \\
+        \lenv, \stk, \tshp, \ts \models_{g} \gpre \lor \gpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \gpre ) \lor ( \lenv, \stk, \tshp, \ts \models_{g} \gpost ) \\
+        \lenv, \stk, \tshp, \ts \models_{g} \exists \lvar \ldotp \lpre & \iff & \exists \val \ldotp \lenv\remapsto{\lvar}{\val}, \stk, \tshp, \ts \models_{g} \gpre \\
+        \lenv, \stk, \tshp, \ts \models_{g} \lpre \implies \lpost & \iff & ( \lenv, \stk, \tshp, \ts \models_{l} \gpre ) \implies ( \lenv, \stk, \tshp, \ts \models_{l} \gpost ) 
+    \end{array}
+\]
+
+Action is pair of local assertions, where the first element cannot contain any write label, \( \dontcare \pt_{\wop} \dontcare \).
 
 \[
     \begin{rclarray}
-        \action \in \Action & \defeq & \Set{ \lpre \transfersto \lpost \ | \ \lpre , \lpost \in \Localassertion \land \lpre \ \texttt{has no write tag} } \\
-        \action \in \Action & \defeq &   
-              \lpre \transfersto \lpost \quad |  \quad \action ; \Action
+        \action \in \Action & \defeq & \Set{ \lpre \transfersto \lpost \ \middle| \ \lpre , \lpost \in \Localassertion \land \lpre \ \texttt{has no write tag} } \\
+        \eval{\lpre \transfersto \lpost }_{\lenv, \stk} & \defeq & \Set{(\hp, \hp') \middle| 
+        \begin{array}{@{}l@{}}
+            \exists \rs, \ws_{1}, \ws_{2} \ldotp \lenv, \stk, \hp, \rs, \ws_{1} \models_{l} \lpre \land {} \\
+            \lenv, \stk, \hp, \rs, \ws_{2} \models_{l}\lpost \land \ws_{1}  = \emptyset \land \ws_{2} \subseteq \rs
+        \end{array}} 
     \end{rclarray}
 \]
 
-
-Logic expression
-
-\[
-    \eval{e}_{\lenv}
-\]
-
-Assume there are special logical variables, ranging \( \loc_{1}, \loc_{2}, \dots \), that point to the corresponding locations in the global heap.
-
-\[
-    \begin{rclarray}
-        \denote{\assfalse}_{\lenv} & \defeq & \emptyset \\
-        \denote{\asstrue}_{\lenv} & \defeq &  \Heap \\
-        \denote{\lvar \pointsto \val }_{\lenv} & \defeq & \Set{ \hp \ | \ \exists \ts \ldotp \hp(\eval{\lvar}_{\lenv}) = (\eval{\val}_{\lenv}, \ts) } \\
-        \denote{\gpre \sep \gpost }_{\lenv} & \defeq & \Set{ \hp_{\gpre} \uplus \hp_{\gpost} \ | \  \hp_{\gpre} \in \denote{\gpre}_{\lenv} \land \hp_{\gpost} \in \denote{\gpost}_{\lenv} } \\
-        \denote{\gpre \land \gpost }_{\lenv} & \defeq & \Set{ \hp \ | \  \hp \in \denote{\gpre}_{\lenv} \land \hp \in \denote{\gpost}_{\lenv} } \\
-        \denote{\gpre \lor \gpost }_{\lenv} & \defeq & \Set{ \hp \ | \  \hp \in \denote{\gpre}_{\lenv} \lor \hp \in \denote{\gpost}_{\lenv} } \\
-        \denote{\exists \lvar \ldotp \gpre }_{\lenv} & \defeq & \Set{ \hp \ | \ \exists \val \ldotp \hp \in \denote{\gpre}_{\lenv\remapsto{\lvar}{\val}} } \\
-        \denote{\gpre \implies \gpost }_{\lenv} & \defeq & \Set{ \hp \ | \  \hp \in \denote{\gpre}_{\lenv} \implies  \hp \in \denote{\gpost}_{\lenv} } \\
-    \end{rclarray}
-\]
-
-
-\[
-    \begin{rclarray}
-        \denote{\assfalse}_{\stk, \lenv} & \defeq &  \emptyset \\
-        \denote{\asstrue}_{\stk, \lenv} & \defeq &  \Heap \times \Heap \\
-        \denote{\assemp}_{\stk, \lenv} & \defeq &  \Set{(\emptyset, \emptyset)} \\
-        \denote{\lvar \pointsto_{r} \val }_{\stk, \lenv} & \defeq & \Set{ ( \hp_{s},\hp_{e}) \ | \  \exists \ts \ldotp \hp_{s}(\eval{\lvar}_{\stk, \lenv}) = (\eval{\val}_{\stk, \lenv}, \ts) \land \hp_{e} = (\eval{\val}_{\stk, \lenv}, \ts)} \\
-        \denote{\lvar \pointsto_{w} \val }_{\stk, \lenv} & \defeq & \Set{ ( \hp_{s},\hp_{e}) \ | \  \exists \val_{s}, \ts_{s},\ts_{e} \ldotp \hp_{s}(\eval{\lvar}_{\stk, \lenv}) = (\val_{s}, \ts_{s}) \land \hp_{e} = (\eval{\val}_{\stk, \lenv}, \ts_{e}) \land \ts_{s} < \ts_{e}} \\
-        \denote{\lpre \sep \lpost }_{\stk, \lenv} & \defeq & \Set{ ( \hp_{\lpre s} \uplus \hp_{\lpost s}, \hp_{\lpre e} \uplus \hp_{\lpost e} ) \ | \ ( \hp_{\lpre s}, \hp_{\lpre e} ) \in \denote{\lpre}_{\stk, \lenv} \land ( \hp_{\lpost s} , \hp_{\lpost e} ) \in \denote{\lpost}_{\stk, \lenv} } \\
-        \denote{\lpre \land \lpost }_{\stk, \lenv} & \defeq & \Set{ ( \hp_{s}, \hp_{e} ) \ | \ ( \hp_{s}, \hp_{e} ) \in \denote{\lpre}_{\stk, \lenv} \land ( \hp_{s} , \hp_{e} ) \in \denote{\lpost}_{\stk, \lenv} } \\
-        \denote{\lpre \lor \lpost }_{\stk, \lenv} & \defeq & \Set{ ( \hp_{s}, \hp_{e} ) \ | \ ( \hp_{s}, \hp_{e} ) \in \denote{\lpre}_{\stk, \lenv} \lor ( \hp_{s} , \hp_{e} ) \in \denote{\lpost}_{\stk, \lenv} } \\
-        \denote{\exists \lvar \ldotp \lpre }_{\stk, \lenv} & \defeq & \Set{ ( \hp_{s}, \hp_{e} ) \ | \ \exists \val \ldotp ( \hp_{s}, \hp_{e} ) \in \denote{\lpre}_{\stk, \lenv\remapsto{\lvar}{\val}} } \\
-        \denote{\lpre \implies \lpost }_{\stk, \lenv} & \defeq & \Set{ ( \hp_{s}, \hp_{e} ) \ | \ ( \hp_{s}, \hp_{e} ) \in \denote{\lpre}_{\stk, \lenv} \implies ( \hp_{s} , \hp_{e} ) \in \denote{\lpost}_{\stk, \lenv} } \\
-    \end{rclarray}
-\]
 
 %Rule, \( \efsep \) will propagate write to read assertions.
 
 \[
-    \begin{rclarray}
-        \asstrue \efsep \lpre & \defeq & \lpre \\
-        \assfalse \efsep \dontcare & \defeq & \assfalse \\
-        \lvar \pointsto_{r} \val \efsep \lvar \pointsto_{r} \val & \defeq & \lvar \pointsto_{r} \val \\
-        \lvar \pointsto_{r} \dontcare \efsep \lvar \pointsto_{w} \val & \defeq & \lvar \pointsto_{w} \val \\
-        ( \lpre_{1} \sep \lpost_{1} ) \efsep ( \lpre_{2} \sep \lpost_{2} ) & \defeq & (\lpre_{1} \efsep \lpre_{2} ) \sep (\lpost_{1} \efsep \lpost_{2} ) \\
-        ( \lpre \land \lpost ) \efsep \lframe & \defeq & (\lpre \efsep \lframe ) \land (\lpost \efsep \lframe ) \\
-        ( \lpre \lor \lpost ) \efsep \lframe & \defeq & (\lpre \efsep \lframe ) \lor (\lpost \efsep \lframe ) \\
-        ( \lpre \lor \lpost ) \efsep \lframe & \defeq & (\lpre \efsep \lframe ) \lor (\lpost \efsep \lframe ) \\
-        \exists \lvar \ldotp \lpre  \efsep \lpre & \defeq & \exists \lvar \ldotp (\lpre \efsep \lframe ) \\
-        ( \lpre \implies \lpost ) \efsep \lframe & \defeq & (\lpre \efsep \lframe ) \implies (\lpost \efsep \lframe ) \\
-        %\propagate{\lvar \pointsto_{r} \val }{\lvar \pointsto_{r} \val }{\lvar \pointsto_{r} \val } & \iff & \true \\
-        %\propagate{\lvar \pointsto_{w} \val }{\lvar \pointsto_{r} \val }{\lvar \pointsto_{w} \val } & \iff & \true \\
-        %\propagate{\lpre }{\lpost }{\lframe } & \iff & \exists \lpre', \lpre'', \lpost', \lpost'', \lframe' \ldotp \lpre = \lpre' \sep \lpre'' \land {} \\
-                                              %& & \lpost = \lpost' \sep \lpost'' \land \lframe = \lpre'' \sep \lpost'' \sep \lframe' \land \propagate{ \lpre' }{\lpost' }{ \lframe' } \\
-        \agree{p}{p'} & \iff & \exists \lframe, \lframe', \lframe'' \neq \assfalse \ldotp \lpre \sep \lframe \efsep \lpre' \sep \lframe' = \lframe'' \\
-        \mergable{\rely}{\lpre}{\lpost}{\lpost'}  & \iff & \forall \lpre_{\rely} \transfersto \lpost_{\rely} \in \rely \ldotp \agree{\lpre}{\lpre_{\rely}} \land \agree{\lpost}{\lpost_{\rely}} \\
-                                                  & & \implies ( \exists \lframe, \lframe', \lframe_{\rely} \ldotp ( \lpost \sep \lframe ) \efsep ( \lpost_{\rely} \sep \lframe_{\rely} ) \implies \lpost' \sep \lframe' \land \lpost \implies \lpost') \\
-        \stable{\rely}{\lpost} & \iff & \forall \lpre_{\rely} \transfersto \lpost_{\rely} \in \rely \ldotp \exists \lpre \ldotp \lpost \overset{\texttt{retag} \ r}{\implies} \lpre \land \agree{\lpre}{\lpre_{\rely}} \land {} \\
-                               & & \exists \lframe,  \lframe_{\rely} \ldotp ( \lpost \sep \lframe ) \efsep ( \lpost_{\rely} \sep \lframe_{\rely} ) = \lpost \sep \lframe
-    \end{rclarray}
-\]
-
-\[
-    \infer[commit]{%
+    \infer[\rl{PRCommit}]{%
         \judgement{\rely, \grte}{\gpre}{ \ptrans{\cmd} }{\gpost}
     }{%
         \begin{array}{l}
@@ -176,26 +149,7 @@ Assume there are special logical variables, ranging \( \loc_{1}, \loc_{2}, \dots
 \]
 
 \[
-    \infer[choice]{%
-        \judgement{\rely, \grte}{\gpre}{\pifs{\bool} \ \prog_{1} \ \pifm \ \prog_{2} }{\gpost}
-    }{%
-        \judgement{\rely, \grte}{\gpre \land \bool}{ \prog_{1} }{\gpost} \quad 
-        \judgement{\rely, \grte}{\gpre \land \neg \bool}{ \prog_{2} }{\gpost} 
-    }
-\]
-
-\[
-    \infer[seq]{%
-        \judgement{\rely, \grte}{\gpre}{ \prog_{1} \pseq \prog_{2} }{\gpost}
-    }{%
-        \judgement{\rely, \grte}{\gpre}{ \prog_{1} }{\gpost'} \quad 
-        \gpost' \implies \gpre' \quad
-        \judgement{\rely, \grte}{\gpre'}{ \prog_{2} }{\gpost} 
-    }
-\]
-
-\[
-    \infer[concur]{%
+    \infer[\rl{PRPar}]{%
         \judgement{\rely, \grte_{1} \cup \grte_{2}}{\gpre_{1} \sep \gpre_{2}}{ \prog_{1} \ppar \prog_{2} }{\gpost_{1} \sep \gpost_{2}}
     }{%
         \begin{array}{l}
@@ -206,13 +160,3 @@ Assume there are special logical variables, ranging \( \loc_{1}, \loc_{2}, \dots
         \end{array}
     }
 \]
-
-\[
-    \infer[repeat]{%
-        \judgement{\rely, \grte}{\gpre}{ \ploop{\bool} \prog }{\gpre \land \neg \bool }
-    }{%
-        \judgement{\rely, \grte}{\gpre \land \bool }{ \prog }{\gpre}
-    }
-\]
-
-
