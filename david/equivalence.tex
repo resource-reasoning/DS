@@ -29,6 +29,66 @@
 	\pred{clean}{\tau} \iff \forall \iota, k, \kappa, n \ldotp \left( (\actlock{\iota}{k}{\kappa}, n) \in \tau \lor (\actunlock{\iota}{k}, n) \in \tau \right) \implies \lnot \pred{absent}{\iota, k, \tau}
 \]
 
+\lem A lock on an item is not needed for any reductions a part from a read, a write or an unlock action performed by the same transaction on the same item.
+\begin{gather*}
+	\forall \mathds{P}, \mathds{P}', h, h', \Phi, \Phi', S, S', \alpha, i, k, v, I, \kappa \ldotp \\
+	(h, \Phi, S, \mathds{P}) \xrightarrow{\alpha} (h', \Phi', S', \mathds{P}')
+		\land
+	(\{i\} \uplus I, \kappa) = \Phi(k)
+		\land \\
+	\alpha \not\in \{ \actread{i}{k}{v}, \actwrite{i}{k}{v}, \actunlock{i}{k} \}
+		\implies
+	\exists \Phi_m, \Phi_m', I', \kappa', \kappa'' \ldotp \\
+	(h, \Phi_m, S, \mathds{P}) \xrightarrow{\alpha} (h', \Phi_m', S, \mathds{P}')
+		\land
+	\Phi_m = \Phi[k \mapsto (I, \kappa')]
+		\land
+	\Phi_m' = \Phi'[k \mapsto (I', \kappa'')]
+		\land
+	\kappa' \leq \textsc{s}
+\end{gather*}
+\begin{proof}
+Let's pick arbitrary $\mathds{P}, \mathds{P}' \in \mathsf{Prog}, h, h' \in \mathsf{Storage}, \Phi, \Phi' \in \mathsf{LMan}, S, S' \in \mathsf{TState}, \alpha \in \mathsf{Act}, i \in \mathsf{Tid}, k \in \mathsf{Key}, v \in \mathsf{Val}, I \in \mathcal{P}(\mathsf{Tid}), \kappa \in \mathsf{Lock}$. We now assume that the following holds:
+\begin{gather}
+	\label{lem:alman1}
+	(h, \Phi, S, \mathds{P}) \xrightarrow{\alpha} (h', \Phi', S', \mathds{P}')
+		\land
+	(\{i\} \uplus I, \kappa) = \Phi(k)
+		\land
+	\alpha \not\in \{ \actread{i}{k}{v}, \actwrite{i}{k}{v} \}
+\end{gather}
+From (\ref{lem:alman1}) we directly obtain that $\kappa \geq \textsc{s}$ given that $i$ is in the owners' set for item $k$. The proof proceeds with a case-by-case analysis on $\alpha$.
+\begin{itemize}
+	\item If $\alpha = \actprog$, $\alpha = \actid{\iota}$ or $\alpha = \actalloc{\iota}{n}{l}$ for some $\iota \in \mathsf{Tid}, n \in \mathds{N}, l \in \mathsf{Key}$, then the result trivially follows given that in these cases $\alpha$ has no requirementes on $\Phi$ to succesfully reduce.
+	
+	\item If $\alpha = \actread{j}{k'}{v'}$ for $j \in \mathsf{Tid}, k' \in \mathsf{Key}, v' \in \mathsf{Val}$ then from (\ref{lem:alman1}) we know that $i \neq j$. Next we consider the following two cases:
+		\begin{itemize}
+			\item If $k = k'$ then from (\ref{lem:alman1}) we obtain that, given the $\alpha$ action has succesfully reduced, $\kappa = \textsc{s}$ and $j \in I$. Therefore we can find $\kappa' = \textsc{s}, \kappa'' = \textsc{s}$ and $I' = I$.
+			\item If $k \neq k'$ then $\alpha$ has no requirement on $\Phi(k)$ to succesfully reduce and the result follows.
+		\end{itemize}
+		
+	\item If $\alpha = \actwrite{j}{k'}{v'}$ for $j \in \mathsf{Tid}, k' \in \mathsf{Key}, v' \in \mathsf{Val}$ then from (\ref{lem:alman1}) we know that $i \neq j$. Next we consider the following two cases:
+		\begin{itemize}
+			\item If $k = k'$ then it is not possible that $\alpha$ succesfully reduced since from (\ref{lem:alman1}) we know that $i$ was in the owners set for key $k$, then it must be the case that $k \neq k'$.
+			\item If $k \neq k'$ then $\alpha$ has no requirement on $\Phi(k)$ to succesfully reduce and the result follows.
+		\end{itemize}
+		
+	\item If $\alpha = \actlock{j}{k'}{\kappa_j}$ for some $j \in \mathsf{Tid}, k' \in \mathsf{Key}, \kappa_j \in \mathsf{Lock}$.
+		\begin{itemize}
+			\item If $k \neq k'$ then $\alpha$ has no requirement on $\Phi(k)$ to succesfully reduce and the result follows.
+			\item If $k = k'$ and $i \neq j$ then from (\ref{lem:alman1}) we know that $\alpha$ succesfully reduced, and therefore $\kappa = \textsc{s}$ and $\kappa_j = \textsc{s}$. This also implies that we can find $\kappa' = \textsc{s}, I' = I \cup \{j\}$ and $\kappa'' = \textsc{s}$.
+			\item If $k = k'$ and $i = j$ then given that $\Phi(k)$ already had $i$ as part of the owners, it must be the case that $\kappa = \textsc{s}, I = \emptyset$ and $\kappa_j = \textsc{x}$ in order for $\alpha$ to reduce as imposed by (\ref{lem:alman1}). It follows that we can find $\kappa' = \textsc{u}, I' = \{i\}$ and $\kappa'' = \textsc{x}$.
+		\end{itemize}
+		
+	\item If $\alpha = \actunlock{j}{k'}$ for $j \in \mathsf{Tid}, k' \in \mathsf{Key}$ then from (\ref{lem:alman1}) we know that $i \neq j$. Next we consider the following two cases:
+		\begin{itemize}
+			\item If $k \neq k'$ then $\alpha$ has no requirement on $\Phi(k)$ to succesfully reduce and the result follows.
+			\item If $k = k'$ then from (\ref{lem:alman1}) we know that $\alpha$ succesfully reduced meaning that $i$ and $j$ were holding the lock at the same time, making $\kappa = \textsc{s}, \kappa' = \textsc{s}, \kappa'' = \textsc{s}$ and $I' = I \setminus \{ i, j \}$.
+		\end{itemize}
+\end{itemize}
+\end{proof}
+
+\iffalse
 \lem Lock and unlock operations done by a transaction on items which it does not read or write can be removed without affecting the program or the global state.
 \begin{gather*}
 	\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, n, n', \iota, k, \kappa, x, y \ldotp
@@ -400,4 +460,4 @@ It now suffices to show that each unioned set in the L.H.S. of (\ref{thm:total1}
 \end{itemize}
 \end{proof}
 }
-
+\fi
