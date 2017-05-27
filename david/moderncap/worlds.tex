@@ -9,91 +9,113 @@ A \textit{world} is the structure that represents the entirety of the state of e
 
 Worlds can be composed whenever they have the same shared state, action model and a disjoint local logical state. We now proceed to define the latter as tuples whose first component is a machine state, the heap, while the second one is a mapping from regions to capabilities held by the thread for that particular region. Given that mCAP is parametric with respect to the separation algebra representing capabilities, we allow users of the framework to chose a suitable instantiation to tackle a particular program verification.
 
-\param (Capability separation algebra). Let $(\mathbb{K}, \bullet_\mathbb{K}, \mathbf{0}_\mathbb{K})$ be any separation algebra satisfying the cross-split property which represents capability resources. Elements of $\mathbb{K}$ are ranged over by $\kappa, \kappa_1, \ldots, \kappa_n$.
+\begin{param}
+	(Machine states pcm).
+	Assume a partial, commutative monoid with multiple units which represents \emph{machine states}, $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M})$. Elements of $\mathbb{M}$ are ranged over by $m, m_1, \ldots, m_n$.
+\end{param}
+In the context of transactions reasoning, we instantiate the pcm of machine states to $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M}) = (\mathsf{Heap} \times \mathsf{Stack}, \uplus, \emptyset)$, where $\uplus$ is the union of partial functions with disjoint domains.
 
-\defn (Machine states separation algebra). Let $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M})$ be any separation algebra satisfying the cross-split property, which represents machine states where elements of $\mathbb{M}$ are ranged over by $m, m_1, \ldots, m_n$. In the scenario of transactions reasoning, we instantiate the separation algebra to $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M}) = (\mathsf{State}, \uplus, \emptyset)$, where $\uplus$ is the union of partial functions with disjoint domains.
+\begin{param}
+	(Primitive capability pcm).
+	Assume a partial, commutative monoid with multiple units which represents \emph{primitive capability resources}, $(\mathbb{K}, \bullet_\mathbb{K}, \mathbf{0}_\mathbb{K})$. Elements of $\mathbb{K}$ are ranged over by $\kappa, \kappa_1, \ldots, \kappa_n$.
+\end{param}
 
-\defn (Region identifiers). We define the set of region identifiers $\mathsf{Rid}$, ranged over by $r, r_1, \ldots, r_n$, to be equivalent to the set $\mathsf{Val}$.
+Given that the shared state in a mCAP world is organized into regions, we require a way to uniquely characterize each of those. We therefore define distinct region identifiers.
+\begin{defn}
+	(Region identifiers).
+	Assume a set of \emph{region identifiers} $\mathsf{Rid}$, ranged over by $r, r_1, \ldots, r_n$.
+\end{defn}
 
-\defn (Region capabilities). Given a separation algebra for capabilities, $(\mathbb{K}, \bullet_\mathbb{K}, \mathbf{0}_\mathbb{K})$, we define the set $\mathsf{RKap}$ to contain all mappings from region identifiers to such capabilities as:
-\[
-	\mathsf{RKap} \triangleq \mathsf{Rid} \overset{\text{fin}}{\rightharpoonup} \mathbb{K}
-\]
-One can see region capabilities as a way to record what capabilities is a thread holding for regions in the shared state. We range over elements of the $\mathsf{RKap}$ set using $\rho, \rho_1, \ldots, \rho_n$. Composition on region capabilities, formally $\circ : \mathsf{RKap} \times \mathsf{RKap} \rightharpoonup \mathsf{RKap}$, is defined as a new region capability whose domain includes all regions in both mappings, and where single capabilities are composed through the given $\bullet_\mathbb{K}$ operator. Formally,
-\[
-	\rho \circ \rho' \triangleq \pred{comp}{\pred{dom}{\rho} \cup \pred{dom}{\rho'}, \rho, \rho'}
-\]
-Where the helper functions $\mathsf{comp} : \left( \mathcal{P}(\mathsf{Rid}) \times \mathsf{RKap} \times \mathsf{RKap} \right) \rightarrow \mathsf{RKap}$ and $\hat{-} : \mathsf{RKap} \rightarrow \mathsf{Rid} \rightarrow \mathbb{K}$, which simply returns the unit capability $\mathbf{0}_\mathbb{K}$ in case a region is not present in $\rho$, are defined in the following way.
-\[
-	\begin{array}{l l}
-			\begin{aligned}
-				\pred{comp}{\emptyset, -, -} &\triangleq \emptyset \\
-				\pred{comp}{\{r\} \cup R, \rho, \rho'} &\triangleq \rho''[r \mapsto (\hat{\rho}(r) \bullet_\mathbb{K} \hat{\rho}'(r))] \\
-				&\text{where } \rho'' = \pred{comp}{R, \rho, \rho'}
-			\end{aligned}
-		&
-		\hat{\rho}(r) \triangleq
+\begin{defn}
+	(Region capabilities).
+	Given a pcm for primitive capabilities, $(\mathbb{K}, \bullet_\mathbb{K}, \mathbf{0}_\mathbb{K})$, the set of \emph{capabilities}, $\mathsf{RKap}$, is defined as the set of partial finite functions from region identifiers to primitive capabilities.
+	\[
+		\mathsf{RKap} \triangleq \mathsf{Rid} \overset{\text{fin}}{\rightharpoonup} \mathbb{K}
+	\]
+	The $\mathsf{RKap}$ set is ranged over by $\rho, \rho_1, \ldots, \rho_n$. Composition on capabilities, $\circ : \mathsf{RKap} \times \mathsf{RKap} \rightharpoonup \mathsf{RKap}$, is defined as follows:
+	\[
+		(\rho \circ \rho') (r)
+			\triangleq
 		\begin{cases}
-			\rho(r), & \text{if } r \in \pred{dom}{\rho}
+			\rho(r), & \text{if } r \not\in \pred{dom}{\rho'}
 			\\
-			\mathbf{0}_\mathbb{K}, & \text{otherwise}
+			\rho'(r), & \text{if } r \not\in \pred{dom}{\rho}
+			\\
+			\rho(r) \bullet_\mathbb{K} \rho'(r), & \text{otherwise}
 		\end{cases}
-	\end{array}
-\]
+	\]
+	The capabilities pcm is defined as $(\mathsf{RKap}, \circ, \mathbf{0}_{\mathsf{RK}})$, where the capability unit set, $\mathbf{0}_{\mathsf{RK}} : \mathsf{Rid} \overset{\text{fin}}{\rightharpoonup} \mathbb{K}$, is the function with an empty domain. 
+\end{defn}
+One can see region capabilities as a way to record what capabilities a thread is holding for regions present in the world's shared state.
 
-\defn (Logical states). Given a separation algebra for machine states $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M})$, and one for capabilities $(\mathbb{K}, \bullet_\mathbb{K}, \mathbf{0}_\mathbb{K})$, a logical state is a pair $(m, \rho)$ where $m \in \mathbb{M}$ is a machine state and $\rho \in \mathsf{RKap}$ is a region capability.
-\[
-	\mathsf{LState} \triangleq \mathbb{M} \times \mathsf{RKap}
-\]
-When referring to an arbitrary logical state or a local state we use $l, l_1, \ldots, l_n$. We define the unit logical state as $\mathbf{0}_\mathsf{L} \triangleq (\mathbf{0}_\mathbb{M}, \emptyset)$ and given a logical state $l$ we use $l_\mathsf{M}$ and $l_\mathsf{K}$ to refer to its first and second projections respectively. The composition of logical states, formally $\circ : \mathsf{LState} \times \mathsf{LState} \rightharpoonup \mathsf{LState}$, is defined as composition on both components.
-\[
-	(m, \rho) \circ (m', \rho') \triangleq (m \bullet_\mathbb{M} m', \rho \circ \rho')
-\]
-The separation algebra of logical states is thus $(\mathsf{LState}, \circ, \mathbf{0}_\mathsf{L})$.
+a logical state is a pair $(m, \rho)$ where $m \in \mathbb{M}$ is a machine state and $\rho \in \mathsf{RKap}$ is a region capability
+\begin{defn}
+	(Logical states).
+	Given a pcm for machine states $(\mathbb{M}, \bullet_\mathbb{M}, \mathbf{0}_\mathbb{M})$, and one for capabilities $(\mathbb{K}, \bullet_\mathbb{K}, \mathbf{0}_\mathbb{K})$, the set of \emph{logical states}, $\mathsf{LStates}$, ranged over by $l, l_1, \ldots, l_n$ is defined as:
+	\[
+		\mathsf{LState} \triangleq \mathbb{M} \times \mathsf{RKap}
+	\]
+	Composition on logical states, $\circ : \mathsf{LState} \times \mathsf{LState} \rightharpoonup \mathsf{LState}$, is defined as:
+	\[
+		(m, \rho) \circ (m', \rho') \triangleq (m \bullet_\mathbb{M} m', \rho \circ \rho')
+	\]
+	The logical states unit set is $\mathbf{0}_\mathsf{L} = \{ (m, \rho)\ |\ m \in \mathbf{0}_\mathbb{M} \land \rho \in \mathbf{0}_\mathsf{RK} \}$ and the pcm is defined as $(\mathsf{LState}, \circ, \mathbf{0}_\mathsf{L})$.
+\end{defn}
+Given a logical state $l$ we use $l_\mathsf{M}$ and $l_\mathsf{K}$ to refer to its first and second projections respectively.
 
-\defn (Shared states). We define the set of shared states $\mathsf{GState}$, ranged over by $g, g_1, \ldots g_n$, as a finite partial function mapping region identifiers to logical states.
-\[
-	\mathsf{GState} \triangleq \mathsf{Rid} \overset{\text{fin}}{\rightharpoonup} \mathsf{LState}
-\]
-The $\llfloor - \rrfloor : \mathsf{GState} \rightarrow \mathsf{LState}$ operator, which extracts the logical states from all shared regions, is defined as:
-\[
-	\llfloor g \rrfloor \triangleq \prod^{\circ}_{r \in \pred{dom}{g}} g(r)
-\]
-For conciseness, we also define the \textit{cross-composition} between logical states and shared states, $\circ : \mathsf{LState} \times \mathsf{GState} \rightharpoonup \mathsf{LState}$, as:
-\[
-	l \circ g \triangleq l \circ \llfloor g \rrfloor
-\]
+\begin{defn}
+	(Shared states).
+	The set of \emph{shared states} $\mathsf{GState}$, ranged over by $g, g_1, \ldots g_n$, is defined as the set of finite partial functions, mapping region identifiers to logical states:
+	\[
+		\mathsf{GState} \triangleq \mathsf{Rid} \overset{\text{fin}}{\rightharpoonup} \mathsf{LState}
+	\]
+	The \emph{combination function}, $\llfloor - \rrfloor : \mathsf{GState} \rightarrow \mathsf{LState}$ is defined as:
+	\[
+		\llfloor g \rrfloor \triangleq \prod^{\circ}_{r \in \pred{dom}{g}} g(r)
+	\]
+	The \textit{cross-composition} function between logical states and shared states, $\oplus : \mathsf{LState} \times \mathsf{GState} \rightharpoonup \mathsf{LState}$, is defined as:
+	\[
+		l \oplus g \triangleq l \circ \llfloor g \rrfloor
+	\]
+\end{defn}
 
-\defn (Action models). The set of actions $\mathsf{Action}$, is defined as tuples of logical states.
-\[
-	\mathsf{Action} \triangleq \mathsf{LState} \times \mathsf{LState}
-\]
-We refer to the first component of an action $(l, l')$ as the pre-state while the second one as the post-state. Actions are used as part of of action models, coming from the set $\mathsf{AMod}$ which is defined as follows.
-\[
-	\mathsf{AMod} \triangleq \mathsf{Rid} \overset{\text{fin}}{\rightharpoonup} \mathbb{K} \overset{\text{fin}}{\rightharpoonup} \mathcal{P}(\mathsf{Action})
-\]
-We use $\mathcal{J}, \mathcal{J}_1, \ldots, \mathcal{J}_n$ to range over action models and we write $\emptyset$ for an action model with an empty domain.
+\begin{defn}
+	(Action models).
+	The set of \emph{actions} $\mathsf{Action}$, is defined as the set of tuples of logical states.
+	\[
+		\mathsf{Action} \triangleq \mathsf{LState} \times \mathsf{LState}
+	\]
+	Actions are used as part of of action models. The set of \emph{action models}, $\mathsf{AMod}$, ranged over by $\mathcal{J}, \mathcal{J}_1, \ldots, \mathcal{J}_n$, is defined as follows.
+	\[
+		\mathsf{AMod} \triangleq \mathsf{Rid} \overset{\text{fin}}{\rightharpoonup} \mathbb{K} \overset{\text{fin}}{\rightharpoonup} \mathcal{P}(\mathsf{Action})
+	\]
+	An action model with an empty domain is denoted by $\emptyset$.
+\end{defn}
+We refer to the first component of an action $(l, l')$ as the \emph{pre-state} while the second one as the \emph{post-state}. 
 
-\defn (Capability containment). A region capability $\rho \in \mathsf{RKap}$ is defined to be contained in an action model $\mathcal{J} \in \mathsf{AMod}$ when any capability associated to a region in $\rho$ must be accounted for in the action model's mapping for the same region.
-\[
-	\rho \prec \mathcal{J} \iff \forall r \in \pred{dom}{\rho} \ldotp \exists \kappa \in \pred{dom}{\mathcal{J}(r)} \ldotp \rho(r) \leq \kappa
-\]
+\begin{defn}
+	(Well-formedness).
+	We define for a triple $(l, g, \mathcal{J}) : \mathsf{LState} \times \mathsf{GState} \times \mathsf{AMod}$ to be \emph{well-formed}, when the cross-composition of the local and shared state is defined, and the resulting region capability is contained in the action model.
+	\[
+		\pred{wf}{l, g, \mathcal{J}} \iff \exists l' \ldotp l \oplus g = l' \land l'_\mathsf{K} \subseteq \pred{dom}{\mathcal{J}} \land \pred{dom}{g} = \pred{dom}{\mathcal{J}}
+	\]
+\end{defn}
 
-\defn (Well-formedness). We define for a tuple $(l, g, \mathcal{J})$ to be well-formed when the cross-composition of the local and shared state is defined, and the resulting region capability is contained in the action model.
-\[
-	\pred{wf}{l, g, \mathcal{J}} \iff \exists m, \rho \ldotp l \circ g = (m, \rho) \land \rho \prec \mathcal{J}
-\]
-
-\defn (World). The set of all worlds $\mathsf{World}$ is ranged over by $w, w_1, \ldots w_n$ and defined as the set of well-formed tuples containing a local state, a global one and an action model.
-\[
-	\mathsf{World} \triangleq \{ w \in \mathsf{LState} \times \mathsf{GState} \times \mathsf{AMod}\ |\ \pred{wf}{w} \}
-\]
-We write $w_\mathsf{L}, w_\mathsf{S}$ and $w_\mathsf{A}$ for the first, second and third projections of a world $w$. Composition on worlds, $\bullet : \mathsf{World} \rightarrow \mathsf{World} \rightharpoonup \mathsf{World}$, is defined by composing local states and requiring that shared states and action models be identical.
-\[
-	(l, g, \mathcal{J}) \bullet (l', g', \mathcal{J}') \triangleq
-	\begin{cases}
-		(l \circ l', g, \mathcal{J}), & \text{if } g = g' \text{ and } \mathcal{J} = \mathcal{J}' \\ & \text{and } \pred{wf}{(l \circ l', g, \mathcal{J})}
-		\\
-		\mathsf{undef} & \text{otherwise}
-	\end{cases}
-\]
+\begin{defn}
+	(World).
+	The set of all \emph{worlds}, $\mathsf{World}$, ranged over by $w, w_1, \ldots w_n$, is defined as the set of well-formed triples containing a local state, a global one and an action model.
+	\[
+		\mathsf{World} \triangleq \{ w \in \mathsf{LState} \times \mathsf{GState} \times \mathsf{AMod}\ |\ \pred{wf}{w} \}
+	\]
+	Composition on worlds, $\bullet : \mathsf{World} \times \mathsf{World} \rightharpoonup \mathsf{World}$, is defined by composing local states and requiring that shared states and action models be identical.
+	\[
+		(l, g, \mathcal{J}) \bullet (l', g', \mathcal{J}') \triangleq
+		\begin{cases}
+			(l \circ l', g, \mathcal{J}), & \text{if } g = g' \text{ and } \mathcal{J} = \mathcal{J}' \\ & \text{and } \pred{wf}{(l \circ l', g, \mathcal{J})}
+			\\
+			\mathsf{undef} & \text{otherwise}
+		\end{cases}
+	\]
+	The worlds pcm is defined as $(\mathsf{World}, \bullet, \mathbf{0}_\mathsf{W})$, where the worlds unit set is $\mathbf{0}_\mathsf{W} = \{ (l, g, \mathcal{J})\ |\ (l, g, \mathcal{J}) \in \mathsf{World} \land l \in \mathbf{0}_\mathsf{L} \}$.
+\end{defn}
+Given a world $w$, we write $w_\mathsf{L}, w_\mathsf{S}$ and $w_\mathsf{A}$ for its first, second and third projections.
