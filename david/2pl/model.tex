@@ -1,0 +1,101 @@
+\subsection{Model}
+
+The abstract model that describes the ecosystem under which transactions run as part of programs is illustrated in this section. At the core of the model resides a concrete, low-level storage, which can be thought of as a contiguous space of memory cells or as a collection of database items. Each of the latter contains a single numerical value and is associated with a unique address, or key used to index it. Transactions access the storage to read from and permanently write to it.
+
+\begin{defn}
+	(Storage values).
+	The set of \emph{storage values}, \textsf{Val}, is defined to be equivalent to the set of integers $\mathds{Z}$. It is ranged over by $v, v_1, \ldots v_n$.
+\end{defn}
+
+\begin{defn}
+	(Storage keys).
+	The set of \emph{keys} used in order to index elements in the storage is defined as \textsf{Key}, ranged over by $k, k_1, \ldots k_n$ and it is equivalent to the set of natural numbers $\mathds{N}$.
+\end{defn}
+
+\begin{defn}
+	(Storage).
+	A \emph{storage} is defined to be the set of total functions with a finite domain from storage keys to storage values:
+	\[
+		\mathsf{Storage} \triangleq \mathsf{Key} \xrightarrow{\text{fin}} \mathsf{Val}
+	\]
+	The $\mathsf{Storage}$ set is ranged over by $h, h_1, \ldots, h_n$. Let $\mathsf{State} \triangleq \mathsf{Storage} \uplus \{\lightning\}$ be the set containing all of the possible members of $\mathsf{Storage}$ together with a special, \textit{faulting}, state $\lightning$ which indicates a program state where a failure happened.	
+\end{defn}
+
+Local variables are privately used by transactions inside of their bodies. They can be arbitrarily initialized, assigned and read and are recorded as part of a transaction's stack.
+\begin{defn}
+	(Transaction stack).
+	The set of \emph{transaction stacks} is defined as the set of total functions with finite domain, mapping variable names to their respective value:
+	\[
+		\mathsf{Stack} \triangleq \mathsf{Var} \xrightarrow{\text{fin}} \mathsf{Val}
+	\]
+	The $\mathsf{Stack}$ set is ranged over by $s, s_1, \ldots, s_n$.
+\end{defn}
+
+Under the \textsc{2pl} protocol, all accesses to the shared storage cells must be protected by a corresponding lock. This means that any transaction that needs to read or write a particular cell must be granted an appropriate lock for that same cell. An abstract lock behaves in the standard way: depending on the mode, it can have zero, one or more \textit{owners}, i.e. threads that have been granted access to the cell.
+
+\begin{defn}
+	(Lock modes).
+	The set of \emph{lock modes}, $\mathsf{Lock}$, is ranged over by $\kappa, \kappa_1, \ldots, \kappa_n$ and defined as:
+	\[
+		\mathsf{Lock} \triangleq \{ \textsc{u}, \textsc{s}, \textsc{x} \}
+	\]
+	The associated strict total order, $>$, is defined in the following way:
+	\[
+		>\ \triangleq \{ (\textsc{x}, \textsc{u}), (\textsc{x}, \textsc{s}), (\textsc{s}, \textsc{u}) \}
+	\]
+	The total order $\geq$ on the set $\mathsf{Lock}$ is equivalent to $>$ unioned with all of the reflexive pairs.
+\end{defn}
+We informally refer to each of the lock mode entries as \textit{unlocked}, \textit{shared} and \textit{exclusive} respectively. This reflects the fact that either no transaction is accessing a cell, one or more transactions are allowed to read the cell's content or a single transaction has been given the permission to write to the cell.
+
+The \textsc{2pl} protocol sets a precise constraint on the pattern of acquisition and release of locks. A transaction $\mathds{T}$'s lifecycle is clearly distinguished between two phases. It initially starts executing in the \textit{growing} phase ($\curlywedge$), where it is free to sequentially acquire locks  for any cell it needs. Once it releases one of the locks it is holding, the transaction enters the \textit{shrinking} phase ($\curlyvee$). Here $\mathds{T}$ is denied any new lock acquisitions while it is allowed to gradually release the locks that are still being held.
+\begin{defn}
+	(Locking phase).
+	 The set of \emph{locking phases}, ranged over by $p$, is defined as:
+	 \[
+	 	\mathsf{Phase} \triangleq \{ \curlywedge, \curlyvee \}
+	 \]
+\end{defn}
+We sometimes refer to the growing and shirinking phase using \textit{acquiring} and \textit{releasing} phase respectively.
+
+Every transaction that is executed as part of a program is associated with a unique identifier (e.g. a number or a timestamp) used to keep track of its current state and the locks it is currently holding.
+\begin{defn}
+	(Transaction identifiers).
+	 Assume a set of \emph{transaction identifiers}, \textsf{Tid}, ranged over by $\iota, i, j \ldots$ with an associated strict total order relation $<$.
+\end{defn}
+A system transaction with identifier $\iota$ is written as $\mathds{T}_\iota$. At this point we have all of the ingredients to introduce the other main component of our model, the lock manager. This global structure records the status of all locks on storage cells.
+
+\begin{defn}
+	(Lock manager).
+	A \emph{lock manager} is defined as a total function with a finite domain from storage keys to pairs of transaction identifiers and lock modes.
+	\[
+		\mathsf{LMan} \triangleq \mathsf{Key} \xrightarrow{\text{fin}} \mathcal{P}(\mathsf{Tid}) \times \mathsf{Lock}
+	\]
+	The $\mathsf{LMan}$ set is ranged over by $\Phi, \Phi_1, \ldots, \Phi_n$. In order to cope with the default state of locks associated to keys initially absent from the domain of a lock manager, a total function, $\hat{-}(-) : \mathsf{LMan} \times \mathsf{Key} \rightarrow \mathcal{P}(\mathsf{Tid}) \times \mathsf{Lock}$, is defined as:
+	\[
+		\hat{\Phi}(k)
+			\triangleq
+		\begin{cases}
+			\Phi(k), & \text{if } k \in \pred{dom}{\Phi} \\
+			(\emptyset, \textsc{u}), & \text{otherwise}
+		\end{cases}
+	\]	
+\end{defn}
+In fact, every cell starts in the unlocked state with no transaction owning it.
+
+We keep track of each transaction's stack and locking phase inside of another global structure which we call the transactions state.
+\begin{defn}
+	(Transactions state).
+	The \emph{state} of all transactions running as part of a program is defined as a total function with a finite domain:
+	\[
+		\mathsf{TState} \triangleq \mathsf{Tid} \rightharpoonup \mathsf{Stack} \times \mathsf{Phase}
+	\]
+	Elements of $\mathsf{TState}$ are ranged over by $S, S_1, \ldots, S_n$. Another total function is also defined, $\hat{-}(-) : \mathsf{TState} \times \mathsf{Tid} \rightarrow \mathsf{Stack} \times \mathsf{Phase}$. Such function overrides the original function lookup in order to cope with newly created transactions with an empty stack starting in the growing phase.
+	\[
+		\hat{S}(\iota)
+			\triangleq
+		\begin{cases}
+			S(\iota), & \text{if } \iota \in \pred{dom}{S} \\
+			(\emptyset, \curlywedge), & \text{otherwise}
+		\end{cases}
+	\]	
+\end{defn}
