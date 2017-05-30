@@ -32,7 +32,7 @@ The environment can also update an already existing region inside the global sta
 		R^u \triangleq \big\{ \left( (l, g, \mathcal{J}), (l, g', \mathcal{J}) \right)\ |\ \exists r, \kappa \ldotp  \kappa\ \sharp\ (l \oplus g)_\mathsf{K}(r) \land (g, g') \in \lceil \mathcal{J}(r) \rceil (\kappa) \big\}
 	\]
 \end{defn}
-An update done by the environment is only allowed to modify the world's shared state $g$, while the local state $l$ and action model $\mathcal{J}$ stay the same. The actual region update is only allowed when the environment utilizes a capability $\kappa$ that is compatible with the capabilities that are currently in the local and shared states. Moreover, $\kappa$ needs to enable the shared state transition as described by $\mathcal{J}(r)$. Since we allow actions to only describe a part of the region they are modifying, and not the entirety of it, we introduce and use the \emph{action framing} function, $\lceil - \rceil : \left( \mathbb{K} \rightarrow \mathcal{P}(\mathsf{Action}) \right) \times \mathbb{K} \rightarrow \mathcal{P}(\mathsf{Action})$.
+An update done by the environment is only allowed to modify the world's shared state $g$, while the local state $l$ and action model $\mathcal{J}$ stay the same. The actual region update is only allowed when the environment makes use of a capability $\kappa$ that is compatible with the capabilities that are currently in the local and shared states. Moreover, $\kappa$ needs to enable the shared state transition as described by $\mathcal{J}(r)$. Since we allow actions to only describe a part of the region they are modifying, and not the entirety of it, we introduce and use the \emph{action framing} function, $\lceil - \rceil : \left( \mathbb{K} \rightarrow \mathcal{P}(\mathsf{Action}) \right) \times \mathbb{K} \rightarrow \mathcal{P}(\mathsf{Action})$.
 	\[
 		\lceil a \rceil (\kappa) \triangleq \{ (p \circ f, q \circ f)\ |\ (p, q) \in a(\kappa) \land f \in \mathsf{LState} \}
 	\]
@@ -65,7 +65,7 @@ Intuitively, we require the stability property as we need to be sure that any gi
 	\end{align*}
 \end{defn}
 
-A thread can create a new region using currently owned resources in its local state and such behaviour is formally described through the $G^c$ between worlds. On the other hand, we leave region destruction as implicit, i.e. the user can encode it as a special action in the action model associated to the region, which gets rid of everything inside of it.
+The effect of a particular thread's actions is modelled through the guarantee relation. A thread can create a new region using currently owned resources in its local state and such behaviour is formally described through the $G^c$ between worlds. On the other hand, we leave region destruction as implicit, i.e. the user can encode it as a special action in the action model associated to the region, which gets rid of everything inside of it.
 \begin{defn}
 	(Construction guarantee).
 	The \emph{construction guarantee} relation, $G^c : \mathsf{World} \times \mathsf{World}$, is defined as:
@@ -112,18 +112,29 @@ We can finally define the overall guarantee relation between worlds, expressed t
 		G \triangleq (G^c \cup G^u)^*
 	\]
 \end{defn}
-Similar to the rely relation, the definition uses a transitive closure to allow multiple region creations and updates as part of a single atomic step performed by a thread.
+Similar to the rely relation, the definition uses a transitive closure to allow multiple region creations and updates as part of a single atomic step performed by a thread. This gives the main reason behind the \textit{orthogonal} constraint as part of the update guarantee definition. A practical explanation of why this condition is required is illustrated in the following example. Assume a situation where we instantiate machine states as standard variable stores and we leave capabilities as abstract or not explicitly specified (through the use of $-$). Let's consider what happens when the action model $\mathcal{J}$ has the following action mapping for shared region $r$ and the orthogonal preservation is not required.
+\[
+	\mathcal{J}(r)
+		=
+	\left\{
+		\begin{array}{r r}
+			\kappa_1: & ([x \mapsto 1], \kappa_2) \transto ([x \mapsto 2, y \mapsto 1], \emptyset) \\
+			\kappa_2: & ([x \mapsto 2, y \mapsto 1], \emptyset) \transto ([x \mapsto 3], \kappa_2)
+		\end{array}
+	\right\}
+\]
+A thread holding capability $\kappa_1$ can use it when $r$ contains $x \mapsto 1$ to update it to $x \mapsto 2$ and introduce out of nowhere, a new resource $y \mapsto 1$, which was not previously held in the thread's local logical state. Moreover, if the obtained capability $\kappa_2$ is used by the same thread as part of the same atomic update to bring the state of the region $r$ directly from $x \mapsto 1$ to $x \mapsto 3$ without one noticing the introduction of the \textit{fictitious} resource $y$. We therefore have the strong constraint on the orthogonal preservation in order to cope with these kind of scenarios.
 
 At this point, we are enabled to explain the fundamental notion of repartitioning with respect to an update from $p$ to $q$, written $P \Rrightarrow^{\{p\}\{q\}} Q$ \cite{cap}. The latter indicates that any world $w_1$ satisfying the assertion $P$ has a machine-state component $(w_1)_\mathsf{M}$ that includes a part, $m_1$, which satisfies the separation logic assertion $p$. Moreover, when $m_1$ is replaced by $m_2$ that satisfies assertion $q$, we are able to reconstruct a world $w_2$ that satisfies $Q$ and for which the transition from $w_1$ to $w_2$ is allowed by the guarantee relation $G$.
 
 \begin{defn}
 	(Repartitioning).
 	\label{repartitioning}
-	The \emph{repartioning} of worlds, written $P \Rrightarrow^{\{p\}\{q\}} Q$, holds if and only if, for every logical environment $e \in \mathsf{LEnv}$, predicate environment $\delta \in \mathsf{PEnv}$, and world $w_1 = (l_1, g_1, \mathcal{J}_1) \in \mathsf{World}$ such that $w_1, e, \delta \vDash P$, there exist states $m_1, m' \in \mathbb{M}$, such that:
+	The \emph{repartioning} of worlds, written $P \Rrightarrow^{\{p\}\{q\}} Q$, holds if and only if, for every logical environment $e \in \mathsf{LEnv}$, predicate environment $\delta \in \mathsf{PEnv}$, and world $w_1 = (l_1, g_1, \mathcal{J}_1) \in \mathsf{World}$ such that $w_1, e, \delta \vDash P$, there exist states $m_1, m' \in \mathbb{M}$, such that for a $\rho_1 \in \mathbf{0}_\mathsf{RK}$:
 	\begin{itemize}
-		\item $(m_1, \emptyset), e \vDash_\mathsf{SL} p$ and
+		\item $(m_1, \rho_1), e \vDash_\mathsf{SL} p$ and
 		\item $m_1 \bullet_\mathbb{M} m' = (l_1 \oplus g_1)_\mathsf{M}$ and
-		\item for every $m_2 \in \mathbb{M}$ where $(m_2, \emptyset), e \vDash_\mathsf{SL} q$, there exists a world $w_2 = (l_2, g_2, \mathcal{J}_2) \in \mathsf{World}$ such that $w_2, e, \delta \vDash Q$ and
+		\item for every $m_2 \in \mathbb{M}$ and $\rho_2 \in  \mathbf{0}_\mathsf{RK}$ where $(m_2, \rho_2), e \vDash_\mathsf{SL} q$, there exists a world $w_2 = (l_2, g_2, \mathcal{J}_2) \in \mathsf{World}$ such that $w_2, e, \delta \vDash Q$ and
 			\begin{itemize}
 				\item $m_2 \bullet_\mathbb{M} m' = (l_2 \oplus g_2)_\mathsf{M}$
 				\item $(w_1, w_2) \in G$
