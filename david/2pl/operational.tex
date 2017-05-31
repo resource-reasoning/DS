@@ -1,6 +1,6 @@
 \subsection{Operational Semantics}
 
-The formal behaviour of transactional programs that run under \tpl\ is expressed through operational semantics.
+The formal behaviour of transactional programs' executions that are controlled by the \tpl\ protocol, is expressed through operational semantics.
 
 \begin{defn}
 	(Action labels).
@@ -18,4 +18,68 @@ The formal behaviour of transactional programs that run under \tpl\ is expressed
 	where $k, l \in \mathsf{Key}, n \in \mathds{N}, v \in \mathsf{Val}, \kappa \in \mathsf{Lock}, \iota \in \mathsf{Tid}$.
 \end{defn}
 
-System transitions are labelled with $\actprog$ and describe program-level execution. For this reason they are not part of any transaction. Control flow actions that happen at the level of transactions are labelled through $\actid{\iota}$, where $\iota$ is the identifier of the transaction performing the action. A transaction $\iota$ reads a particular value $v$ from cell indexed with $k$ via $\actread{\iota}{k}{v}$ while similarly it can write a value $v$ to $k$ through the $\actwrite{\iota}{k}{v}$.
+System transitions are labelled with $\actprog$ and describe program-level execution. For this reason they are not part of any transaction. Control flow commands, that happen at the level of transactions (e.g. conditionals, loops) are labelled through $\actid{\iota}$, where $\iota$ is the identifier of the transaction performing the action. A transaction $\iota$ reads a particular value $v$ from cell indexed with $k$ via a transition whose label is $\actread{\iota}{k}{v}$ while similarly it can write a value $v$ to $k$ through $\actwrite{\iota}{k}{v}$. Cells are allocated with transitions labelled with $\actalloc{\iota}{n}{l}$ where $l$ is the storage address from which a sequence of $n$ fresh consecutive cells starts. Last, lock and unlock actions do not arise explicitly from syntactic commands as per Definition \ref{defn:ecmd}, but instead have their respective labels: $\actlock{\iota}{k}{\kappa}$ for transaction $\iota$ to lock cell $k$ under mode $\kappa$ and $\actunlock{\iota}{k}$ for the same transaction to release any locks held on $k$.
+
+\begin{defn}
+	(Labels interpretation).
+	Formal semantics for action labels are provided through an \emph{interpretation function} that, given an action, returns a global state transformer function that maps a storage and a lock manager to an updated version resulting from the label execution.
+	\[
+		\llbracket - \rrbracket
+			:
+		\mathsf{Act} \rightarrow
+		\mathsf{Storage} \times \mathsf{LMan} \rightarrow
+		\mathsf{State} \times \mathsf{LMan}
+	\]
+	\begin{align*}\\
+		\llbracket \actprog \rrbracket &\triangleq \lambda h, \Phi \ldotp (h,\Phi) \\
+		\llbracket \actid{\iota} \rrbracket &\triangleq \lambda h, \Phi \ldotp (h,\Phi) \\
+		\llbracket \actalloc{\iota}{n}{l} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+			\begin{cases}
+				(h[\vec{a} \mapsto 0], \Phi[\vec{a} \mapsto (\{ \iota \}, \textsc{x})]),
+				&
+				\text{if } n > 0 \text{ and } l \in \mathsf{Key} \text{ and } \\
+				& \vec{a} = (l, \ldots, l + n - 1) \text{ and } \\
+				& \{ l, \ldots, l + n - 1 \} \cap \pred{dom}{h} \equiv \emptyset \\
+				(\lightning, \emptyset), & \text{otherwise}
+			\end{cases}
+	\\
+	\llbracket \actread{\iota}{k}{v} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+	\begin{cases}
+	(h, \Phi), & \text{if } k \in \pred{dom}{h} \text{ and } h(k) = v \text{ and } (I, \kappa) = \hat{\Phi}(k) \\ & \text{and } \iota \in I \text{ and } \kappa \geq \textsc{s} \\
+	(\lightning, \emptyset), & \text{otherwise}
+	\end{cases} \\
+	\llbracket \actwrite{\iota}{k}{v} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+	\begin{cases}
+	(h[k \mapsto v], \Phi), & \text{if } k \in \pred{dom}{h} \text{ and } (\{\iota\}, \textsc{x}) = \hat{\Phi}(k) \\
+	(\lightning, \emptyset), & \text{otherwise}
+	\end{cases} \\
+	\llbracket \actlock{\iota}{k}{\kappa} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+	\begin{cases}
+	(h, \Phi[k \mapsto (\{\iota\}, \kappa)]) & \text{if } k \in \pred{dom}{h} \text{ and } ( \kappa \geq \textsc{s} \text{ and } (\emptyset, \textsc{u}) = \hat{\Phi}(k) \\
+	& \text{or } \kappa = \textsc{x} \text{ and } (\{\iota\}, \textsc{s}) = \hat{\Phi}(k) ) \\
+	(h, \Phi[k \mapsto (\{\iota\} \cup I, \textsc{s})]) & \text{if } k \in \pred{dom}{h} \text{ and } \kappa = \textsc{s} \text{ and } (I, \textsc{s}) = \hat{\Phi}(k) \\
+	& \text{and } I \not\equiv \emptyset \\
+	(\lightning, \emptyset), & \text{otherwise}
+	\end{cases} \\
+	\llbracket \actunlock{\iota}{k} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+	\begin{cases}
+	(h, \Phi[k \mapsto (\emptyset, \textsc{u})]) & \text{if } k \in \pred{dom}{h} \text{ and } (\{\iota\}, \kappa) = \hat{\Phi}(k) \\
+	(h, \Phi[k \mapsto (I, \textsc{s})]) & \text{if } k \in \pred{dom}{h} \text{ and } (\{\iota\} \cup I, \textsc{s}) = \hat{\Phi}(k) \text{ and } I \not\equiv \emptyset \\
+	(\lightning, \emptyset), & \text{otherwise}
+	\end{cases}
+	\end{align*}
+\end{defn}
+Both the $\actprog$ and $\actid{\iota}$ actions have no effect on the global storage and on the lock manager structures, therefore the state transformer associated to them will simply be identity. The $\actalloc{\iota}{n}{l}$ label will instead give a transformer that succeeds in creating new cells at addresses $l$ to $l + n - 1$ (as we precisely want $n$ consecutive cells) only when all of such addresses are not currently in the heap domain and $n$ is a positive number. The initial value for those storage cells is set to be $0$. In all other cases, the operation will fail, bringing the resulting state to $\lightning$, i.e. the faulting state. The keys which have been allocated will also be set in the output lock manager, by locking them in exclusive mode and giving their sole ownership to transaction $\iota$.
+
+The intepretation of a read action label, $\actread{\iota}{k}{v}$ is identity in the case where $v$ is the value associated to address $k$ as part of the input storage $h$ and $\iota$ is an owner of $k$'s lock, currently under a mode which is either shared or exclusive (expressed through the total order $\geq$). In all other scenarios the execution fails, resulting in the $\lightning$ state. The state transformer for write operations, namely $\actwrite{\iota}{k}{v}$, works in a similar way, by requiring transaction $\iota$ to be the unique owner of cell $k$ locked in exclusive mode. On top of this, $k$ must obviously be part of the input storage $h$. If these requirements are met, then $\iota$ can update $k$'s numerical value to the given $v$, otherwise the system fails and again we reach $\lightning$.
+
+A $\actlock{\iota}{k}{\kappa}$ action label transforms the input lock manager according to a set of requirements. First, cell $k$ must be a valid key in the input storage $h$. Next, we have three cases to consider. Either the lock action is requesting a shared lock on $k$, i.e. $\kappa = \textsc{s}$, and the current lock mode on $k$ is already \textsc{s}, in which case $\iota$ is simply added to the set of lock owners. Otherwise, if the lock mode associated to $k$ inside of $\Phi$ is unlocked, and there are no owners, then $\iota$ is free to lock it in any mode out of \textsc{s} or \textsc{x}. The last scenario is referred to as \textit{lock upgrade}, since, if $\iota$ is currently the sole owner of $k$ under shared mode, it can issue an exclusive lock request and be granted access. All other cases are covered with the faulting state. The final label to consider is the unlock one, namely $\actunlock{\iota}{k}$, which releases a lock currently owned by $\iota$. In the case where $\iota$ was the only transaction holding the lock, then the lock manager is transformed so that $k$'s lock turns into unlocked mode with an empty owner set. If instead there are other threads holding the same lock in shared mode, then the latter is preserved and $\iota$ is removed from the corresponding owners set.
+
+\subsubsection{Commands}
+
+\begin{gather*}
+		(-, -, -) \xrightarrow{-}_- (-, -, -) : \\
+		\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
+		\times \mathsf{Act} \times \mathsf{Tid} \times
+		\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
+	\end{gather*}
