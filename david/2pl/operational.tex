@@ -78,7 +78,7 @@ A $\actlock{\iota}{k}{\kappa}$ action label transforms the input lock manager ac
 
 \subsubsection{Commands}
 	
-The operational semantics of commands are defined as a labelled transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed and labels are the actions illustrated in Definition \ref{defn:actLabels}. The effect of transaction commands is reflected locally on $\iota$'s variable stack and locking phase and globally through the interpretation of the action label.
+The operational semantics of commands are defined as a labelled transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed and labels are the actions illustrated in Definition \ref{defn:actLabels}. The effect of transaction commands is reflected locally on $\mathds{T}_\iota$'s variable stack and locking phase and globally through the interpretation of the action label.
 \begin{gather*}
 	(-, -, -) \xrightarrow{-}_- (-, -, -) : \\
 	\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
@@ -154,16 +154,6 @@ Loops are supported in the operational semantics in a similar way to the if stat
 The \textsc{SeqSkip} and \textsc{Seq} rules, cope with the sequential composition of commands inside of a transaction's body. The first command in a composition is ran one step at a time through rule \textsc{Seq}, until it is eventually resolved to $\pskip$ and at that point, the execution proceeds to the next command $\mathds{C}$ via the \textsc{SeqSkip} rule. Any action label $\alpha$, which is executed by $\mathds{C}_1$, is then replicated in the reduction of $\mathds{C}_1 ; \mathds{C}_2$.
 
 \[
-\infer[\textsc{SeqSkip}]
-{
-	(s, p, \pskip ; \mathds{C})
-	\xrightarrow{\actid{\iota}}_\iota
-	(s, p, \mathds{C})
-}
-{}
-\]
-
-\[
 \infer[\textsc{Seq}]
 {
 	(s, p, \mathds{C}_1 ; \mathds{C}_2)
@@ -175,6 +165,16 @@ The \textsc{SeqSkip} and \textsc{Seq} rules, cope with the sequential compositio
 	\xrightarrow{\alpha}_\iota
 	(s', p', \mathds{C}_1')
 }
+\]
+
+\[
+\infer[\textsc{SeqSkip}]
+{
+	(s, p, \pskip ; \mathds{C})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C})
+}
+{}
 \]
 
 A transaction can allocate fresh storage cells through the use of the $\palloc{\mathds{E}}$ command by specifying the amount of necessary space needed through the numerical expression $\mathds{E}$. The \textsc{Alloc} rule's premiss requires $n$ to be the result of the semantic evaluation of $\mathds{E}$ under the stack $s$. The rest of the requirements are imposed by the interpretation of the $\actalloc{\iota}{n}{l}$ label. The \textsc{Alloc} rule reduces the command to $\pskip$ and updates the transaction stack so that variable $\pvar{x}$ points to the start address of the newly allocated storage cells sequence, $l$.
@@ -219,7 +219,7 @@ In order to reduce a write command issued by a transaction, the \textsc{Write} r
 }
 \]
 
-At any point during the execution of a command as part of a transaction $\iota$, the latter can acquire a lock  on a cell in the storage in a nondeterministic fashion through the \textsc{Lock} rule, as long as $\iota$ is strictly in the growing phase. The current transaction's stack, locking phase and command $\mathds{C}$ will not be modified as part of this transition. We model locking and unlocking of cells this way, in order to cover all possible flavours of \tpl. In fact, any particular pattern of lock acquisition and release that complies with Two-Phase-Locking will be a subset of this operational semantics.
+At any point during the execution of a command as part of a transaction $\mathds{T}_\iota$, the latter can acquire a lock  on a cell in the storage in a nondeterministic fashion through the \textsc{Lock} rule, as long as $\mathds{T}_\iota$ is strictly in the growing phase. The current transaction's stack, locking phase and command $\mathds{C}$ will not be modified as part of this transition. We model locking and unlocking of cells this way, in order to cover all possible flavours of \tpl. In fact, any particular pattern of lock acquisition and release that complies with Two-Phase-Locking will be a subset of this operational semantics.
 
 \[
 \infer[\textsc{Lock}]
@@ -231,7 +231,7 @@ At any point during the execution of a command as part of a transaction $\iota$,
 {}
 \]
 
-Opposite to the \textsc{Lock} rule we present the \textsc{Unlock} one, which copes with transactions nondeterministically releasing locks on cells they own. No constraint is set on which locking phase $\iota$ is currently in, but the successful reduction labelled via $\actunlock{\iota}{k}$ sets the transaction's phase to shrinking. This way, the same rule covers the case where the current unlock is the first one determining the start of the shrinking phase or the case where $\iota$ has already started releasing locks. As part of the reduction described by \textsc{Unlock}, the transaction's stack and command are unmodified.
+Opposite to the \textsc{Lock} rule we present the \textsc{Unlock} one, which copes with transactions nondeterministically releasing locks on cells they own. No constraint is set on which locking phase $\mathds{T}_\iota$ is currently in, but the successful reduction labelled via $\actunlock{\iota}{k}$ sets the transaction's phase to shrinking. This way, the same rule covers the case where the current unlock is the first one determining the start of the shrinking phase or the case where $\iota$ has already started releasing locks. As part of the reduction described by \textsc{Unlock}, the transaction's stack and command are unmodified.
 
 \[
 \infer[\textsc{Unlock}]
@@ -239,6 +239,186 @@ Opposite to the \textsc{Lock} rule we present the \textsc{Unlock} one, which cop
 	(s, p, \mathds{C})
 	\xrightarrow{\actunlock{\iota}{k}}_\iota
 	(s, \curlyvee, \mathds{C})
+}
+{}
+\]
+
+\subsubsection{Transactions}
+
+The operational semantics of transactions are defined as a labelled transition relation through the following rule, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction which is being executed and the labels are the actions performed as part of commands in the transaction's body.
+\begin{gather*}
+	(-, -, -) \xrightarrow{-} (-, -, -) : \\
+	\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Trans}
+	\times \mathsf{Act} \times
+	\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Trans}
+\end{gather*}
+
+The only rule which allows the reduction of a transaction's body is \textsc{Step}. The latter indicates that as long as we can run a single reduction step on the body of $\mathds{T}_\iota$, namely $\mathds{C}$, to bring the transaction's state to $s', p', \mathds{C}'$, then we can replicate that same step on the level of the transaction to bring it to the same $s', p', \ptdef{\mathds{C}'}$. Note how the transaction identifier $\iota$ is used to annotate the command reduction on $\mathds{C}$.
+\[
+\infer[\textsc{Step}]
+{
+	(s, p, \ptdef{\mathds{C}}_\iota)
+	\xrightarrow{\alpha}
+	(s', p', \ptdef{\mathds{C}'}_\iota)
+}
+{
+	(s, p, \mathds{C})
+	\xrightarrow{\alpha}_\iota
+	(s', p', \mathds{C}')
+}
+\]
+
+\subsubsection{Programs}
+
+The operational semantics of programs are defined as a labelled transition relation through the following rules. Labels either come from system transitions or from the execution of transactions and moreover of the commands within their bodies. They are propagated all the way to the level of programs.
+\begin{gather*}
+(-, -, -, -) \xrightarrow{-} (-, -, -, -) \\
+: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog} \times \mathsf{Act} \times \mathsf{State} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog}
+\end{gather*}
+
+Whenever program execution encounters a new user transaction definition that does not carry a transaction identifier, it will associate a fresh one to it, $\iota$, and turn it into a system transaction. The identifier $\iota$ must be distinct from all others currently running in the system (and traceable via the transactions state $S$). Moreover $\iota$ needs to be the maximum element with regards to all other present identifiers. For this purpose, we leverage the given strict total order $<$, defined on $\mathsf{Tid}$.
+\[
+\infer[\textsc{Start}]
+{
+	(h, \Phi, S, \mathtt{begin}\ \mathds{C}\ \mathtt{end})
+	\xrightarrow{\actid{\iota}}
+	(h, \Phi, S, \mathtt{begin}\ \mathds{C}\ \mathtt{end}_\iota)
+}
+{
+	\iota \in \{ i\ |\ \forall j \in \pred{dom}{S} \ldotp j < i \}
+}
+\]
+
+On the opposite end, when a transaction's body is the $\pskip$ command, the program reduces to $\pskip$ through the \textsc{PSkip} rule which determines the end of the transaction. This can only happen as long as $\mathds{T}_\iota$ (i.e. the terminating transaction) is not holding any locks as part of the lock manager. This is concretely checked by making sure the identifier $\iota$ is not part of any owners' set in $\Phi$.
+
+\[
+\infer[\textsc{PSkip}]
+{
+	 (h, \Phi, S, \mathtt{begin}\ \pskip\ \mathtt{end}_\iota)
+	\xrightarrow{\actid{\iota}}
+	(h, \Phi, S, \pskip)
+}
+{
+	\forall k \ldotp k \in \pred{dom}{\Phi} \implies \iota \not\in \left( \Phi(k) \downarrow_1 \right)
+}
+\]
+
+The main rule that deals with the reduction of an active transaction is \textsc{Exec}. This applies to a system transaction identified with $\iota$: as long as such transaction can be reduced for one single step labelled with action $\alpha$ we can reduce the program in which $\mathds{T}_\iota$ resides in the same way. The state of $\mathds{T}_\iota$ is retrieved from the overall transactions state $S$, which gives both the local stack and locking phase for $\iota$ itself. As part of the reduction, the updated storage component $h'$ and lock manager one $\Phi'$, will be the output of the state trasformer function obtained from the interpretation of $\alpha$ and applied to the current global structures $h, \Phi$. The new local state of $\mathds{T}_\iota$, i.e. $s'$ and $p'$, is recorded by updating the mapping for $\iota$ as part of $S$.
+
+\[
+\infer[\textsc{Exec}]
+{
+	 (h, \Phi, S, \mathtt{begin}\ \mathds{C}\ \mathtt{end}_\iota)
+	\xrightarrow{\alpha}
+	(h', \Phi', S[\iota \mapsto (s', p')], \mathtt{begin}\ \mathds{C}'\ \mathtt{end}_\iota)
+}
+{
+	(s, p) = \hat{S}(\iota) &
+	(s, p, \mathtt{begin}\ \mathds{C}\ \mathtt{end}_\iota)
+	\xrightarrow{\alpha}
+	(s', p', \mathtt{begin}\ \mathds{C}'\ \mathtt{end}_\iota) &
+	(h', \Phi') = \llbracket \alpha \rrbracket (h, \Phi)
+}
+\]
+
+Sequential composition of programs is reduced through the \textsc{PSeq} and \textsc{PSeqSkip} operational semantics rules. Similarly to the commands one, $\mathds{P}_1 ; \mathds{P}_2$ is overall reduced by first taking steps in $\mathds{P}_1$ until the program execution hits $\pskip$, at which point the reduction follows with $\mathds{P}_2$ using a system transition labelled with $\actprog$.
+
+\[
+\infer[\textsc{PSeq}]
+{
+	 (h, \Phi, S, \mathds{P}_1; \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1'; \mathds{P}_2)
+}
+{
+	 (h, \Phi, S, \mathds{P}_1)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1')
+}
+\]
+
+\[
+\infer[\textsc{PSeqSkip}]
+{
+	 (h, \Phi, S, \pskip; \mathds{P})
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \mathds{P})
+}
+{}
+\]
+
+On the other hand, the parallel composition of two programs is carried over by choosing one of the programs to reduce for one single step in a nondeterministic way. It follows that the interleaving of reductions coming from different programs happens as part of this process. Also, for this reason, we have two rules to cope with the parallel composition $\mathds{P}_1 \| \mathds{P}_2$: \textsc{ParL} and \textsc{ParR}, which, as the names suggest, take one step on the program which is syntactically on the left ($\mathds{P}_1$) or on the right ($\mathds{P}_2$).
+
+\[
+\infer[\textsc{ParL}]
+{
+	 (h, \Phi, S, \mathds{P}_1 \| \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1' \| \mathds{P}_2)
+}
+{
+	 (h, \Phi, S, \mathds{P}_1)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1')
+}
+\]
+
+\[
+\infer[\textsc{ParR}]
+{
+	 (h, \Phi, S, \mathds{P}_1 \| \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1 \| \mathds{P}_2')
+}
+{
+	 (h, \Phi, S, \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_2')
+}
+\]
+
+When both programs that are being composed in parallel reach $\pskip$ we can use the \textsc{ParEnd} rule to reduce the composition itself to $\pskip$ through a system transition $\actprog$.
+
+\[
+\infer[\textsc{ParEnd}]
+{
+	 (h, \Phi, S, \pskip \| \pskip)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \pskip)
+}
+{}
+\]
+
+Looping is supported by the operational semantics through the \textsc{Loop} rule which converts $\mathds{P}^*$ into $\pskip + (\mathds{P} ; \mathds{P}^*)$ via a system transition labelled with $\actprog$. The syntactic transformation turns the loop into a nondeterministic choice between terminating the program or executing the loop body ($\mathds{P}$) and repeating the same loop choice.
+
+\[
+\infer[\textsc{Loop}]
+{
+	 (h, \Phi, S, \mathds{P}^*)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \pskip + (\mathds{P} ; \mathds{P}^*))
+}
+{}
+\]
+
+The \textsc{ChoiceL} and \textsc{ChoiceR} rules cover the reduction of nondeterministic choice between two programs, $\mathds{P}_1 + \mathds{P}_2$. The choice happens as part of a system transition labelled with $\actprog$ which does not modify the global structures $h, \Phi, S$ but only reduces the program.
+
+\[
+\infer[\textsc{ChoiceL}]
+{
+	 (h, \Phi, S, \mathds{P}_1 + \mathds{P}_2)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \mathds{P}_1)
+}
+{}
+\]
+
+\[
+\infer[\textsc{ChoiceR}]
+{
+	 (h, \Phi, S, \mathds{P}_1 + \mathds{P}_2)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \mathds{P}_2)
 }
 {}
 \]
