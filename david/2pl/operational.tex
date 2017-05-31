@@ -21,6 +21,7 @@ The formal behaviour of transactional programs' executions that are controlled b
 System transitions are labelled with $\actprog$ and describe program-level execution. For this reason they are not part of any transaction. Control flow commands, that happen at the level of transactions (e.g. conditionals, loops) are labelled through $\actid{\iota}$, where $\iota$ is the identifier of the transaction performing the action. A transaction $\iota$ reads a particular value $v$ from cell indexed with $k$ via a transition whose label is $\actread{\iota}{k}{v}$ while similarly it can write a value $v$ to $k$ through $\actwrite{\iota}{k}{v}$. Cells are allocated with transitions labelled with $\actalloc{\iota}{n}{l}$ where $l$ is the storage address from which a sequence of $n$ fresh consecutive cells starts. Last, lock and unlock actions do not arise explicitly from syntactic commands as per Definition \ref{defn:ecmd}, but instead have their respective labels: $\actlock{\iota}{k}{\kappa}$ for transaction $\iota$ to lock cell $k$ under mode $\kappa$ and $\actunlock{\iota}{k}$ for the same transaction to release any locks held on $k$.
 
 \begin{defn}
+	\label{defn:actLabels}
 	(Labels interpretation).
 	Formal semantics for action labels are provided through an \emph{interpretation function} that, given an action, returns a global state transformer function that maps a storage and a lock manager to an updated version resulting from the label execution.
 	\[
@@ -76,10 +77,168 @@ The intepretation of a read action label, $\actread{\iota}{k}{v}$ is identity in
 A $\actlock{\iota}{k}{\kappa}$ action label transforms the input lock manager according to a set of requirements. First, cell $k$ must be a valid key in the input storage $h$. Next, we have three cases to consider. Either the lock action is requesting a shared lock on $k$, i.e. $\kappa = \textsc{s}$, and the current lock mode on $k$ is already \textsc{s}, in which case $\iota$ is simply added to the set of lock owners. Otherwise, if the lock mode associated to $k$ inside of $\Phi$ is unlocked, and there are no owners, then $\iota$ is free to lock it in any mode out of \textsc{s} or \textsc{x}. The last scenario is referred to as \textit{lock upgrade}, since, if $\iota$ is currently the sole owner of $k$ under shared mode, it can issue an exclusive lock request and be granted access. All other cases are covered with the faulting state. The final label to consider is the unlock one, namely $\actunlock{\iota}{k}$, which releases a lock currently owned by $\iota$. In the case where $\iota$ was the only transaction holding the lock, then the lock manager is transformed so that $k$'s lock turns into unlocked mode with an empty owner set. If instead there are other threads holding the same lock in shared mode, then the latter is preserved and $\iota$ is removed from the corresponding owners set.
 
 \subsubsection{Commands}
-
+	
+The operational semantics of commands are defined as a labelled transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed and labels are the actions illustrated in Definition \ref{defn:actLabels}. The effect of transaction commands is reflected locally on $\iota$'s variable stack and locking phase and globally through the interpretation of the action label.
 \begin{gather*}
-		(-, -, -) \xrightarrow{-}_- (-, -, -) : \\
-		\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
-		\times \mathsf{Act} \times \mathsf{Tid} \times
-		\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
-	\end{gather*}
+	(-, -, -) \xrightarrow{-}_- (-, -, -) : \\
+	\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
+	\times \mathsf{Act} \times \mathsf{Tid} \times
+	\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd}
+\end{gather*}
+
+The \textsc{Assign} rule works in a standard way, by updating the value associated to a variable in the transaction's stack with the assigned expression evaluated under the same stack $s$. It then resolves into a $\pskip$ command without modifying the transaction's locking phase.
+\[
+\infer[\textsc{Assign}]
+{
+	(s, p, \passign{\pvar{x}}{\mathds{E}})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s[\pvar{x} \mapsto v], p, \pskip)
+}
+{
+	v = \tsem{\mathds{E}}^\textsc{e}_s
+}
+\]
+
+The conditional statement is coped with two rules, \textsc{CondT} and \textsc{CondF}, that cover the cases where the boolean condition $\mathds{B}$, evaluated under the current stack $s$, resolves to $\top$ or to $\bot$. In the first case, the execution will proceed to the $\mathds{C}_1$ body while in the second one to the $\mathds{C}_2$ command. Given that such control flow operations have no concrete effect on the global state of the program, conditional transitions are labelled with $\actid{\iota}$.
+
+\[
+\infer[\textsc{CondT}]
+{
+	(s, p, \pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C}_1)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{b} = \top
+}
+\]
+
+\[
+\infer[\textsc{CondF}]
+{
+	(s, p, \pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C}_2)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{b} = \bot
+}
+\]
+
+Loops are supported in the operational semantics in a similar way to the if statement, with two rules: \textsc{LoopT} and \textsc{LoopF}. In the first case, the condition $\mathds{B}$ must be evaluated to $\top$ and the loop is unrolled for one iteration at a time. In the second case, when $\mathds{B}$ is semantically evaluated to $\bot$ under the stack $s$, the program execution exits the loop, resolving in a $\pskip$ command. Again, $\actid{\iota}$ is used to label such transitions since there is no action involving the global state (i.e. storage and lock manager).
+
+\[
+\infer[\textsc{LoopT}]
+{
+	(s, p, \ploop{\mathds{B}}{\mathds{C}})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C}; \ploop{\mathds{B}}{\mathds{C}})
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{B} = \top
+}
+\]
+
+\[
+\infer[\textsc{LoopF}]
+{
+	(s, p, \ploop{\mathds{B}}{\mathds{C}})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \pskip)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{B} = \bot
+}
+\]
+
+The \textsc{SeqSkip} and \textsc{Seq} rules, cope with the sequential composition of commands inside of a transaction's body. The first command in a composition is ran one step at a time through rule \textsc{Seq}, until it is eventually resolved to $\pskip$ and at that point, the execution proceeds to the next command $\mathds{C}$ via the \textsc{SeqSkip} rule. Any action label $\alpha$, which is executed by $\mathds{C}_1$, is then replicated in the reduction of $\mathds{C}_1 ; \mathds{C}_2$.
+
+\[
+\infer[\textsc{SeqSkip}]
+{
+	(s, p, \pskip ; \mathds{C})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C})
+}
+{}
+\]
+
+\[
+\infer[\textsc{Seq}]
+{
+	(s, p, \mathds{C}_1 ; \mathds{C}_2)
+	\xrightarrow{\alpha}_\iota
+	(s', p', \mathds{C}_1' ; \mathds{C}_2)
+}
+{
+	(s, p, \mathds{C}_1)
+	\xrightarrow{\alpha}_\iota
+	(s', p', \mathds{C}_1')
+}
+\]
+
+A transaction can allocate fresh storage cells through the use of the $\palloc{\mathds{E}}$ command by specifying the amount of necessary space needed through the numerical expression $\mathds{E}$. The \textsc{Alloc} rule's premiss requires $n$ to be the result of the semantic evaluation of $\mathds{E}$ under the stack $s$. The rest of the requirements are imposed by the interpretation of the $\actalloc{\iota}{n}{l}$ label. The \textsc{Alloc} rule reduces the command to $\pskip$ and updates the transaction stack so that variable $\pvar{x}$ points to the start address of the newly allocated storage cells sequence, $l$.
+\[
+\infer[\textsc{Alloc}]
+{
+	(s, p, \palloc{\pvar{x}}{\mathds{E}})
+	\xrightarrow{\actalloc{\iota}{n}{l}}_\iota
+	(s[\pvar{x} \mapsto l], p, \pskip)
+}
+{
+	n = \tsem{\mathds{E}}_s^\textsc{e}
+}
+\]
+
+The \textsc{Read} rule enables the reduction of transactions reading items in the shared storage. Transitions generated this way are labelled through $\actread{\iota}{k}{v}$ and carry all of the requirements imposed by the semantic interpretation of actions. The accessed key $k$ is the result of semantically evaluating expression $\mathds{E}$ under the current stack $s$. Finally, the rule reduces the command into $\pskip$ and updates the value associated to variable $\pvar{x}$ in $s$ to the read value $v$.
+
+\[
+\infer[\textsc{Read}]
+{
+	(s, p, \pderef{\pvar{x}}{\mathds{E}})
+	\xrightarrow{\actread{\iota}{k}{v}}_\iota
+	(s[\pvar{x} \mapsto v], p, \pskip)
+}
+{
+	k = \tsem{\mathds{E}}_s^\textsc{e}
+}
+\]
+
+In order to reduce a write command issued by a transaction, the \textsc{Write} rule is used. The target storage key $k$ and the value $v$ written to it are the results of semantically evaluating expressions $\mathds{E}_1$ and $\mathds{E}_2$ respectively, both under the transaction's stack $s$. The transition is labelled with the $\actwrite{\iota}{k}{v}$ action which adds the set of requirements on the current storage and lock manager. The rule also reduces the command to $\pskip$.
+
+\[
+\infer[\textsc{Write}]
+{
+	(s, p, \pmutate{\mathds{E}_1}{\mathds{E}_2})
+	\xrightarrow{\actwrite{\iota}{k}{v}}_\iota
+	(s, p, \pskip)
+}
+{
+	k = \llbracket \mathds{E}_1 \rrbracket_s &
+	v = \llbracket \mathds{E}_2 \rrbracket_s
+}
+\]
+
+At any point during the execution of a command as part of a transaction $\iota$, the latter can acquire a lock  on a cell in the storage in a nondeterministic fashion through the \textsc{Lock} rule, as long as $\iota$ is strictly in the growing phase. The current transaction's stack, locking phase and command $\mathds{C}$ will not be modified as part of this transition. We model locking and unlocking of cells this way, in order to cover all possible flavours of \tpl. In fact, any particular pattern of lock acquisition and release that complies with Two-Phase-Locking will be a subset of this operational semantics.
+
+\[
+\infer[\textsc{Lock}]
+{
+	(s, \curlywedge, \mathds{C})
+	\xrightarrow{\actlock{\iota}{k}{\kappa}}_\iota
+	(s, \curlywedge, \mathds{C})
+}
+{}
+\]
+
+Opposite to the \textsc{Lock} rule we present the \textsc{Unlock} one, which copes with transactions nondeterministically releasing locks on cells they own. No constraint is set on which locking phase $\iota$ is currently in, but the successful reduction labelled via $\actunlock{\iota}{k}$ sets the transaction's phase to shrinking. This way, the same rule covers the case where the current unlock is the first one determining the start of the shrinking phase or the case where $\iota$ has already started releasing locks. As part of the reduction described by \textsc{Unlock}, the transaction's stack and command are unmodified.
+
+\[
+\infer[\textsc{Unlock}]
+{
+	(s, p, \mathds{C})
+	\xrightarrow{\actunlock{\iota}{k}}_\iota
+	(s, \curlyvee, \mathds{C})
+}
+{}
+\]
