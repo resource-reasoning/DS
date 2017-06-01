@@ -16,5 +16,8 @@ Individual project as part of an MEng in Computing.
 ### Non-Serialisibility
 * Analysing Snapshot Isolation
 
-### Logics
-* Owicki-Gries Reasoning for Weak Memory Models, 
+### Logics/Proof System
+* Owicki-Gries Reasoning for Weak Memory Models
+* Relaxed Seperation Logic: A Program Logic for C11 Concurrency
+* A Program Logic for C11 Memory Fences
+* Reasoning about Consistency Choices in Distributed System 
