@@ -1,6 +1,86 @@
 \subsubsection{Trace equivalence}
 
-The proof process starts by specifying and later proving a series of transformations on traces that preserve the semantic meaning of the trace in terms of the effects on the global storage.
+The final proof of equivalence will need a number of preliminary lemmata in order to succeed. Most of them describe a series of concrete transformations applied traces that preserve the semantic meaning of the trace in terms of the effects on the global storage. We start by giving some helpful definitions that will be later used as part of the lemmata.
+
+The first one allows to express that a trace $\tau$ is able to generate a particular storage starting from a given initial state with a storage, lock manager, transactions' stack and program components. It serves the purpose of comparing different traces by establishing a type of trace equivalence. In fact, we obtain important information knowing that two distinct traces $\tau$ and $\tau'$ can generate the same heap under some circumstances.
+
+\begin{defn}
+	(Trace generated).
+	A trace $\tau$ \emph{generates} a storage $\underline{h}$ starting from the state $h, \Phi, S, \mathds{P}$ if and only if every action in $\tau$ labels one of consecutive reductions that bring $\mathds{P}$ to $\pskip$ under the \tpl\ operational semantics.
+	\begin{align*}
+		\pred{tgen}{[], h, \underline{h}, \Phi, S, \mathds{P}}
+			\iff&
+		h = \underline{h} \land \mathds{P} = \pskip \land \Phi = \emptyset
+			\\
+		\pred{tgen}{(\alpha, n) : \tau, h, \underline{h}, \Phi, S, \mathds{P}}
+			\iff&
+		\exists h', \Phi', S', \mathds{P}' \ldotp (h, \Phi, S, \mathds{P}) \xrightarrow{\alpha} (h', \Phi', S', \mathds{P}') \\ &\land \pred{tgen}{\tau, h', \underline{h}, \Phi', S', \mathds{P}'}
+	\end{align*}
+\end{defn}
+
+In order for the \tpl\ to support any kind of two phase locking pattern we utilize nondeterministic locking of storage cell, as described in Section \ref{sec:opSemCmd2pl}. This comes with the downside of allowing a transaction to lock (and later unlock) any cell it wants. This can happen even if later in the execution, the same transaction does not use the locks to access the respective storage cells to read from or write to it. Locks done by a transaction as part of a trace which are later never used to access the corresponding cell are often and informally referred to as \textit{spurious}. The next two definitions formally describe this behaviour.
+
+\begin{defn}
+	(Absent access).
+	A cell which is neither read or written to by a given transaction as part of a trace is \emph{absent} and the corresponding predicate is defined as follows:
+	\[
+		\pred{absent}{\iota, k, \tau}
+			\iff
+		\lnot \exists v, n \ldotp (\actread{\iota}{k}{v}, n) \in \tau \lor (\actwrite{\iota}{k}{v}, n) \in \tau
+	\]
+\end{defn}
+
+\begin{defn}
+	(Clean trace).
+	A trace is \emph{clean} if and only if its transactions do not lock or unlock any absent cell.
+	\[
+		\pred{clean}{\tau} \iff \forall \iota, k, \kappa, n \ldotp
+		\left( (\actlock{\iota}{k}{\kappa}, n) \in \tau \lor (\actunlock{\iota}{k}, n) \in \tau \right)
+			\implies
+		\lnot \pred{absent}{\iota, k, \tau}
+	\]
+\end{defn}
+
+\begin{defn}
+	(Trace difference).
+	\[
+		\tau' = \tau \setminus S \iff \left( \forall x \ldotp x \not\in S \implies (x \in \tau \iff x \in \tau') \right)
+	\]
+\end{defn}
+
+We are now ready to show that any trace $\tau$ that contains a spurious lock (followed by an unlock on the same item) and is able to generate a particular storage $h'$, has a corresponding trace $\tau'$ which contains all of $\tau$'s operations a part from the spurious lock and $\tau'$ can generate $h'$ starting with the same initial state and program.
+
+\begin{lem}
+	\label{lem:lockAbsent}
+	(Spurious lock removal).
+	Lock and unlock operations done by a transaction on items which it does not read or write can be removed without affecting the program or the global state.
+	\begin{gather*}
+		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, n, n', \iota, k, \kappa, x, y \ldotp
+			\\
+		\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land  \pred{absent}{\iota, k, \tau} \land x = (\actlock{\iota}{k}{\kappa}, n) \land y = (\actunlock{\iota}{k}, n') \\ \land x \in \tau \land y \in \tau
+		\land \tau' = \tau \setminus \{ x, y \}
+			\implies
+		\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
+	\end{gather*}
+	\begin{proof}
+	Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathds{Prog}, n, n' \in \mathds{N}, \iota \in \mathsf{Tid}, k \in \mathsf{Key}, \kappa \in \mathsf{Lock}, x, y \in \mathsf{Act} \times \mathds{N}$. We now assume that the following holds:
+	\begin{gather*}
+		\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land  \pred{absent}{\iota, k, \tau} \land x = (\actlock{\iota}{k}{\kappa}, n) \land y = (\actunlock{\iota}{k}, n') \\ \land x \in \tau \land y \in \tau
+		\land \tau' = \tau \setminus \{ x, y \}
+	\end{gather*}
+	From Proposition \ref{prop:2phase} we obtain that $\tau \vDash x < y$. From the definition of $\mathsf{tgen}$ and the fact that both $x$ and $y$ are in $\tau$ it follows that $\kappa \geq \textsc{s}$ and:
+	\begin{gather}
+		(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\actlock{\iota}{k}{\kappa}} (h_1', \Phi_1', S_1', \mathds{P}_1') \\ \rightarrow^* (h_2, \Phi_2, S_2, \mathds{P}_2) \xrightarrow{\actunlock{\iota}{k}} (h_2', \Phi_2', S_2', \mathds{P}_2') \rightarrow^* (h', \emptyset, S', \pskip)
+	\end{gather}
+	From the semantic interpretation of $\mathsf{lock}$ and $\mathsf{unlock}$, we know that it is the case that $h_1' = h_1, S_1' = S_1, \mathds{P}_1' = \mathds{P}_1, h_2' = h_2, S_2' = S_2, \mathds{P}_2' = \mathds{P}_2$ and $\Phi_1' = \Phi_1[k \mapsto (\{\iota\} \cup I, \kappa)], \Phi_2' = \Phi_2[k \mapsto (I', \kappa')]$ for $I, I' \in \mathcal{P}(\mathsf{Tid})$ such that $\iota \not\in I'$ and $\kappa' \leq \textsc{s}$. From the assumption that $\pred{absent}{\iota, k, \tau}$ holds, we know there is no read or write action on $k$ done by $\iota$ happening in $(h_1', \Phi_1', S_1', \mathds{P}_1') \rightarrow^* (h_2, \Phi_2, S_2, \mathds{P}_2)$ meaning that actions which need a presence of $\iota$'s lock acquisition on $k$ to succeed (i.e. read and write) are not there. From Lemma \ref{lem:alman} we obtain that all actions that are part of the sequence of reductions $(h_1', \Phi_1', S_1', \mathds{P}_1') \rightarrow^* (h_2, \Phi_2, S_2, \mathds{P}_2)$ will succesfully reduce with the $\Phi_1$ lock manager not containing $\iota$ as an owner for $k$. It follows that, for $(\alpha, n+1) \in \tau$ and $(\alpha', n'+1) \in \tau$:
+	\begin{gather}
+		\label{lem:spur1} (h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_1'', \Phi_1'', S_1'', \mathds{P}_1'')
+			\\
+		\label{lem:spur2} \rightarrow^* (h_2'', \Phi_2'', S_2'',\mathds{P}_2'') \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)
+	\end{gather}
+	From the initial assumption we also know that $\tau' = \tau \setminus \{ x, y \}$ meaning that $\tau'$ has all of $\tau$'s actions a part from the ones at position $n$ and $n'$. As a consequence we have that by following $\tau'$ up to (and not including) position $n$ we have $(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1)$. Skipping the operation at position $n$ which is not present in $\tau'$, we proceed with the one in position $n + 1$ all the way to (and not including) the one in position $n'$ to get by (\ref{lem:spur1}) and (\ref{lem:spur2}) that $(h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_1'', \Phi_1'', S_1'', \mathds{P}_1'') \rightarrow^* (h_2'', \Phi_2'', S_2'',\mathds{P}_2'')$ holds. Now we apply the action from position $n' + 1$ to the end in $\tau'$ to obtain $(h_2'', \Phi_2'', S_2'',\mathds{P}_2'') \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)$. From the definition of $\mathsf{tgen}$ we can state that $\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}$ holds as needed.
+	\end{proof}
+\end{lem}
 
 \[
 	\alpha(\iota, k) \triangleq \alpha \text{ s.t. }
@@ -12,23 +92,6 @@ The proof process starts by specifying and later proving a series of transformat
 			\actunlock{\iota}{k}\
 			|\ v \in \mathsf{Val}, \kappa \in \mathsf{Lock}
 		\}
-\]
-\begin{align*}
-	\pred{tgen}{[], h, \underline{h}, \Phi, S, \mathds{P}}
-		\iff&
-	h = \underline{h} \land \mathds{P} = \pskip \land \Phi = \emptyset
-		\\
-	\pred{tgen}{(\alpha, n) : \tau, h, \underline{h}, \Phi, S, \mathds{P}}
-		\iff&
-	\exists h', \Phi', S', \mathds{P}' \ldotp (h, \Phi, S, \mathds{P}) \xrightarrow{\alpha} (h', \Phi', S', \mathds{P}') \\ &\land \pred{tgen}{\tau, h', \underline{h}, \Phi', S', \mathds{P}'}
-\end{align*}
-\[
-	\pred{absent}{\iota, k, \tau}
-		\iff
-	\lnot \exists v, n \ldotp (\actread{\iota}{k}{v}, n) \in \tau \lor (\actwrite{\iota}{k}{v}, n) \in \tau
-\]
-\[
-	\pred{clean}{\tau} \iff \forall \iota, k, \kappa, n \ldotp \left( (\actlock{\iota}{k}{\kappa}, n) \in \tau \lor (\actunlock{\iota}{k}, n) \in \tau \right) \implies \lnot \pred{absent}{\iota, k, \tau}
 \]
 
 \lem \label{lem:alman} A lock on an item is not needed for any reductions a part from a read, a write or an unlock action performed by the same transaction on the same item.
@@ -88,35 +151,6 @@ From (\ref{lem:alman1}) we directly obtain that $\kappa \geq \textsc{s}$ given t
 			\item If $k = k'$ then from (\ref{lem:alman1}) we know that $\alpha$ succesfully reduced meaning that $i$ and $j$ were holding the lock at the same time, making $\kappa = \textsc{s}, \kappa' = \textsc{s}, \kappa'' = \textsc{s}$ and $I' = I \setminus \{ i, j \}$.
 		\end{itemize}
 \end{itemize}
-\end{proof}
-
-
-\lem \label{lem:lockAbsent} Lock and unlock operations done by a transaction on items which it does not read or write can be removed without affecting the program or the global state.
-\begin{gather*}
-	\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, n, n', \iota, k, \kappa, x, y \ldotp
-		\\
-	\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land  \pred{absent}{\iota, k, \tau} \land x = (\actlock{\iota}{k}{\kappa}, n) \land y = (\actunlock{\iota}{k}, n') \\ \land x \in \tau \land y \in \tau
-	\land \tau' = \tau \setminus \{ x, y \}
-		\implies
-	\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-\end{gather*}
-\begin{proof}
-Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathds{Prog}, n, n' \in \mathds{N}, \iota \in \mathsf{Tid}, k \in \mathsf{Key}, \kappa \in \mathsf{Lock}, x, y \in \mathsf{Act} \times \mathds{N}$. We now assume that the following holds:
-\begin{gather*}
-	\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land  \pred{absent}{\iota, k, \tau} \land x = (\actlock{\iota}{k}{\kappa}, n) \land y = (\actunlock{\iota}{k}, n') \\ \land x \in \tau \land y \in \tau
-	\land \tau' = \tau \setminus \{ x, y \}
-\end{gather*}
-From Lemma \ref{lem:2phase} we obtain that $\tau \vDash x < y$. From the definition of $\mathsf{tgen}$ and the fact that both $x$ and $y$ are in $\tau$ it follows that $\kappa \geq \textsc{s}$ and:
-\begin{gather}
-	(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\actlock{\iota}{k}{\kappa}} (h_1', \Phi_1', S_1', \mathds{P}_1') \\ \rightarrow^* (h_2, \Phi_2, S_2, \mathds{P}_2) \xrightarrow{\actunlock{\iota}{k}} (h_2', \Phi_2', S_2', \mathds{P}_2') \rightarrow^* (h', \emptyset, S', \pskip)
-\end{gather}
-From the semantic interpretation of $\mathsf{lock}$ and $\mathsf{unlock}$, we know that it is the case that $h_1' = h_1, S_1' = S_1, \mathds{P}_1' = \mathds{P}_1, h_2' = h_2, S_2' = S_2, \mathds{P}_2' = \mathds{P}_2$ and $\Phi_1' = \Phi_1[k \mapsto (\{\iota\} \cup I, \kappa)], \Phi_2' = \Phi_2[k \mapsto (I', \kappa')]$ for $I, I' \in \mathcal{P}(\mathsf{Tid})$ such that $\iota \not\in I'$ and $\kappa' \leq \textsc{s}$. From the assumption that $\pred{absent}{\iota, k, \tau}$ holds, we know there is no read or write action on $k$ done by $\iota$ happening in $(h_1', \Phi_1', S_1', \mathds{P}_1') \rightarrow^* (h_2, \Phi_2, S_2, \mathds{P}_2)$ meaning that actions which need a presence of $\iota$'s lock acquisition on $k$ to succeed (i.e. read and write) are not there. From Lemma \ref{lem:alman} we obtain that all actions that are part of the sequence of reductions $(h_1', \Phi_1', S_1', \mathds{P}_1') \rightarrow^* (h_2, \Phi_2, S_2, \mathds{P}_2)$ will succesfully reduce with the $\Phi_1$ lock manager not containing $\iota$ as an owner for $k$. It follows that, for $(\alpha, n+1) \in \tau$ and $(\alpha', n'+1) \in \tau$:
-\begin{gather}
-	\label{lem:spur1} (h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_1'', \Phi_1'', S_1'', \mathds{P}_1'')
-		\\
-	\label{lem:spur2} \rightarrow^* (h_2'', \Phi_2'', S_2'',\mathds{P}_2'') \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)
-\end{gather}
-From the initial assumption we also know that $\tau' = \tau \setminus \{ x, y \}$ meaning that $\tau'$ has all of $\tau$'s actions a part from the ones at position $n$ and $n'$. As a consequence we have that by following $\tau'$ up to (and not including) position $n$ we have $(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1)$. Skipping the operation at position $n$ which is not present in $\tau'$, we proceed with the one in position $n + 1$ all the way to (and not including) the one in position $n'$ to get by (\ref{lem:spur1}) and (\ref{lem:spur2}) that $(h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_1'', \Phi_1'', S_1'', \mathds{P}_1'') \rightarrow^* (h_2'', \Phi_2'', S_2'',\mathds{P}_2'')$ holds. Now we apply the action from position $n' + 1$ to the end in $\tau'$ to obtain $(h_2'', \Phi_2'', S_2'',\mathds{P}_2'') \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)$. From the definition of $\mathsf{tgen}$ we can state that $\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}$ holds as needed.
 \end{proof}
 
 \lem \label{lem:rr} The order of two consecutive reads can be swapped as long as the transactions performing them are distinct.
