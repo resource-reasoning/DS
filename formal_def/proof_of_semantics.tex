@@ -1,7 +1,7 @@
 \section{Proof of semantics\label{sec:proof_semantics}}
 \begin{lem}
     \label{lem:no-over-write}
-    A history cannot be overwritten, i.e.\ \( \forall \tshp, \tshp', \loc, \ts \ldotp ( \tshp, \dontcare ) \globaltransfer{\dontcare} ( \tshp', \dontcare ) \implies \tshp(\loc)(\ts) \subseteq \tshp'(\loc)(\ts)\)
+    A history cannot be overwritten, i.e.\ \( \forall \tshp, \tshp', \loc, \ts \ldotp ( \tshp, \dontcare ) \globaltransfer{\dontcare} ( \tshp', \dontcare ) \implies \tshp(\loc)(\ts)\undef \lor \tshp(\loc)(\ts) = \tshp'(\loc)(\ts)\)
 \end{lem}
 \begin{proof}
     Induction on the semantics.
@@ -32,57 +32,79 @@
 
 
 \begin{defn}
-Session order \( \so \), or program order.
+Program order \( \po \).
 \[ 
     \begin{rclarray}
         lc \in \texttt{LastCommit} & \defeq & \Threadid \parfun \powerset{\Transid} \\
-        \func{sessionOrder}^{0}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set{(\emptyset, \emptyset, \tshp_{init}, \tdpl_{init}, \emptyset)} \\
-        \func{sessionOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) & \defeq & 
-        \Set{(\settrans, \so, \tshp, \tdpl \uplus \Set{\thid \mapsto \dontcare}, lc) \middle|
+        \func{programOrder}^{0}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set{(\emptyset, \emptyset, \tshp_{init}, \tdpl_{init}, \emptyset)} \\
+        \func{programOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) & \defeq & 
+        \Set{(\settrans, \po, \tshp, \tdpl, lc) \middle| \ \dagger \ } \\
+        \dagger & \equiv & 
             \begin{array}{@{}l@{}}
-                \exists \settrans', \so', \tshp', \tdpl', lc', \tll \ldotp \\
-                (\settrans', \so', \tshp', \tdpl' \uplus \Set{\thid \mapsto \dontcare}, lc') \in {} \\
-                \qquad \func{sessionOrder}^{\nat -1}(\tdpl_{init}, \tshp_{init}) \land {} \\
-                ( \tshp', \tdpl' \uplus \Set{\thid \mapsto \dontcare}) \globaltransfer{\tll} ( \tshp, \tdpl \uplus \Set{\thid \mapsto \dontcare}) \land {} \\
-                \tll = \lid \implies \\
+                \exists \settrans', \po', \tshp', \tdpl', lc', \tll \ldotp (\settrans', \po', \tshp', \tdpl' , lc') \in \func{sessionOrder}^{\nat -1}(\tdpl_{init}, \tshp_{init}) \land {} \\
+                ( \tshp', \tdpl' ) \globaltransfer{\tll} ( \tshp, \tdpl ) \land {} \\
+                \tll = \lid \implies 
                 \begin{formulea}
-                    \settrans = \settrans' \land \so = \so' \land \tdpl = \tdpl' \land lc = lc'
+                    \settrans = \settrans' \land \po = \po' \land \tdpl = \tdpl' \land lc = lc'
                 \end{formulea} \land {} \\
-                \exists \tsid \ldotp \tll = \lcmt{\tsid} \implies  \\
+                \exists \tsid \ldotp \tll = \lcmt{\tsid} \implies  
                 \begin{formulea}
-                    \settrans = \settrans' \uplus \Set{\tsid} \land {} \\
-                    \so = \so' \uplus \Set{(\tsid', \tsid) \middle| \tsid' \in lc'(\thid)} \land {} \\
-                    \tdpl = \tdpl' \land lc = lc'\remapsto{\thid}{\Set{\tsid}}
+                    \exists \tdpl'', \stk,\stk', \ts, \ts', \progext, {\progext}', \thid \ldotp \settrans = \settrans' \uplus \Set{\tsid} \land {} \\
+                        \po = \po' \uplus \Set{(\tsid', \tsid) \middle| \tsid' \in lc'(\thid)} \land {} \\
+                        \tdpl = \tdpl'' \uplus \Set{\thid \mapsto (\stk,\ts,\progext)} \land {} \\
+                        \tdpl' = \tdpl'' \uplus \Set{\thid \mapsto (\stk',\ts',{\progext}')} \land {}\\
+                        lc = lc'\remapsto{\thid}{\Set{\tsid}}
                 \end{formulea} \land {} \\
-                \exists \thid' \ldotp \tll = \lfork{\thid', \dontcare} \implies  \\
+                \exists \thid, \prog \ldotp \tll = \lfork{\thid, \prog} \implies 
                 \begin{formulea}
-                    \settrans = \settrans' \land \so = \so' \land \tdpl = \tdpl' \uplus \Set{\thid' \mapsto \dontcare } \land {} \\
-                    lc = lc' \uplus \Set{\thid' \mapsto lc'(\thid)}
+                    \exists \tdpl'', \stk, \ts, \progext, {\progext}', \thid' \ldotp \settrans = \settrans' \land \po = \po' \land {} \\
+                    lc = lc' \uplus \Set{\thid \mapsto lc'(\thid')} \land {} \\
+                    \tdpl = \tdpl'' \uplus \Set{\thid \mapsto (\emptyset,\ts,\prog), \thid' \mapsto (\stk,\ts,{\progext}')} \land {} \\
+                    \tdpl' = \tdpl'' \uplus \Set{\thid' \mapsto (\stk,\ts,\progext)} 
                 \end{formulea} \land {} \\
-                \exists \thid'' \ldotp \tll = \ljoin{\thid'', \dontcare} \implies  \\
+                \exists \thid,\ts \ldotp \tll = \ljoin{\thid, \ts} \implies 
                 \begin{formulea}
-                    \settrans = \settrans' \land \so = \so' \land \tdpl = \tdpl' \uplus \Set{\thid'' \mapsto \dontcare } \land {} \\
-                    lc = lc'\remapsto{\thid}{lc'(\thid) \uplus lc'(\thid'')} \setminus \Set{\thid'' \mapsto \dontcare}
-                \end{formulea} \land {} \\
-            \end{array}
-        } \\
-        \func{histories}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set { (\settrans,\so,\tshp) \middle| (\settrans,\so,\tshp, \dontcare, \dontcare) \in  \bigcup\limits_{\nat \in \Nat } \func{sessionOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) }
+                    \exists \tdpl'', \stk,\stk',  \ts', \progext, \progext', \thid' \ldotp
+                    \settrans = \settrans' \land \po = \po' \land {} \\
+                    lc = lc'\remapsto{\thid'}{lc'(\thid) \uplus lc'(\thid')} \setminus \Set{\thid \mapsto \dontcare} \land {} \\
+                    \tdpl = \tdpl'' \uplus \Set{\thid' \mapsto (\stk',\max\Set{\ts,\ts'},\progext)} \land {} \\
+                    \tdpl' = \tdpl'' \uplus \Set{\thid \mapsto (\stk,\ts,\pskip), \thid' \mapsto (\stk',\ts',{\progext}')}
+                \end{formulea} 
+            \end{array} \\
+        \func{histories}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set { (\settrans,\po,\tshp) \middle| (\settrans,\po,\tshp, \dontcare, \dontcare) \in  \bigcup\limits_{\nat \in \Nat } \func{sessionOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) }
     \end{rclarray}
 \]
 \end{defn}
 
-%\begin{lem}
-    %Transactions ordered by session order \( \so \) appear in the same order in the time-stamp heap, i.e.\ \( \forall \tshp_{init}, \tdpl_{init}, (\settrans, \so, \tshp) \in \func{histories}(\tshp_{init}, \tdpl_{init}), \tsid, \tsid' \in \settrans, \loc \ldotp \exists \ts, ts' \ldotp \tshp(\loc)(\ts) = (\dontcare, \dontcare, \tsid) \land \tshp(\loc)(\ts') = (\dontcare, \dontcare, \tsid') \implies \ts < \ts' \)
-%\end{lem}
-%\begin{proof}
-    %From the definition of session order and the semantics, especially \emph{commit}, \emph{seqnoskip}, \emph{par} and \emph{wait}.
-%\end{proof}
+To define trace and then program order, we first extend the labels used in the semantics.
+Each label has one extra parameter to record the thread that preforms the step, so the label looks like \( \lcommit{\thid,\tsid} \), \( \lfork{\thid,\thid',\prog} \) and \( \ljoin{\thid,\thid',\ts} \).
+
+\begin{defn}[Trace]
+    Given a initial state \( \tshp \) and \( \tdpl \), a trace \( \trc \) is define as a tuple \( (\setlabels,<) \) that satisfies predicate \( \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat} \), for some number \( \nat \).
+\[
+    \begin{rclarray}
+        \pred{trace}{\tshp,\tdpl,\setlabels,<,0} & \defeq & \setlabels = \emptyset \land < = \emptyset\\
+        \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat} & \defeq & \eixsts \tshp',\tdpl', \tll \ldotp (\tshp, \tdpl) \globaltransfer{\tll} (\tshp', \tdpl' ) \land ( \tll = \lid \implies \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat-1}  ) \land {} \\
+                                                    & & (\tll \neq \lid \implies \pred{trace}{\tshp,\tdpl,\setlabels \uplus \Set{\tll},<\uplus \Set{(\tll,\tll') \middle| \tll' \in \setlabels},\nat-1} )\\
+    \end{rclarray}
+\]
+\end{defn}
+
+
+
+\begin{defn}[Program Order]
+\[ 
+    \begin{rclarray}
+        \pred{programOrder}{\settrans, \po, \tshp, \tdpl,\nat} & \defeq & \forall \tsid \in \settrans \exists \tshp',\tshp'',\tdpl',\tdpl'' \ldotp \tshp,\tdpl \globaltransfer{}^{*} \tshp',\tdpl' \globaltransfer{}\\
+    \end{rclarray}
+\]
+\end{defn}
 
 \begin{defn}
     Visibility and potential arbitration relations.
     \[
         \begin{rclarray}
-            \func{graph}(\settrans,\so,\tshp) & \defeq & (\settrans,\so,\vis,\tar) \\
+            \func{graph}(\settrans,\po,\tshp) & \defeq & (\settrans,\po,\vis,\tar) \\
                                               & & \texttt{where} \ \vis \defeq \Set{(\tsid,\tsid') \in \settrans \middle| 
             \begin{array}{@{}l@{}}
                 \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop,\eop}, \op' \in \Set{\rop,\sop} \ldotp \ts < \ts' \land {} \\
@@ -97,73 +119,32 @@ Session order \( \so \), or program order.
     \]
 \end{defn}
 
-%\begin{lem}
-    %\label{lem:lc-latest}
-    %In the definition of \( \func{sessionOrder} \), the \( lc \) records the latest committed transaction(s) of each thread.
-%\end{lem}
-%\begin{proof}
-    %Induction on the number \( n \).
-
-    %Case \( n = 0 \). 
-    %There is no running thread and \( lc \) is undefined for all thread identifier \( \thid \).
-
-    %Case \( n > 0 \). 
-    %Assume when \( n - 1\) and \( (\settrans', \so', \tshp', \tdpl' \uplus \Set{\thid \mapsto \dontcare}, lc') \in \func{sessionOrder}^{\nat - 1}(\tdpl_{init}, \tshp_{init}) \), the \( lc' \) records the latest committed transactions.
-    %Now we need to check \( n \).
-    %We consider different \( \tll \), where \(( \tshp', \tdpl' \uplus \Set{\thid \mapsto \dontcare}) \globaltransfer{\tll} ( \tshp, \tdpl \uplus \Set{\thid \mapsto \dontcare}) \)
-
-    %Sub-case \( \tll  = \actid \).
-    %The program state does not change, and \( lc = lc' \).
-
-    %Sub-case \( \tll = \lcmt{\tsid}\).
-    %For the thread \( \thid \) that commits a new transaction \( \tsid \), given the semantics, the new transaction must pick a time greater all the transactions within the same thread.
-    %Thus, the new \( lc = lc'\remapsto{\thid}{\Set{\tsid}} \).
-
-    %Sub-case \( \tll = \lfork{\thid', \dontcare} \). 
-    %The initial time of the new thread \( \thid' \) is the time of its parent thread, so the latest committed transactions of the new thread \( \thid' \) should be the same as its parent thread.
-    %Thus, the new \( lc = lc' \uplus \Set{\thid' \mapsto lc'(\thid)} \).
-
-    %Sub-case \( \tll = \ljoin{\thid'', \dontcare} \). 
-    %Given the semantics, the thread \( \thid'' \) reduces all its transactions and return its local time to the parent thread \( \thid \).
-    %The parent thread updates the time to the maximum between itself and the time returned from the child thread, so the latest committed transactions of the parent thread should include those from the child thread.  
-    %Thus, the new \( lc = lc'\remapsto{\thid}{lc'(\thid) \uplus lc'(\thid'')} \setminus \Set{\thid'' \mapsto \dontcare} \).
-%\end{proof}
-
-\begin{lem}
-    \label{lem:happen-in-same-time}
-    The read/start operations of all the needed locations happen in the same time, so do write/end operations.
-    This is \( \forall \tshp, \tsid, \loc, \loc', \ts, \ts', \op, \op' \ldotp ( \op, \op' \in \Set{\rop,\sop} \lor \op, \op' \in \Set{\wop,\eop} ) \land \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land  \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \implies \ts = \ts' \)
-\end{lem}
-\begin{proof}
-    Derive from \( \func{commitTrans} \) from the semantics.
-\end{proof}
-
 \begin{lem}[Session]
-    \( \so \subseteq \vis \), for some \( \settrans \) and \( \tshp\), such that \( \func{graph}(\settrans,\so,\tshp) = (\settrans,\so,\vis,\dontcare ) \).
+    \( \po \subseteq \vis \), for some \( \settrans \) and \( \tshp\), such that \( \func{graph}(\settrans,\po,\tshp) = (\settrans,\po,\vis,\dontcare ) \).
 \end{lem}   
 \begin{proof}
-    Given the definition of \( \func{sessionOrder} \), assume a sequence of \( \so_n \), each of which represents the result of the \( n \)-steps \(\func{sessionOrder} \), so \( \so = \bigcup\limits_{n} \so_n \land \forall n, n' \ldotp n < n' \implies \so_n \subseteq \so_{n'} \).
-    Therefore, if \( ( \tsid , \tsid' ) \in \so \), there must exist a \( n \) that \( ( \tsid , \tsid' ) \notin \so_{n-1} \) but \( ( \tsid , \tsid' ) \in \so_{n} \).
+    Given the definition of \( \func{sessionOrder} \), assume a sequence of \( \po_n \), each of which represents the result of the \( n \)-steps \(\func{sessionOrder} \), so \( \po = \bigcup\limits_{n} \po_n \land \forall n, n' \ldotp n < n' \implies \po_n \subseteq \po_{n'} \).
+    Therefore, if \( ( \tsid , \tsid' ) \in \po \), there must exist a \( n \) that \( ( \tsid , \tsid' ) \notin \po_{n-1} \) but \( ( \tsid , \tsid' ) \in \po_{n} \).
     This means there exists \( lc \) for same thread \( \thid \), such that \( \tsid \in lc(\thid) \).
     Since the \( lc \) is a partial function that records the last committed transactions of each thread.
     Note that if there is a new thread, it records the last committed transactions of its parent thread, while if it is a join point, it records both the parent and child last committed transactions.
     Then if the new transaction \( \tsid' \) commits, it must pick a starting time greater than any transactions included in \( lc(\thid) \).
-    Assuming the time-stamp heap \( \tshp \) after the new transaction \( \tsid' \) committing and by the Lemma \ref{lem:happen-in-same-time}, we have \( \forall \loc, \loc', \ts, \ts', \op \in \Set{\wop,\eop}, \op' \in \Set{\rop,\sop} \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid') \implies \ts < \ts' \), which implies \( (\tsid, \tsid') \in \so \).
+    Assuming the time-stamp heap \( \tshp \) after the new transaction \( \tsid' \) committing and by the Lemma \ref{lem:happen-in-same-time}, we have \( \forall \loc, \loc', \ts, \ts', \op \in \Set{\wop,\eop}, \op' \in \Set{\rop,\sop} \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid') \implies \ts < \ts' \), which implies \( (\tsid, \tsid') \in \po \).
 \end{proof}
 
 \begin{lem}[prefix]
     \label{lem:prefix}
-    \( \tar; \vis \subseteq \vis \), for some \( \settrans, \so \) and \( \tshp\), such that \( \func{graph}(\settrans,\so,\tshp) = (\settrans,\so,\vis,\tar ) \).
+    \( \tar; \vis \subseteq \vis \), for some \( \settrans, \po \) and \( \tshp\), such that \( \func{graph}(\settrans,\po,\tshp) = (\settrans,\po,\vis,\tar ) \).
 \end{lem}
 \begin{proof}
-    For all \( \tsid, \tsid', \tsid'' \), if \( (\tsid, \tsid') \in \tar \) and \( (\tsid', \tsid'') \in \vis \), by the definitions of \( \so \) and \( \vis \), the commit time of \( \tsid' \) is greater than the one of \( \tsid \) but smaller than the start time of \( \tsid'' \).
+    For all \( \tsid, \tsid', \tsid'' \), if \( (\tsid, \tsid') \in \tar \) and \( (\tsid', \tsid'') \in \vis \), by the definitions of \( \po \) and \( \vis \), the commit time of \( \tsid' \) is greater than the one of \( \tsid \) but smaller than the start time of \( \tsid'' \).
     Thus there must exist \( \loc, \loc'', \ts, \ts' , \ts'', \op \in \Set{\wop, \eop}  \) and \( \op'' \in \Set{\rop, \sop } \) such that  \( \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \), \( \tshp(\loc'')(\ts'') = (\dontcare, \op'', \tsid'') \) and \( \ts < \ts'' \), thus \( ( \tsid, \tsid'' ) \in \vis \).
 \end{proof}
 
 \begin{lem}[nocoflict]
     \label{lem:nocoflict}
     Two transactions cannot concurrently write to the same location, this means that one must observe another one.
-    This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid) \land  \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\), for some \( \settrans, \so \) and \( \tshp\), such that \( \func{graph}(\settrans,\so,\tshp) = (\settrans,\so,\vis,\dontcare ) \).
+    This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid) \land  \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\), for some \( \settrans, \po \) and \( \tshp\), such that \( \func{graph}(\settrans,\po,\tshp) = (\settrans,\po,\vis,\dontcare ) \).
 \end{lem}
 \begin{proof}
     Prove by contradiction.
@@ -233,49 +214,3 @@ Session order \( \so \), or program order.
     This means \( \tsid, \dots \tsid_{1}, \dots \tsid' \) is also a circle, which contradict with assumption that \( \tar_{n} \) has no circle.
 \end{proof}
 
-%Now we need to recover \( \ww \), \( \wr \) and \( \rw \) from \( \tshp \).
-%We need to prove that there is no circle that does not contain contain adjacent \( \rw \).
-%By contradiction, if such circle exists, we can prove that the time goes backward in the circle.
-                                                                          
-%\[
-    %\begin{rclarray}
-        %\func{graph}(\settrans, \so, \tshp) & \defeq & (\settrans, \so, \wr, \ww, \rw) \\
-                                            %& & \texttt{where} \ \forall \tsid, \tsid' \in \settrans \ldotp \tsid \neq \tsid' \land \exists \loc, \ts, \ts' > \ts \ldotp  \\
-                                            %& & (\tsid, \tsid') \in \wr \implies  \ts = \max(\Set{\ts'' \middle| \ts'' < \ts }), \val \ldotp \tshp(\loc)(\ts) = (\dontcare,\wop,\tsid) \land \tshp(\loc)(\ts') = (\dontcare,\rop,\tsid') \land {} \\
-                                            %& & (\tsid, \tsid') \in \ww \implies \tshp(\loc)(\ts) = (\dontcare,\wop,\tsid) \land \tshp(\loc)(\ts') = (\dontcare,\wop,\tsid') \land {} \\
-                                            %& & (\tsid, \tsid') \in \rw \implies \tshp(\loc)(\ts) = (\dontcare,\rop,\tsid) \land \tshp(\loc)(\ts') = (\dontcare,\wop,\tsid') 
-    %\end{rclarray}
-%\]
-
-%\begin{lem}
-    %Given two transactions, \( \tsid_{1} \), \( \tsid_{2} \) and \( \tsid_{3} \), if there is a relation between \( \tsid_{1} \) and \( \tsid_{2} \), so does \( \tsid_{2} \) and \( \tsid_{3} \), and at least one of these two relations is not a read-write relation, then the time, associated with the events that determines the orders, strictly increases.
-
-    %The ABOVE NOT REALLY DESCRIBE THE PROPERTY!!! BUT LEAVE IT FOR NOW. BECAUSE MIGHT CHANGE THE PROOF STRATEGY.
-
-    %This is, given \( (\settrans, \so, \wr, \ww, \rw) \) generated from \( \tshp \), it satisfies the following property:
-     
-    %\[
-        %\begin{array}{@{}l@{}}
-            %\forall \tsid_{1}, \tsid_{2},\tsid_{3} \in \settrans \ldotp \exists \tll, \tll' \in \Set{\so, \wr, \ww, \rw}, \loc_{1}, \loc_{2}, \loc_{3}, \ts_{1}, \ts_{2}, \ts_{3}, \op_{1}, \op_{2}, \op_{3} \ldotp  (\tsid_{1}, \tsid_{2}) \in \tll \land (\tsid_{2}, \tsid_{3}) \in \tll' \land {} \\
-            %\tshp(\loc_{1})(\ts_{1}) = (\dontcare, \op_{1}, \tsid_{1}) \land \tshp(\loc_{2})(\ts_{2}) = (\dontcare, \op_{2}, \ts_{2}) \land \tshp(\loc_{3})(\ts_{3}) = (\dontcare, \op_{3}, \ts_{3}) \land \ts_{1} < \ts_{2} < \ts_{3} \land {} \\
-            %\tll = \so \land \tll' = \so \implies \loc_{2} = \loc_{3} \land \op_{1}, \op_{2}, \op_{3} \in \Set{\wop, \rop} \land {} \\
-            %\tll = \so \land \tll' = \ww \implies \loc_{2} = \loc_{3} \land \op_{1} \in \Set{\wop, \rop} \land \op_{2} = \op_{3} = \wop \land {} \\
-            %\tll = \so \land \tll' = \wr \implies \loc_{2} = \loc_{3} \land \op_{1} \in \Set{\wop, \rop} \land \op_{2} = \wop \land \op_{3} = \rop \land {} \\
-            %\tll = \so \land \tll' = \rw \implies \loc_{2} = \loc_{3} \land \op_{1} \in \Set{\wop, \rop} \land \op_{2} = \rop \land \op_{3} = \wop \land {} \\
-            %\tll = \ww \land \tll' = \so \implies \loc_{1} = \loc_{2} \land \op_{1} = \op_{2} = \wop \land \op_{3} \in \Set{\wop, \rop} \land {} \\
-            %\tll = \ww \land \tll' = \ww \implies \loc_{1} = \loc_{2} \land \op_{1} = \op_{2} = \op_{3} = \wop \land {} \\
-            %\tll = \ww \land \tll' = \wr \implies \loc_{1} = \loc_{2} \land \op_{1} = \op_{2} = \wop \land \op_{3} = \rop \land {} \\
-            %\tll = \ww \land \tll' = \rw \implies \loc_{2} = \loc_{3} \land \op_{1} = \wop \land \op_{2} = \rop \land \op_{3} = \wop \land {} \\
-            %\tll = \wr \land \tll' = \so \implies \loc_{1} = \loc_{2} \land \op_{1} = \wop \land \op_{2} = \rop \land \op_{3} \in \Set{\wop, \rop} \land {} \\
-            %\tll = \wr \land \tll' = \ww \implies \loc_{2} = \loc_{3} \land \op_{1} = \op_{2} = \op_{3} = \wop \land {} \\
-            %\tll = \wr \land \tll' = \wr \implies \loc_{2} = \loc_{3} \land \op_{1} = \op_{2} = \wop \land \op_{3} = \rop {} \\
-            %\tll = \wr \land \tll' = \rw \implies \loc_{2} = \loc_{3} \land \op_{1} = \wop \land \op_{2} = \rop \land \op_{3} = \wop \land {} \\
-            %\tll = \rw \land \tll' = \so \implies \loc_{1} = \loc_{2} \land \op_{1} = \rop \land \op_{2} = \wop \land \op_{3} \in \Set{\wop, \rop} \land {} \\
-            %\tll = \rw \land \tll' = \ww \implies \loc_{2} = \loc_{3} \land \op_{1} = \rop \land \op_{2} = \op_{3} = \wop \land {} \\
-            %\tll = \rw \land \tll' = \wr \implies \loc_{2} = \loc_{3} \land \op_{1} = \rop \land \op_{2} = \wop \land \op_{3} = \rop 
-        %\end{array}
-    %\]
-%\end{lem}
-%\begin{proof}
-
-%\end{proof}
