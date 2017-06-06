@@ -140,219 +140,257 @@ Once a trace is clean, we can proceed to manipulate it and, under certain cases,
 	\end{gather*}
 \end{defn}
 
-We start by showing that the order of two consecutive reads can be swapped as long as the transactions performing them are distinct. Since reads do not alter the storage and they only require at least a shared lock on the target cell, we always succeed in the swap. It is fundamental for the transactions to be different otherwise we would be potentially altering the control flow inside the body of a transaction.
+The semantically valid swap operations allowed on traces are summarized in the following table, where $\alpha$ and $\alpha'$ label two consecutive operations inside a program trace and the \textit{condition} is the sufficient requirement needed to perform the swap.
+
+\begin{center}
+	\begin{tikzpicture}[->, semithick]
+		\tikzset{
+		    tleft/.style= {rectangle, draw=black, color=black, minimum width=2.5cm, rounded corners=3pt},
+		    pleft/.style= {above, black!5!blue, thick},
+		    pright/.style= {above, black!5!magenta, thick},
+		}
+		
+		\node[tleft] (s1) at (0, 0) {$h, \Phi, S, \mathds{P}$};
+		\node[tleft] (s2) at (6, 2) {$\textcolor{blue}{h[1 \mapsto 5]}, \Phi, S, \mathds{P}_a$};
+		\node[tleft] (s3) at (6, -2) {$h, \textcolor{magenta}{\Phi[2 \mapsto (\{j\}, \textsc{x})]}, S, \mathds{P}_b$};
+		\node[tleft] (s4) at (11, 0) {$\textcolor{blue}{h[1 \mapsto 5]},\textcolor{magenta}{\Phi[2 \mapsto (\{j\}, \textsc{x})]}, S, \mathds{P}'$};
+		
+		\draw
+		(s1) edge[pleft] node[midway, sloped] {$\actwrite{i}{1}{5}$} (s2.195)
+		(s1) edge[pright] node[midway, sloped, below] {$\actlock{j}{2}{\textsc{x}}$} (s3.165)
+		(s2) edge[pright] node[midway, sloped] {$\actlock{j}{2}{\textsc{x}}$} (s4.40)
+		(s3) edge[pleft] node[midway, sloped, below] {$\actwrite{i}{1}{5}$} (s4.320);
+	\end{tikzpicture}
+	\captionof{figure}{An example of swapping consecutive actions in a program reduction. Note how the end state does not change as a result of the reordering.}
+\end{center}
+
 \begin{lem}
-	(Proof in \ref{lem:rr}).
+	(Swap rules).
 	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, k, k', v, v', \alpha, \alpha', n \ldotp \\
-		i \neq j \land \alpha = \actread{i}{k}{v} \land \alpha' = \actread{j}{k'}{v'} \land (\alpha, n) \in \tau \land (\alpha', n+1) \in \tau \\ \land\ \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \pred{swap}{\tau, (\alpha, n), (\alpha', n+1)}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
+		\forall
+			\alpha, \alpha',
+			i, j, k, \kappa,
+			h, h', h_a,
+			\Phi, \Phi', \Phi_a,
+			S, S', S_a,
+			\mathds{P}, \mathds{P}', \mathds{P}_a
+		\ldotp \\
+		(h, \Phi, S, \mathds{P})
+			\xrightarrow{\alpha}
+		(h_a, \Phi_a, S_a, \mathds{P}_a)
+			\xrightarrow{\alpha'}
+		(h', \Phi', S', \mathds{P}')
+			\land
+			i \neq j \\
+			\land
+		\lnot \left( \alpha = \actunlock{i}{k}
+			\land
+		\alpha' = \actlock{j}{k}{\kappa} \right)
+			\land
+		\alpha = \alpha(i)
+			\land
+		\alpha' = \alpha(j) \\
+			\implies
+		\exists h_b, \Phi_b, S_b, \mathds{P}_b \ldotp
+		(h, \Phi, S, \mathds{P})
+			\xrightarrow{\alpha'}
+		(h_b, \Phi_b, S_b, \mathds{P}_b)
+			\xrightarrow{\alpha}
+		(h', \Phi', S', \mathds{P}')
 	\end{gather*}
+	\begin{proof}
+	Let's pick arbitrary $\alpha, \alpha' \in \mathsf{Act}, i, j \in \mathsf{Tid}, k \in \mathsf{Key}, \kappa \in \mathsf{Lock}, h, h', h_a \in \mathsf{Storage}$, $\Phi, \Phi', \Phi_a \in \mathsf{LMan}, S, S', S_a \in \mathsf{TState}, \mathds{P}, \mathds{P}', \mathds{P}_a \in \mathsf{Prog}$ and assume that the following holds:
+	\begin{gather}
+		\label{lem:swapT1}
+		(h, \Phi, S, \mathds{P})
+			\xrightarrow{\alpha}
+		(h_a, \Phi_a, S_a, \mathds{P}_a)
+			\xrightarrow{\alpha'}
+		(h', \Phi', S', \mathds{P}')
+			\land
+			i \neq j \\
+			\land
+		\label{lem:swapT2}
+		\lnot \left( \alpha = \actunlock{i}{k}
+			\land
+		\alpha' = \actlock{j}{k}{\kappa} \right)
+			\land
+		\alpha = \alpha(i)
+			\land
+		\alpha' = \alpha(j)
+	\end{gather}
+	We now proceed in finding $h_b, \Phi_b, S_b, \mathds{P}_b$ by doing a case-by-case analysis on $\alpha$ and $\alpha'$ based on the feasible reductions, i.e. the ones allowed by the \tpl\ operational semantics, they can be part of according to (\ref{lem:swapT1}). From (\ref{lem:swapT2}) we know that neither $\alpha$ nor $\alpha'$ are system transitions $\actprog$. Similarly, we can't have a situation where $\alpha'$ is a lock on a key that has just been unlocked by $\alpha$. Also, since from (\ref{lem:swapT1}) we know that $i \neq j$ meaning that the two actions come from parallel transactions. This implies that, without loss of generality, programs $\mathds{P}, \mathds{P}_a, \mathds{P}'$ have the following shape:
+	\[
+		\begin{array}{c @{\hspace{15pt}} c @{\hspace{15pt}} c}
+			\mathds{P}
+				=
+			\left( \mathds{T}_i ; \mathds{P}_1 \right)
+				\|
+			\left( \mathds{T}_j ; \mathds{P}_2 \right)
+				\|
+			\mathds{P}_3
+			&
+			\mathds{P}_a
+				=
+			\left( \mathds{T}_i' ; \mathds{P}_1 \right)
+				\|
+			\left( \mathds{T}_j ; \mathds{P}_2 \right)
+				\|
+			\mathds{P}_3
+			&
+			\mathds{P}'
+				=
+			\left( \mathds{T}_i' ; \mathds{P}_1 \right)
+				\|
+			\left( \mathds{T}_j' ; \mathds{P}_2 \right)
+				\|
+			\mathds{P}_3
+		\end{array}
+	\]
+	Let us also define the new intermediate program, $\dot{\mathds{P}}$, for all the cases we will consider:
+	\[
+		\dot{\mathds{P}}
+			=
+		\left( \mathds{T}_i ; \mathds{P}_1 \right)
+			\|
+		\left( \mathds{T}_j' ; \mathds{P}_2 \right)
+			\|
+		\mathds{P}_3
+	\]
+	In the following list we only consider one of the two combinations for each pair as the other one can be trivially found with the appropriate substitutions.
+	\begin{enumerate}[label=({\roman*})]
+		\item If $\alpha = \actid{i}$ then from the semantic interpretation of $\mathsf{i}$, we obtain that $h_a = h, \Phi_a = \Phi, S_a = S$. It follows that for any action $\alpha'$ performed by $j$ we have the following reduction, from (\ref{lem:swapT1}):
+		\[
+			(h, \Phi, S, \mathds{P})
+				\xrightarrow{\alpha'}
+			(h', \Phi', S', \dot{\mathds{P}})
+				\xrightarrow{\alpha}
+			(h', \Phi', S', \mathds{P}')
+		\]
+		We can therefore pick $h_b = h', \Phi_b = \Phi', S_b = S'$ and $\mathds{P}_b = \dot{\mathds{P}}$. The same occurs when picking $\alpha' = \actid{j}$ and an arbitrary $\alpha = \alpha(i)$.
+		
+		\item If $\alpha = \actread{i}{k}{v}$ and $\alpha' = \actread{j}{k'}{v}$ then from the semantic interpretation of $\mathsf{read}$ we know that $h' = h_a = h, \Phi' = \Phi_a = \Phi$. Also, the two $\mathsf{read}$ actions will update transaction-local variables to the values read from the storage so we select $S_b$ to be $S[j \mapsto (s[\pvar{x} \mapsto v], p)]$ where $(s, p) = S(j)$. This implies that we can always reduce in the following way:
+		\[
+			(h, \Phi, S, \mathds{P})
+				\xrightarrow{\alpha'}
+			(h, \Phi, S_b, \dot{\mathds{P}})
+				\xrightarrow{\alpha}
+			(h, \Phi, S', \mathds{P}')
+		\]
+		We can therefore pick $h_b = h', \Phi_b = \Phi'$ and $\mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actread{i}{k}{v}$ and $\alpha' = \actwrite{j}{k'}{v'}$ then from (\ref{lem:swapT1}) it must be the case that $k \neq k'$. This means that given the disjointness of keys, we can always find $h_b = h', \Phi_b = \Phi, S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actwrite{i}{k}{v}$ and $\alpha' = \actwrite{j}{k'}{v'}$ then from (\ref{lem:swapT1}) it must be the case that $k \neq k'$. Now we can always find $h_b = h[k' \mapsto v'], \Phi_b = \Phi, S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actread{i}{k}{v}$ and $\alpha' = \actlock{j}{k'}{\kappa}$ then from (\ref{lem:swapT1}) it must be the case that either $k \neq k'$ or $k = k'$ and $\Phi(k) = (\{i\} \uplus I, \textsc{s})$ and $\kappa = \textsc{s}$. In both cases we can find $h_b = h, \Phi_b = \Phi', S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actwrite{i}{k}{v}$ and $\alpha' = \actlock{j}{k'}{\kappa}$ then from (\ref{lem:swapT1}) it must be the case that $k \neq k'$. Now we can always find $h_b = h, \Phi_b = \Phi', S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actread{i}{k}{v}$ and $\alpha' = \actunlock{j}{k'}$ then from (\ref{lem:swapT1}) it must be the case that either $k \neq k'$ or $k = k'$ and $\Phi(k) = (\{i,j\} \uplus I, \textsc{s})$. In both cases we can find $h_b = h, \Phi_b = \Phi', S_b = S[j \mapsto (s, \pshrink)], \mathds{P}_b = \dot{\mathds{P}}$ for $s = S(j) \downarrow_1$.
+		
+		\item If $\alpha = \actwrite{i}{k}{v}$ and $\alpha' = \actunlock{j}{k'}$ then from (\ref{lem:swapT1}) it must be the case that $k \neq k'$. Now we can always find $h_b = h, \Phi_b = \Phi', S_b = S', \mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actread{i}{k}{v}$ and $\alpha' = \actalloc{j}{n}{l}$ then from (\ref{lem:swapT1}) it must be the case that $k < l \lor l \geq l + n$. Now we can always find $h_b = h', \Phi_b = \Phi', S_b = S[j \mapsto (s[\pvar{x} \mapsto l], p)], \mathds{P}_b = \dot{\mathds{P}}$. Where $\pvar{x}$ is the variable recording the newly allocated address $l$ in transaction $j$ and $(s, p) = S(j)$.
+		
+		\item If $\alpha = \actwrite{i}{k}{v}$ and $\alpha' = \actalloc{j}{n}{l}$ then from (\ref{lem:swapT1}) it must be the case that $k < l \lor l \geq l + n$. Now we can always find $h_b = h[l \mapsto 0]\ldots[l + n - 1 \mapsto 0], \Phi_b = \Phi', S_b = S[j \mapsto (s[\pvar{x} \mapsto l], p)], \mathds{P}_b = \dot{\mathds{P}}$. Where $\pvar{x}$ is the variable recording the newly allocated address $l$ in transaction $j$ and $(s, p) = S(j)$.
+		
+		\item If $\alpha = \actlock{i}{k}{\kappa}$ and $\alpha' = \actlock{j}{k'}{\kappa'}$ then from (\ref{lem:swapT1}) it must be the case that either $k \neq k'$ or $k = k'$ and $\kappa = \kappa' = \textsc{s}$. In the first scenario we can find $\Phi_b = \Phi[k' \mapsto (\{j\} \uplus I', \kappa')]$ for $I' = \Phi(k') \downarrow_1$ while in the second one $\Phi_b = \Phi[k \mapsto (\{j\} \uplus I, \textsc{s})]$ for $I = \Phi(k) \downarrow_1$ with $i \not\in I$. In both cases we pick $h_b = h, S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actunlock{i}{k}$ and $\alpha' = \actunlock{j}{k'}$ then from (\ref{lem:swapT1}) it must be the case that either $k \neq k'$ or $k = k'$ and $\Phi(k) = (\{i, j\} \uplus I, \textsc{s})$. In the first scenario we can find $\Phi_b = \Phi[k' \mapsto (I', \kappa'')]$ for $(\{j\} \uplus I', \kappa') = \Phi(k')$, while in the second one $\Phi_b = \Phi[k \mapsto (\{i\} \uplus I, \textsc{s})]$ with $j \not\in I$. In both cases we pick $h_b = h, S_b = S[j \mapsto (s, \pshrink)], \mathds{P}_b = \dot{\mathds{P}}$. for $s = S(j) \downarrow_1$.
+		
+		\item If $\alpha = \actlock{i}{k}{\kappa}$ and $\alpha' = \actunlock{j}{k'}$ then from (\ref{lem:swapT1}) it must be the case that either $k \neq k'$ and we find $\Phi_b = \Phi[k' \mapsto (I', \kappa'')]$ for $(\{j\} \uplus I', \kappa') = \Phi(k')$ or $k = k'$ and $\Phi(k) = (\{j\} \uplus I, \textsc{s})$ and $\kappa = \textsc{s}$. In the latter case we can find $\Phi_b = \Phi[k \mapsto (I, \textsc{s})]$. In both cases we pick $h_b = h, S_b = S', \mathds{P}_b = \dot{\mathds{P}}$.
+		
+		\item If $\alpha = \actunlock{i}{k}$ and $\alpha' = \actlock{j}{k'}{\kappa}$ then from (\ref{lem:swapT2}) it must be the case that $k \neq k'$. Now we can always find $h_b = h, \Phi_b = \Phi[k' \mapsto (\{j\} \uplus I, \kappa)], S_b = S, \mathds{P}_b = \dot{\mathds{P}}$ for $(I, \kappa') = \Phi(k'), j \not\in I$ and $\kappa' \leq \textsc{s}$.
+		
+		\item If $\alpha = \actalloc{i}{n}{l}$ and $\alpha' = \actlock{j}{k}{\kappa}$ then from (\ref{lem:swapT1}) it must be the case that $k < l \lor k \geq l + n$. Now we can always find $h_b = h, \Phi_b = \Phi[k \mapsto (\{j\} \uplus I, \kappa)], S_b = S, \mathds{P}_b = \dot{\mathds{P}}$ for $I = \Phi(k) \downarrow_1$.
+		
+		\item If $\alpha = \actalloc{i}{n}{l}$ and $\alpha' = \actunlock{j}{k}$ then from (\ref{lem:swapT1}) it must be the case that $k < l \lor k \geq l + n$. Now we can always find $h_b = h, \Phi_b = \Phi[k \mapsto (I, \kappa')], S_b = S[j \mapsto (s, \pshrink)], \mathds{P}_b = \dot{\mathds{P}}$, for $(\{j\} \uplus I, \kappa) = \Phi(k), \kappa' \leq \textsc{s}$ and $s = S(j) \downarrow_1$.
+		
+		\item If $\alpha = \actalloc{i}{n}{l}$ and $\alpha' = \actalloc{j}{n'}{l'}$ then from (\ref{lem:swapT1}) it must be the case that $\{l, \ldots, l + n - 1\} \cap \{l', \ldots, l' + n' -1 \} \equiv \emptyset$. Now we can always find $h_b = h[l' \mapsto 0]\ldots[l' + n' - 1 \mapsto 0], \Phi_b = \Phi[l' \mapsto (\{j\}, \textsc{x})]\ldots[l' + n' - 1 \mapsto (\{j\}, \textsc{x})], S_b = S[j \mapsto (s[\pvar{x} \mapsto l'], p)], \mathds{P}_b = \dot{\mathds{P}}$ for $(s, p) = S(j)$.
+	\end{enumerate}
+	All other cases are either ruled out by assumption (\ref{lem:swapT2}) or by the fact that they are unfeasible under the \tpl\ semantics. We provide one of such unfeasible examples for clarity. If $\alpha = \actwrite{i}{k}{v}$ and $\alpha' = \actlock{j}{k}{\textsc{s}}$ for any $v \in \mathsf{Val}$ then in no possible way the original consecutive reduction could have happened. This is because $\alpha$ requires $\Phi(k) = (\{i\}, \textsc{x})$ while $\alpha'$ needs $\Phi_a(k) = (I, \kappa)$ for $\kappa \leq \textsc{s}$. We know that it must be the case that $\Phi_a = \Phi$ since $\alpha$ does not modify the lock manager. It is now clear that such situation could have never occurred.
+	\end{proof}
 \end{lem}
 
-The order of two consecutive read, write, lock or unlock operations can be swapped as long as the transactions performing them are distinct and the keys they refer to are different.
-\begin{lem}
-	(Proof in \ref{lem:rwlu}).
+\begin{defn}
+	\label{defn:swappable}
+	(Swappable trace actions).
+	Two operations as part of a trace  $\tau$ are \emph{swappable} if and only if their indeces are consecutive and for any $\tau$ generated full reduction, there is a point where two consecutive reductions are labelled by them and they are allowed to be swapped.
 	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, k, k', x, y, n \ldotp \\
-			i \neq j \land x = \alpha(i, k) \land y = \alpha(j, k') \land k \neq k' \land (x, n) \in \tau \land (y, n+1) \in \tau \\ \land\ \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \pred{swap}{\tau, (x, n), (y, n+1)}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
+		\pred{swappable}{\tau, (\alpha, n), (\alpha', n')} \\
+			\iff \\
+		n' = n + 1 \land 
+		\forall h, \underline{h}, \Phi, S, \mathds{P} \ldotp
+		\pred{tgen}{\tau, h, \underline{h}, \Phi, S, \mathds{P}}
+			\implies \\
+		((\alpha, n) \in \tau
+			\land
+		(\alpha', n') \in \tau
+			\land
+		\exists h_1, h_2, h_a, h_b, \Phi_1, \Phi_2, \Phi_a, \Phi_b, S_1, S_2, S_a, S_b, S', \mathds{P}, \mathds{P}_1, \mathds{P}_2, \mathds{P}_a, \mathds{P}_b \ldotp \\
+		(h, \Phi, S, \mathds{P})
+			\rightarrow^*
+		(h_1, \Phi_1, S_1, \mathds{P}_1)
+			\xrightarrow{\alpha}
+		(h_a, \Phi_a, S_a, \mathds{P}_a)
+			\xrightarrow{\alpha'}
+		(h_2, \Phi_2, S_2, \mathds{P}_2)
+			\rightarrow^*
+		(\underline{h}, \emptyset, S', \pskip) \\
+			\land\
+		(h_1, \Phi_1, S_1, \mathds{P}_1)
+			\xrightarrow{\alpha}
+		(h_b, \Phi_b, S_b, \mathds{P}_b)
+			\xrightarrow{\alpha'}
+		(h_2, \Phi_2, S_2, \mathds{P}_2))
 	\end{gather*}
-\end{lem}
+\end{defn}
 
-In the case of two consecutive alloc operations inside a trace, we only require for the transactions performing them to be distinct. There is no constraint on the keys generated since we already know they must be two disjoint sets, otherwise the original reduction would have not been allowed.
 \begin{lem}
-	(Proof in \ref{lem:aa}).
+	(Trace swap equivalence).
 	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, m, m', l, l', \alpha, \alpha', n \ldotp \\
-			i \neq j \land \alpha = \actalloc{i}{m}{l} \land \alpha' = \actalloc{j}{m'}{l'} \land (\alpha, n) \in \tau \land (\alpha', n+1) \in \tau \\ \land\ \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \pred{swap}{\tau, (\alpha, n), (\alpha', n+1)}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
+		\forall h, \underline{h}, \Phi, S, \mathds{P}, \tau, \tau', x, y \ldotp \\
+		\pred{tgen}{\tau, h, \underline{h}, \Phi, S, \mathds{P}}
+			\land
+		\pred{swappable}{\tau, x, y}
+			\land
+		\tau' = \pred{swap}{\tau, x, y}
+			\implies
+		\pred{tgen}{h, \underline{h}, \Phi, S, \mathds{P}}
 	\end{gather*}
+	\begin{proof}
+	Let's pick arbitrary $h, \underline{h} \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathsf{Prog}, \tau, \tau' \in [\mathsf{Act} \times \mathds{N}], x, y \in \mathsf{Act} \times \mathds{N}$. We now assume that the following holds:
+	\[
+		\pred{tgen}{\tau, h, \underline{h}, \Phi, S, \mathds{P}}
+			\land
+		\pred{swappable}{\tau, x, y}
+			\land
+		\tau' = \pred{swap}{\tau, x, y}
+	\]
+	The above means that we can generate the $\underline{h}$ storage from $\tau$ starting with state $(h, \Phi, S, \mathds{P})$ and there are two operations $x = (\alpha, n), y = (\alpha', n + 1)$ which are $\mathsf{swappable}$ as defined in Definition \ref{defn:swappable}. We also know that another trace, $\tau'$, is equivalent to $\tau$ with operations $x$ and $y$ swapped. It is required to show that $\tau'$ can also generate $\underline{h}$ starting from $(h, \Phi, S, \mathds{P})$.
+	
+	From the definition of $\mathsf{swappable}$, we know that the following must hold, where the non-bound variables are assumed to be existentially quantified for conciseness:
+	\begin{gather}
+		\label{lem:tswap1}
+		(h, \Phi, S, \mathds{P})
+			\rightarrow^*
+		(h_1, \Phi_1, S_1, \mathds{P}_1)
+			\xrightarrow{\alpha}
+		(h_a, \Phi_a, S_a, \mathds{P}_a) \\
+		\label{lem:tswap2}
+			\xrightarrow{\alpha'}
+		(h_2, \Phi_2, S_2, \mathds{P}_2)
+			\rightarrow^*
+		(\underline{h}, \emptyset, S', \pskip) \\
+		\label{lem:tswap3}
+			\land\
+		(h_1, \Phi_1, S_1, \mathds{P}_1)
+			\xrightarrow{\alpha}
+		(h_b, \Phi_b, S_b, \mathds{P}_b)
+			\xrightarrow{\alpha'}
+		(h_2, \Phi_2, S_2, \mathds{P}_2)
+	\end{gather}
+	From (\ref{lem:tswap1}) and the definition of $\mathsf{swap}$ we obtain that, following $\tau'$ for $n - 1$ steps we can reduce $(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1)$. Next, we know that $\alpha$ and $\alpha'$ are swapped in $\tau'$, meaning that from (\ref{lem:tswap3}) we can reduce $(h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_b, \Phi_b, S_b, \mathds{P}_b) \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2)$ and we reach step $n+2$. From then on $\tau$ and $\tau'$ are equivalent, therefore the from (\ref{lem:tswap2}) we reduce until $\pskip$ to a state whose storage component is $\underline{h}$.
+	\end{proof}
 \end{lem}
-
-We are always able to swap the order of a storage allocation operation followed by a read, write, lock or unlock as long as the transactions performing them are distinct and the keys accessed are not part of the ones created by the allocation. If the latter was not considered as a requirement, then we would allow to access a storage cell which is absent from the heap: an impossible case.
-\begin{lem}
-	(Proof in \ref{lem:ax}).
-	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, k, x, y, n, m, l \ldotp \\
-			i \neq j \land x = \alpha(j, k) \land y = \actalloc{i}{m}{l} \land (x, n) \in \tau \land (y, n+1) \in \tau \land (k < l \lor k \geq l + n) \\ \land\ \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \pred{swap}{\tau, (x, n), (y, n+1)}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-	\end{gather*}
-\end{lem}
-
-The final and simpler case is the one regarding one $\mathsf{id}$ transition. Given that by definition, $\actid{\iota}$ does not affect the global state but it is limited to label control flow reductions within transaction $\mathds{T}_\iota$, the relative order with respect to any other action performed by a different transaction does not matter.
-\begin{lem}
-	(Proof in \ref{lem:idx}).
-	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, x, y, n \ldotp \\
-			i \neq j \land x = \actid{i} \land y = \alpha(j) \land (x, n) \in \tau \land (y, n+1) \in \tau \\ \land\ \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \pred{swap}{\tau, (x, n), (y, n+1)}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-	\end{gather*}
-\end{lem}
-
-The semantically valid swap operations allowed on traces are summarized in the following table, where $\alpha$ and $\alpha'$ label two consecutive operations inside a program trace and the \textit{condition} is the sufficient requirement needed to perform the swap. 
-\newcolumntype{C}{>{$}c<{$}}
-\[\def\arraystretch{1.5}
-	\begin{tabular}{|C|C|C|}
-		\hline
-			\alpha
-			&
-			\alpha'
-			&
-			\text{Condition}
-			\\
-		\hline
-			\actid{i}
-			&
-			\actid{j}
-			&
-			\top
-			\\
-		\hline
-			\actid{i}
-			&
-			\actalloc{j}{n}{l}
-			&
-			\top
-			\\
-		\hline
-			\actid{i}
-			&
-			\actread{j}{k}{v}
-			&
-			\top
-			\\
-		\hline
-			\actid{i}
-			&
-			\actwrite{j}{k}{v}
-			&
-			\top
-			\\
-		\hline
-			\actid{i}
-			&
-			\actlock{j}{k}{\kappa}
-			&
-			\top
-			\\
-		\hline
-			\actid{i}
-			&
-			\actunlock{j}{k}
-			&
-			\top
-			\\
-		\hline
-			\actread{i}{k}{v}
-			&
-			\actread{j}{k'}{v'}
-			&
-			\top
-			\\
-		\hline
-			\actread{i}{k}{v}
-			&
-			\actwrite{j}{k'}{v'}
-			&
-			k \neq k'
-			\\
-		\hline
-			\actread{i}{k}{v}
-			&
-			\actlock{j}{k'}{\kappa}
-			&
-			k \neq k' \lor \kappa = \textsc{s}
-			\\
-		\hline
-			\actread{i}{k}{v}
-			&
-			\actunlock{j}{k'}
-			&
-			k \neq k' \lor \Phi(k) = (\{i, j\} \uplus I, \textsc{s})
-			\\
-		\hline
-			\actread{i}{k}{v}
-			&
-			\actalloc{j}{n}{l}
-			&
-			k < l \lor k \geq l + n
-			\\
-		\hline
-			\actwrite{i}{k}{v}
-			&
-			\actwrite{j}{k'}{v'}
-			&
-			k \neq k'
-			\\
-		\hline
-			\actwrite{i}{k}{v}
-			&
-			\actlock{j}{k'}{\kappa}
-			&
-			k \neq k'
-			\\
-		\hline
-			\actwrite{i}{k}{v}
-			&
-			\actunlock{j}{k'}
-			&
-			k \neq k'
-			\\
-		\hline
-			\actwrite{i}{k}{v}
-			&
-			\actalloc{j}{n}{l}
-			&
-			k < l \lor k \geq l + n
-			\\
-		\hline
-			\actalloc{i}{n}{l}
-			&
-			\actalloc{j}{n'}{l'}
-			&
-			\top
-			\\
-		\hline
-			\actalloc{i}{n}{l}
-			&
-			\actlock{j}{k}{\kappa}
-			&
-			k < l \lor k \geq l + n
-			\\
-		\hline
-			\actalloc{i}{n}{l}
-			&
-			\actunlock{j}{k}
-			&
-			k < l \lor k \geq l + n
-			\\
-		\hline
-			\actlock{i}{k}{\kappa}
-			&
-			\actlock{j}{k'}{\kappa'}
-			&
-			k \neq k' \lor \kappa = \kappa' = \textsc{s}
-			\\
-		\hline
-			\actlock{i}{k}{\kappa}
-			&
-			\actunlock{j}{k'}
-			&
-			k \neq k' \lor \kappa = \textsc{s}
-			\\
-		\hline
-			\actunlock{i}{k}
-			&
-			\actunlock{j}{k'}
-			&
-			k \neq k' \lor \Phi(k) = (\{i, j\} \uplus I, \textsc{s})
-			\\
-		\hline
-	\end{tabular}
-\]
