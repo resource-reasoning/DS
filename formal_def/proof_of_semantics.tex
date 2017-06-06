@@ -79,23 +79,31 @@ Program order \( \po \).
 To define trace and then program order, we first extend the labels used in the semantics.
 Each label has one extra parameter to record the thread that preforms the step, so the label looks like \( \lcommit{\thid,\tsid} \), \( \lfork{\thid,\thid',\prog} \) and \( \ljoin{\thid,\thid',\ts} \).
 
-\begin{defn}[Trace]
+\begin{defn}[Traces]
     Given a initial state \( \tshp \) and \( \tdpl \), a trace \( \trc \) is define as a tuple \( (\setlabels,<) \) that satisfies predicate \( \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat} \), for some number \( \nat \).
 \[
     \begin{rclarray}
-        \pred{trace}{\tshp,\tdpl,\setlabels,<,0} & \defeq & \setlabels = \emptyset \land < = \emptyset\\
-        \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat} & \defeq & \eixsts \tshp',\tdpl', \tll \ldotp (\tshp, \tdpl) \globaltransfer{\tll} (\tshp', \tdpl' ) \land ( \tll = \lid \implies \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat-1}  ) \land {} \\
-                                                    & & (\tll \neq \lid \implies \pred{trace}{\tshp,\tdpl,\setlabels \uplus \Set{\tll},<\uplus \Set{(\tll,\tll') \middle| \tll' \in \setlabels},\nat-1} )\\
+        \func{traces}(\tshp,\tdpl,0) & \defeq & \Set{(\emptyset, \emptyset,\tshp,\tdpl)} \\
+        \func{traces}(\tshp,\tdpl,\nat) & \defeq & \Set{(\setlabels,<,\tshp',\tdpl') \middle| (\tshp'', \tdpl'') \globaltransfer{\lid} (\tshp', \tdpl' ) \land (\setlabels,<,\tshp'',\tdpl'') \in \func{trace}(\tshp,\tdpl,\setlabels,<,\nat-1)} \\
+                                                    & & \uplus \Set{(\setlabels \uplus \Set{\tll} ,< \uplus \Set{(\tll',\tll) \middle| \tll' \in \setlabels}, \tshp',\tdpl') \middle| 
+        \begin{array}{@{}l@{}}
+            (\tshp'', \tdpl'') \globaltransfer{\tll} (\tshp', \tdpl' ) \land \tll \neq \lid \land {} \\
+            (\setlabels,<,\tshp'',\tdpl'') \in \func{trace}(\tshp,\tdpl,\setlabels,<,\nat-1)
+        \end{array}
+}  \\
     \end{rclarray}
 \]
 \end{defn}
 
 
-
 \begin{defn}[Program Order]
 \[ 
     \begin{rclarray}
-        \pred{programOrder}{\settrans, \po, \tshp, \tdpl,\nat} & \defeq & \forall \tsid \in \settrans \exists \tshp',\tshp'',\tdpl',\tdpl'' \ldotp \tshp,\tdpl \globaltransfer{}^{*} \tshp',\tdpl' \globaltransfer{}\\
+        \func{programOrder}(\setlabels, <) & \defeq & ( \settrans, \po ) \\
+        \settrans & \equiv & \Set{\tsid \middle| \lcmt{\thid,\tsid} \in \setlabels } \\
+        \po & \equiv & \Set{(\tsid, \tsid') \middle| \lcmt{\thid,\tsid} < \lcmt{\thid,\tsid'} } \\
+            & & \uplus \Set{(\tsid, \tsid') \middle| \lcmt{\thid,\tsid} < \lfork{\thid,\thid', \dontcare} < \lcmt{\thid',\tsid'} } \\
+            & & \uplus \Set{(\tsid, \tsid') \middle| \lcmt{\thid,\tsid} < \ljoin{\thid',\thid, \dontcare} < \lcmt{\thid',\tsid'} }
     \end{rclarray}
 \]
 \end{defn}
@@ -104,13 +112,13 @@ Each label has one extra parameter to record the thread that preforms the step, 
     Visibility and potential arbitration relations.
     \[
         \begin{rclarray}
-            \func{graph}(\settrans,\po,\tshp) & \defeq & (\settrans,\po,\vis,\tar) \\
-                                              & & \texttt{where} \ \vis \defeq \Set{(\tsid,\tsid') \in \settrans \middle| 
+            \func{graph}(\settrans,\tshp) & \defeq & (\vis,\tar) \\
+            \vis & \equiv & \Set{(\tsid,\tsid') \in \settrans \middle| 
             \begin{array}{@{}l@{}}
                 \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop,\eop}, \op' \in \Set{\rop,\sop} \ldotp \ts < \ts' \land {} \\
                 \tshp(\loc)(\ts) = (\dontcare, \op,\tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op',\tsid') 
             \end{array} } \\
-                                              & & \quad \qquad \tar \defeq \Set{(\tsid,\tsid')  \in \settrans \middle| 
+            \tar & \defeq & \Set{(\tsid,\tsid')  \in \settrans \middle| 
             \begin{array}{@{}l@{}}
                 \exists \loc, \loc', \ts, \ts', \op, \op' \in \Set{\wop,\eop} \ldotp \ts < \ts' \land {} \\
                 \tshp(\loc)(\ts) = (\dontcare, \op,\tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op',\tsid') 
@@ -119,8 +127,17 @@ Each label has one extra parameter to record the thread that preforms the step, 
     \]
 \end{defn}
 
+We will simple use notations \( (\settrans,\po,\vis,\tar) \) to refer an element of the set:
+\[
+    \Set{(\settrans,\po,\vis,\tar) \middle| 
+        \begin{array}{@{}l@{}}
+            (\settrans,\po) = \func{programOrder}(\setlabels,<) \land (\vis,\tar) = \func{graph}(\settrans,\tshp) \land {} \\
+            (\setlabels,<,\tshp,\tdpl) \in \bigcup\limits_{\nat \in \Nat}\func{traces}(\tshp',\tdpl',\nat)
+        \end{array}
+    } 
+\]
 \begin{lem}[Session]
-    \( \po \subseteq \vis \), for some \( \settrans \) and \( \tshp\), such that \( \func{graph}(\settrans,\po,\tshp) = (\settrans,\po,\vis,\dontcare ) \).
+    \( \po \subseteq \vis \).
 \end{lem}   
 \begin{proof}
     Given the definition of \( \func{sessionOrder} \), assume a sequence of \( \po_n \), each of which represents the result of the \( n \)-steps \(\func{sessionOrder} \), so \( \po = \bigcup\limits_{n} \po_n \land \forall n, n' \ldotp n < n' \implies \po_n \subseteq \po_{n'} \).
@@ -134,7 +151,7 @@ Each label has one extra parameter to record the thread that preforms the step, 
 
 \begin{lem}[prefix]
     \label{lem:prefix}
-    \( \tar; \vis \subseteq \vis \), for some \( \settrans, \po \) and \( \tshp\), such that \( \func{graph}(\settrans,\po,\tshp) = (\settrans,\po,\vis,\tar ) \).
+    \( \tar; \vis \subseteq \vis \).
 \end{lem}
 \begin{proof}
     For all \( \tsid, \tsid', \tsid'' \), if \( (\tsid, \tsid') \in \tar \) and \( (\tsid', \tsid'') \in \vis \), by the definitions of \( \po \) and \( \vis \), the commit time of \( \tsid' \) is greater than the one of \( \tsid \) but smaller than the start time of \( \tsid'' \).
@@ -144,7 +161,7 @@ Each label has one extra parameter to record the thread that preforms the step, 
 \begin{lem}[nocoflict]
     \label{lem:nocoflict}
     Two transactions cannot concurrently write to the same location, this means that one must observe another one.
-    This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid) \land  \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\), for some \( \settrans, \po \) and \( \tshp\), such that \( \func{graph}(\settrans,\po,\tshp) = (\settrans,\po,\vis,\dontcare ) \).
+    This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid) \land  \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\).
 \end{lem}
 \begin{proof}
     Prove by contradiction.
