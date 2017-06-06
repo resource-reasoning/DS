@@ -32,7 +32,72 @@
 \end{lem}
 
 \begin{lem}
-	\label{lem:alman} A lock on an item is not needed for any reductions a part from a read, a write or an unlock action performed by the same transaction on the same item.
+	\label{lem:lockRedundant}
+	Redundant exclusive lock operations present in a trace, can be converted to the corresponding shared equivalent without affecting the end storage.
+	\begin{gather*}
+		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, n, \iota, k, x \ldotp
+			\\
+		\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \pred{redundant}{\iota, k, \textsc{x}, \tau} \land x = (\actlock{\iota}{k}{\textsc{x}}, n)
+		\\ \land x \in \tau
+		\land \tau' = \pred{swap}{\tau, x, (\actlock{\iota}{k}{\textsc{s}}, n)}
+			\implies
+		\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
+	\end{gather*}
+	\begin{proof}
+	Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathds{Prog}, n \in \mathds{N}, \iota \in \mathsf{Tid}, k \in \mathsf{Key}, x \in \mathsf{Act} \times \mathds{N}$. We now assume that the following holds:
+	\begin{gather}
+		\label{lem:lockRedundant1}
+		\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}}
+		\land x = (\actlock{\iota}{k}{\textsc{x}}, n)
+		\land x \in \tau \\
+		\label{lem:lockRedundant2}
+		\land\ \pred{redundant}{\iota, k, \textsc{x}, \tau}
+		\land \tau' = \pred{swap}{\tau, x, (\actlock{\iota}{k}{\textsc{s}}, n)}
+	\end{gather}
+	The above means that by following the actions in $\tau$ we can generate the storage $h'$ starting from the $h, \Phi, S, \mathds{P}$ state and that the same $\tau$ includes an exclusive lock operation $x = \actlock{\iota}{k}{\textsc{x}}$ done by transaction $\iota$ on storage key $k$ which is redundant. This means that $\iota$ never writes to $k$ as part of $\tau$. The statement also expresses that there is a trace $\tau'$ which is equivalent to $\tau$ with operation $x$ converted into $\actlock{\iota}{k}{\textsc{s}}$.
+	
+	From (\ref{lem:lockRedundant1}) we know that there must be a reduction of the following shape, for $S' \in \mathsf{TState}, \alpha = x \downarrow_1$ and $\alpha' = \actunlock{\iota}{k}$:
+	\begin{gather}
+		\label{lem:lockRedundant3}
+		\begin{array}{c}
+			(h, \Phi, S, \mathds{P})
+				\rightarrow^*
+			(h_l, \Phi_l, S_l, \mathds{P}_l)
+				\xrightarrow{\alpha}
+			(h_l', \Phi_l', S_l', \mathds{P}_l')
+				\rightarrow^* \\
+			(h_a, \Phi_a, S_a, \mathds{P}_a)
+				\xrightarrow{\dot{\alpha}}
+			(h_a', \Phi_a', S_a', \mathds{P}_a')
+				\rightarrow^* \\
+			(h_u, \Phi_u, S_u, \mathds{P}_u)
+				\xrightarrow{\alpha'}
+			(h_u', \Phi_u', S_u', \mathds{P}_u')
+				\rightarrow^*
+			(h', \emptyset, S', \pskip)
+		\end{array}
+	\end{gather}
+	Given the fact that $x$ acquires an exclusive lock on $k$, it must be the case that $\Phi_l'(k) = (\{\iota\}, \textsc{x})$. From (\ref{lem:lockRedundant3}) we obtain that all actions that accesses $k$ done by transaction $\iota$, i.e. $\dot{\alpha}$, must occur in the reduction sequence:
+	\begin{gather}
+		\label{lem:lockRedundant4}
+		(h_l', \Phi_l', S_l', \mathds{P}_l') \rightarrow^* (h_u, \Phi_u, S_u, \mathds{P}_u)
+	\end{gather}
+	Let's now convert action $\alpha$ into $\actlock{\iota}{k}{\textsc{s}}$, making $\Phi_l'(k) = (\{\iota\}, \textsc{s})$. From Lemma \ref{lem:alman} we know that the only actions in the reductions (\ref{lem:lockRedundant4}) that need the presence of a lock introduced on $k$ are $\dot{\alpha} \in \{ \actread{\iota}{k}{v}, \actwrite{\iota}{k}{v}, \actunlock{\iota}{k} \}$. Given that $\alpha' = \actunlock{\iota}{k}$ and a single transaction can only unlock a particular cell once, there cannot be an unlock operation on $k$ which happens as part of the sequence of reductions in (\ref{lem:lockRedundant4}). It follows that $\dot{\alpha} \neq \actunlock{\iota}{k}$ and $\Phi_a(k) = \Phi_l' = (\{\iota\}, \textsc{s})$.
+	\begin{enumerate}
+		\item From (\ref{lem:lockRedundant2}) and the definition of $\mathsf{redundant}$ we know that $\dot{\alpha}$ cannot be $\actwrite{\iota}{k}{v}$.
+		
+		\item If $\dot{\alpha} = \actread{\iota}{k}{v}$ then all it is required for this transition to succeed is for $k \in \pred{dom}{h}$ which must hold from the fact that $\dot{\alpha}$ suceeded in $\tau$ and $\iota \in I$ for $(I, \kappa) = \Phi_a(k)$ which we know holds since $\Phi_a(k) = (\{\iota\}, \textsc{s}$.
+	\end{enumerate}
+	We have proven that we can reach program state $(h_u, \Phi_u, S_u, \mathds{P}_u)$ even by replacing the original $\alpha$ with $\actlock{\iota}{k}{\textsc{s}}$, i.e. by following the actions in $\tau'$. Now $\alpha'$ can always reduce since it needs $\iota \in I$ for $\Phi_u(k) = (I, \textsc{s})$ which will be the case since the new $\alpha$ added a lock on $k$ and no unlock operation removed it since. From program state $(h_u', \Phi_u', S_u', \mathds{P}_u')$ we can follow the rest of the actions in $\tau'$ which in this part will be equivalent to the ones in $\tau$ to reach the final state $(h', \emptyset, S', \pskip)$. From the definition of $\mathsf{tgen}$ the following must hold:
+	\[
+		\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
+	\]
+	\end{proof}
+\end{lem}
+
+\begin{lem}
+	\label{lem:alman}
+	A lock on an item is not needed for any reductions a part from a read, a write or an unlock action performed by the same transaction on the same item.
 	\begin{gather*}
 		\forall \mathds{P}, \mathds{P}', h, h', \Phi, \Phi', S, S', \alpha, i, k, v, I, \kappa \ldotp \\
 		(h, \Phi, S, \mathds{P}) \xrightarrow{\alpha} (h', \Phi', S', \mathds{P}')
@@ -89,177 +154,6 @@
 				\item If $k = k'$ then from (\ref{lem:alman1}) we know that $\alpha$ succesfully reduced meaning that $i$ and $j$ were holding the lock at the same time, making $\kappa = \textsc{s}, \kappa' = \textsc{s}, \kappa'' = \textsc{s}$ and $I' = I \setminus \{ i, j \}$.
 			\end{itemize}
 	\end{itemize}
-	\end{proof}
-\end{lem}
-
-\begin{lem}
-	\label{lem:rr}
-	The order of two consecutive reads can be swapped as long as the transactions performing them are distinct.
-	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, k, k', v, v', \alpha, \alpha', n \ldotp \\
-		i \neq j \land \alpha = \actread{i}{k}{v} \land \alpha' = \actread{j}{k'}{v'} \land (\alpha, n) \in \tau \land (\alpha', n+1) \in \tau \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(\alpha, n), (\alpha', n+1)\} \cup \{ (\alpha, n+1), (\alpha', n) \}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-	\end{gather*}
-	\begin{proof}
-	Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathsf{Prog}, i, j \in \mathsf{Tid}, k, k' \in \mathsf{Key}, v, v' \in \mathsf{Val}, \alpha, \alpha' \in \mathsf{Act}, n \in \mathds{N}$. We assume that the following holds:
-	\begin{gather*}
-		i \neq j \land \alpha = \actread{i}{k}{v} \land \alpha' = \actread{j}{k'}{v'} \land (\alpha, n) \in \tau \land (\alpha', n+1) \in \tau \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(\alpha, n), (\alpha', n+1)\} \cup \{ (\alpha, n+1), (\alpha', n) \}
-	\end{gather*}
-	The above means that the two transactions performing the consecutive read actions $\alpha$ and $\alpha'$ are distinct and in $\tau$. Also, $\tau'$ is equivalent to $\tau$ with the $\alpha$ and $\alpha'$ actions swapped. From the definition of $\mathsf{tgen}$ we know that following the actions in $\tau$ we obtain the following:
-	\begin{gather}
-		\label{lem:rr1} (h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_0, \Phi_0, S_0, \mathds{P}_0) \\
-		\label{lem:rr2} \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S, \pskip)
-	\end{gather}
-	It is now required to show that trace $\tau'$ is executing the following:
-	\[
-		(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha'} (h_0', \Phi_0', S_0', \mathds{P}_0') \xrightarrow{\alpha} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)
-	\]
-	Since $i \neq j$ we know that the two action labels $\alpha$ and $\alpha'$ were produced by the two transactions running in parallel executing a single step each meaning we can write $\mathds{P}_1 = \mathds{P}_i \| \mathds{P}_j$ (or equivalently $\mathds{P}_j \| \mathds{P}_i$) for some $\mathds{P}_i, \mathds{P}_j \in \mathsf{Prog}$. It follows that $\mathds{P}_2 = \mathds{P}_i' \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_i) \xrightarrow{\alpha} (h_0, \Phi_0, S_0, \mathds{P}_i')$ and $(h_0, \Phi_0, S_0, \mathds{P}_j) \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_j')$. Given the effect of the $\mathsf{read}$ action, we know that $h_1 = h_0 = h_2, \Phi_1 = \Phi_0 = \Phi_2$. We can immediately find a $h_0' = h_1 = h_2$ and a $\Phi_0' = \Phi_1 = \Phi_2$. $\mathds{P}_0'$ will be the program $\mathds{P}_1$ that has executed a step in the program where transaction $j$ resides, formally $\mathds{P}_0' = \mathds{P}_i \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_j) \xrightarrow{\alpha'} (h_0', \Phi_0', S_0', \mathds{P}_j')$. We know that this will always succeed since the $\mathsf{read}$ action requirements on $h_0, \Phi_0$ are all satisfied by (\ref{lem:rr2}). From this, $\mathds{P}_0'$ can always reduce to $\mathds{P}_2$ by chosing to run the program in which transaction $i$ is, i.e. $\mathds{P}_i$ as part of $(h_0', \Phi_0', S_0', \mathds{P}_i) \xrightarrow{\alpha} (h_2, \Phi_2, S_2, \mathds{P}_i')$, which is possible thanks to the assumption in (\ref{lem:rr1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the updates to the local variables does not matter.
-	\end{proof}
-\end{lem}
-
-\begin{lem}
-	\label{lem:rwlu}
-	The order of two consecutive read, write, lock or unlock operations can be swapped as long as the transactions performing them are distinct and the keys they refer to are different.
-	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, k, k', x, y, n \ldotp \\
-			i \neq j \land x = \alpha(i, k) \land y = \alpha(j, k') \land k \neq k' \land (x, n) \in \tau \land (y, n+1) \in \tau \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(x, n), (y, n+1)\} \cup \{ (x, n+1), (y, n) \}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-	\end{gather*}
-	\begin{proof}
-	Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathsf{Prog}, i, j \in \mathsf{Tid}, k, k' \in \mathsf{Key}, x, y \in \mathsf{Act}, n \in \mathds{N}$. We assume that the following holds:
-	\begin{gather}
-		i \neq j \land x = \alpha(i, k) \land y = \alpha(j, k') \land (x, n) \in \tau \land (y, n+1) \in \tau \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(x, n), (y, n+1)\} \cup \{ (x, n+1), (y, n) \}
-	\end{gather}
-	The above means that the two transactions performing the consecutive actions $x$ and $y$ are distinct and in $\tau$. Also, $\tau'$ is equivalent to $\tau$ with the $x$ and $y$ actions swapped. From the definition of $\mathsf{tgen}$ we know that following the actions in $\tau$ we obtain the following:
-	\begin{gather}
-		\label{lem:xy1} (h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{x} (h_0, \Phi_0, S_0, \mathds{P}_0) \\
-		\label{lem:xy2} \xrightarrow{y} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S, \pskip)
-	\end{gather}
-	It is now required to show that trace $\tau'$ is executing the following:
-	\[
-		(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{y} (h_0', \Phi_0', S_0', \mathds{P}_0') \xrightarrow{x} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)
-	\]
-	Since $i \neq j$ we know that the two action labels $x$ and $y$ were produced by the two transactions running in parallel executing a single step each meaning we can write $\mathds{P}_1 = \mathds{P}_i \| \mathds{P}_j$ (or equivalently $\mathds{P}_j \| \mathds{P}_i$) for some $\mathds{P}_i, \mathds{P}_j \in \mathsf{Prog}$. It follows that $\mathds{P}_2 = \mathds{P}_i' \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_i) \xrightarrow{x} (h_0, \Phi_0, S_0, \mathds{P}_i')$ and $(h_0, \Phi_0, S_0, \mathds{P}_j) \xrightarrow{y} (h_2, \Phi_2, S_2, \mathds{P}_j')$. We will proceed with a case-by-case analysis on $x$ and $y$ in order to find suitable $h_0'$ and $\Phi_0'$.
-	\begin{itemize}
-		\item If $x = \actread{i}{k}{v}$ and $y = \actread{j}{k'}{v'}$ for $v, v' \in \mathsf{Val}$ then the result follows directly from Lemma \ref{lem:rr}.
-		
-		\item If $x = \actwrite{i}{k}{v}$ and $y = \actwrite{j}{k'}{v'}$ for $v, v' \in \mathsf{Val}$ then $h_2 = h_1[k \mapsto v][k' \mapsto v']$ since $k \neq k'$ and $\Phi_2 = \Phi_1$ meaning we can find $h_0' = h_1[k \mapsto v']$ and $\Phi_0' = \Phi_1$.
-		
-		\item If $x = \actread{i}{k}{v}$ and $y = \actwrite{j}{k'}{v'}$ for $v, v' \in \mathsf{Val}$ then $h_2 = h_1[k' \mapsto v']$ and $\Phi_2 = \Phi_1$ meaning we can find $h_0' = h_1[k' \mapsto v']$ and $\Phi_0' = \Phi_1$.
-		
-		\item If $x = \actlock{i}{k}{\kappa}$ and $y = \actunlock{j}{k'}$ for $\kappa \in \mathsf{Lock}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1[k \mapsto (I, \kappa)][k' \mapsto (I' \setminus \{j\}, \kappa')]$ since $k \neq k'$ for $I, I' \in \mathcal{P}(\mathsf{Tid})$ and $\kappa' \in \mathsf{Lock}$, meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1[k' \mapsto (I' \setminus \{j\}, \kappa')]$.
-		
-		\item If $x = \actlock{i}{k}{\kappa}$ and $y = \actlock{j}{k'}{\kappa'}$ for $\kappa, \kappa' \in \mathsf{Lock}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1[k \mapsto (I, \kappa)][k' \mapsto (I', \kappa')]$ since $k \neq k'$ for $I, I' \in \mathcal{P}(\mathsf{Tid})$ meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1[k' \mapsto (I', \kappa')]$.
-		
-		\item If $x = \actunlock{i}{k}$ and $y = \actunlock{j}{k'}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1[k \mapsto (I \setminus \{i\}, \kappa)][k' \mapsto (I' \setminus \{j\}, \kappa')]$ since $k \neq k'$ for $I, I' \in \mathcal{P}(\mathsf{Tid})$ and $\kappa, \kappa' \in \mathsf{Lock}$, meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1[k' \mapsto (I' \setminus \{j\}, \kappa')]$.
-		
-		\item If $x = \actlock{i}{k}{\kappa}$ and $y = \actread{j}{k'}{v}$ for $\kappa \in \mathsf{Lock}$ and $v \in \mathsf{Val}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1[k \mapsto (I, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1$.
-		
-		\item If $x = \actlock{i}{k}{\kappa}$ and $y = \actwrite{j}{k'}{v}$ for $\kappa \in \mathsf{Lock}$ and $v \in \mathsf{Val}$ then $h_2 = h_1[k' \mapsto v]$ and $\Phi_2 = \Phi_1[k \mapsto (I, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_0' = h_1[k \mapsto v]$ and $\Phi_0' = \Phi_1$.
-		
-		\item If $x = \actunlock{i}{k}$ and $y = \actread{j}{k'}{v}$ for $v \in \mathsf{Val}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1[k \mapsto (I \setminus \{j\}, \kappa)]$ for $\kappa \in \{\textsc{u}, \textsc{s}\}$ and $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1$.
-		
-		\item If $x = \actunlock{i}{k}$ and $y = \actwrite{j}{k'}{v}$ for $v \in \mathsf{Val}$ then $h_2 = h_1[k' \mapsto v]$ and $\Phi_2 = \Phi_1[k \mapsto (I \setminus \{j\}, \kappa)]$ for $\kappa \in \{\textsc{u}, \textsc{s}\}$ and $I \in \mathcal{P}(\mathsf{Tid})$, meaning we can find $h_0' = h_1[k \mapsto v]$ and $\Phi_0' = \Phi_1$.
-	\end{itemize}
-	The inverted cases that are not included in the list can be trivially found as a consequence of the presented ones, with the appropriate substitions.
-	
-	From (\ref{lem:xy1}) we obtain that $\mathds{P}_0'$ is the program $\mathds{P}_1$ that has executed a step in the program where transaction $j$ resides, formally $\mathds{P}_0' = \mathds{P}_i \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_j) \xrightarrow{y} (h_0', \Phi_0', S_0', \mathds{P}_j')$. We know that this will always succeed since the actions act on disjoint parts of the global heap and lock manager, as showed in the case-by-case analysis above, meaning that their requirements are all satisfied by (\ref{lem:xy2}). From this, $\mathds{P}_0'$ can always reduce to $\mathds{P}_2$ by chosing to run the program in which transaction $i$ is, i.e. $\mathds{P}_i$ as part of $(h_0', \Phi_0', S_0', \mathds{P}_i) \xrightarrow{x} (h_2, \Phi_2, S_2, \mathds{P}_i')$, which is possible thanks to the assumption in (\ref{lem:xy1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the eventual updates to the local variables does not matter.
-	\end{proof}
-\end{lem}
-
-\begin{lem}
-	\label{lem:aa}
-	The order of two consecutive allocations can be swapped as long as the transactions performing them are distinct.
-	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, m, m', l, l', \alpha, \alpha', n \ldotp \\
-			i \neq j \land \alpha = \actalloc{i}{m}{l} \land \alpha' = \actalloc{j}{m'}{l'} \land (\alpha, n) \in \tau \land (\alpha', n+1) \in \tau \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(\alpha, n), (\alpha', n+1)\} \cup \{ (\alpha, n+1), (\alpha', n) \}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-	\end{gather*}
-	\begin{proof}
-	Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathsf{Prog}, i, j \in \mathsf{Tid}, l, l' \in \mathsf{Key}, \alpha, \alpha' \in \mathsf{Act}, n, m, m' \in \mathds{N}$. We assume that the following holds:
-	\begin{gather}
-		i \neq j \land \alpha = \actalloc{i}{m}{l} \land \alpha' = \actalloc{j}{m'}{l'} \land (\alpha, n) \in \tau \land (\alpha', n+1) \in \tau \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(\alpha, n), (\alpha', n+1)\} \cup \{ (\alpha, n+1), (\alpha', n) \}
-	\end{gather}
-	The above means that the two transactions performing the consecutive allocation actions $\alpha$ and $\alpha'$ are distinct and in $\tau$. Also, $\tau'$ is equivalent to $\tau$ with the $\alpha$ and $\alpha'$ actions swapped. From the definition of $\mathsf{tgen}$ we know that following the actions in $\tau$ we obtain the following:
-	\begin{gather}
-		\label{lem:aa1} (h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_0, \Phi_0, S_0, \mathds{P}_0) \\
-		\label{lem:aa2} \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S, \pskip)
-	\end{gather}
-	It is now required to show that trace $\tau'$ is executing the following:
-	\[
-		(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha'} (h_0', \Phi_0', S_0', \mathds{P}_0') \xrightarrow{\alpha} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)
-	\]
-	Since $i \neq j$ we know that the two action labels $\alpha$ and $\alpha'$ were produced by the two transactions running in parallel executing a single step each meaning we can write $\mathds{P}_1 = \mathds{P}_i \| \mathds{P}_j$ (or equivalently $\mathds{P}_j \| \mathds{P}_i$) for some $\mathds{P}_i, \mathds{P}_j \in \mathsf{Prog}$. It follows that $\mathds{P}_2 = \mathds{P}_i' \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_i) \xrightarrow{\alpha} (h_0, \Phi_0, S_0, \mathds{P}_i')$ and $(h_0, \Phi_0, S_0, \mathds{P}_j) \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_j')$. Given the effect of the $\mathsf{alloc}$ action, we know that $\Phi_2 = \Phi_1 = \Phi_0$. We can immediately find a $\Phi_0' = \Phi_1 = \Phi_2$. We also know that $\{l, \ldots, l + n - 1\} \subseteq \pred{dom}{h_0}$ and in order for $\actalloc{j}{n'}{l'}$ to suceed, which it does by (\ref{lem:aa2}), $\{l', \ldots, l' + n' - 1\} \cap \pred{dom}{h_0} \equiv \emptyset$ which means that the two ranges of memory locations are disjoint. As a consequence the order of allocation does not matter in terms of reaching the final heap $h_2$; our $h_0'$ will therefore be $h_1[l' \mapsto 0]\ldots[l' + n' - 1 \mapsto 0]$. $\mathds{P}_0'$ will be the program $\mathds{P}_1$ that has executed a step in the program where transaction $j$ resides, formally $\mathds{P}_0' = \mathds{P}_i \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_j) \xrightarrow{\alpha'} (h_0', \Phi_0', S_0', \mathds{P}_j')$. We know that this will always succeed since the $\mathsf{alloc}$ action requirements are all satisfied by (\ref{lem:aa2}). From this, $\mathds{P}_0'$ can always reduce to $\mathds{P}_2$ by chosing to run the program in which transaction $i$ is, i.e. $\mathds{P}_i$ as part of $(h_0', \Phi_0', S_0', \mathds{P}_i) \xrightarrow{\alpha} (h_2, \Phi_2, S_2, \mathds{P}_i')$, which is possible thanks to the assumption in (\ref{lem:aa1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the updates to the local variables does not matter.
-	\end{proof}
-\end{lem}
-
-\begin{lem}
-	\label{lem:ax}
-	The order of an allocation followed by a read, write, lock or unlock can be swapped as long as the transactions performing them are distinct and the keys accessed are not part of the ones created by the allocation.
-	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, k, x, y, n, m, l \ldotp \\
-			i \neq j \land x = \alpha(j, k) \land y = \actalloc{i}{m}{l} \land (x, n) \in \tau \land (y, n+1) \in \tau \land (k < l \lor k \geq l + n) \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(x, n), (y, n+1)\} \cup \{ (x, n+1), (y, n) \}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-	\end{gather*}
-	\begin{proof}
-	Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathsf{Prog}, i, j \in \mathsf{Tid}, k, l \in \mathsf{Key}, x, y \in \mathsf{Act}, n, m \in \mathds{N}$. We assume that the following holds:
-	\begin{gather*}
-		i \neq j \land x = \alpha(j, k) \land y = \actalloc{i}{m}{l} \land (x, n) \in \tau \land (y, n+1) \in \tau \land (k < l \lor k \geq l + n) \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(x, n), (y, n+1)\} \cup \{ (x, n+1), (y, n) \}
-	\end{gather*}
-	The above means that the two transactions performing the consecutive actions $x$ and $y$ are distinct and in $\tau$. Also, $\tau'$ is equivalent to $\tau$ with the $x$ and $y$ actions swapped. From the definition of $\mathsf{tgen}$ we know that following the actions in $\tau$ we obtain the following:
-	\begin{gather}
-		\label{lem:ax1} (h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{x} (h_0, \Phi_0, S_0, \mathds{P}_0) \\
-		\label{lem:ax2} \xrightarrow{y} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S, \pskip)
-	\end{gather}
-	It is now required to show that trace $\tau'$ is executing the following:
-	\[
-		(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{y} (h_0', \Phi_0', S_0', \mathds{P}_0') \xrightarrow{x} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)
-	\]
-	Since $i \neq j$ we know that the two action labels $x$ and $y$ were produced by the two transactions running in parallel executing a single step each meaning we can write $\mathds{P}_1 = \mathds{P}_i \| \mathds{P}_j$ (or equivalently $\mathds{P}_j \| \mathds{P}_i$) for some $\mathds{P}_i, \mathds{P}_j \in \mathsf{Prog}$. It follows that $\mathds{P}_2 = \mathds{P}_i' \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_i) \xrightarrow{x} (h_0, \Phi_0, S_0, \mathds{P}_i')$ and $(h_0, \Phi_0, S_0, \mathds{P}_j) \xrightarrow{y} (h_2, \Phi_2, S_2, \mathds{P}_j')$. Given the effect of the $\mathsf{alloc}$ action, we know that $\Phi_2 = \Phi_1 = \Phi_0$. Given the effect of the $\mathsf{alloc}$ action, we know that $\Phi_2 = \Phi_1 = \Phi_0$ and $h_0 = h_1[l \mapsto 0]\ldots[l + n - 1 \mapsto 0]$. In order to find $h_0'$ and $\Phi_0'$, we now proceed with a case-by-case analysis on the kind of action $x$.
-	\begin{itemize}
-		\item If $x = \actread{j}{k}{v}$ for $v \in \mathsf{Val}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1$ meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1$.
-		
-		\item If $x = \actwrite{j}{k}{v}$ for $v \in \mathsf{Val}$ then $h_2 = h_1[k \mapsto v]$ and $\Phi_2 = \Phi_1$ meaning we can find $h_0' = h_1[k \mapsto v]$ and $\Phi_0' = \Phi_1$.
-		
-		\item If $x = \actlock{j}{k}{\kappa}$ for some $\kappa \in \mathsf{Lock}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1[k \mapsto (I, \kappa)]$ meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1[k \mapsto (I, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$.
-		
-		\item If $x = \actunlock{j}{k}$ then $h_2 = h_1$ and $\Phi_2 = \Phi_1[k \mapsto (I \setminus \{j\}, \kappa)]$ for $I \in \mathcal{P}(\mathsf{Tid})$ and $\kappa \in \{\textsc{u}, \textsc{s}\}$ meaning we can find $h_0' = h_1$ and $\Phi_0' = \Phi_1[k \mapsto (I \setminus \{j\}, \kappa)]$.
-	\end{itemize}
-	$\mathds{P}_0'$ will be the program $\mathds{P}_1$ that has executed a step in the program where transaction $j$ resides, formally $\mathds{P}_0' = \mathds{P}_i \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_j) \xrightarrow{y} (h_0', \Phi_0', S_0', \mathds{P}_j')$. We know that this will always succeed since the $\mathsf{alloc}$ action requirements are all satisfied by (\ref{lem:ax2}). From this, $\mathds{P}_0'$ can always reduce to $\mathds{P}_2$ by chosing to run the program in which transaction $i$ is, i.e. $\mathds{P}_i$ as part of $(h_0', \Phi_0', S_0', \mathds{P}_i) \xrightarrow{x} (h_2, \Phi_2, S_2, \mathds{P}_i')$, which is possible thanks to the assumption in (\ref{lem:ax1}). Given that by assumption $i \neq j$, it must be the case that $S(i)$ and $S(j)$ are disjoint therefore the relative ordering on the updates to the local variables does not matter.
-	\end{proof}
-\end{lem}
-
-	\begin{lem}
-		\label{lem:idx}
-		The order of an $\mathsf{id}$ operation followed by any other action performed by a different transaction can be swapped.
-	\begin{gather*}
-		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, i, j, x, y, n \ldotp \\
-			i \neq j \land x = \actid{i} \land y = \alpha(j) \land (x, n) \in \tau \land (y, n+1) \in \tau \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(x, n), (y, n+1)\} \cup \{ (x, n+1), (y, n) \}
-			\\	 
-		 \implies \pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
-	\end{gather*}
-	\begin{proof}
-	Let's pick arbitrary $\tau, \tau' \in [\mathsf{Act} \times \mathds{N}], h, h' \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathsf{Prog}, i, j \in \mathsf{Tid}, x, y \in \mathsf{Act}, n \in \mathds{N}$. We assume that the following holds:
-	\begin{gather*}
-		i \neq j \land x = \actid{i} \land y = \alpha(j) \land (x, n) \in \tau \land (y, n+1) \in \tau \land (k < l \lor k \geq l + n) \\ \land \pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \tau' = \tau \setminus \{(x, n), (y, n+1)\} \cup \{ (x, n+1), (y, n) \}
-	\end{gather*}
-	The above means that the two transactions performing the consecutive actions $x$ and $y$ are performed by distinct transactions and in $\tau$. Also, $\tau'$ is equivalent to $\tau$ with the $x$ and $y$ actions swapped. From the definition of $\mathsf{tgen}$ we know that following the actions in $\tau$ we obtain the following:
-	\begin{gather}
-		\label{lem:idx1} (h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{x} (h_0, \Phi_0, S_0, \mathds{P}_0) \\
-		\label{lem:idx2} \xrightarrow{y} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S, \pskip)
-	\end{gather}
-	It is now required to show that trace $\tau'$ is executing the following:
-	\[
-		(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{y} (h_0', \Phi_0', S_0', \mathds{P}_0') \xrightarrow{x} (h_2, \Phi_2, S_2, \mathds{P}_2) \rightarrow^* (h', \emptyset, S', \pskip)
-	\]
-	Since $i \neq j$ we know that the two action labels $x$ and $y$ were produced by the two transactions running in parallel executing a single step each meaning we can write $\mathds{P}_1 = \mathds{P}_i \| \mathds{P}_j$ (or equivalently $\mathds{P}_j \| \mathds{P}_i$) for some $\mathds{P}_i, \mathds{P}_j \in \mathsf{Prog}$. It follows that $\mathds{P}_2 = \mathds{P}_i' \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_i) \xrightarrow{x} (h_0, \Phi_0, S_0, \mathds{P}_i')$ and $(h_0, \Phi_0, S_0, \mathds{P}_j) \xrightarrow{y} (h_2, \Phi_2, S_2, \mathds{P}_j')$. Given the effect of the $\mathsf{id}$ action, we know that $h_1 = h_0, \Phi_1 = \Phi_0, S_1 = S_0$ meaning that $y$ reduced succesfully as per (\ref{lem:idx2}), with a configuration equivalent to the one after $x$ reduced. It follows that we can find $h_0' = h_1, \Phi_0' = \Phi_1, S_0' = S_1$.
-	
-	$\mathds{P}_0'$ will be the program $\mathds{P}_1$ that has executed a step in the program where transaction $j$ resides, formally $\mathds{P}_0' = \mathds{P}_i \| \mathds{P}_j'$ for $(h_1, \Phi_1, S_1, \mathds{P}_j) \xrightarrow{y} (h_0', \Phi_0', S_0', \mathds{P}_j')$. We know that this will always succeed since the $\mathsf{alloc}$ action requirements are all satisfied by (\ref{lem:idx2}). From this, $\mathds{P}_0'$ can always reduce to $\mathds{P}_2$ by chosing to run the program in which transaction $i$ is, i.e. $\mathds{P}_i$ as part of $(h_0', \Phi_0', S_0', \mathds{P}_i) \xrightarrow{x} (h_2, \Phi_2, S_2, \mathds{P}_i')$, which is possible thanks to the assumption in (\ref{lem:idx1}).
 	\end{proof}
 \end{lem}
 

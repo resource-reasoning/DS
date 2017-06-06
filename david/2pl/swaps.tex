@@ -31,14 +31,25 @@ In order for the \tpl\ operational semantics to model any kind of two phase lock
 \end{defn}
 
 \begin{defn}
+	(Redundant lock).
+	A lock in mode $\kappa$ on cell $k$ done by transaction $\iota$ as part of trace $\tau$ is \emph{redundant} if and only if $\kappa$ is exclusive and every time $\iota$ accesses $k$, it does so only to read.
+	\begin{gather*}
+		\pred{redundant}{\iota, k, \kappa, \tau}
+			\iff \\
+		\left( \kappa = \textsc{x} \land \forall v, n \ldotp \alpha = \alpha(\iota, k) \land (\alpha, n) \in \tau \implies \alpha = \actread{\iota}{k}{v} \right)
+	\end{gather*}
+\end{defn}
+
+\begin{defn}
 	(Clean trace).
 	A trace is \emph{clean} if and only if its transactions do not lock or unlock any absent cell.
-	\[
-		\pred{clean}{\tau} \iff \forall \iota, k, \kappa, n \ldotp
-		\left( (\actlock{\iota}{k}{\kappa}, n) \in \tau \lor (\actunlock{\iota}{k}, n) \in \tau \right)
+	\begin{gather*}
+		\pred{clean}{\tau} \iff \\
+		\forall \iota, k, \kappa, n \ldotp
+		\left( (\actlock{\iota}{k}{\kappa}, n) \in \tau \lor (\actunlock{\iota}{k}, n) \in \tau \right) \\
 			\implies
-		\lnot \pred{absent}{\iota, k, \tau}
-	\]
+		\pred{needed}{\iota, k, \kappa, \tau} \land \lnot \pred{redundant}{\iota, k, \kappa, \tau}
+	\end{gather*}
 \end{defn}
 
 \begin{center}
@@ -97,8 +108,22 @@ It is now possible to show that any trace $\tau$ that contains a spurious lock (
 	\begin{gather*}
 		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, n, n', \iota, k, \kappa, x, y \ldotp
 			\\
-		\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land  \pred{absent}{\iota, k, \tau} \land x = (\actlock{\iota}{k}{\kappa}, n) \land y = (\actunlock{\iota}{k}, n') \\ \land x \in \tau \land y \in \tau
+		\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \pred{absent}{\iota, k, \tau} \land x = (\actlock{\iota}{k}{\kappa}, n) \land y = (\actunlock{\iota}{k}, n') \\ \land x \in \tau \land y \in \tau
 		\land \tau' = \tau \setminus \{ x, y \}
+			\implies
+		\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
+	\end{gather*}
+\end{lem}
+
+\begin{lem}
+	(Proof in \ref{lem:lockRedundant}).
+	Redundant exclusive lock operations present in a trace, can be converted to the corresponding shared equivalent without affecting the end storage.
+	\begin{gather*}
+		\forall \tau, \tau', h, h', \Phi, S, \mathds{P}, n, \iota, k, \kappa, x \ldotp
+			\\
+		\pred{tgen}{\tau, h, h', \Phi, S, \mathds{P}} \land \pred{redundant}{\iota, k, \kappa, \tau} \land x = (\actlock{\iota}{k}{\kappa}, n)
+		\\ \land x \in \tau
+		\land \tau' = \pred{swap}{\tau, x, (\actlock{\iota}{k}{\textsc{s}}, n)}
 			\implies
 		\pred{tgen}{\tau', h, h', \Phi, S, \mathds{P}}
 	\end{gather*}
@@ -127,7 +152,7 @@ The proof uses another important property of operations inside a trace which is 
 	\end{gather*}
 \end{lem}
 
-Once a trace is clean, we can proceed to manipulate it and, under certain cases, swap the order of its operations. Repeating this process, will give us a new trace, syntactically different but semantically equivalent, as observed by its effects on the global heap. This is what we are interested in, given our requirement of simulating a serial trace. Whenever in the following definitions we encounter a term of the shape $\alpha(\iota)$ or $\alpha(\iota, k)$ we actually mean the first projection of their operation-level equivalent, i.e. $op(\iota) \downarrow_1$ and $op(\iota, k) \downarrow_1$ respectively.
+Once a trace is clean, we can proceed to manipulate it and, under certain circumstances, swap the order of its operations. Repeating this process, will give us a new trace, syntactically different but semantically equivalent, as observed by its effects on the global heap. This is what we are interested in, given our requirement of simulating a serial trace. Whenever in the following definitions we encounter a term of the shape $\alpha(\iota)$ or $\alpha(\iota, k)$ we actually mean the first projection of their operation-level equivalent, i.e. $op(\iota) \downarrow_1$ and $op(\iota, k) \downarrow_1$ respectively.
 
 \begin{defn}
 	(Swapped trace).
@@ -165,7 +190,8 @@ The semantically valid swap operations allowed on traces are summarized in the f
 \end{center}
 
 \begin{lem}
-	(Swap rules).
+	\label{lem:swapT}
+	(Feasible swap rules).
 	\begin{gather*}
 		\forall
 			\alpha, \alpha',
@@ -185,7 +211,9 @@ The semantically valid swap operations allowed on traces are summarized in the f
 			\land
 		\lnot \left( \alpha = \actunlock{i}{k}
 			\land
-		\alpha' = \actlock{j}{k}{\kappa} \right)
+		\alpha' = \actlock{j}{k}{\kappa}
+			\land
+		\Phi_a(k) \downarrow_2 = \textsc{x} \right)
 			\land
 		\alpha = \alpha(i)
 			\land
@@ -279,6 +307,14 @@ The semantically valid swap operations allowed on traces are summarized in the f
 		\]
 		We can therefore pick $h_b = h', \Phi_b = \Phi'$ and $\mathds{P}_b = \dot{\mathds{P}}$.
 		
+		\item If $\alpha = \actunlock{i}{k}$ and $\alpha' = \actlock{j}{k'}{\kappa}$ then from (\ref{lem:swapT2}) it must either be the case that $k \neq k'$ or $k = k'$ and $\Phi(k) = (\{i\} \uplus I, \textsc{s})$. From (\ref{lem:swapT1}) we get that $\kappa = \textsc{s}$ in the case of $k = k'$.
+		\begin{itemize}
+			\item If $k \neq k'$ then we can always find $\Phi_b = \Phi[k' \mapsto (\{j\} \uplus I', \kappa)]$ for $(I', \kappa') = \Phi(k'), j \not\in I$ and $\kappa' \leq \textsc{s}$
+			
+			\item If $k = k'$ and $\Phi(k) = (\{i\} \uplus I, \textsc{s})$ and $\kappa = \textsc{s}$ then $\Phi_b = \Phi[k \mapsto (\{i, j\}, \textsc{s})]$
+		\end{itemize}
+		In both cases the storage, stack and program components of the intermediate state will be $h_b = h, S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
+		
 		\item If $\alpha = \actread{i}{k}{v}$ and $\alpha' = \actwrite{j}{k'}{v'}$ then from (\ref{lem:swapT1}) it must be the case that $k \neq k'$. This means that given the disjointness of keys, we can always find $h_b = h', \Phi_b = \Phi, S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
 		
 		\item If $\alpha = \actwrite{i}{k}{v}$ and $\alpha' = \actwrite{j}{k'}{v'}$ then from (\ref{lem:swapT1}) it must be the case that $k \neq k'$. Now we can always find $h_b = h[k' \mapsto v'], \Phi_b = \Phi, S_b = S, \mathds{P}_b = \dot{\mathds{P}}$.
@@ -300,8 +336,6 @@ The semantically valid swap operations allowed on traces are summarized in the f
 		\item If $\alpha = \actunlock{i}{k}$ and $\alpha' = \actunlock{j}{k'}$ then from (\ref{lem:swapT1}) it must be the case that either $k \neq k'$ or $k = k'$ and $\Phi(k) = (\{i, j\} \uplus I, \textsc{s})$. In the first scenario we can find $\Phi_b = \Phi[k' \mapsto (I', \kappa'')]$ for $(\{j\} \uplus I', \kappa') = \Phi(k')$, while in the second one $\Phi_b = \Phi[k \mapsto (\{i\} \uplus I, \textsc{s})]$ with $j \not\in I$. In both cases we pick $h_b = h, S_b = S[j \mapsto (s, \pshrink)], \mathds{P}_b = \dot{\mathds{P}}$. for $s = S(j) \downarrow_1$.
 		
 		\item If $\alpha = \actlock{i}{k}{\kappa}$ and $\alpha' = \actunlock{j}{k'}$ then from (\ref{lem:swapT1}) it must be the case that either $k \neq k'$ and we find $\Phi_b = \Phi[k' \mapsto (I', \kappa'')]$ for $(\{j\} \uplus I', \kappa') = \Phi(k')$ or $k = k'$ and $\Phi(k) = (\{j\} \uplus I, \textsc{s})$ and $\kappa = \textsc{s}$. In the latter case we can find $\Phi_b = \Phi[k \mapsto (I, \textsc{s})]$. In both cases we pick $h_b = h, S_b = S', \mathds{P}_b = \dot{\mathds{P}}$.
-		
-		\item If $\alpha = \actunlock{i}{k}$ and $\alpha' = \actlock{j}{k'}{\kappa}$ then from (\ref{lem:swapT2}) it must be the case that $k \neq k'$. Now we can always find $h_b = h, \Phi_b = \Phi[k' \mapsto (\{j\} \uplus I, \kappa)], S_b = S, \mathds{P}_b = \dot{\mathds{P}}$ for $(I, \kappa') = \Phi(k'), j \not\in I$ and $\kappa' \leq \textsc{s}$.
 		
 		\item If $\alpha = \actalloc{i}{n}{l}$ and $\alpha' = \actlock{j}{k}{\kappa}$ then from (\ref{lem:swapT1}) it must be the case that $k < l \lor k \geq l + n$. Now we can always find $h_b = h, \Phi_b = \Phi[k \mapsto (\{j\} \uplus I, \kappa)], S_b = S, \mathds{P}_b = \dot{\mathds{P}}$ for $I = \Phi(k) \downarrow_1$.
 		
@@ -348,6 +382,7 @@ The semantically valid swap operations allowed on traces are summarized in the f
 \end{defn}
 
 \begin{lem}
+	\label{lem:traceSwapEq}
 	(Trace swap equivalence).
 	\begin{gather*}
 		\forall h, \underline{h}, \Phi, S, \mathds{P}, \tau, \tau', x, y \ldotp \\
