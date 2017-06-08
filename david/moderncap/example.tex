@@ -51,7 +51,7 @@ If we now were to assume the atomicity of operations at the level of single comm
 \end{table}
 \egroup
 
-This clearly demonstrates that such a system is not safe for usage and requires a \textit{concurrency control} mechanism in place. We can for instance consider a setting where each transaction locks access to the entire database, executes, and once done, gives its priviledge to another transaction which is running in parallel. Such a primitive technique would clearly not provide good performance but would guarantee the absence of the issues we encountered previously and would be less hard to reason about. This is because, given two programs $p$ and $p'$ running concurrently, we only have to consider the case where $p$ goes first followed by $p'$ and where $p'$ runs before $p$. On the other hand, \textit{Two-Phase-Locking} works at the level of single database entries and allows concurrent transactions to only acquire locks for the items they read or write. The crucial constraint enforced by the mechanism is that, once a transaction releases a lock on an item, it cannot later lock any other one. 
+This clearly demonstrates that such a system is not safe for usage and requires a \textit{concurrency control} mechanism in place. We can for instance consider a setting where each transaction locks access to the entire database, executes, and once done, gives its priviledge to another transaction which is running in parallel. Such a primitive technique would clearly not provide good performance but would guarantee the absence of the issues we encountered previously and would be less hard to reason about. This is because, given two programs $p$ and $p'$ running concurrently, we only have to consider the case where $p$ goes first followed by $p'$ and where $p'$ runs before $p$. On the other hand, \textit{Two-Phase-Locking} works at the level of single database entries and allows concurrent transactions to only acquire locks for the items they read or write. The crucial constraint enforced by the mechanism is that, once a transaction releases a lock on an item, it cannot later lock any other one. This requirement is what will allows us to show in this report the equivalence of any execution to one where transactions run one before the other, with no interleaving. We will therefore proceed with a formal proof of the program assuming it runs in the environment described at the beginning of the paragraph.
 
 In order to reason about the concurrent program in Figure \ref{fig:bobCode}, we introduce an abstraction to describe bank accounts. One of these is represented by a logic predicate of the shape $\pred{Account}{x, m}$. The latter describes an account that resides in the database at address $x$ and currently contains $m$ dollars. As the bank allows no overdraft, we add a constraint to all accounts in order to enforce $m$ to be a non-negative number. On top of this, the same predicate gives capabilities to perform the two fundamental actions:
 \begin{itemize}
@@ -83,7 +83,8 @@ Everything that is in the graphical rectangle, also known as a \textit{box}, rep
 \]
 The previously introduced capabilities are mapped to concrete mutations of the shared region's contents. For instance, if we look at the \tguard{Interest} case, we notice how a transaction is able to transform $\cell{x}{m}$ into $\cell{x}{m + 600}$ given that it holds the capability in its local state, and moves the latter back in the region. Since all region updates have to be modelled as part of its interpretation, it follows that the latter serves the crucial purpose of declaring to all transactions how might the shared state change under the effect of a concurrent program. This enables users of the program logic to write \textit{stable} assertions in their programs' specifications. If they do so, it is then ensured that a particular assertion will remain valid, no matter how concurrent transactions modify a region's content according to the interpretation's actions. Such a constraint automatically gives us the \textit{composionality} of proofs, meaning that two transactions can be proven independently and then combined in parallel.
 
-A sketch proof of the two transactions running under \textsc{2pl} follows.
+We can now build a sketch proof for the two transactions in isolation in Figure \ref{fig:proofL} and Figure \ref{fig:proofR}. Notice how in both cases, the preconditions are stable with respect to the interference coming from the other transaction. In fact, we can see a disjunction as part of the shared region content which takes into account the possibility of a concurrent action occurring before the transaction starts, and for which we don't possess a full capability. For example, in Figure \ref{fig:proofL} we can se that the precondition includes $\textcolor{blue}{2 \mapsto m \lor 2 \mapsto m + 600}$ which, by only considering the intereference table, reflects both the situation where the considered transaction is the first one to execute, and the one where the other transaction precedes it.
+\begin{center}
 \[
 	\begin{array}{l}
 		\specline{
@@ -113,7 +114,12 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 						\sep [\tguard{Rent}]^r
 				} \\
 				\quad \quad \pmutate{\pvar{bob}}{\pvar{m} - 500} \\
-				\quad \quad \specline{\exists r \ldotp \boxed{\pvar{bob} \mapsto \pvar{m} - 500 \land \left(\pvar{m} = m \lor \pvar{m} = m + 600\right) \land \pvar{m} \geq 500 \sep [\tguard{Rent}]^r}^r} \\
+				\quad \quad \specline{
+					\exists r \ldotp
+						\boxed{
+							\pvar{bob} \mapsto \pvar{m} - 500 \land \left(\pvar{m} = m \lor \pvar{m} = m + 600\right) \land \pvar{m} \geq 500
+							\sep [\tguard{Rent}]^r}
+						}^r_{I(r, \pvar{bob})} \\
 			\quad \pifm \\
 				\quad \quad \specline{
 					\exists r \ldotp
@@ -128,28 +134,36 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 				} \\
 		\mathtt{end} \\
 		\specline{
-				\left( \exists r \ldotp
-					\boxed{
-						2 \mapsto m - 500 \land m \geq 500
+				\exists r \ldotp
+					\left( 
+						\boxed{
+							2 \mapsto m - 500 \land m \geq 500
+							\sep [\tguard{Rent}]^r
+						}^r_{I(r, 2)}
+					\right)
+				\lor \\
+				\exists r \ldotp
+					\left(
+						\boxed{
+							2 \mapsto m + 100 \land m \geq 0
+							\sep [\tguard{Rent}]^r
+						}^r_{I(r, 2)}
+					\right) \\
+				\lor
+					\left(
+						\boxed{
+							2 \mapsto m \land 0 \leq m < 500
+						}^r_{I(r, 2)}
 						\sep [\tguard{Rent}]^r
-					}^r_{I(r, 2)}
-				\right) \\
-			\lor
-				\left( \exists r \ldotp
-					\boxed{
-						2 \mapsto m + 100 \land m \geq 0 \sep [\tguard{Rent}]^r
-					}^r_{I(r, 2)}
-				\right) \\
-			\lor
-				\left( \exists r \ldotp
-					\boxed{
-						2 \mapsto m \land 0 \leq m < 500
-					}^r_{I(r, 2)}
-					\sep [\tguard{Rent}]^r
-				\right)
+					\right)
 			} \\
 	\end{array}
 \]
+\captionof{figure}{Sketch proof of the rent direct debit transaction.}
+\label{fig:proofL}
+\end{center}
+
+\begin{center}
 \[
 	\begin{array}{l}
 		\specline{
@@ -180,18 +194,46 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 			\quad \specline{
 				\exists r \ldotp
 					\boxed{
-						\pvar{id} \mapsto \pvar{x} + 600 \land \left( \pvar{x} = m \lor \pvar{x} = m - 500 \right) \land m \geq 0 \sep [\tguard{Increment}]^r
+						\pvar{id} \mapsto \pvar{x} + 600 \land \left( \pvar{x} = m \lor \pvar{x} = m - 500 \right) \land m \geq 0
+						\sep [\tguard{Increment}]^r
 					}^r_{I(r, \pvar{id})}
 			} \\
 		\mathtt{end} \\
 		\specline{
 				\exists r \ldotp
 					\boxed{
-						\left(2 \mapsto m + 600 \lor 2 \mapsto m + 100 \right) \land m \geq 0 \sep [\tguard{Increment}]^r
+						\left(2 \mapsto m + 600 \lor 2 \mapsto m + 100 \right) \land m \geq 0
+						\sep [\tguard{Increment}]^r
 					}^r_{I(r, 2)}
 		}
 	\end{array}
 \]
+\captionof{figure}{Sketch proof of the credit interest transaction.}
+\label{fig:proofR}
+\end{center}
+Once the proofs are done, we can combine them for our original example in order to obtain the verified result we were hoping for: the end effect of the program is either to add \$100 to Bob's account when he has allowance to pay his rent, or to add \$600 if he does not and later flag him with an alert. For this reason, we formally introduce two other predicates that allow to express this.
+\begin{align*}
+	\pred{Alerted}{x, m}
+		&\equiv
+	\exists r \ldotp
+		\boxed{
+			x \mapsto m + 600 \land m \geq 0
+			\sep [\tguard{Increment}]^r
+		}^r_{I(r, 2)}
+		\sep [\tguard{Rent}]^r
+	\\
+	\pred{Processed}{x, m}
+		&\equiv
+	\exists r \ldotp
+		\boxed{
+			x \mapsto m + 100 \land m \geq 0
+			\sep [\tguard{Increment}]^r
+			\sep [\tguard{Rent}]^r
+		}^r_{I(r, 2)}
+\end{align*}
+As we can see, in the case of $\mathsf{Alerted}$, the \tguard{Rent} capability is still in the local state and has not been moved to the shared region, meaning that the first transaction could not succeed in its direct debit operation. The final sketch proof appears in Figure \ref{fig:proofPar}.
+
+\begin{center}
 \begin{gather*}
 \specline{\pred{Account}{2, n_2}} \\
 \begin{array}{c || c}
@@ -213,8 +255,11 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 	\end{array}
 \end{array} \\
 \specline{
-	\pred{Account}{2, \textcolor{ForestGreen}{n_2 + 600}}
+	\pred{Alerted}{2, \textcolor{ForestGreen}{n_2 + 600}}
 		\lor
-	\pred{Account}{2, \textcolor{ForestGreen}{n_2 + 100}}
+	\pred{Processed}{2, \textcolor{ForestGreen}{n_2 + 100}}
 }
 \end{gather*}
+\captionof{figure}{Sketch proof of the parallel composition of the \textit{rent} and \textit{interest} transactions.}
+\label{fig:proofPar}
+\end{center}
