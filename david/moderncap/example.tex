@@ -13,18 +13,17 @@ The bank has a particular client, Bob, who pays his flat's rent of \$500 the fir
 					\quad \passign{\pvar{bob}}{2}; \\
 					\quad \pderef{\pvar{m}}{\pvar{bob}}; \\
 					\quad \pifs{\pvar{m} \geq 500} \\
-					\quad \quad \pmutate{\pvar{bob}}{\pvar{m} - 500} \\
+						\quad \quad \pmutate{\pvar{bob}}{\pvar{m} - 500} \\
+					\quad \pifm \\
+						\quad \quad \pskip \\
 				\mathtt{end}
 			\end{array}
 		&
 			\begin{array}{l}
 				\mathtt{begin} \\
-					\quad \passign{\pvar{id}}{0}; \\
-					\quad \pwhiles{\pvar{id} < 5} \\
-						\quad \quad \pderef{\pvar{x}}{\pvar{id}}; \\
-						\quad \quad \pmutate{\pvar{id}}{\pvar{x} + 600}; \\
-						\quad \quad \passign{\pvar{id}}{\pvar{id} + 1} \\
-					\quad \pwhilee \\
+					\quad \passign{\pvar{id}}{2}; \\
+					\quad \pderef{\pvar{x}}{\pvar{id}}; \\
+					\quad \pmutate{\pvar{id}}{\pvar{x} + 600}; \\
 				\mathtt{end}
 			\end{array}
 		\end{array}
@@ -33,10 +32,10 @@ The bank has a particular client, Bob, who pays his flat's rent of \$500 the fir
 	\label{fig:bobCode}
 \end{figure}
 
-If we now were to assume the atomicity of operations at the level of single commands, we would need to consider all possible interleavings of the two blocks of code. Some of the possible executions that arise in this context are incorrect and can lead to serious issues. Table \ref{table:bankOutcome} shows every possible end state of the database, assuming that it started as $\{ 0 \mapsto n_0, 1 \mapsto n_1, 2 \mapsto 10000, 3 \mapsto n_3, 4 \mapsto n_4 \}$. The final result we would expect, and want, is the one described by option (ii) in the table, where Bob's account contains \$$10100$. Nevertheless, (i) and (iii) might still happen if the direct debit transaction reads Bob's money into $\pvar{m}$ first, but writes to it it after the other transaction has added \$$600$ to the total, or vice versa.
+If we now were to assume the atomicity of operations at the level of single commands, we would need to consider all possible interleavings of the two blocks of code. Some of the possible executions that arise in this context are incorrect and can lead to serious issues. Table \ref{table:bankOutcome} shows every possible end state of the database, assuming that it started as $\{ 0 \mapsto n_0, 1 \mapsto n_1, 2 \mapsto n_2, 3 \mapsto n_3, 4 \mapsto n_4 \}$. The final results that we would expect, and want, are the ones described by options (i) and (ii) in the table, where Bob's account either contains $n_2 + 600$ dollars or $n_2 + 100$, based on whether its initial allowance was less or more than \$500. Nevertheless, (iii) might still happen if the direct debit transaction reads Bob's money into $\pvar{m}$ first, but writes to it it after the other transaction has added \$$600$ to the total.
 
 \bgroup
-\setlength{\tabcolsep}{1em}
+\setlength{\tabcolsep}{1.5em}
 \def\arraystretch{1.5}
 \begin{table}[h]
 	\centering
@@ -45,9 +44,9 @@ If we now were to assume the atomicity of operations at the level of single comm
 	\begin{tabular}{|c|c|c|c|c|c|}
 	\hline
 	\textbf{\#} & \textbf{0}         & \textbf{1}         & \textbf{2}         & \textbf{3}         & \textbf{4}         \\ \hline
-	\textcolor{red}{i}   & $n_0 + 4$ & $n_1 + 4$ & $\textcolor{red}{10600}$     & $n_3 + 4$ & $n_4 + 4$ \\ \hline
-	\textcolor{ForestGreen}{ii}  & $n_0 + 4$ & $n_1 + 4$ & $\textcolor{ForestGreen}{10100}$ & $n_3 + 4$ & $n_4 + 4$ \\ \hline
-	\textcolor{red}{iii} & $n_0 + 4$ & $n_1 + 4$ & $\textcolor{red}{9500}$  & $n_3 + 4$ & $n_4 + 4$ \\ \hline
+	\textcolor{ForestGreen}{i}   & $n_0 $ & $n_1 $ & $\textcolor{ForestGreen}{n_2 + 600}$     & $n_3 $ & $n_4 $ \\ \hline
+	\textcolor{ForestGreen}{ii}  & $n_0 $ & $n_1 $ & $\textcolor{ForestGreen}{n_2 + 100}$ & $n_3 $ & $n_4 $ \\ \hline
+	\textcolor{red}{iii} & $n_0 $ & $n_1 $ & $\textcolor{red}{n_2 - 500}$  & $n_3 $ & $n_4 $ \\ \hline
 	\end{tabular}
 \end{table}
 \egroup
@@ -65,7 +64,7 @@ Formally, we represent all of this information as:
 	\pred{Account}{x, m}
 		\equiv
 	\exists r \ldotp \boxed{x \mapsto m \land m \geq 0}^r_{I(r, x)}
-	\sep [\tguard{Rent}(m)]^r \sep [\tguard{Interest}(m)]^r
+	\sep [\tguard{Rent}]^r \sep [\tguard{Interest}]^r
 \]
 
 Everything that is in the graphical rectangle, also known as a \textit{box}, represents the content of a part, or \textit{region}, of the database which is shared among multiple transactions, that can access it. The region is uniquely identified by $r$ and transactions can modify it by following a precise set of rules that is listed in the following table, which we call the region \textit{interpretation}. Intuitively, each action of the shape $a \transto b$ in the interpretation of a region, shows the required state that needs to be present in the region, $a$, followed by what that same chunk will be replaced with, $b$.
@@ -90,7 +89,7 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 		\specline{
 				\exists r \ldotp
 					\boxed{
-						\left(2 \mapsto m \lor 2 \mapsto m + 600 \right) \land m \geq 0
+						2 \mapsto m \lor 2 \mapsto m + 600 \land m \geq 0
 					}^r_{I(r, 2)}
 					\sep [\tguard{Rent}]^r
 		} \\
@@ -98,7 +97,7 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 			\quad \passign{\pvar{bob}}{2}; \\
 			\quad \specline{
 				\exists r \ldotp
-					\boxed{\left( \pvar{bob} \mapsto m \lor \pvar{bob} \mapsto m + 600 \right) \land m \geq 0}^r_{I(r, \pvar{bob})}
+					\boxed{\pvar{bob} \mapsto m \lor \pvar{bob} \mapsto m + 600 \land m \geq 0}^r_{I(r, \pvar{bob})}
 					\sep [\tguard{Rent}]^r
 			} \\
 			\quad \pderef{\pvar{m}}{\pvar{bob}}; \\
@@ -115,22 +114,86 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 				} \\
 				\quad \quad \pmutate{\pvar{bob}}{\pvar{m} - 500} \\
 				\quad \quad \specline{\exists r \ldotp \boxed{\pvar{bob} \mapsto \pvar{m} - 500 \land \left(\pvar{m} = m \lor \pvar{m} = m + 600\right) \land \pvar{m} \geq 500 \sep [\tguard{Rent}]^r}^r} \\
+			\quad \pifm \\
+				\quad \quad \specline{
+					\exists r \ldotp
+						\boxed{\pvar{bob} \mapsto m \land 0 \leq m < 500}^r_{I(r, \pvar{bob})}
+						\sep [\tguard{Rent}]^r
+				} \\
+				\quad \quad \pskip \\
+				\quad \quad \specline{
+					\exists r \ldotp
+						\boxed{\pvar{bob} \mapsto m \land 0 \leq m < 500}^r_{I(r, \pvar{bob})}
+						\sep [\tguard{Rent}]^r
+				} \\
 		\mathtt{end} \\
 		\specline{
 				\left( \exists r \ldotp
-					\boxed{2 \mapsto m - 500 \lor 2 \mapsto m + 100 \land m \geq 500 \sep [\tguard{Rent}]^r}^r_{I(r, 2)} \right) \\
-				\lor \left( \exists r \ldotp
-					\boxed{2 \mapsto m + 100 \land 0 \leq m < 500 \sep [\tguard{Rent}]^r}^r_{I(r, 2)} \right) \\
-				\lor \left( \exists r \ldotp
+					\boxed{
+						2 \mapsto m - 500 \land m \geq 500
+						\sep [\tguard{Rent}]^r
+					}^r_{I(r, 2)}
+				\right) \\
+			\lor
+				\left( \exists r \ldotp
+					\boxed{
+						2 \mapsto m + 100 \land m \geq 0 \sep [\tguard{Rent}]^r
+					}^r_{I(r, 2)}
+				\right) \\
+			\lor
+				\left( \exists r \ldotp
 					\boxed{
 						2 \mapsto m \land 0 \leq m < 500
 					}^r_{I(r, 2)}
-					\sep [\tguard{Rent}]^r \right) \\
+					\sep [\tguard{Rent}]^r
+				\right)
 			} \\
 	\end{array}
 \]
+\[
+	\begin{array}{l}
+		\specline{
+			\exists r \ldotp
+				\boxed{
+					\left( 2 \mapsto m \lor 2 \mapsto m - 500 \right) \land m \geq 0
+				}^r_{I(r, 2)}
+				\sep [\tguard{Increment}]^r
+		} \\
+		\mathtt{begin} \\
+			\quad \passign{\pvar{id}}{2}; \\
+			\quad \specline{
+				\exists r \ldotp
+					\boxed{
+						\left( \pvar{id} \mapsto m \lor \pvar{id} \mapsto m - 500\right) \land m \geq 0
+					}^r_{I(r, \pvar{id})}
+					\sep [\tguard{Increment}]^r
+			} \\
+			\quad \pderef{\pvar{x}}{\pvar{id}}; \\
+			\quad \specline{
+				\exists r \ldotp
+					\boxed{
+						\pvar{id} \mapsto \pvar{x} \land \left( \pvar{x} = m \lor \pvar{x} = m - 500 \right) \land m \geq 0
+					}^r_{I(r, \pvar{id})}
+					\sep [\tguard{Increment}]^r
+			} \\
+			\quad \pmutate{\pvar{id}}{\pvar{x} + 600}; \\
+			\quad \specline{
+				\exists r \ldotp
+					\boxed{
+						\pvar{id} \mapsto \pvar{x} + 600 \land \left( \pvar{x} = m \lor \pvar{x} = m - 500 \right) \land m \geq 0 \sep [\tguard{Increment}]^r
+					}^r_{I(r, \pvar{id})}
+			} \\
+		\mathtt{end} \\
+		\specline{
+				\exists r \ldotp
+					\boxed{
+						\left(2 \mapsto m + 600 \lor 2 \mapsto m + 100 \right) \land m \geq 0 \sep [\tguard{Increment}]^r
+					}^r_{I(r, 2)}
+		}
+	\end{array}
+\]
 \begin{gather*}
-\specline{\pred{Account}{0, n_0} \sep \pred{Account}{1, n_1} \sep \pred{Account}{2, n_2} \\ \sep\ \pred{Account}{3, n_3} \sep \pred{Account}{4, n_4}} \\
+\specline{\pred{Account}{2, n_2}} \\
 \begin{array}{c || c}
 	\begin{array}{l}
 		\mathtt{begin} \\
@@ -143,14 +206,15 @@ A sketch proof of the two transactions running under \textsc{2pl} follows.
 	&
 	\begin{array}{l}
 		\mathtt{begin} \\
-			\quad \passign{\pvar{id}}{0}; \\
-			\quad \pwhiles{\pvar{id} < 5} \\
-				\quad \quad \pderef{\pvar{x}}{\pvar{id}}; \\
-				\quad \quad \pmutate{\pvar{x}}{\pvar{x} + 4}; \\
-				\quad \quad \passign{\pvar{id}}{\pvar{id} + 1} \\
-			\quad \pwhilee \\
+			\quad \passign{\pvar{id}}{2}; \\
+			\quad \pderef{\pvar{x}}{\pvar{id}}; \\
+			\quad \pmutate{\pvar{id}}{\pvar{x} + 600}; \\
 		\mathtt{end}
 	\end{array}
 \end{array} \\
-\specline{\pred{Account}{0, n_0 + 600} \sep \pred{Account}{1, n_1 + 600} \sep \pred{Account}{2, \textcolor{ForestGreen}{n_2 + 100}} \\ \sep\ \pred{Account}{3, n_3 + 600} \sep \pred{Account}{4, n_4 + 600}}
+\specline{
+	\pred{Account}{2, \textcolor{ForestGreen}{n_2 + 600}}
+		\lor
+	\pred{Account}{2, \textcolor{ForestGreen}{n_2 + 100}}
+}
 \end{gather*}
