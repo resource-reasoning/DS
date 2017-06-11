@@ -398,7 +398,7 @@ In Figure \ref{fig:spinproof} we give a CAP sketch proof of the \texttt{lock(x)}
 
 We refer to an operation as atomic when it happens at a single discrete point in time \cite{modularsteps}. Whenever atomic actions are performed concurrently, the actual execution will always be an interleaving of those. In general, even if a command is built from multiple operations, abstract atomicity can be obtained if the overall effect appears to be atomic.
 
-Linearizability \cite{linearizability} is a correctness condition which allows methods of a concurrent module to be used by clients as atomic. All of such module operations are provided with sequential specifications that are proven to behave atomically with respect to each other. As a consequence, the moment a new method is added to the module, the linearizability proof for all methods needs to performed. The main contribution of the approach is the fact that specifications that guarantee linearizability are an abstraction which can be directly used by clients of the module to reason without having to worry about the implementation details.
+Linearizability \cite{linearizability} is a correctness condition which allows methods of a concurrent module to be used by clients as atomic. All of such module operations are provided with sequential specifications that are proven to behave atomically with respect to each other. As a consequence, the moment a new method is added to the module, the linearizability proof for all methods needs to be performed. The main contribution of the approach is the fact that specifications that guarantee linearizability are an abstraction which can be directly used by clients of the module to reason without having to worry about the implementation details.
 
 \subsection{TaDA} \label{s:tada}
 
@@ -471,6 +471,81 @@ I(\textbf{Stack}_r(x, h, ns, ds)) \triangleq &\cell{x}{h} \lstar \mathsf{stack}(
 
 The stack's address $x$ points to the head node, $h$, which is the first node of the structure that will be either $\snull$ for an empty stack or point to a value and a subsequent node. On top of this, $ns$ is a logical list including all active node pairs $(n, v)$ in the stack where $n$ is the node's address and $v$ the value it points to. Those nodes that were at one point part of the stack but have been popped since, are called dead nodes and included in the set $ds$. As we can see from the transition system, every time an item is popped, it is virtually moved from $ns$ to $ds$ to keep track of it. This additional information, which can be seen as a ghost state of the program, is particularly helpful when proving the \texttt{pop} function implementation. In fact, if the function pops an item $n$ which has been concurrently removed since we first read it, then it is necessary to know that it had the $\twocell{n}{-}{-}$ structure and this information is provided as part of the dead nodes assertion.
 
+\begin{figure}[h]
+\[
+	\begin{array}{l}
+		\pfunction{\pvar{makeStack}}
+		{}
+		{
+		\\
+		\quad \palloc{\pvar{x}}{1};
+		\\
+		\quad \preturn{\pvar{x}}; \\
+		}
+		\end{array}
+		\ \ \ \
+		\begin{array}{l}
+		\pfunction{\pvar{push}}
+		{\pvar{x}, \pvar{v}}
+		{
+		\\
+		\quad \palloc{\pvar{fst}}{2};
+		\\
+		\quad \pmutate{\pvar{fst}}{\pvar{v}};
+		\\
+		\\
+		\quad \mathtt{do} \ \{
+		\\
+		\quad \quad \pderef{\pvar{h}}{\pvar{x}};
+		\\
+		\quad \quad \pmutate{\pvar{fst} + 1}{\pvar{h}};
+		\\
+		\quad \quad \pfuncall{\pvar{b}}{CAS}{\pvar{x}, \pvar{h}, \pvar{fst}};
+		\\
+		\quad\} \ \mathtt{while}\ (\pvar{b} = 0);
+		\\
+		}
+		\end{array}
+		\ \ \ \
+		\begin{array}{l}
+		\pfunction{\pvar{pop}}
+		{\pvar{x}}
+		{
+		\\
+		\quad \passign{\pvar{r}}{0};
+		\\
+		\quad \mathtt{do} \ \{
+		\\
+		\quad \quad \passign{\pvar{b}}{0};
+		\\
+		\quad \quad \pderef{\pvar{h}}{\pvar{x}};
+		\\
+		\quad\quad \pifelses{\pvar{h} = \snull}
+		\\
+		\quad\quad \quad \preturn{0};
+		\\
+		\quad\quad \pifelsem
+		\\
+		\quad \quad \quad \pderef{\pvar{r}}{\pvar{h}};
+		\\
+		\quad \quad \quad \pderef{\pvar{next}}{\pvar{h} + 1};
+		\\
+		\quad \quad \quad \pfuncall{\pvar{b}}{CAS}{\pvar{x}, \pvar{h}, \pvar{next}};
+		\\
+		\quad\quad \pifelsee
+		\\
+		\quad\} \ \mathtt{while}\ (\pvar{b} = 0);
+		\\
+		\\
+		\quad \preturn{\pvar{r}};
+		\\
+		}
+	\end{array}
+	\label{fig:concurrentstack}
+	\]
+	\captionof{figure}{The concurrent stack \textsc{While} language implementation with the addition of the compare-and-swap (\texttt{CAS}) command.}
+\end{figure}
+
 We provide an implementation of the three methods in Figure \ref{fig:concurrentstack} followed by a full TaDA proof of the $\pfuncallnr{push}{\pvar{x}, \pvar{v}}$ function. The proof begins by unwrapping the $\pred{S}{r, \pvar{x}, l}$ abstract predicate into its definition which includes the $\textbf{Stack}_r$ region predicate and the $[\tguard{G}]_r$  action guard. We use the latter as part of the \textsc{MakeAtomic} rule, in order to modify the underlying stack structure to insert a new element, $\pvar{v}$. This step gives us the atomicity tracking component $\atomtok$ and the ability of treating a sequence of commands as if they happened atomically. As part of the function's body, we allocate memory for the node (\texttt{fst}) that will host the new element and begin a loop whose task is to read the stack's head node into \texttt{h} and use \texttt{CAS} to atomically set it to \texttt{fst} only when \texttt{h} is equivalent to $[\pvar{x}]$ (meaning that the value of the stack's head has not changed since we first read it into \texttt{h}). We prove all of this using the following inference rules:
 \begin{itemize}
 \item \textsc{Existential} in order to get rid of the existential quantifiers on logical variables $h, ns, ds$ and to be able to apply the next rules.
@@ -479,79 +554,6 @@ We provide an implementation of the three methods in Figure \ref{fig:concurrents
 \item We \textsc{Frame} out all assertions only leaving $\cell{\pvar{x}}{h}$ since this is all we need to conclude the proof. In fact, the $\pfuncallnr{CAS}{\pvar{x}, \pvar{h}, \pvar{fst}}$ command does not modify any other variables a part from $\pvar{x}$.
 \item The \textsc{CAS} rule finally allows us to condition the actual update on the boolean return value, $\pvar{b}$ which is used inside the following postconditions to understand whether the swap has happened or not.
 \end{itemize}
-
-\[
-\begin{array}{l}
-\pfunction{\pvar{makeStack}}
-{}
-{
-\\
-\quad \palloc{\pvar{x}}{1};
-\\
-\quad \preturn{\pvar{x}}; \\
-}
-\end{array}
-\ \ \ \
-\begin{array}{l}
-\pfunction{\pvar{push}}
-{\pvar{x}, \pvar{v}}
-{
-\\
-\quad \palloc{\pvar{fst}}{2};
-\\
-\quad \pmutate{\pvar{fst}}{\pvar{v}};
-\\
-\\
-\quad \mathtt{do} \ \{
-\\
-\quad \quad \pderef{\pvar{h}}{\pvar{x}};
-\\
-\quad \quad \pmutate{\pvar{fst} + 1}{\pvar{h}};
-\\
-\quad \quad \pfuncall{\pvar{b}}{CAS}{\pvar{x}, \pvar{h}, \pvar{fst}};
-\\
-\quad\} \ \mathtt{while}\ (\pvar{b} = 0);
-\\
-}
-\end{array}
-\ \ \ \
-\begin{array}{l}
-\pfunction{\pvar{pop}}
-{\pvar{x}}
-{
-\\
-\quad \passign{\pvar{r}}{0};
-\\
-\quad \mathtt{do} \ \{
-\\
-\quad \quad \passign{\pvar{b}}{0};
-\\
-\quad \quad \pderef{\pvar{h}}{\pvar{x}};
-\\
-\quad\quad \pifelses{\pvar{h} = \snull}
-\\
-\quad\quad \quad \preturn{0};
-\\
-\quad\quad \pifelsem
-\\
-\quad \quad \quad \pderef{\pvar{r}}{\pvar{h}};
-\\
-\quad \quad \quad \pderef{\pvar{next}}{\pvar{h} + 1};
-\\
-\quad \quad \quad \pfuncall{\pvar{b}}{CAS}{\pvar{x}, \pvar{h}, \pvar{next}};
-\\
-\quad\quad \pifelsee
-\\
-\quad\} \ \mathtt{while}\ (\pvar{b} = 0);
-\\
-\\
-\quad \preturn{\pvar{r}};
-\\
-}
-\end{array}
-\label{fig:concurrentstack}
-\]
-\captionof{figure}{The concurrent stack \textsc{While-Language} implementation with the addition of the compare-and-swap (\texttt{CAS}) command.}
 
 \newgeometry{margin=2cm}
 \[
