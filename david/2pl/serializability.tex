@@ -200,6 +200,8 @@ The two following definitions empower us to formally define the serializability 
 
 \subsubsection{Graphs}
 
+\label{sec:graphs}
+
 The proof of serializability will be carried over a particular representation of traces that we introduce in this section. We utilize serialization graphs in order to describe relationships between transactions participating in a program execution.
 
 \begin{defn}
@@ -207,32 +209,37 @@ The proof of serializability will be carried over a particular representation of
 	(Serialization graph).
 	The \emph{serialization graph} of a given trace $\tau$ is a directed graph whose nodes are the identifiers of all the transactions that perform an action as part of $\tau$ and whose edges are between transactions that have ordered conflicting operations according to $\tau$.
 	\begin{align*}
-		\pred{SG}{\tau} &\triangleq (N, E) \\
-		\text{where } N &\triangleq \{ \iota\ |\ op(\iota) \in \tau \} \\
+		\pred{SG}{\tau} &\triangleq (N, E) \\[0.4em]
+		\text{where } N &\triangleq \{ \iota\ |\ op(\iota) \in \tau \} \\[0.4em]
 		E &\triangleq
-			\begin{aligned}
-				\{
-					(i, j)\ |&\ x = op(i, k) \land x' = op(j, k) \\
-					&\land \pred{conflict}{x, x'} \land \tau \vDash x < x' 
-				\}	
-			\end{aligned}
+			\left\{
+				\begin{array}{r | l}
+					(i, j)
+					&
+					\begin{array}{c}
+						x = op(i, k) \land x' = op(j, k) \\
+						\land\ \pred{conflict}{x, x'}
+						\land \tau \vDash x < x' 
+					\end{array}
+				\end{array}
+			\right\}
 	\end{align*}
 \end{defn}
 
 Edge connections and paths within a graph $G = (N, E)$ are described by introducing an arrow notation. We write $i \rightarrow j \in G$ to indicate that there is an edge from node $i$ to node $j$ in $E$. In the following list of statements, we make an abuse of notation to allow more expressive formulas and add a transitive closure arrow ($\rightarrow^*$) that is able to describe a path in the graph.
 \[
-	\begin{array}{l l}
-		i \rightarrow j \in E \triangleq (i, j) \in E
-			&
-		i \rightarrow j \in G \triangleq i \rightarrow j \in G \downarrow_2
-			\\
-		i \rightarrow^1 j \in E \triangleq i \rightarrow j \in E
-			&
-		i \rightarrow^n j \in E \triangleq \exists t \ldotp i \rightarrow t \in E \land t \rightarrow^{n-1} \in E
-			\\
-		i \rightarrow^* j \in E \triangleq \exists n \ldotp i \rightarrow^n j \in E
-			\ \ \ \ &
-		i \rightarrow^* j \in G \triangleq i \rightarrow^* j \in G \downarrow_2
+	\begin{array}{c @{\hspace{30pt}} c}
+		\begin{aligned}
+			i \rightarrow j \in E &\triangleq (i, j) \in E \\
+			i \rightarrow^1 j \in E &\triangleq i \rightarrow j \in E \\
+			i \rightarrow^* j \in E &\triangleq \exists n \ldotp i \rightarrow^n j \in E
+		\end{aligned}
+		&
+		\begin{aligned}
+			i \rightarrow j \in G &\triangleq i \rightarrow j \in G \downarrow_2 \\
+			i \rightarrow^n j \in E &\triangleq \exists t \ldotp i \rightarrow t \in E \land t \rightarrow^{n-1} \in E \\
+			i \rightarrow^* j \in G &\triangleq i \rightarrow^* j \in G \downarrow_2
+		\end{aligned}
 	\end{array}		
 \]
 
@@ -255,11 +262,11 @@ Our goal is now to prove that all traces whose serialization graph contains no c
 	\end{gather*}
 \end{defn}
 
-The following theorem establishes a key property we later need in order to prove serializability of the operational semantics introduced in Section \ref{sec:2plSemantics}. The process will in fact start by building the serialization graph of an arbitrary trace arising from \tpl\ semantics, showing that under any circumstance it is acyclic and from Theorem \ref{thm:acySer} we obtain the result needed.
+The following theorem establishes a key property we later need in order to prove serializability of the operational semantics introduced in Section \ref{sec:2plSemantics}. The process will in fact start by building the serialization graph of an arbitrary trace arising from \tpl\ semantics, showing that under any circumstance it is acyclic and therefore serializable. This fundamental relationship is established in Theorem \ref{thm:acySer} where we obtain the needed result.
 \begin{thm}
 	\label{thm:acySer}
 	(Acyclic means serializable).
-	Every trace that has a serialization graph with no cycles is serializable.
+	Every trace that has a serialization graph with no cycles is serializable \cite{ccontrol}.
 	\[
 		\forall \tau \ldotp \pred{acyclic}{\pred{SG}{\tau}} \implies \pred{serializable}{\tau}
 	\]
@@ -271,135 +278,207 @@ The following theorem establishes a key property we later need in order to prove
 
 \subsubsection{Proof}
 
-The list of propositions that follows, describes concrete properties on arbitrary traces $\tau$ generated from the \tpl\ operational semantics rules. The proof process follows the guidelines defined in \cite{papa} and \cite{ccontrol}.
+The list of lemmata that follows, describes concrete properties on arbitrary traces $\tau$ generated from the \tpl\ operational semantics rules. The proof process follows the guidelines defined in \cite{papa} and \cite{ccontrol}.
 
-\begin{prop}
+We first introduce and prove all the required properties that serve as building blocks for the final proof. The initial step is to determine that all read, write or allocation actions performed by a transaction, are always followed by an unlock action on the same key done by the same transaction.
+
+\begin{lem}
 	\label{prop:unlock}
-	(Proof in Lemma \ref{lem:unlock}).
-	All read, write or alloc operations are followed by an unlock action on the same key done by the same transaction.
+	(Proof in \ref{lem:unlock}).
 	\[
 		\forall \tau, \iota, k, \kappa, x \ldotp
 		x = op(\iota, k) \land x \in \tau \implies \left( \tau \vDash x < \actunlock{\iota}{k} \right)
 	\]
-\end{prop}
+\end{lem}
 
-\begin{prop}
+Conversely, we are also required to show that anytime a particular transaction accesses a storage item through a $\mathsf{read}$ or $\mathsf{write}$ operation, it locks the corresponding entry in the lock manager using the required lock mode. Thus, we first show that all reads are preceded by the appropriate shared lock acquisition.
+\begin{lem}
 	\label{prop:read}
-	(Proof in Lemma \ref{lem:read}).
-	All reads are preceded by the appropriate shared lock acquisition.
+	(Proof in \ref{lem:read}).
 	\begin{gather*}
 		\forall \tau, \iota, k, v, \kappa, x, n \ldotp \\
 		x = (\actread{\iota}{k}{v}, n) \land x \in \tau \implies \left( \tau \vDash \actlock{\iota}{k}{\kappa} < x \land \kappa \geq \textsc{s} \right)
 	\end{gather*}
-\end{prop}
+\end{lem}
 
-\begin{prop}
+Then, for the $\mathsf{write}$ case, we also show that all writes to a cell are preceded by the appropriate exclusive lock acquisition.
+\begin{lem}
 	\label{prop:write}
-	(Proof in Lemma \ref{lem:write}).
-	All writes to a cell are preceded by the appropriate exclusive lock acquisition.
+	(Proof in \ref{lem:write}).
 	\begin{gather*}
 		\forall \tau, x, i, k, v, n \ldotp
 		x = (\actwrite{i}{k}{v}, n) \land x \in \tau \implies
 		\tau \vDash \actlock{i}{k}{\textsc{x}} < x
 	\end{gather*}
-\end{prop}
+\end{lem}
 
-\begin{prop}
+The lock manager is not only modified with $\mathsf{lock}$ and $\mathsf{unlock}$ operations, but also with the allocation of new storage cells, which enlarges the domain of the storage and locks the new cells into exclusive mode. In relation to this, we prove that a read or write operation accessing a cell allocated as part of the trace, must appear after the corresponding alloc action. On top of this, we also show that the transaction responsible for allocating the cell will always be the first one to release the lock it holds on it, before any other transaction is able to lock it.
+\begin{lem}
 	\label{prop:allocBefore}
 	(Proof in Lemma \ref{lem:allocBefore}).
-	A read or write operation accessing a cell allocated as part of the trace, must appear after the corresponding alloc action.
 	\begin{gather*}
 		\forall \tau, i, j, x, x', n, n', l, m, k, v, \kappa \ldotp \\
 		x = (\actalloc{i}{m}{l}, n) \land x' \in \{ (\actread{j}{k}{v}, n'), (\actwrite{j}{k}{v}, n') \} \land l \leq k < l + m
 		\\
-		\land x \in \tau \land x' \in \tau
+		\land\ x \in \tau \land x' \in \tau
 		\implies
 		\left( \tau \vDash x < x'  \land \tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa} \right)
 	\end{gather*}
-\end{prop}
+\end{lem}
 
-\begin{prop}
+Next, we shift the focus to a fundamental property of a single transaction within a trace, namely the two-phase property, from which the entire protocol gets its name from. It is therefore necessary to show that any full trace generated by our operational semantics is such that no lock is acquired by a transaction after one gets released by the same transaction.
+\begin{lem}
 	\label{prop:2phase}
-	(Proof in Lemma \ref{lem:2phase}).
-	No lock is acquired by a transaction after one gets released by the same transaction.
+	(Proof in \ref{lem:2phase}).
 	\begin{gather*}
 		\forall \tau, \iota, k, k', n, n', x, x', \kappa \ldotp \\
 		\left( x = (\actlock{\iota}{k}{\kappa}, n) \land x' = (\actunlock{\iota}{k'}, n') \land x \in \tau \land x' 	\in \tau \right) \\
 		\implies \left( \tau \vDash x < x' \right)
 	\end{gather*}
-\end{prop}
+\end{lem}
 
-\begin{prop}
+At this point, we can start looking at porperties involving relationships between transactions that have conflicting operations within a trace. In the following lemma, we show that it must be the case that if two transactions run conflicting operations on the same item, either one releases its lock before the other acquires it or vice versa.
+\begin{lem}
 	\label{prop:conflict}
-	(Proof in Lemma \ref{lem:conflict}).
-	If two transactions run conflicting operations on the same item, either one releases its lock before the other acquires it or vice versa.
+	(Proof in \ref{lem:conflict}).
 	\begin{gather*}
 		\forall \tau, i, j, k, \kappa, \kappa', x, x' \ldotp \\
 		x = op(i, k) \in \tau \land x' = op(j, k) \in \tau \land \pred{conflict}{x, x'} \implies \\
 		\left( \tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa} \right) \lor \left( \tau \vDash \actunlock{j}{k} < \actlock{i}{k}{\kappa'} \right)
 	\end{gather*}
-\end{prop}
+\end{lem}
 
-\lem \label{lem:sg1}
-\begin{gather*}
-\forall \tau, i, j \ldotp i \rightarrow j \in \pred{SG}{\tau} \implies \\
-\exists k, \kappa, x, x' \ldotp x = op(i, k) \in \tau \land x' = op(j, k) \in \tau \\
-\land\ \pred{conflict}{x, x'} \land \tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa}
-\end{gather*}
-\begin{proof}
-Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$, such that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for some $h \in \mathsf{Storage}$, $\mathds{P} \in \mathsf{Prog}$ and transaction identifiers $i, j \in \mathsf{Tid}$. Now we assume that $i \rightarrow j \in \pred{SG}{\tau}$. By definition of a serialization graph built through $\mathsf{SG}$ we directly obtain that there must be two operations $x = op(i, k)$ and $x' = op(j, k)$ in $\tau$ which are conflicting, so $\pred{conflict}{x, x'}$ holds and $\tau \vDash x < x'$ (\textsc{i}).
+We can now start combining the lemmata demonstrated so far, to prove properties about the serialization graph of traces. In fact, we show that every edge $(i, j)$ in the serialization graph of a trace $\tau$, corresponds to two conflicting operations in $\tau$ done by $i$ and $j$ respectively, and such that transaction $i$ releases the corresponding lock before $j$ acquires it.
+\begin{lem}
+	\label{lem:sg1}
+	\begin{gather*}
+	\forall \tau, i, j \ldotp i \rightarrow j \in \pred{SG}{\tau} \implies \\
+	\exists k, \kappa, x, x' \ldotp x = op(i, k) \in \tau \land x' = op(j, k) \in \tau \\
+	\land\ \pred{conflict}{x, x'} \land \tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa}
+	\end{gather*}
+	\begin{proof}
+	Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$, such that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for some $h \in \mathsf{Storage}$, $\mathds{P} \in \mathsf{Prog}$ and transaction identifiers $i, j \in \mathsf{Tid}$. Now we assume that $i \rightarrow j \in \pred{SG}{\tau}$. From the definition of a serialization graph built through the $\mathsf{SG}$ predicate, we directly obtain that there must be two operations $x = op(i, k)$ and $x' = op(j, k)$ in $\tau$ which are conflicting, so the following holds:
+	\begin{gather}
+		\label{lem:sg1.4}
+		\pred{conflict}{x, x'} \\
+		\label{lem:sg1.5}
+		\land\ \tau \vDash x < x'
+	\end{gather}
+	In the case where $x = (\actalloc{i}{n}{l}, n')$ for some $n, n' \in \mathds{N}$, then we obtain the needed result from Lemma \ref{prop:allocBefore}, since we directly know that $\tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa}$.
+	
+	In all other cases, $x$ and $x'$ are conflicting read/write operations. By Lemma \ref{prop:read}, Lemma \ref{prop:write} and Lemma \ref{prop:unlock} we obtain that both $x$ and $x'$ must be preceded and followed by the appropriate lock acquisitions and releases. Formally, the following must hold for $x_i^l = (\actlock{i}{k}{\kappa}, n_1)$, $x_i^u = (\actunlock{i}{k}, n_2)$, $x_j^l = (\actlock{j}{k}{\kappa'}, n_3)$, $x_j^u = (\actunlock{j}{k}, n_4)$ and $n_1, n_2, n_3, n_4 \in \mathds{N}, \kappa, \kappa' \in \mathsf{Lock}$.
+	\begin{enumerate}
+		\item \label{sg1.1} $\tau \vDash x_i^l < x < x_i^u$
+		\item \label{sg1.2} $\tau \vDash x_j^l < x' < x_j^u$
+	\end{enumerate}
+	By Lemma \ref{prop:conflict} we know that, given the operations are conflicting from (\ref{lem:sg1.4}), either $\tau \vDash x_i^u < x_j^l$ or $\tau \vDash x_j^u < x_i^l$ holds. In the case where $\tau \vDash x_j^u < x_i^l$ holds, by points \ref{sg1.1} and \ref{sg1.2} we would get:
+	\begin{align*}
+		&\tau \vDash x_i^l < x < x_i^u \land \tau \vDash x_j^l < x' < x_j^u \land \tau \vDash x_j^u < x_i^l \\
+		&\implies \tau \vDash x_j^l < x' < x_j^u < x_i^l < x < x_i^u
+		\\
+		&\implies \tau \vDash x' < x
+	\end{align*}		
+	 The last result, i.e. $\tau \vDash x' < x$ which contradicts (\ref{lem:sg1.5}). Therefore it must be the case that $\tau \vDash x_i^u < x_j^l$ holds.
+	\end{proof}
+\end{lem}
 
-In the case where $x = (\actalloc{i}{n}{l}, n')$ for some $n, n' \in \mathds{N}$, then we obtain the needed result from Proposition \ref{prop:allocBefore}.
+The result achieved as part of Lemma \ref{lem:sg1} is extended in order to cover not just the neighbouring nodes in $\mathsf{SG}$, but also transactions connected through a directed path of conflicts. In fact, the serialization graph itself does not give us a relationship between nodes in a path (longer than 1), but we can compute one knowing that there is a chain of pairs of transactions with conflicting operations. In fact, if node $i$ and $j$ are connected by a path, there must be at least one $\mathsf{unlock}$ operation done by $i$ which happens before a $\mathsf{lock}$ one in $j$.
 
-Otherwise $x$ and $x'$ are conflicting read/write operations. By Proposition \ref{prop:read}, Proposition \ref{prop:write} and Proposition \ref{prop:unlock} we obtain the following, for $x_i^l = (\actlock{i}{k}{\kappa}, n_1)$, $x_i^u = (\actunlock{i}{k}, n_2)$, $x_j^l = (\actlock{j}{k}{\kappa'}, n_3)$, $x_j^u = (\actunlock{j}{k}, n_4)$ and $n_1, n_2, n_3, n_4 \in \mathds{N}, \kappa, \kappa' \in \mathsf{Lock}$.
-\begin{enumerate}
-	\item \label{sg1.1} $\tau \vDash x_i^l < x < x_j^u$
-	\item \label{sg1.2} $\tau \vDash x_j^l < x' < x_j^u$
-\end{enumerate}
-By Proposition \ref{prop:conflict} we know that either $\tau \vDash x_i^u < x_j^l$ or $\tau \vDash x_j^u < x_i^l$ holds. In the case where $\tau \vDash x_j^u < x_i^l$ holds, by points \ref{sg1.1} and \ref{sg1.2} we would get that $\tau \vDash x' < x$ which contradicts (\textsc{i}). Therefore it must be the case that $\tau \vDash x_i^u < x_j^l$ holds.
-\end{proof}
+\begin{center}
+	\begin{tikzpicture}[->, semithick]
+		\tikzset{
+		    tnode/.style= {circle, draw=blue, color=blue, minimum width=1cm},
+		    pnew/.style= {below, black!5!blue, thick},
+		}
+		
+		\node[tnode] (s1) at (0, 0) {$\iota$};
+		\node[tnode] (s2) at (2, 0) {$a$};
+		\node[tnode] (s3) at (6, 0) {$b$};
+		\node[tnode] (s4) at (10, 0) {$c$};
+		
+		\draw
+		(s2) edge[pnew, bend left] node[color=black, midway, above] {$\pred{conflict}{x_a, x_b}$} (s3)
+		(s3) edge[pnew, bend left] node[color=black, midway, above] {$\pred{conflict}{x_b', x_c}$} (s4);
+	\end{tikzpicture}
+	\captionof{figure}{A serialization graph which shows conflicting operations between nodes.}
+	\label{fig:nodesPath}
+\end{center}
 
-\lem \label{lem:sg2}
-\begin{gather*}
-\forall \tau, i, j, n > 0 \ldotp i \rightarrow^n j \in \pred{SG}{\tau} \implies \\
-\exists k, k', \kappa \ldotp op(i, k) \in \tau \land op(j, k') \in \tau \land \tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa}
-\end{gather*}
+In order to better understand this, let's focus on the example provided in Figure \ref{fig:nodesPath} where we labelled the edges of a serialization graph for clarity. We assume that the conflicting operations are instantiated as $x_a = op(a, k), x_b = op(b, k), x_b' = op(b, k')$ and $x_c = op(c, k')$. Now, since it could be the case that $k \neq k'$, there might not exists a conflict between an operation of transaction $a$ and $c$. Still, from Lemma \ref{lem:sg1} we know that transaction $a$ must release the lock on $k$ before $b$ acquires it, and $b$ release the lock on $k'$ before $c$ acquires it. It follows that the $\mathsf{unlock}$ operation of $a$ in $k$ precedes the $\mathsf{lock}$ on $k'$ done by $c$. This intuition is formally verified as part of the following lemma.
 
-{\parindent0pt
-\begin{proof}
-Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$, such that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for some $h \in \mathsf{Storage}$, $\mathds{P} \in \mathsf{Prog}$, $n \in \mathds{Z}$ such that $n > 0$ and transaction identifiers $i, j \in \mathsf{Tid}$. We will prove the lemma by induction on length of the path from node $i$ to node $j$, $n$. \\
+\begin{lem}
+	\label{lem:sg2}
+	\begin{gather*}
+	\forall \tau, i, j, n > 0 \ldotp i \rightarrow^n j \in \pred{SG}{\tau} \implies \\
+	\exists k, k', \kappa \ldotp op(i, k) \in \tau \land op(j, k') \in \tau \land \tau \vDash \actunlock{i}{k} < \actlock{j}{k'}{\kappa}
+	\end{gather*}
+	
+	{\parindent0pt
+	\begin{proof}
+	Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$, such that $\tau = \pred{trace}{h, \emptyset, S, \mathds{P}}$ for some $h \in \mathsf{Storage}$, $\mathds{P} \in \mathsf{Prog}$, $S \in \mathsf{TState}$, $n \in \mathds{Z}$ such that $n > 0$ and transaction identifiers $i, j \in \mathsf{Tid}$. We will prove the lemma by induction on $n$, i.e. the length of the path from node $i$ to node $j$. \\
+	
+	\textit{Base case}: $n = 1$
+	
+	We assume that $i \rightarrow^1 j \in \pred{SG}{\tau}$ which, by definition, is equivalent to $i \rightarrow j \in \pred{SG}{\tau}$. From Lemma \ref{lem:sg1} we get that $\exists k, \kappa \ldotp \alpha_i(k) \in \tau \land \alpha_j(k) \in \tau \land \tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa}$ that concludes the proof for this case. \\
+	
+	\textit{Inductive case}: $n > 1$
+	
+	\textit{Inductive hypothesis}: Assume the property holds for $n$.
+	
+	We now want to prove the same property for $n + 1$ so we assume that:
+	\begin{gather}
+		\label{lem:sg2.1}
+		i \rightarrow^{n+1} j \in \pred{SG}{\tau}
+	\end{gather}
+	From (\ref{lem:sg2.1}) and the definition of $\rightarrow^{n+1}$, we know that for $n$ and for some $t \in \mathsf{Tid}$, the following holds:
+	\begin{gather}
+		\label{lem:sg2.2}
+		i \rightarrow^n t \in \pred{SG}{\tau} \\
+		\label{lem:sg2.3}
+		\land\ t \rightarrow j \in \pred{SG}{\tau}
+	\end{gather}
+	From (\ref{lem:sg2.2}) and the inductive hypothesis on $n$ we obtain that, for keys $k_1, k_2 \in \mathsf{Key}$ and lock mode $\kappa_t \in \mathsf{Lock}$, there are two operations $op(i, k_1)$ and $op(t, k_2)$ which are part of $\tau$ and for which the following is true:
+	\begin{gather}
+		\label{lem:sg2.4}
+		\tau \vDash \actunlock{i}{k_1} < \actlock{t}{k_2}{\kappa_t}
+	\end{gather}
+	From (\ref{lem:sg2.3}) we know that $t \rightarrow j \in \pred{SG}{\tau}$ holds and together with Lemma \ref{lem:sg1} we obtain that, for a storage key $k \in \mathsf{Key}$ and lock mode $\kappa \in \mathsf{Lock}$, there are two conflicting actions $op(t, k)$ and $op(j, k)$ inside $\tau$ such that $\tau \vDash \actunlock{t}{k} < \actlock{j}{k}{\kappa}$. From Lemma \ref{prop:2phase} we obtain that $\tau \vDash \actlock{t}{k_2}{\kappa_t} < \actunlock{t}{k}$ holds, as a consequence of the two-phase rule. Therefore, combined with (\ref{lem:sg2.4}), we then have:
+	\begin{gather*}
+		\left(
+		\begin{array}{c}
+			\tau \vDash \actunlock{i}{k_1} < \actlock{t}{k_2}{\kappa_t}
+			\land \tau \vDash \actlock{t}{k_2}{\kappa_t} < \actunlock{t}{k} \\
+			\land\ \tau \vDash \actunlock{t}{k} < \actlock{j}{k}{\kappa}
+		\end{array} \right) \\
+		\begin{aligned}
+			&\implies \tau \vDash \actunlock{i}{k_1} < \actlock{t}{k_2}{\kappa_t} < \actunlock{t}{k} < \actlock{j}{k}{\kappa} \\
+			&\implies \tau \vDash \actunlock{i}{k_1} < \actlock{j}{k}{\kappa}
+		\end{aligned}
+	\end{gather*}
+	We can thus conclude with the required result.
+	\end{proof}
+	}
+\end{lem}
 
-\textit{Base case}: $n = 1$
-
-We assume that $i \rightarrow^1 j \in \pred{SG}{\tau}$ which, by definition, is equivalent to $i \rightarrow j \in \pred{SG}{\tau}$. By Proposition \ref{lem:sg1} we get that $\exists k, \kappa \ldotp \alpha_i(k) \in \tau \land \alpha_j(k) \in \tau \land \tau \vDash \actunlock{i}{k} < \actlock{j}{k}{\kappa}$ that concludes the proof for this case. \\
-
-\textit{Inductive case}: $n > 1$
-
-\textit{Inductive hypothesis}: Assume the property holds for $n$.
-
-We now want to prove the same property for $n + 1$ so we assume that $i \rightarrow^{n+1} j \in \pred{SG}{\tau}$. By definition, we know that for $n$ and some $t \in \mathsf{Tid}$, $i \rightarrow^n t \in \pred{SG}{\tau}$ and $t \rightarrow j \in \pred{SG}{\tau}$ holds. By inductive hypothesis on $n$ we obtain that, for keys $k_1, k_2 \in \mathsf{Key}$ and lock mode $\kappa_t \in \mathsf{Lock}$, there are two operations $op(i, k_1)$ and $op(t, k_2)$ which are part of $\tau$ and that $\tau \vDash \actunlock{i}{k_1} < \actlock{t}{k_2}{\kappa_t}$ holds. By the fact that $t \rightarrow j \in \pred{SG}{\tau}$ holds and Lemma \ref{lem:sg1} we know that, for a storage key $k \in \mathsf{Key}$ and lock mode $\kappa \in \mathsf{Lock}$, there are two conflicting actions $op(t, k)$ and $op(j, k)$ inside $\tau$ such that $\tau \vDash \actunlock{t}{k} < \actlock{j}{k}{\kappa}$. By Proposition \ref{prop:2phase} we obtain that $\tau \vDash \actlock{t}{k_2}{\kappa_t} < \actunlock{t}{k}$ holds. As a consequence, it follows that $\tau \vDash \actunlock{i}{k_1} < \actlock{j}{k}{\kappa}$.
-\end{proof}
-}
-
+At this point we have formulated and shown all of the necessary ingredients to prove that the serialization graph of any \tpl\ trace does not contain any cycles. As part of the proof, we assume the presence of a generic cycle and using a combination of the previously defined lemmata, show that we arrive at a contradiction.
 \begin{thm}
 	\label{thm:sgAcyclic}
 	(Acyclic serialization graph).
-	The serialization graph of any \tpl\ trace is acyclic.
 	\[
 	\forall \tau, i \ldotp i \in \pred{SG}{\tau} \downarrow_1 \implies \lnot i \rightarrow^* i \in \pred{SG}{\tau}
 	\]
 	\begin{proof}
-	Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$, such that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for some $h \in \mathsf{Storage}$, $\mathds{P} \in \mathsf{Prog}$ and transaction identifier $i \in \mathsf{Tid}$. We assume that $i$ is part of the transaction identifiers in the serialization graph, i.e. $i \in \pred{SG}{\tau} \downarrow_1$. Let's also assume that the graph contains a cycle on $i$, which means that $\exists n \ldotp i \rightarrow^n i \in \pred{SG}{\tau}$. By Lemma \ref{lem:sg2} we obtain that for some keys $k, k' \in \mathsf{Key}$ and lock mode $\kappa \in \mathsf{Lock}$, $\tau \vDash \actunlock{i}{k} < \actlock{i}{k'}{\kappa}$ which contradicts Proposition \ref{prop:2phase}. Therefore, by contradiction we get that $\lnot i \rightarrow^* i \in \pred{SG}{\tau}$.
+	Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$, such that $\tau = \pred{trace}{h, \emptyset, S, \mathds{P}}$ for some $h \in \mathsf{Storage}$, $\mathds{P} \in \mathsf{Prog}$, $S \in \mathsf{TState}$ and transaction identifier $i \in \mathsf{Tid}$. We assume that $i$ is part of the transaction identifiers in the serialization graph, i.e. $i \in \pred{SG}{\tau} \downarrow_1$. Let's now also assume that the graph contains a cycle on $i$, which means that $\exists n \ldotp i \rightarrow^n i \in \pred{SG}{\tau}$. From Lemma \ref{lem:sg2} we obtain that for some keys $k, k' \in \mathsf{Key}$ and lock mode $\kappa \in \mathsf{Lock}$, $\tau \vDash \actunlock{i}{k} < \actlock{i}{k'}{\kappa}$ which contradicts the two-phase rule defined in Lemma \ref{prop:2phase}. Therefore, by contradiction we conclude that $\lnot i \rightarrow^* i \in \pred{SG}{\tau}$.
 	\end{proof}
 \end{thm}
 
+For completion, we combine the theorem which was just proven with our results from Section \ref{sec:graphs} in order to formally prove that every \tpl\ trace produced by our operational semantics is serializable.
 \begin{thm}
 	(Serializability).
-	Every \tpl\ trace is serializable.
 	\[
-		\forall \tau, h, \mathds{P} \ldotp \tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}} \implies \pred{serializable}{\tau}
+		\forall \tau, h, S, \mathds{P} \ldotp \tau = \pred{trace}{h, \emptyset, S, \mathds{P}} \implies \pred{serializable}{\tau}
 	\]
 	\begin{proof}
-	Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$ and assume that $\tau = \pred{trace}{h, \emptyset, \emptyset, \mathds{P}}$ for program $\mathds{P}$ and storage $h$. From Theorem \ref{thm:sgAcyclic} we obtain that $\pred{acyclic}{\tau}$ holds and from Theorem \ref{thm:acySer} we know that $\pred{serializable}{\tau}$ holds, which concludes our proof.
+	Let's pick an arbitrary trace $\tau \in [\mathsf{Act} \times \mathds{N}]$ and assume that $\tau = \pred{trace}{h, \emptyset, S, \mathds{P}}$ for program $\mathds{P}$, transactions' stack $S$ and storage $h$. From Theorem \ref{thm:sgAcyclic} we obtain that $\pred{acyclic}{\tau}$ holds and from Theorem \ref{thm:acySer} we know that $\pred{serializable}{\tau}$ holds, which concludes our proof.
 	\end{proof}
 \end{thm}
