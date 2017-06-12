@@ -36,11 +36,24 @@ END
 \label{fig:transfer}
 \end{center}
 
-For the example in Figure \ref{fig:transfer} we would have the following transaction definition.
+Following the explanation in \cite{ccontrol}, we formally define a transaction $T$ as the tuple $(\theta, \sqsubset)$ where $\theta$ is the set of all operations in $T$ and $\sqsubset$ is a partial order on $\theta$. The latter is defined as:
+\[
+	\theta \subseteq \left\lbrace op\ |\ op \in \lbrace \tread{x}^i, \twritee{x}^i \rbrace, x \in \pred{items}{db}, i \in \mathds{N} \right\rbrace \cup \left\lbrace \tcommit, \tabort \right\rbrace
+\]
+The set of operations, $\theta$, maintains the constraint $\left(\tcommit \in \theta \Leftrightarrow \tabort \notin \theta\right)$ while the ordering relation, $\sqsubset$, must satisfy the property that if the transaction contains an operation $t$ which is either a commit or an abort, then all operations must appear in a transaction before $t$. Formally,
+\[
+	\forall t \in \{\tcommit, \tabort\} \ldotp t \in \theta \Rightarrow \left( \forall op \in \theta \ldotp op \neq t \Rightarrow op \sqsubset t \right)
+\]
+
+Also, we state that, as part of a single transaction, any two operations that involve a particular item, with at least one of them being a write, must be ordered according to $\sqsubset$:
+\begin{gather*}
+	\forall x \in \pred{items}{db}, op, i, j \ldotp \left( op \in \left\lbrace \tread{x}^i, \twritee{x}^i \right\rbrace \land \lbrace op, \twritee{x}^j \rbrace \subseteq \theta \right) \\ \implies (\twritee{x}^j \sqsubset op \lor op \sqsubset \twritee{x}^j)
+\end{gather*}
+For the example in Figure \ref{fig:transfer} we would have the following transaction definition:
 \begin{gather*}
 \theta \equiv \left\lbrace \tmread{\texttt{a}}^1, \tmread{\texttt{b}}^2, \tmwritee{\texttt{a}}^3, \tmwritee{\texttt{b}}^4, \tcommit \right\rbrace
 \\
-\sqsubset \equiv \{ (\tmread{\texttt{a}}^1, \tmwritee{\texttt{a}}^3), (\tmread{\texttt{b}}^2, \tmwritee{\texttt{b}}^4), (\tmread{\texttt{a}}^1, \tcommit), (\tmread{\texttt{b}}^2, \tcommit), (\tmwritee{\texttt{a}}^3, \tcommit), (\tmwritee{\texttt{b}}^4, \tcommit) \}
+\sqsubset\ \equiv \{ (\tmread{\texttt{a}}^1, \tmwritee{\texttt{a}}^3), (\tmread{\texttt{b}}^2, \tmwritee{\texttt{b}}^4), (\tmread{\texttt{a}}^1, \tcommit), (\tmread{\texttt{b}}^2, \tcommit), (\tmwritee{\texttt{a}}^3, \tcommit), (\tmwritee{\texttt{b}}^4, \tcommit) \}
 \end{gather*}
 This gives the \textit{DBS} the option to arbitrarily schedule the operations which are not ordered according to $\sqsubset$. In fact, under the mentioned example, one could invert the order of the two reads (or even run them in parallel) and still always get to the same final result. As we will see in section \ref{histories}, if a history is proven to be serializable, then we can guarantee valuable properties about it.
 
@@ -49,9 +62,26 @@ This gives the \textit{DBS} the option to arbitrarily schedule the operations wh
 Modern database systems employ concurrency in order to run multiple transactions at the same time to achieve a higher performance and better operations throughput. On the downside, running operations in parallel on shared data items can lead to race conditions and a potential loss of two of the aforementioned ACID properties, consistency and isolation.
 
 % In order to investigate the matter further, we will introduce some definitions which will prove useful.
-The interleaving of operations which arises from a concurrent run of transactions, is referred to as a history. It records the order in which operations actually happen on the database and given that some of them could effectively execute in parallel, they are not totally ordered. A history $H$ is therefore a tuple $(\Theta, \pord)$ such that for a set of $n$ transactions $T_H = \left\lbrace T_i \right\rbrace_{i \in I}$, where $I = \{ i\ |\ 1 \leq i \leq n\}$, we have the operations set $\Theta \triangleq \bigcup_{i = 1}^{n} \theta_i$ and the partial order $\pord \subseteq \bigcup_{i = 1}^{n} \sqsubset_i$ \cite{ccontrol}. Let's also define two operations as conflicting if they both access the same data item and one of them is a write; formally we describe the property as $\pred{conflict}{op_\alpha, op_\beta} \Leftrightarrow \left( op_\alpha \in \{ \tread{x}, \twritee{x} \} \land op_\beta = \twritee{x} \right) \lor \left( op_\alpha = \twritee{x} \land op_\beta \in \{ \tread{x}, \twritee{x} \} \right)$. We then require that $\forall op_\alpha, op_\beta \ldotp (\pred{conflict}{op_\alpha, op_\beta} \land\left\lbrace op_\alpha, op_\beta \right\rbrace \subseteq \Theta) \Rightarrow (op_\alpha \pord op_\beta \lor op_\beta \pord op_\alpha)$. This means that all conflicting operations appearing in a history must be somehow ordered by $\pord$. When considering a history $H_{total}$ which is a total order over the operations of its transactions, we can refer to it simply by $\twritee{x}_i^1, $ $\twritee{y}_j^1, $ $\tcommit_i, $ $\tread{x}_j^2, $ $\twritee{x}_j^3, $ $\tcommit_j$ for example.
+The interleaving of operations which arises from a concurrent run of transactions, is referred to as a history. It records the order in which operations actually happen on the database and given that some of them could effectively execute in parallel, they are not totally ordered. A history $H$ is therefore a tuple $(\Theta, \pord)$ such that for a set of $n$ transactions $T_H = \left\lbrace T_i \right\rbrace_{i \in I}$, where $I = \{ i\ |\ 1 \leq i \leq n\}$, we have the operations set $\Theta \triangleq \bigcup_{i = 1}^{n} \theta_i$ and the partial order $\pord \subseteq \bigcup_{i = 1}^{n} \sqsubset_i$ \cite{ccontrol}. Let's also define two operations as conflicting if they both access the same data item and one of them is a write; formally we describe the property as:
+\[
+	\pred{conflict}{op_\alpha, op_\beta} \Leftrightarrow \left( op_\alpha \in \{ \tread{x}, \twritee{x} \} \land op_\beta = \twritee{x} \right) \lor \left( op_\alpha = \twritee{x} \land op_\beta \in \{ \tread{x}, \twritee{x} \} \right)
+\]
+We then require that all conflicting operations appearing in a history must be somehow ordered by $\pord$.
+\[
+	\forall op_\alpha, op_\beta \ldotp (\pred{conflict}{op_\alpha, op_\beta} \land\left\lbrace op_\alpha, op_\beta \right\rbrace \subseteq \Theta) \Rightarrow (op_\alpha \pord op_\beta \lor op_\beta \pord op_\alpha)
+\]
+When considering a history $H_{total}$ which is a total order over the operations of its transactions, we can refer to it simply by $\twritee{x}_i^1, $ $\twritee{y}_j^1, $ $\tcommit_i, $ $\tread{x}_j^2, $ $\twritee{x}_j^3, $ $\tcommit_j$ for example.
 
-For every history $H = (\Theta, \pord)$ we define its committed transactions as the set $\pred{committed}{H} \triangleq \{ T_i\ |\ \tcommit_i \in \Theta \}$. We can now build its corresponding precedence graph \cite{dbconcepts} $G(H) = (V, E)$ where the set of vertices $V = \pred{committed}{T_H}$ includes all committed transactions in $H$ and the edges $E \triangleq \{ (T_i, T_j)\ |\ i \neq j \land \exists op_\alpha, op_\beta \ldotp op_\alpha \in \theta_i \land op_\beta \in \theta_j \land op_\alpha \pord op_\beta \}$.
+For every history $H = (\Theta, \pord)$ we can compute the group of transactions which committed as part of it as the set:
+\[
+	\pred{committed}{H} \triangleq \{ T_i\ |\ \tcommit_i \in \Theta \}
+\]
+This definition will aid us in describing a fundamental structure for the analysis of histories, the precedence or serialization graph. The latter allows to establish relationships between the transactions committing their operations as part a history. We can now build a history's precedence graph \cite{dbconcepts} $G(H) = (V, E)$ where the set of vertices $V = \pred{committed}{H}$ includes all committed transactions in $H$ and an edge $(T_i, T_j)$ is in $E$, if transaction $T_i$ has an operation which is ordered before one in $T_j$ and the two are conflicting. Formally, the set of edges is defined as:
+\[
+	E \triangleq \{ (T_i, T_j)\ |\ i \neq j \land \exists op_\alpha, op_\beta \ldotp op_\alpha \in \theta_i \land op_\beta \in \theta_j \land op_\alpha\ \pord\ op_\beta \land \pred{conflict}{op_\alpha, op_\beta} \}
+\]
+
+In Figure \ref{fig:exPrecGraph} we can see a concrete instance of a history with $3$ transactions and its corresponding precedence graph. Note that the graph's nodes include the three transactions since they all commit as part of $H$. On top of this, the edge from $T_1$ to $T_2$ is justified by pair the conflicting operations $(\tmread{x}_1^1, \tmwritee{x}_2^2)$, while the one from $T_1$ to $T_2$ by the pair $(\tmread{y}_1^2, \tmwritee{y}_3^1)$.
 
 \begin{center}
 \begin{tikzpicture}[->, semithick]
@@ -66,9 +96,15 @@ For every history $H = (\Theta, \pord)$ we define its committed transactions as 
 \\
 $H \equiv \tmread{x}_1^1, \tmread{x}_2^1, \tmread{y}_1^2, \tmwritee{x}_2^2, \tcommit_2, \tmwritee{y}_3^1, \tcommit_1, \tcommit_3$
 \captionof{figure}{An example history with its corresponding precedence graph.}
+\label{fig:exPrecGraph}
 \end{center}
 
-Two histories $H_i$ and $H_j$ are equivalent \cite{ccontrol}, written $H_i \equiv H_j$, if and only if $\pred{committed}{H_i} \equiv \pred{committed}{H_j} \land \forall op_\alpha, op_\beta \ldotp (\pred{conflict}{op_\alpha, op_\beta} \land \left\lbrace op_\alpha, op_\beta \right\rbrace \subseteq \Theta_i) \Rightarrow (op_\alpha \pord_i op_\beta \Leftrightarrow op_\alpha \pord_j op_\beta)$. The latter condition states that any two conflicting operations in two histories must be ordered in the same way. This is necessary since the result of a concurrent execution of a set of transactions only depends upon the relative ordering of conflicting operations. We describe a history as serial if all of its constituent transactions are run one after the other, without an interleaving of their operations. Such histories guarantee the highest possible database isolation. It is possible to further state that any history $H$ is serializable if and only if it is equivalent to some serial history $H'$. The serializability theorem \cite{ccontrol} states that any history $H$, such that its precedence graph $G(H)$ contains no cycles, is serializable.
+A history $H_i$ is said to be equivalent to another history $H_j$ \cite{ccontrol}, when they have the same set of transactions which committed as part of them, and they order conflicting operations in the same way. We formally write $H_i \equiv H_j$, and this holds if and only if:
+\begin{gather*}
+	\pred{committed}{H_i} \equiv \pred{committed}{H_j} \\
+	\land \forall op_\alpha, op_\beta \ldotp (\pred{conflict}{op_\alpha, op_\beta} \land \left\lbrace op_\alpha, op_\beta \right\rbrace \subseteq \Theta_i) \Rightarrow (op_\alpha\ \pord_i\ op_\beta \Leftrightarrow op_\alpha\ \pord_j\ op_\beta)
+\end{gather*}
+The latter condition is necessary because the result of a concurrent execution of a set of transactions only depends upon the relative ordering of conflicting operations. We describe a history as serial if all of its constituent transactions are run one after the other, without an interleaving of their operations. Such histories guarantee the highest possible database isolation. It is possible to further state that any history $H$ is serializable if and only if it is equivalent to some serial history $H'$. The serializability theorem \cite{ccontrol} states that any history $H$, such that its precedence graph $G(H)$ contains no cycles, is serializable.
 
 \subsection{Anomalies and Isolation Levels}
 
@@ -109,7 +145,24 @@ Serializable & $\times$ & $\times$ & $\times$ & $\times$ \\
 \label{table:isolation}
 \end{center}
 
-A concrete example of how the presence of the described phenomena can lead to a lack of correctness is shown in Table \ref{table:inconsistent} where transactions run at the read committed level. Let's assume that $T_i$ is executed by a bank's agent that wants to read what percentage of the overall funds are held by customer $a$ and $T_j$ is directly performed by $a$ as a withdrawal from an ATM machine. The former would first read the balance of $a$ then sum the funds of all customers (in this case $a$, $b$, $c$) and perform a simple division. On the other hand, $T_j$ will first read the cash availability, then subtract $\$100$ and provide the money to the customer. Given the isolation level selected, a non-repeatable read appears as part of history $H$ as $T_j$ removes the money after $T_i$ has read the initial balance for $a$ and before it has computed the overall sum. Therefore the end result $(\texttt{b}\div\texttt{total})$ will be incorrect and larger than the actual one. Moreover, this is a consequence to the fact that $H$ is not serializable. We can show this by first noticing that there are two possible serial histories $H_1 = \tmread{a}_1^1, \tmread{a}_1^2, \tmread{b}_1^3, \tmread{c}_1^4, \tcommit_1, \tmread{a}_2^1, \tmwritee{a}_2^2, \tcommit_2$ and $H_2 = \tmread{a}_2^1, \tmwritee{a}_2^2, \tcommit_2, \tmread{a}_1^1, \tmread{a}_1^2, \tmread{b}_1^3, \tmread{c}_1^4, \tcommit_1$. The conflicting operations are $(\tmread{a}_1^1, \tmwritee{a}_2^2), (\tmread{a}_1^2, \tmwritee{a}_2^2)$ and the order in which the operations appear in $H$ is $\tmread{a}_1^1 \pord_H \tmwritee{a}_2^2 \pord_H \tmread{a}_1^2$ which is neither equivalent to the one in $H_1$, $\tmread{a}_1^1 \pord_{H_1} \tmread{a}_1^2 \pord_{H_1} \tmwritee{a}_2^2$, nor to the one in $H_2$, $\tmwritee{a}_2^2 \pord_{H_2} \tmread{a}_1^1 \pord_{H_2} \tmread{a}_1^2$. Therefore since $H$ is not equivalent to any of $H_1$ and $H_2$, it is clearly not serializable. A plausible solution for this kind of issue is to change the isolation level of the $DBS$ to repeatable read which forbids the presence of the culprit phenomenon.
+A concrete example of how the presence of the described phenomena can lead to a lack of correctness is shown in Table \ref{table:inconsistent} where transactions run at the read committed level. Let's assume that $T_i$ is executed by a bank's agent that wants to read what percentage of the overall funds are held by customer $a$ and $T_j$ is directly performed by $a$ as a cash withdrawal from an ATM machine. The former would first read the balance of $a$ then sum the funds of all customers (in this case $a$, $b$, $c$) and perform a simple division. On the other hand, $T_j$ will first read the cash availability, then subtract $\$100$ and provide the money to the customer. Given the isolation level selected, a non-repeatable read appears as part of history $H$ as $T_j$ removes the money after $T_i$ has read the initial balance for $a$ and before it has computed the overall sum. Therefore the end result $(\texttt{b}\div\texttt{total})$ will be incorrect and larger than the actual one. Moreover, this is a consequence to the fact that $H$ is not serializable. We can show this by first noticing that there are two possible serial histories:
+\begin{align*}
+	H_1 &= \tmread{a}_1^1, \tmread{a}_1^2, \tmread{b}_1^3, \tmread{c}_1^4, \tcommit_1, \tmread{a}_2^1, \tmwritee{a}_2^2, \tcommit_2 \\[0.5em]
+	H_2 &= \tmread{a}_2^1, \tmwritee{a}_2^2, \tcommit_2, \tmread{a}_1^1, \tmread{a}_1^2, \tmread{b}_1^3, \tmread{c}_1^4, \tcommit_1
+\end{align*}
+The conflicting operations that happen as part of the execution are the pairs $(\tmread{a}_1^1, \tmwritee{a}_2^2)$ and $(\tmread{a}_1^2, \tmwritee{a}_2^2)$. The relative order in which they appear in the histories we consider is expressed as follows:
+\[
+	\begin{array}{c}
+		H: \tmread{a}_1^1\ \pord_H\ \tmwritee{a}_2^2\ \pord_H\ \tmread{a}_1^2
+		\\[0.5em]
+		\begin{array}{c c}
+			H_1 : \tmread{a}_1^1\ \pord_{H_1}\ \tmread{a}_1^2\ \pord_{H_1}\ \tmwritee{a}_2^2\
+			&\
+			H_2 : \tmwritee{a}_2^2\ \pord_{H_2}\ \tmread{a}_1^1\ \pord_{H_2}\ \tmread{a}_1^2
+		\end{array}
+	\end{array}
+\]
+It is clear that the particular ordering of conflicts in $H$ is neither the same as the one in $H_1$, nor to the one in $H_2$. Therefore since $H$ is not equivalent to any of $H_1$ and $H_2$, it is clearly not serializable. A plausible solution for this kind of issue is to change the isolation level of the $DBS$ to repeatable read which forbids the presence of the culprit phenomenon.
 \begin{center}
 \captionof{table}{History $H$ showing a concurrent run of two transactions $T_i$ and $T_j$.}
 \def\arraystretch{1.4}
@@ -133,15 +186,39 @@ A concrete example of how the presence of the described phenomena can lead to a 
 
 \subsection{Locking Protocols}
 
-The most popular mechanism to enforce a particular isolation level is to use some form of locking. We can consider each data item $x \in \pred{items}{db}$ to be associated with a lock that manages the access to its value. When a transaction runs an operation which accesses $x$, it is required to hold the lock relative to the item. The exact synchronization structure used in this case is a read/write lock which works under two modes, a shared one and an exclusive one. The former allows multiple read operations to happen in parallel while the latter makes sure that there is only one write operation executing at any point in time. This way blocking only happens when transactions perform concurrent conflicting operations on the same data item. In terms of notation, a transaction $T_i$ can lock an item using $\tlock{\kappa}{x}_i$ and unlock it with $\tunlock{\kappa}{x}_i$ where $\kappa \in \{ \tshared, \texclusive \}$ is the lock mode (shared or exclusive). If a transaction requests access to item $x$ and gets an immediate grant even if $x$'s lock is held by another transaction, we say that the two locks are compatible \cite{dbconcepts}. We define the property for lock modes as follows $\forall \kappa_i, \kappa_j \ldotp (\exists x \ldotp \tlock{\kappa_i}{x} \land \tlock{\kappa_j}{x}) \Rightarrow (\pred{compatible}{\kappa_i, \kappa_j} \Leftrightarrow (\kappa_i = \tshared \land \kappa_j = \tshared))$.
+The most popular mechanism to enforce a particular isolation level is to use some form of locking. We can consider each data item $x \in \pred{items}{db}$ to be associated with a lock that manages the access to its value. When a transaction runs an operation which accesses $x$, it is required to hold the lock relative to the item. The exact synchronization structure used in this case is a read/write lock that works under two modes, a shared one and an exclusive one. The former allows multiple read operations to happen in parallel while the latter makes sure that there is only one write operation executing at any point in time. This way, execution blocking only happens when transactions perform concurrent conflicting operations on the same data item. In terms of notation, a transaction $T_i$ can lock an item using $\tlock{\kappa}{x}_i$ and unlock it with $\tunlock{\kappa}{x}_i$ where $\kappa \in \{ \tshared, \texclusive \}$ is the lock mode (shared or exclusive). If a transaction requests access to item $x$ and gets an immediate grant even if $x$'s lock is held by another transaction, we say that the two locks are compatible \cite{dbconcepts}. We define this property for lock modes as follows:
+\[
+	\pred{compatible}{\kappa, \kappa'} \iff (\kappa = \tshared \land \kappa' = \tshared)
+\]
 
-We can specify the usage of locks in a formal way by describing histories $H$ that arise from locking protocols. All accesses to items must be guarded by the corresponding locks, so $\forall x, i \ldotp (\tmwritee{x}_i \in \Theta_H \Rightarrow \tlock{\texclusive}{x}_i \pord \tmwritee{x}_i \pord \tunlock{\texclusive}{x}_i) \land (\tmread{x}_i \in \Theta_H \Rightarrow \exists \kappa \ldotp \tlock{\kappa}{x}_i \pord \tmread{x}_i \pord \tunlock{\kappa}{x}_i)$. Given that a transaction requesting an already acquired and non-compatible lock must wait for the counterpart to release it we will see that $\forall x, \kappa_a, \kappa_b, i, j \ldotp (i \neq j \land \lnot \pred{compatible}{\kappa_a, \kappa_b} \land \{ \tlock{\kappa_a}{x}_i, \tunlock{\kappa_a}{x}_i, \tlock{\kappa_b}{x}_j, \tunlock{\kappa_b}{x}_j \}\subseteq \Theta_H) \Rightarrow (\tlock{\kappa_a}{x}_i \pord \tunlock{\kappa_b}{x}_j \lor \tlock{\kappa_b}{x}_j \\ \pord \tunlock{\kappa_a}{x}_i)$.
+We can specify the usage of locks in a formal way by describing histories $H$ that arise from locking protocols. Given that all accesses to database items are well locked, we know that they must be guarded by the corresponding and appropriate locks which are later released, so:
+\begin{gather*}
+	\forall x, i \ldotp \left( \tmwritee{x}_i \in \Theta_H \implies \tlock{\texclusive}{x}_i\ \pord\ \tmwritee{x}_i\ \pord\ \tunlock{\texclusive}{x}_i \right) \\[0.3em]
+	\land \left( \tmread{x}_i \in \Theta_H \implies \exists \kappa \ldotp \tlock{\kappa}{x}_i\ \pord\ \tmread{x}_i\ \pord\ \tunlock{\kappa}{x}_i \right)
+\end{gather*}
+On top of this, when that a transaction requests an already acquired and non-compatible lock, it must wait for the counterpart to release. This implies that as part of locking protocols' histories, we will see that:
+\begin{gather*}
+	\forall x, \kappa_a, \kappa_b, i, j \ldotp \\
+	(i \neq j \land \lnot \pred{compatible}{\kappa_a, \kappa_b} \land \{ \tlock{\kappa_a}{x}_i, \tunlock{\kappa_a}{x}_i, \tlock{\kappa_b}{x}_j, \tunlock{\kappa_b}{x}_j \}\subseteq \Theta_H) \\
+	 \implies (\tlock{\kappa_a}{x}_i\ \pord\ \tunlock{\kappa_b}{x}_j \lor \tlock{\kappa_b}{x}_j\ \pord\ \tunlock{\kappa_a}{x}_i)
+\end{gather*}
 
-Two-Phase-Locking (\tpl) is a concurrency control protocol which is vastly used in commercial $DBS$ products. In its base version, as the name suggests, each transaction $T_i$'s execution can be divided into two phases \cite{ccontrol}: a growing phase where $T_i$ sequentially acquires locks for all the data items it is going to access, and a shrinking phase that starts on the first lock release and will unlock all the items it holds, one after the other. According to \tpl, during the growing phase no locks are released, and once the shrinking phase has started, no locks are acquired. Formally, all histories that result from the use of \tpl\ will have an additional property in comparison to the ones already mentioned for locking protocols. In fact lock operations will be further ordered as to comply with the two phase separation $\forall x, y, \kappa_a, \kappa_b, i, j \ldotp (\{ \tlock{\kappa_a}{x}_i, \tunlock{\kappa_b}{y}_j \} \subset \Theta_H \Rightarrow \tlock{\kappa_a}{x}_i \pord \tunlock{\kappa_b}{y}_j)$.
+Two-Phase-Locking (\tpl) is a concurrency control protocol which is vastly used in commercial $DBS$ products. In its base version, as the name suggests, each transaction $T_i$'s execution can be divided into two phases \cite{ccontrol}: a growing phase where $T_i$ sequentially acquires locks for all the data items it is going to access, and a shrinking phase that starts on the first lock release and will unlock all the items it holds, one after the other. According to \tpl, during the growing phase no locks are released, and once the shrinking phase has started, no locks are acquired. Formally, all histories that result from the use of \tpl\ will have an additional property in comparison to the ones already mentioned for locking protocols. In fact lock operations will be further ordered as to comply with the two phase separation:
+\[
+	\forall x, y, \kappa_a, \kappa_b, i \ldotp (\{ \tlock{\kappa_a}{x}_i, \tunlock{\kappa_b}{y}_i \} \subset \Theta_H \implies \tlock{\kappa_a}{x}_i\ \pord\ \tunlock{\kappa_b}{y}_i)
+\]
 
-A variation of the method is Conservative Two-Phase-Locking (\textsc{c2pl}) that works in a similar way with the key difference that all locks ever needed as part of a transaction are acquired before any read or write operation happens. As a consequence, we can state that all histories $H$ adhering to \textsc{c2pl} will be such that $\forall x, op, \kappa, i \ldotp (op \neq \textsf{L} \land \{ \tlock{\kappa}{x}_i, op \} \subseteq \Theta_H) \Rightarrow \tlock{\kappa}{x}_i \pord op$. This is done primarily in order to prevent situations in which \tpl\ would exhibit deadlocks.
+A variation of the method is Conservative Two-Phase-Locking (\textsc{c2pl}) that works in a similar way with the key difference that all locks ever needed as part of a transaction are acquired before any read or write operation happens. As a consequence, we can state that all histories $H$ adhering to \textsc{c2pl} will be such that:
+\[
+	\forall x, op, \kappa, i \ldotp (op \neq \textsf{L} \land \{ \tlock{\kappa}{x}_i, op \} \subseteq \Theta_H) \Rightarrow \tlock{\kappa}{x}_i\ \pord\ op
+\]
+This is done primarily in order to prevent situations in which \tpl\ would exhibit deadlocks, since lock acquisitions can be done in some precise order that all transactions need to follow.
 
-The most used version of \tpl\ inside concrete implementations is Strict Two-Phase-Locking (\stpl) which imposes a different kind of constraint. Specifically, it only allows transactions to release the locks they hold after they have either committed or aborted. Its histories follow the rules listed for standard \tpl\ and moreover they guarantee that $\forall x, op, \kappa, i \ldotp (op \in \{ \tcommit_i, \tabort_i \} \land \{ \tunlock{\kappa}{x}_i, op \} \subset \Theta_H) \Rightarrow op \pord \tunlock{\kappa}{x}_i$. The Strong-Strict Two-Phase-Locking (\textsc{ss2pl}) protocol works by combining the two previous approaches in a way that all locking operations happen before any access to items and all unlocking operations appear after a transaction's commit or abort completion. We summarize the pecularities of the four variants of the protocol in Table \ref{table:2plvariants}.
+Another version of \tpl\ which is widely used inside concrete implementations is Strict Two-Phase-Locking (\stpl) which imposes a different kind of constraint. Specifically, it only allows transactions to release the locks they hold after they have either committed or aborted. Its histories follow the rules listed for standard \tpl\ and moreover they guarantee that:
+\[
+	\forall x, op, \kappa, i \ldotp (op \in \{ \tcommit_i, \tabort_i \} \land \{ \tunlock{\kappa}{x}_i, op \} \subset \Theta_H) \Rightarrow op\ \pord\ \tunlock{\kappa}{x}_i
+\]
+The Strong-Strict Two-Phase-Locking (\textsc{ss2pl}) protocol works by combining the two previous approaches in a way that all locking operations happen before any access to items and all unlocking operations appear after a transaction's commit or abort completion. We summarize the pecularities of the four variants of the protocol in Table \ref{table:2plvariants}.
 \begin{center}
 \captionof{table}{Two-Phase-Locking variants' constraints. Gradual locking refers to a transaction acquiring locks for cells as it needs to, while the extreme version makes it obtain all needed locks before starting. Similarly, gradual unlocking releases locks whenever they are no longer needed (while still following the two phases rule) and, on the other hand, extreme unlocking only releases locks after a transaction has committed.}
 \def\arraystretch{1.4}
@@ -160,3 +237,23 @@ Extreme Unlocking & $\times$ & $\times$ & \checkmark & \checkmark \\
 \end{tabular}
 \label{table:2plvariants}
 \end{center}
+
+\subsection{Serializability \& Transactional Models}
+
+\label{sec:serTransMod}
+
+The theory for database transactions that we introduced so far has recently had a large number of applications to the more general context of programming languages. Transactions are being effectively used in the latter to provide an overall simplification to shared-memory concurrency. Popular commercial programming languages provide syntactic constructs to embed a chunk of code into an atomic transaction. This allows to free programmers from the burden of mantaining the fictional atomicity of operations, and delegate everything to the language implementation. We explore two models of transactions in this setting.
+
+\paragraph{Push/Pull Model}
+The model of transactions described in \cite{pushPull} is presented as a general theory of serializability, that abstracts away all of the algorithm and implementation details, in order to find a compact set of operations used in the vast majority of cases. The model does not use a concrete machine state, i.e. a global storage or memory heap, to track the effect of transactions' operations such as writes. Instead, it assigns a local \textit{log} of operations to each transaction and considers a unique shared log, which records the history of all globally visible operations. The semantics allow transactions to \textsc{Push} or \textsc{Unpush}, in order to share their local effects with the global log or to recall them from it. Conversely, they can \textsc{Pull} an operation from the shared log into their local view, together with detangling from one through an \textsc{Unpull}. These two types of actions can be seen as reading or \textit{forgetting} a read from the global storage. The framework comes with a proof of serializability within the semantic model, meaning that once users map their algorithms to push \textit{Push/Pull} semantic rules, they obtain a proof of serializability as a consequence.
+
+\paragraph{Semantics for Transactions} The work done in \cite{semanticsTransactions} presents a set of formal languages which are able to describe particular behaviours that arise from the use of transactions within a programming language. Those are defined in terms of small-step operational semantics that allow the interleaving of parallel operations. They are high-level in order not to appear too complicated to the eyes of a programmer, while still detailed enough to express the required features. The languages of the \textsf{AtomsFamily} are listed here, in increasing order of consistency strictness:
+\begin{enumerate}
+	\item \label{highLevel.1} As part of \textsf{StrongBasic} only one single thread is allowed to execute a transaction at one time. On top of this, a running transaction cannot spawn a new thread and other parallel threads cannot read or write memory cells from the global heap. This is the strongest and simplest of the languages.
+	
+	\item The \textsf{StrongNestedParallel} language is an extension of the one described in (\ref{highLevel.1}). It allows to spawn threads within transactions in multiple ways. The expression $\mathsf{spawn_{oc}}$, \textit{spawn on commit}, is allowed anywhere in a program, but if included in a transaction, the spawned thread only reduces once the transaction completed. $\mathsf{spawn_{ip}}$, \textit{internally parallel}, is only allowed within a transaction and the latter can only commit once the spawned thread completed.
+	
+	\item \label{highLevel.2} \textsf{Weak} is a modified version of the language in \ref{highLevel.1} with the removal of the nontransactional code constraint. As a consequence, threads running in parallel to a transaction can access the shared heap through nontransactional commands.
+	
+	\item Finally, the \textsf{WeakUndo} language hass all the features of the one in (\ref{highLevel.2}) together with the possibility for a transaction to abort, undo all of the heap updates and retry.
+\end{enumerate}

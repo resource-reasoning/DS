@@ -18,7 +18,7 @@ The first one allows to express that a trace $\tau$ is able to generate a partic
 	\end{align*}
 \end{defn}
 
-In order for the \tpl\ operational semantics to model any kind of two phase locking pattern, we utilize nondeterministic locking of storage cells, as described in Section \ref{sec:opSemCmd2pl}. This comes with the downside of allowing a transaction to lock (and later unlock) any cell it wants. Such phenomenon can happen even if later in the execution the same transaction does not use the locks to access the respective storage cells to read from or write to them. Lock operations performed by a transaction as part of a trace, which are never used to later access the corresponding cell are often and informally referred to as \textit{spurious}. The next two definitions formally describe this behaviour.
+In order for the \tpl\ operational semantics to model any kind of two phase locking pattern, we utilize nondeterministic locking of storage cells, as described in Section \ref{sec:opSemCmd2pl}. This comes with the downside of allowing a transaction to lock (and later unlock) any cell it wants. Such phenomenon can happen even if later in the execution the same transaction does not use the locks to access the respective storage cells to read from or write to them. Lock operations performed by a transaction as part of a trace, which are never used to later access the corresponding cell are often and informally referred to as \textit{spurious}. The next definition formally describes this behaviour.
 
 \begin{defn}
 	(Absent access).
@@ -30,9 +30,10 @@ In order for the \tpl\ operational semantics to model any kind of two phase lock
 	\]
 \end{defn}
 
+Another situation that might arise as a consequence of nondeterministic locking, which is not covered by the $\mathsf{absent}$ predicate, is when a transaction locks a cell in exclusive mode only to read from it.
 \begin{defn}
 	(Redundant lock).
-	A lock in mode $\kappa$ on cell $k$ done by transaction $\iota$ as part of trace $\tau$ is \emph{redundant} if and only if $\kappa$ is exclusive and every time $\iota$ accesses $k$, it does so only to read.
+	A lock operation for mode $\kappa$ on cell $k$ done by transaction $\iota$ as part of trace $\tau$ is \emph{redundant} if and only if $\kappa$ is exclusive and every time $\iota$ accesses $k$, it does so only to read from it.
 	\begin{gather*}
 		\pred{redundant}{\iota, k, \kappa, \tau}
 			\iff \\
@@ -40,15 +41,16 @@ In order for the \tpl\ operational semantics to model any kind of two phase lock
 	\end{gather*}
 \end{defn}
 
+When none of the two described phenomena occur as part of a given trace, we say that the latter is \textit{clean} and we are ready to start modifying it.
 \begin{defn}
 	(Clean trace).
-	A trace is \emph{clean} if and only if its transactions do not lock or unlock any absent cell.
+	A trace is \emph{clean} if and only if its transactions do not lock or unlock any absent cell and they don't hold reduntant locks.
 	\begin{gather*}
 		\pred{clean}{\tau} \iff \\
 		\forall \iota, k, \kappa, n \ldotp
 		\left( (\actlock{\iota}{k}{\kappa}, n) \in \tau \lor (\actunlock{\iota}{k}, n) \in \tau \right) \\
 			\implies
-		\pred{needed}{\iota, k, \kappa, \tau} \land \lnot \pred{redundant}{\iota, k, \kappa, \tau}
+		\lnot \pred{absent}{\iota, k, \tau} \land \lnot \pred{redundant}{\iota, k, \kappa, \tau}
 	\end{gather*}
 \end{defn}
 
@@ -82,7 +84,7 @@ In order for the \tpl\ operational semantics to model any kind of two phase lock
 	\captionof{figure}{A trace containing spurious locks and its clean equivalent.}
 \end{center}
 
-We are able to modify the structure of a trace through the union or the difference with a set of operations, which we formally define as follows.
+We are able to change the structure of a trace through the union or the difference with a set of operations, which we formally define as follows.
 \begin{defn}
 	(Trace difference).
 	\[
@@ -100,7 +102,7 @@ We are able to modify the structure of a trace through the union or the differen
 	\end{gather*}
 \end{defn}
 
-It is now possible to show that any trace $\tau$ that contains a spurious lock (followed by an unlock on the same item) and is able to generate a particular storage $h'$, has a corresponding trace $\tau'$ which contains all of $\tau$'s operations a part from the spurious ones, and $\tau'$ can generate $h'$ starting with the same initial state and program.
+It is now possible to show that any trace $\tau$ that contains a spurious lock (followed by an unlock on the same item) and is able to generate a particular storage $h'$, has a corresponding trace $\tau'$ which contains all of $\tau$'s operations a part from the spurious ones, and $\tau'$ can generate $h'$ starting with the same initial state and program. This intuitively means that spurious locks and unlocks are unnecessary operations and do not affect the final state.
 
 \begin{lem}
 	(Proof in \ref{lem:lockAbsent}).
@@ -115,6 +117,7 @@ It is now possible to show that any trace $\tau$ that contains a spurious lock (
 	\end{gather*}
 \end{lem}
 
+In a similar way we also show that if redundant locks are replaced with their shared versions, then the original program reductions can still be performed and they terminate with the same resulting storage.
 \begin{lem}
 	(Proof in \ref{lem:lockRedundant}).
 	Redundant exclusive lock operations present in a trace, can be converted to the corresponding shared equivalent without affecting the end storage.
@@ -129,7 +132,7 @@ It is now possible to show that any trace $\tau$ that contains a spurious lock (
 	\end{gather*}
 \end{lem}
 
-The proof uses another important property of operations inside a trace which is the fact that a lock on an item is not needed for any reductions a part from a read, a write or an unlock action performed by the same transaction on the same item. As we will see later, we leverage this proof in order to \textit{clean} traces from any spurious locks they contain.
+Both proofs use another important property of operations inside a trace, which is the fact that a lock on an item is not needed for any reductions a part from a read, a write or an unlock action performed by the same transaction on the same item. As we will see later, we leverage this proof in order to \textit{clean} traces from any spurious locks they contain.
 
 \begin{lem}
 	(Proof in \ref{lem:alman}).
@@ -152,20 +155,7 @@ The proof uses another important property of operations inside a trace which is 
 	\end{gather*}
 \end{lem}
 
-Once a trace is clean, we can proceed to manipulate it and, under certain circumstances, swap the order of its operations. Repeating this process, will give us a new trace, syntactically different but semantically equivalent, as observed by its effects on the global heap. This is what we are interested in, given our requirement of simulating a serial trace. Whenever in the following definitions we encounter a term of the shape $\alpha(\iota)$ or $\alpha(\iota, k)$ we actually mean the first projection of their operation-level equivalent, i.e. $op(\iota) \downarrow_1$ and $op(\iota, k) \downarrow_1$ respectively.
-
-\begin{defn}
-	(Swapped trace).
-	A trace $\tau'$ is the \emph{swapped} version of $\tau$ for some operations $x$ and $y$ if and only if $\tau'$ contains all of $\tau$'s operations in the same exact order a part from the one of $x$ and $y$, which is swapped.
-	\begin{gather*}
-		\tau' = \pred{swap}{\tau, x, y}
-		\iff \\
-		\exists \alpha_x, n_x, \alpha_y, n_y \ldotp x = (\alpha_x, n_x) \land y = (\alpha_y, n_y)\ \land \\
-		\tau' = \tau \setminus \{(\alpha_x, n_x), (\alpha_y, n_y)\} \cup \{ (\alpha_x, n_y), (\alpha_y, n_x) \}
-	\end{gather*}
-\end{defn}
-
-The semantically valid swap operations allowed on traces are summarized in the following table, where $\alpha$ and $\alpha'$ label two consecutive operations inside a program trace and the \textit{condition} is the sufficient requirement needed to perform the swap.
+Once a trace is clean, we can proceed to manipulate it and, under certain circumstances, swap the order of its operations. We only do so when the reordering does not change the final program state. Repeating this process will give us a new trace, syntactically different but semantically equivalent, as observed by its effects on the global heap. This is what we are interested in, given our requirement of simulating a serial trace. Whenever in the following definitions we encounter a term of the shape $\alpha(\iota)$ or $\alpha(\iota, k)$ we actually mean the first projection of their operation-level equivalent, i.e. $op(\iota) \downarrow_1$ and $op(\iota, k) \downarrow_1$ respectively.
 
 \begin{center}
 	\begin{tikzpicture}[->, semithick]
@@ -187,8 +177,10 @@ The semantically valid swap operations allowed on traces are summarized in the f
 		(s3) edge[pleft] node[midway, sloped, below] {$\actwrite{i}{1}{5}$} (s4.320);
 	\end{tikzpicture}
 	\captionof{figure}{An example of swapping consecutive actions in a program reduction. Note how the end state does not change as a result of the reordering.}
+	\label{fig:swap}
 \end{center}
 
+We only consider swaps of consecutive actions inside a trace and identify the pairs of operations $\alpha, \alpha'$ that can be swapped by focusing on \textit{feasible} sequences of two immediate program reductions as depicted in Figure \ref{fig:swap}. These reductions are the ones which are allowed by the \tpl\ operational semantics. For example, the action $\alpha = \actwrite{1}{k}{v}$ immediately followed by $\alpha' = \actread{2}{k}{v}$ is not a feasible pair, since under \tpl\ such a reduction could never happen. In all other feasible cases, we show that the order of two consecutive operations does not matter, by explicitly finding a new intermediate program state that allows $\alpha'$ to reduce first followed by $\alpha$. This last reduction must bring the program to the same state as $\alpha'$ did in the original case, before the swap took place.
 \begin{lem}
 	\label{lem:swapT}
 	(Feasible swap rules).
@@ -247,7 +239,7 @@ The semantically valid swap operations allowed on traces are summarized in the f
 			\land
 		\alpha' = \alpha(j)
 	\end{gather}
-	We now proceed in finding $h_b, \Phi_b, S_b, \mathds{P}_b$ by doing a case-by-case analysis on $\alpha$ and $\alpha'$ based on the feasible reductions, i.e. the ones allowed by the \tpl\ operational semantics, they can be part of according to (\ref{lem:swapT1}). From (\ref{lem:swapT2}) we know that neither $\alpha$ nor $\alpha'$ are system transitions $\actprog$. Similarly, we can't have a situation where $\alpha'$ is a lock on a key that has just been unlocked by $\alpha$. Also, since from (\ref{lem:swapT1}) we know that $i \neq j$ meaning that the two actions come from parallel transactions. This implies that, without loss of generality, programs $\mathds{P}, \mathds{P}_a, \mathds{P}'$ have the following shape:
+	We now proceed in finding $h_b, \Phi_b, S_b, \mathds{P}_b$ by doing a case-by-case analysis on $\alpha$ and $\alpha'$ based on the feasible reductions they can be part of, according to (\ref{lem:swapT1}). From (\ref{lem:swapT2}) we know that neither $\alpha$ nor $\alpha'$ are system transitions $\actprog$. Similarly, we can't have a situation where $\alpha'$ is a lock on a key that has just been unlocked by $\alpha$. Also, since from (\ref{lem:swapT1}) we know that $i \neq j$ meaning that the two actions come from parallel transactions. This implies that, without loss of generality, programs $\mathds{P}, \mathds{P}_a, \mathds{P}'$ have the following shape:
 	\[
 		\begin{array}{c @{\hspace{15pt}} c @{\hspace{15pt}} c}
 			\mathds{P}
@@ -348,6 +340,17 @@ The semantically valid swap operations allowed on traces are summarized in the f
 \end{lem}
 
 \begin{defn}
+	(Swapped trace).
+	A trace $\tau'$ is the \emph{swapped} version of $\tau$ for some operations $x$ and $y$ if and only if $\tau'$ contains all of $\tau$'s operations in the same exact order a part from the one of $x$ and $y$, which is swapped.
+	\begin{gather*}
+		\tau' = \pred{swap}{\tau, x, y}
+		\iff \\
+		\exists \alpha_x, n_x, \alpha_y, n_y \ldotp x = (\alpha_x, n_x) \land y = (\alpha_y, n_y)\ \land \\
+		\tau' = \tau \setminus \{(\alpha_x, n_x), (\alpha_y, n_y)\} \cup \{ (\alpha_x, n_y), (\alpha_y, n_x) \}
+	\end{gather*}
+\end{defn}
+
+\begin{defn}
 	\label{defn:swappable}
 	(Swappable trace actions).
 	Two operations as part of a trace  $\tau$ are \emph{swappable} if and only if their indeces are consecutive and for any $\tau$ generated full reduction, there is a point where two consecutive reductions are labelled by them and they are allowed to be swapped.
@@ -374,9 +377,9 @@ The semantically valid swap operations allowed on traces are summarized in the f
 		(\underline{h}, \emptyset, S', \pskip) \\
 			\land\
 		(h_1, \Phi_1, S_1, \mathds{P}_1)
-			\xrightarrow{\alpha}
-		(h_b, \Phi_b, S_b, \mathds{P}_b)
 			\xrightarrow{\alpha'}
+		(h_b, \Phi_b, S_b, \mathds{P}_b)
+			\xrightarrow{\alpha}
 		(h_2, \Phi_2, S_2, \mathds{P}_2))
 	\end{gather*}
 \end{defn}
@@ -392,7 +395,7 @@ The semantically valid swap operations allowed on traces are summarized in the f
 			\land
 		\tau' = \pred{swap}{\tau, x, y}
 			\implies
-		\pred{tgen}{h, \underline{h}, \Phi, S, \mathds{P}}
+		\pred{tgen}{\tau, h, \underline{h}, \Phi, S, \mathds{P}}
 	\end{gather*}
 	\begin{proof}
 	Let's pick arbitrary $h, \underline{h} \in \mathsf{Storage}, \Phi \in \mathsf{LMan}, S \in \mathsf{TState}, \mathds{P} \in \mathsf{Prog}, \tau, \tau' \in [\mathsf{Act} \times \mathds{N}], x, y \in \mathsf{Act} \times \mathds{N}$. We now assume that the following holds:
@@ -421,11 +424,11 @@ The semantically valid swap operations allowed on traces are summarized in the f
 		\label{lem:tswap3}
 			\land\
 		(h_1, \Phi_1, S_1, \mathds{P}_1)
-			\xrightarrow{\alpha}
-		(h_b, \Phi_b, S_b, \mathds{P}_b)
 			\xrightarrow{\alpha'}
+		(h_b, \Phi_b, S_b, \mathds{P}_b)
+			\xrightarrow{\alpha}
 		(h_2, \Phi_2, S_2, \mathds{P}_2)
 	\end{gather}
-	From (\ref{lem:tswap1}) and the definition of $\mathsf{swap}$ we obtain that, following $\tau'$ for $n - 1$ steps we can reduce $(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1)$. Next, we know that $\alpha$ and $\alpha'$ are swapped in $\tau'$, meaning that from (\ref{lem:tswap3}) we can reduce $(h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha} (h_b, \Phi_b, S_b, \mathds{P}_b) \xrightarrow{\alpha'} (h_2, \Phi_2, S_2, \mathds{P}_2)$ and we reach step $n+2$. From then on $\tau$ and $\tau'$ are equivalent, therefore the from (\ref{lem:tswap2}) we reduce until $\pskip$ to a state whose storage component is $\underline{h}$.
+	From (\ref{lem:tswap1}) and the definition of $\mathsf{swap}$ we obtain that, following $\tau'$ for $n - 1$ steps we can reduce $(h, \Phi, S, \mathds{P}) \rightarrow^* (h_1, \Phi_1, S_1, \mathds{P}_1)$. Next, we know that $\alpha$ and $\alpha'$ are swapped in $\tau'$, meaning that from (\ref{lem:tswap3}) we can reduce $(h_1, \Phi_1, S_1, \mathds{P}_1) \xrightarrow{\alpha'} (h_b, \Phi_b, S_b, \mathds{P}_b) \xrightarrow{\alpha} (h_2, \Phi_2, S_2, \mathds{P}_2)$ and we reach step $n+2$. From then on $\tau$ and $\tau'$ are equivalent, therefore the from (\ref{lem:tswap2}) we reduce until $\pskip$ to a state whose storage component is $\underline{h}$.
 	\end{proof}
 \end{lem}

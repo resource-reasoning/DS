@@ -1,0 +1,261 @@
+\section{Motivating example}
+
+We present an introductory example to give a taste of the work done from a high-level point of view. All of the notation and details that follow will be formally introduced and explained in later sections of this report.
+
+Let's assume the existence of a retail bank which keeps all records of its customers' accounts in a database. The latter is a simple collection of indexed numerical items. We can reach a particular item in the database using its index key, also known as address. A bank account is implemented as a single item $a$ stored in the database, where $a$'s address is the customer's unique identifier and $a$'s content is the amount of money currently in the account.
+
+The bank has a particular client, Bob, who pays his flat's rent of \$500 the first day of every month through direct debit. Coincidentally, the bank also pays interest to its customers on the first day of every month. In a fictional period of high interest rates, it gives \$600 per month to all of its 5 customers, including Bob. The modern bank's backend software system is setup in a way that the two described operations are scheduled to run in transactions that execute at the same time, concurrently. The executed code is displayed in Figure \ref{fig:bobCode}. We assume that Bob's unique identifier, and therefore account address, is $2$. This explains why the first transaction declaration assigns value $2$ to variable $\pvar{bob}$ to later dereference it and read the amount of money in the account. In the case where there is more than \$500 available, the same quantity is subtracted and the account's database item is updated. At the same time, as part of the other transaction, Bob's identifier is retrieved and used to increment by \$600 the amount in his account.
+\begin{figure}[h]
+	\begin{gather*}
+		\begin{array}{c || c}
+			\begin{array}{l}
+				\mathtt{begin} \\
+					\quad \passign{\pvar{bob}}{2}; \\
+					\quad \pderef{\pvar{m}}{\pvar{bob}}; \\
+					\quad \pifs{\pvar{m} \geq 500} \\
+						\quad \quad \pmutate{\pvar{bob}}{\pvar{m} - 500} \\
+					\quad \pifm \\
+						\quad \quad \pskip \\
+				\mathtt{end}
+			\end{array}
+		&
+			\begin{array}{l}
+				\mathtt{begin} \\
+					\quad \passign{\pvar{id}}{2}; \\
+					\quad \pderef{\pvar{x}}{\pvar{id}}; \\
+					\quad \pmutate{\pvar{id}}{\pvar{x} + 600}; \\
+				\mathtt{end}
+			\end{array}
+		\end{array}
+	\end{gather*}
+	\captionof{figure}{The bank's database program ran every month in parallel to execute Bob's direct debit and credit interest to all of its customers.}
+	\label{fig:bobCode}
+\end{figure}
+
+If we now were to assume the atomicity of operations at the level of single commands, we would need to consider all possible interleavings of the two blocks of code. Some of the possible executions that arise in this context are incorrect and can lead to serious issues. Table \ref{table:bankOutcome} shows every possible end state of the database, assuming that it started as $\{ 0 \mapsto n_0, 1 \mapsto n_1, 2 \mapsto n_2, 3 \mapsto n_3, 4 \mapsto n_4 \}$. The final results that we would expect, and want, are the ones described by options (i) and (ii) in the table, where Bob's account either contains $n_2 + 600$ dollars or $n_2 + 100$, based on whether its initial allowance was less or more than \$500. Nevertheless, (iii) might still happen if the direct debit transaction reads Bob's money into $\pvar{m}$ first, but writes to it it after the other transaction has added \$$600$ to the total.
+
+\bgroup
+\setlength{\tabcolsep}{1.5em}
+\def\arraystretch{1.5}
+\begin{table}[h]
+	\centering
+	\caption{All the possible final database outcomes from the program in Figure \ref{fig:bobCode}.}
+	\label{table:bankOutcome}
+	\begin{tabular}{|c|c|c|c|c|c|}
+	\hline
+	\textbf{\#} & \textbf{0}         & \textbf{1}         & \textbf{2}         & \textbf{3}         & \textbf{4}         \\ \hline
+	\textcolor{ForestGreen}{i}   & $n_0 $ & $n_1 $ & $\textcolor{ForestGreen}{n_2 + 600}$     & $n_3 $ & $n_4 $ \\ \hline
+	\textcolor{ForestGreen}{ii}  & $n_0 $ & $n_1 $ & $\textcolor{ForestGreen}{n_2 + 100}$ & $n_3 $ & $n_4 $ \\ \hline
+	\textcolor{red}{iii} & $n_0 $ & $n_1 $ & $\textcolor{red}{n_2 - 500}$  & $n_3 $ & $n_4 $ \\ \hline
+	\end{tabular}
+\end{table}
+\egroup
+
+This clearly demonstrates that such a system is not safe for usage and requires a \textit{concurrency control} mechanism in place. We can for instance consider a setting where each transaction locks access to the entire database, executes, and once done, gives its priviledge to another transaction which is running in parallel. Such a primitive technique would clearly not provide good performance but would guarantee the absence of the issues we encountered previously and would be less hard to reason about. This is because, given two programs $p$ and $p'$ running concurrently, we only have to consider the case where $p$ goes first followed by $p'$ and where $p'$ runs before $p$. On the other hand, \textit{Two-Phase-Locking} works at the level of single database entries and allows concurrent transactions to only acquire locks for the items they read or write. The crucial constraint enforced by the mechanism is that, once a transaction releases a lock on an item, it cannot later lock any other one. This requirement is what will allows us to show in this report the equivalence of any execution to one where transactions run one before the other, with no interleaving. We will therefore proceed with a formal proof of the program assuming it runs in the environment described at the beginning of the paragraph.
+
+In order to reason about the concurrent program in Figure \ref{fig:bobCode}, we introduce an abstraction to describe bank accounts. One of these is represented by a logic predicate of the shape $\pred{Account}{x, m}$. The latter describes an account that resides in the database at address $x$ and currently contains $m$ dollars. As the bank allows no overdraft, we add a constraint to all accounts in order to enforce $m$ to be a non-negative number. On top of this, the same predicate gives capabilities to perform the two fundamental actions:
+\begin{itemize}
+	\item Pay \textit{rent} by removing \$$500$ from the account when there is enough allowance.
+	
+	\item Credit \textit{interest} by adding \$$600$ to the total.
+\end{itemize}
+Formally, we represent all of this information as:
+\[
+	\pred{Account}{x, m}
+		\equiv
+	\exists r \ldotp \boxed{x \mapsto m \land m \geq 0}^r_{I(r, x)}
+	\sep [\tguard{Rent}]^r \sep [\tguard{Interest}]^r
+\]
+
+Everything that is in the graphical rectangle, also known as a \textit{box}, represents the content of a part, or \textit{region}, of the database which is shared among multiple transactions, that can access it. The region is uniquely identified by $r$ and transactions can modify it by following a precise set of rules that is listed in the following table, which we call the region \textit{interpretation}. Intuitively, each action of the shape $a \transto b$ in the interpretation of a region, shows the required state that needs to be present in the region, $a$, followed by what that same chunk will be replaced with, $b$.
+\[
+	I(r, x) \triangleq \left( 
+		\begin{array}{r l}
+			\tguard{Rent}:
+				&
+			\exists m \ldotp \cell{x}{m} \land m \geq 500 \transfersto \cell{x}{m - 500} \sep [\tguard{Rent}]^r
+			\\
+			\tguard{Interest}:
+				&
+			\exists m \ldotp \cell{x}{m} \transfersto \cell{x}{m + 600} \sep [\tguard{Interest}]^r
+		\end{array}
+	 \right)
+\]
+The previously introduced capabilities are mapped to concrete mutations of the shared region's contents. For instance, if we look at the \tguard{Interest} case, we notice how a transaction is able to transform $\cell{x}{m}$ into $\cell{x}{m + 600}$ given that it holds the capability in its local state, and moves the latter back in the region. Since all region updates have to be modelled as part of its interpretation, it follows that the latter serves the crucial purpose of declaring to all transactions how might the shared state change under the effect of a concurrent program. This enables users of the program logic to write \textit{stable} assertions in their programs' specifications. If they do so, it is then ensured that a particular assertion will remain valid, no matter how concurrent transactions modify a region's content according to the interpretation's actions. Such a constraint automatically gives us the \textit{composionality} of proofs, meaning that two transactions can be proven independently and then combined in parallel.
+
+We can now build a sketch proof for the two transactions in isolation in Figure \ref{fig:proofL} and Figure \ref{fig:proofR}. Notice how in both cases, the preconditions are stable with respect to the interference coming from the other transaction. In fact, we can see a disjunction as part of the shared region content which takes into account the possibility of a concurrent action occurring before the transaction starts, and for which we don't possess a full capability. For example, in Figure \ref{fig:proofL} we can se that the precondition includes $\textcolor{blue}{2 \mapsto m \lor 2 \mapsto m + 600}$ which, by only considering the intereference table, reflects both the situation where the considered transaction is the first one to execute, and the one where the other transaction precedes it.
+\begin{center}
+\[
+	\begin{array}{l}
+		\specline{
+				\exists r \ldotp
+					\boxed{
+						\left( 2 \mapsto m \lor 2 \mapsto m + 600 \right) \land m \geq 0
+					}^r_{I(r, 2)}
+					\sep [\tguard{Rent}]^r
+		} \\
+		\mathtt{begin} \\
+			\quad \specline{2 \mapsto m \lor 2 \mapsto m + 600 \land m \geq 0} \\
+			\quad \passign{\pvar{bob}}{2}; \\
+			\quad \specline{
+				\pvar{bob} \mapsto m \lor \pvar{bob} \mapsto m + 600 \land m \geq 0
+			} \\
+			\quad \pderef{\pvar{m}}{\pvar{bob}}; \\
+			\quad \specline{
+				\pvar{bob} \mapsto \pvar{m} \land \left(\pvar{m} = m \lor \pvar{m} = m + 600\right) \land m \geq 0
+			} \\
+			\quad \pifs{\pvar{m} \geq 500} \\
+				\quad \quad \specline{
+					\pvar{bob} \mapsto \pvar{m} \land \left(\pvar{m} = m \lor \pvar{m} = m + 600\right) \land \pvar{m} \geq 500
+				} \\
+				\quad \quad \pmutate{\pvar{bob}}{\pvar{m} - 500} \\
+				\quad \quad \specline{
+					\pvar{bob} \mapsto \pvar{m} - 500 \land \left(\pvar{m} = m \lor \pvar{m} = m + 600\right) \land \pvar{m} \geq 500
+				} \\
+			\quad \pifm \\
+				\quad \quad \specline{
+					\pvar{bob} \mapsto m \land 0 \leq m < 500
+				} \\
+				\quad \quad \pskip \\
+				\quad \quad \specline{
+					\pvar{bob} \mapsto m \land 0 \leq m < 500
+				} \\
+		\mathtt{end} \\
+		\specline{
+			\left( 
+				\exists r \ldotp
+					\boxed{
+						2 \mapsto m - 500 \land m \geq 500
+						\sep [\tguard{Rent}]^r
+					}^r_{I(r, 2)}
+			\right)
+		\lor \\
+			\left(
+				\exists r \ldotp
+				\boxed{
+					2 \mapsto m + 100 \land m \geq 0
+					\sep [\tguard{Rent}]^r
+				}^r_{I(r, 2)}
+			\right)
+		\lor \\
+			\left(
+				\exists r \ldotp
+				\boxed{
+					2 \mapsto m \land 0 \leq m < 500
+				}^r_{I(r, 2)}
+				\sep [\tguard{Rent}]^r
+			\right)
+		} \\
+	\end{array}
+\]
+\captionof{figure}{Sketch proof of the rent direct debit transaction.}
+\label{fig:proofL}
+\end{center}
+
+\begin{center}
+\[
+	\begin{array}{l}
+		\specline{
+			\exists r \ldotp
+				\boxed{
+					\left( 2 \mapsto m \land m \geq 0 \right)
+						\lor
+					\left( 2 \mapsto m - 500 \land m \geq 500 \right) 
+				}^r_{I(r, 2)}
+				\sep [\tguard{Increment}]^r
+		} \\
+		\mathtt{begin} \\
+			\quad \specline{
+				\left( 2 \mapsto m \land m \geq 0 \right)
+					\lor
+				\left( 2 \mapsto m - 500 \land m \geq 500 \right) 
+			} \\
+			\quad \passign{\pvar{id}}{2}; \\
+			\quad \specline{
+				\left( \pvar{id} \mapsto m \land m \geq 0 \right)
+					\lor
+				\left( \pvar{id} \mapsto m - 500 \land m \geq 500 \right)
+			} \\
+			\quad \pderef{\pvar{x}}{\pvar{id}}; \\
+			\quad \specline{
+				\pvar{id} \mapsto \pvar{x}
+					\land
+				\left( \left( \pvar{x} = m \land m \geq 0 \right)
+					\lor
+				\left( \pvar{x} = m - 500 \land m \geq 500 \right) \right)
+			} \\
+			\quad \pmutate{\pvar{id}}{\pvar{x} + 600}; \\
+			\quad \specline{
+				\pvar{id} \mapsto \pvar{x} + 600
+					\land
+				\left( \left( \pvar{x} = m \land m \geq 0 \right)
+					\lor
+				\left( \pvar{x} = m - 500 \land m \geq 500 \right) \right)
+			} \\
+		\mathtt{end} \\
+		\specline{
+				\exists r \ldotp
+					\boxed{
+						\left( 2 \mapsto m + 600 \land m \geq 0 \right)
+							\lor
+						\left( 2 \mapsto m + 100 \land m \geq 500 \right)
+						\sep [\tguard{Increment}]^r
+					}^r_{I(r, 2)}
+		}
+	\end{array}
+\]
+\captionof{figure}{Sketch proof of the credit interest transaction.}
+\label{fig:proofR}
+\end{center}
+Once the proofs are done, we can combine them for our original example in order to obtain the verified result we were hoping for: the end effect of the program is either to add \$100 to Bob's account when he has allowance to pay his rent, or to add \$600 if he does not and later flag him with an alert. For this reason, we formally introduce two other predicates that allow to express this.
+\begin{align*}
+	\pred{Alerted}{x, m}
+		&\equiv
+	\exists r \ldotp
+		\boxed{
+			x \mapsto m \land m \geq 0
+			\sep [\tguard{Increment}]^r
+		}^r_{I(r, x)}
+		\sep [\tguard{Rent}]^r
+	\\
+	\pred{Processed}{x, m}
+		&\equiv
+	\exists r \ldotp
+		\boxed{
+			x \mapsto m \land m \geq 0
+			\sep [\tguard{Increment}]^r
+			\sep [\tguard{Rent}]^r
+		}^r_{I(r, x)}
+\end{align*}
+As we can see, in the case of $\mathsf{Alerted}$, the \tguard{Rent} capability is still in the local state and has not been moved to the shared region, meaning that the first transaction could not succeed in its direct debit operation. The final sketch proof appears in Figure \ref{fig:proofPar}. When combining the post conditions of the two transactions, we elide the conflicting assertions that result in \texttt{false}, and only keep the valid ones.
+
+\begin{center}
+\begin{gather*}
+\specline{\pred{Account}{2, n_2}} \\
+\begin{array}{c || c}
+	\begin{array}{l}
+		\mathtt{begin} \\
+			\quad \passign{\pvar{bob}}{2}; \\
+			\quad \pderef{\pvar{m}}{\pvar{bob}}; \\
+			\quad \pifs{\pvar{m} \geq 500} \\
+			\quad \quad \pmutate{\pvar{bob}}{\pvar{m} - 500} \\
+		\mathtt{end}
+	\end{array}
+	&
+	\begin{array}{l}
+		\mathtt{begin} \\
+			\quad \passign{\pvar{id}}{2}; \\
+			\quad \pderef{\pvar{x}}{\pvar{id}}; \\
+			\quad \pmutate{\pvar{id}}{\pvar{x} + 600}; \\
+		\mathtt{end}
+	\end{array}
+\end{array} \\
+\specline{
+	\pred{Alerted}{2, \textcolor{ForestGreen}{n_2 + 600}}
+		\lor
+	\pred{Processed}{2, \textcolor{ForestGreen}{n_2 + 100}}
+}
+\end{gather*}
+\captionof{figure}{Sketch proof of the parallel composition of the \textit{rent} and \textit{interest} transactions.}
+\label{fig:proofPar}
+\end{center}
