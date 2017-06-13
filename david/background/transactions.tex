@@ -257,3 +257,37 @@ The model of transactions described in \cite{pushPull} is presented as a general
 	
 	\item Finally, the \textsf{WeakUndo} language hass all the features of the one in (\ref{highLevel.2}) together with the possibility for a transaction to abort, undo all of the heap updates and retry.
 \end{enumerate}
+
+\paragraph{Consistency Models} Cerone et al. \cite{ceroneConcur15} define a general framework for transactional consistency models within the context of distributed systems, in particular of geo-replicated databases. In this scenario, guaranteeing that the database behaves as if transactions get executed serially is often too slow, or unfeasible due to network failures. This is the main reason why weaker consistency guarantees are taken into account, which allows the occurrence of behaviours prohibited by serializability. The framework itself enables to uniformly specify a variety of such models by taking an axiomatic approach, with the goal of reasoning about databases at a high level of abstraction. What is key in finding common ground among a number of consistency models is the property of atomic visibility. This states that it is guaranteed that all or none of the effects of a transaction are visible to others. Replicated database systems typically enforce this behaviour. The crucial difference is then to understand and analyse when the effects become visible.
+
+As part of the framework, reasoning happens at the level of abstract database executions, that are a structures of events with particular relations on them. Each introduced consistency model is specified through consistency axioms that restrict the possible abstract executions. We will go through the high-level details of a two of such models to understand how they are generally developed.
+
+The baseline model is \textbf{Read Atomic}, which is defined through two axioms. The internal consistency axiom, \textsc{Int}, ensures that, as part of the body of a transaction, the value read from a database item $x$ is equivalent to the last value written to $x$ or the last value read from it. On the other hand, the external consistency axiom, \textsc{Ext}, enforces that any time a transaction $T$ reads a value from item $x$ before it writes to it, it will obtain a value which was written to $x$ by transactions preceding $T$. In the case where no transaction wrote to $x$, the default value of $0$ will be returned.
+
+The \textit{precedence} between transactions is given by the visibility relation, \textsf{VIS}. We write $T_1 \xrightarrow{\mathsf{VIS}} T_2$ in order to express that $T_2$'s internal operations can be influenced by $T_1$'s effect on the database. Another fundamental relation of abstract executions is arbitration, \textsf{AR}, which is defined on transactions. The meaning of $T_1 \xrightarrow{\mathsf{AR}} T_2$ is that transaction $T_2$'s version of database items supersedes the one written to by $T_1$.
+
+The adoption of the \textbf{Read Atomic} model leads to a variety of anomalies including the one of causality violation, an example of which is graphically shown in Figure \ref{fig:causVio}. In order to forbid this kind of behaviour we are required to strengthen the consistency model with a new axiom, \textsc{TransVis}. Causal consistency will in fact be obtained by enforcing the \textsf{VIS} to be transitive. It follows that the effects of transactions ordered by \textsf{VIS} are observed by others in this same order.
+\begin{center}
+	\begin{tikzpicture}[->, semithick]
+		\tikzset{
+		    trans/.style= {rectangle, draw=black, color=black, minimum width=3.8cm, minimum height=1cm},
+		    vis/.style= {above, black!5!black, semithick},
+		}
+		
+		\node[trans] (s1) at (0, 0) {$\textcolor{blue}{\tmwrite{x}{1}}\ ;\ \tmwrite{y}{0}$};
+		\node[trans] (s2) at (5, 0) {$\textcolor{blue}{\tmreade{x}{1}}\ ;\ \tmwrite{y}{1}$};
+		\node[trans] (s3) at (10, 0) {$\textcolor{red}{\tmreade{x}{0}}\ ;\ \tmreade{y}{1}$};
+		\node at (0, 0.8) {$T_1$};
+		\node at (5, 0.8) {$T_2$};
+		\node at (10, 0.8) {$T_3$};
+		
+		\draw
+		(s1) edge[vis, bend right] node[midway, above] {$\mathsf{VIS}$} (s2)
+		(s1) edge[vis, bend left] node[midway, above] {$\mathsf{AR}$} (s2)
+		(s1) edge[vis, bend right] node[midway, above] {$\mathsf{AR}$} (s3.270)
+		(s2) edge[vis, bend right] node[midway, above] {$\mathsf{VIS}$} (s3)
+		(s2) edge[vis, bend left] node[midway, above] {$\mathsf{AR}$} (s3);
+	\end{tikzpicture}
+	\captionof{figure}{An example of the causality violation anomaly.}
+	\label{fig:causVio}
+\end{center}
