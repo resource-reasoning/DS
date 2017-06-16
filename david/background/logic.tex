@@ -29,7 +29,7 @@ The requirement for it to work, is that no variable which is modified as part of
 	\pred{nc}{C, C', P, Q} \triangleq \pred{mod}{C} \cap (\pred{fv}{C'} \cup \pred{fv}{P} \cup \pred{fv}{Q}) \equiv \emptyset
 \end{gather*}
 
-The rule states that as long as two threads only access disjoint parts of memory to execute, then they can safely be composed in parallel. The disjointness requirement appears as a side-condition to the rule, expressed through the non conflict predicate $\mathsf{nc}$.
+The rule states that as long as two threads only need access to disjoint parts of memory in order to execute, then they can safely be composed in parallel. The disjointness requirement appears as a side-condition to the rule, expressed through the non conflict predicate $\mathsf{nc}$.
 
 When dealing with process interaction, programs need to be syntactically structured in a new way. This novelty is introduced in order to declare and model the shared resources which are accessible to concurrent commands in a program. On top this, a new command is also introduced to allow a process to access shared resources through a conditional critical region \cite{csl} \cite{brookes}.
 \[
@@ -117,7 +117,7 @@ It follows that the parallel composition rule does not change from the disjoint 
 		{P_n}{C_n}{Q_n}
 	}
 \]
-
+As part of the presented rule, we still need to enforce that no variable free in $P_i$ or $Q_i$ is modified in $C_j$ when $i \neq j$.
 
 \tocless\subsection{RGSep} \label{rgsep}
 
@@ -126,7 +126,7 @@ The efforts developed as part of separation logic and rely/guarantee reasoning w
 	\boxed{P} \lstar \boxed{Q} \Leftrightarrow \boxed{P \land Q}
 \]
 
-Interference between parallel threads is modelled using actions of the form $P \transto Q$. The action meaning is that the part of the shared state where $P$ holds will be replaced with a part that satisfies $Q$ leaving the rest of $s$ intact. For example, if we were describing the action that allows to increment a counter stored at address $x$, we would have something along the lines of $\cell{x}{n} \transto \cell{x, m} \land m \geq n$.
+Interference between parallel threads is modelled using actions of the form $P \transto Q$. The action meaning is that the part of the shared state where $P$ holds will be replaced with a part that satisfies $Q$ leaving the rest of $s$ intact. For example, if we were describing the action that allows to increment a counter stored at address $x$, we would have something along the lines of $\cell{x}{n} \transto \cell{x}{m} \land m \geq n$.
 
 RGSep requires all preconditions and postconditions of commands in a proof to be stable under interference coming from the environment. We can syntactically check for stability as follows.
 \begin{align*}
@@ -140,7 +140,7 @@ The first property states that if we take a state $S$ and remove the part satisf
 
 \label{sec:cap}
 
-Concurrent Abstract Predicates (CAP) is a program logic explained in \cite{cap} which makes use of separation logic constructs to allow abstraction on shared data structures using abstract predicates. These provide a disjointness of shared resources at the abstraction level which might not be reflected in the actual implementation. For example, if we consider a set module and formulate a predicate stating that ``the set is $\{ 1,2 \}$", then we want to remove element $2$ and be able to assert that the set is now $\{ 1 \}$. In order to reason about the module in such a fine-grained manner, we want element $2$ to be manipulated independently from the rest of the set. This kind of disjointness expressed at the level of abstraction does not need to be part of the implementation. In fact one could implement the set module using a singly linked list which requires traversing some elements before reaching the desired item.
+Concurrent Abstract Predicates (CAP) is a program logic explained in \cite{cap} which makes use of separation logic constructs to allow abstraction on shared data structures using predicates. These provide a disjointness of shared resources at the abstraction level which might not be reflected in the actual implementation. For example, if we consider a set module and formulate a predicate stating that ``the set is $\{ 1,2 \}$", then we want to remove element $2$ and be able to assert that the set is now $\{ 1 \}$. In order to reason about the module in such a fine-grained manner, we want element $2$ to be manipulated independently from the rest of the set. This kind of disjointness expressed at the level of abstraction does not need to be part of the implementation. In fact one could implement the set module using a singly linked list which requires traversing some elements before reaching the desired item.
 
 Concurrent abstract predicates also hold information regarding what kind of interference is allowed on the shared memory from the thread and the environment. Fractional permissions are utilized in order to model the type of control a thread has on a particular shared structure \cite{fractional}. On top of this, implementation code can be formally verified against high level specifications and later be \textit{hidden} to clients that make use of it by allowing them not to refer to low-level details in their own proof derivations.
 
@@ -149,14 +149,14 @@ Standard separation logic is augmented with two novel assertions, the shared reg
 	\sharedr{P} \lstar \sharedr{Q} \iff \sharedr{P \land Q}
 \]
 
-The permission assertion $[\tguard{A}]_\pi^r$ gives the thread the possibility to perform action $\tguard{A}$ on region $r$ with fractional permission $\pi$. The latter will be a real value in $(0, 1)$ when both the thread and the environment can execute $\tguard{A}$ or equals to $1$ in the case where the thread is the only one to be able to do so. We can combine permissions to perform the same action in the same region in the following way:
+The permission assertion $[\tguard{A}]_\pi^r$ gives a thread the possibility to perform action $\tguard{A}$ on region $r$ with fractional permission $\pi$. The latter will be a real value in $(0, 1)$ when both the thread and the environment can execute $\tguard{A}$ or equals to $1$ in the case where the thread is the only one to be able to do so. We can combine permissions to perform the same action in the same region in the following way:
 \[
 	[\tguard{A}]_{\pi_1}^r \lstar [\tguard{A}]_{\pi_2}^r \iff [\tguard{A}]_{\pi_1 + \pi_2}^r
 \]
 
 Actions in CAP are similar to the ones seen in Section \ref{rgsep} and have the form $\tguard{A}: P \transto Q$ where the label is followed by two assertions that describe the part of the region needed for $\tguard{A}$ and the same part after the action has taken place. All possible actions for a particular region $r$ are summarized inside $I(r, \vec{x})$. We can create a shared region from an assertion $P$ as $P \Rrightarrow \exists r \ldotp \sharedr{P} \lstar \pred{all}{I(r, \vec{x})}$, by including every action permission available.
 
-We now have all the ingredients to prove the specification \cite{cap} of a lock module in CAP. The latter will provide three methods, namely \texttt{makeLock()}, \texttt{lock(x)} and \texttt{unlock(x)}. As the names suggest, the first method will allocate the necessary resources for a lock and initiate it while the other two will acquire or release the lock at address $\pvar{x}$. Following these English specifications we can provide formal ones.
+We now have all the ingredients to prove the specification of a lock module in CAP \cite{cap}. The latter will provide three methods, namely \texttt{makeLock()}, \texttt{lock(x)} and \texttt{unlock(x)}. As the names suggest, the first method will allocate the necessary resources for a lock and initiate it, while the other two will acquire or release the lock at address $\pvar{x}$. Following these English specifications we can provide formal ones.
 \begin{gather*}
 \triple
 {emp}
@@ -280,7 +280,7 @@ Note that the full atomic triple has the following shape, where the first part o
 \[
 	\atriplee{}{x \in X}{P_p}{P(x)}{C}{y \in Y}{Q_p(x, y)}{Q(x, y)}
 \]
-This includes all assertions which are stable under the environment's intereference. Everything which is instead on the public side of the state, accepts interference as described by the guarded transitions for regions. Whenever we encounter a standard Hoare triple $\triple{P}{C}{Q}$ in TaDA, we can see it as pure syntactic sugar for $\atriplenq{}{P}{\top}{C}{Q}{\top}$ where there is effectively no public state.	
+This includes all assertions which are stable under the environment's intereference. Everything which is instead on the public side of the state, accepts interference as described by the guarded transitions for regions. Whenever we encounter a standard Hoare triple $\vdash \triple{P}{C}{Q}$ in TaDA, we can see it as pure syntactic sugar for $\atriplenq{}{P}{\top}{C}{Q}{\top}$ where there is effectively no public state.	
 \begin{gather*}
 \triple{emp}{\mathtt{makeStack}()}{\exists r \ldotp \pred{S}{r, \pvar{ret}, []}}
 \\[0.7em]
@@ -308,7 +308,7 @@ The \texttt{makeStack()} method is given a sequential specification, since it wo
 &\pred{values}{(-, v) \cons l} \triangleq v \cons \pred{values}{l}
 \end{align*}
 
-The region type $\textbf{Stack}_r(x, h, ns, ds)$ described the structure of a shared region in memory. In addition to that, $[\tguard{G}]_r$ is a guard that is associated to the region as an abstract resource. It gives a thread the permission to perform action $\tguard{G}$ on shared region $r$. Actions in TaDA are defined inside a labelled transition system that maps guards to possible updates to the region. In our case, we express a single guard which gives the ability to both push and pop from the stack. In the second case, the update actually only happens when the stack is non-empty.
+The region type $\textbf{Stack}_r(x, h, ns, ds)$ describes the structure of a shared region in memory. In addition to that, $[\tguard{G}]_r$ is a guard that is associated to the region as an abstract resource. It gives a thread the permission to perform action $\tguard{G}$ on shared region $r$. Actions in TaDA are defined inside a labelled transition system that maps guards to possible updates to the region. In our case, we express a single guard which gives the ability to both push and pop from the stack. In the second case, the update actually only happen when the stack is non-empty.
 \begin{align*}
 &\tguard{G}: \forall n, v \neq 0, ns, ds \ldotp (ns, ds) \transto ((n, v) \cons ns, ds)
 \\
@@ -317,7 +317,7 @@ The region type $\textbf{Stack}_r(x, h, ns, ds)$ described the structure of a sh
 
 We unveil the meaning of the additional arguments of $\textbf{Stack}_r$ by providing a region interpretation for the latter.
 \begin{align*}
-I(\textbf{Stack}_r(x, h, ns, ds)) \triangleq &\cell{x}{h} \lstar \mathsf{stack}(h, ns) \lstar \bigoast_{(n, v) \in ds} \twocell{n}{v}{-}
+I(\textbf{Stack}_r(x, h, ns, ds)) &\triangleq \cell{x}{h} \lstar \mathsf{stack}(h, ns) \lstar \bigoast_{(n, v) \in ds} \twocell{n}{v}{-}
 \\
 \text{where } &\mathsf{stack}(h, []) \triangleq h = \snull
 \\
@@ -396,9 +396,9 @@ The stack's address $x$ points to the head node, $h$, which is the first node of
 		\\
 		}
 	\end{array}
-	\label{fig:concurrentstack}
 	\]
 	\captionof{figure}{The concurrent stack \textsc{While} language implementation with the addition of the compare-and-swap (\texttt{CAS}) command.}
+	\label{fig:concurrentstack}
 \end{figure}
 
 We provide an implementation of the three methods in Figure \ref{fig:concurrentstack} followed by a full TaDA proof of the $\pfuncallnr{push}{\pvar{x}, \pvar{v}}$ function in Figure \ref{fig:tadaProof}. The proof begins by unwrapping the $\pred{S}{r, \pvar{x}, l}$ abstract predicate into its definition which includes the $\textbf{Stack}_r$ region predicate and the $[\tguard{G}]_r$  action guard. We use the latter as part of the \textsc{MakeAtomic} rule, in order to modify the underlying stack structure to insert a new element, $\pvar{v}$. This step gives us the atomicity tracking component $\atomtok$ and the ability of treating a sequence of commands as if they happened atomically. As part of the function's body, we allocate memory for the node (\texttt{fst}) that will host the new element and begin a loop whose task is to read the stack's head node into \texttt{h} and use \texttt{CAS} to atomically set it to \texttt{fst} only when \texttt{h} is equivalent to $[\pvar{x}]$ (meaning that the value of the stack's head has not changed since we first read it into \texttt{h}). We prove all of this using the following inference rules:
