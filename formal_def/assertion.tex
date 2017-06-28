@@ -23,16 +23,14 @@ Local assertions, also transaction assertions, describe the state inside transac
 \[ 
     \begin{rclarray}
         \lpre , \lpost \in \Localassertion & \defeq & 
-        \begin{array}{l}
                   \assfalse \quad                  |
             \quad \asstrue \quad                   |
             \quad \assemp \quad                    |
-            \quad \expr \pt_{\op} \expr \quad      | \\
-                  \lpre \sep \lpost \quad          | 
+            \quad \expr \pt_{\op} \expr \quad      | 
+            \quad \lpre \sep \lpost \quad          | 
             \quad \lpre \land \lpost \quad         |
             \quad \lpre \lor \lpost \quad          |
             \quad \exists \lvar \ldotp \lpre \quad |
-        \end{array}
     \end{rclarray}
 \]                                  
 
@@ -84,8 +82,8 @@ The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
     \infer[\rl{TRDeref}]{%
         \judgement{}{\var = \dontcare \land \expr_{1} \pt_{\op} \expr_{2} }{ \pderef{\var}{\expr_{1}} }{\var = \expr_{2} \land \expr_{1} \pt_{\op'} \expr_{1} }
     }{%
-        \var \notin \func{fv}(\expr_{1}) \quad
-        \var \notin \func{fv}(\expr_{2}) \quad 
+        \var \notin \func{fv}{\expr_{1}} \quad
+        \var \notin \func{fv}{\expr_{2}} \quad 
         \op = \op' = \Set{\wop} \lor \op' = \op \cup \Set{\rop}
     }
 \]
@@ -103,16 +101,17 @@ How to form a negative assertion?
 \[
     \begin{rclarray}
         \gpre , \gpost \in \Globalassertion & \defeq & 
-        \begin{array}{l}
-                  \assfalse \quad                  |
-            \quad \asstrue \quad                   |
-            \quad \assemp \quad                    |
-            \quad \expr \pointsto \expr \quad      |
-            \quad \gpre \sep \gpost \quad          | \\
-                  \gpre \land \gpost \quad         |
-            \quad \gpre \lor \gpost \quad          |
-            \quad \exists \lvar \ldotp \gpre \quad |
-        \end{array}
+                  \assfalse \quad                     |
+            \quad \asstrue \quad                      |
+            \quad \assemp \quad                       |
+            \quad \expr \pointsto \expr \quad         |
+            \quad \gpre \sep \gpost \quad             | \\
+         & &      \gpre \land \gpost \quad    |
+            \quad \gpre \lor \gpost \quad             |
+            \quad \exists \lvar \ldotp \gpre \quad    |
+            \quad \boxass{\gpre}_{\intf}^{\rid} \quad |
+            \quad \capb{\capid(\vec{\lvar})} \quad    | \\
+            \intf \in \Interference & \defeq & 
     \end{rclarray}
 \]
 
@@ -135,20 +134,21 @@ How to give semantics to a negative assertion?
     \end{array}
 \]
 
-Action is pair of local assertions, where the first element cannot contain any write label, \( \dontcare \pt_{\wop} \dontcare \).
+Action is pair of local assertions, where the first element, also pre-condition, only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \).
+The second element, also called post-condition, should contain the same resource as pre-condition and if locations have been updated, they must be tagged with \( \wop \).
 
 \[
     \begin{rclarray}
         \action \in \Action & \defeq & \Set{ \lpre \transfersto \lpost \ \middle| \ \lpre , \lpost \in \Localassertion } \\
         \eval{\lpre \transfersto \lpost }_{\lenv, \stk} & \defeq & \Set{(\hp, \hp') \middle| 
         \begin{array}{@{}l@{}}
-            \exists \rs, \ws \ldotp \lenv, \stk, \hp, \emptyset,\emptyset \models_{l} \lpre \land \lenv, \stk, \hp, \rs, \ws \models_{l}\lpost 
+            \exists \lenv, \stk, \rs, \ws \ldotp \lenv, \stk, \hp, \emptyset,\emptyset \models_{l} \lpre \land \lenv, \stk, \hp, \rs, \ws \models_{l}\lpost \land {}\\
+            \dom(\hp') = \dom(\hp') \land \hp \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws} = \hp' \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws}  
         \end{array}} 
     \end{rclarray}
 \]
 
-
-%Rule, \( \efsep \) will propagate write to read assertions.
+The repartition is redefined by adding a merging process.
 
 \[
     \infer[\rl{PRCommit}]{%
@@ -162,13 +162,45 @@ Action is pair of local assertions, where the first element cannot contain any w
     }
 \]
 
+Before defining repartition, we define the meaning of \emph{merge} by first giving a syntactic rule.
+To merge two actions \( \lpre \transfersto \lpost \) and \( \lpre' \transfersto \lpost' \), it requires the pre-conditions agrees, which means that if they describe some common heaps, the state of the common part should be consistent.
+Then if the post-conditions write to different locations, the \emph{merge} (to the left) operator \( \actmrg \) returns a new action where the effect of right hands side propagate to the left hand side.
+
+\[
+    \begin{rclarray}
+        \func{writeSet}{\lvar \pointsto_{\op \cup \Set{\wop}} \dontcare } & \defeq & \Set{\lvar} \\
+        \func{writeSet}{\lvar \pointsto_{\op \setminus \Set{\wop}} \dontcare } & \defeq & \emptyset \\
+        \func{writeSet}{ \lpre \sep \lpost } & \defeq & \func{writeSet}{\lpre} \uplus \func{writeSet}{\lpost} \\
+        \lpre \mrg \lpost & \defeq & 
+        \begin{funcarray}
+            ( \lpre' \mrg \lpost' ) \sep \lvar \pointsto_{\op \cup \Set{\wop}} \dontcare  &  ( \lpre = \lpre' \sep \lvar \pointsto_{\dontcare} \dontcare ) \land  ( \lpost = \lpost' \sep \lvar \pointsto_{\op \cup \Set{\wop}} \dontcare ) \\
+            \lpre & o.w. \\
+        \end{funcarray} \\
+        \pred{agree}{\lpre , \lpost} & \iff & \exists \lpre', \lpost', \lframe \ldotp ( \lpre = \lpre \sep \lframe ) \land ( \lpost = \lpost' \sep \lframe)  \land (\lpre' \sep \lpost' \sep \lframe)\isdef \\
+        ( \lpre \transfersto \lpost ) \actmrg ( \lpre' \transfersto \lpost' ) & \defeq & 
+        \begin{funcarray}
+            \lpre \transfersto (\lpost \mrg \lpost') & \pred{agree}{\lpre , \lpre'} \land \func{writeSet}{\lpost} \cap \func{writeSet}{\lpost'} = \emptyset \\
+            \texttt{undefined} & o.w.
+        \end{funcarray}
+    \end{rclarray}
+\]
+
 \[
     \begin{rclarray}
         \rely \vdash \gpre \Rrightarrow^{\{\lpre\}\{\lpost\}} \gpost & \iff & \exists \lenv, \lenv', \stk, \stk', \tshp, \tshp', \ts, \ts' \ldotp   \lenv, \stk, \tshp, \ts \models_{g} \gpre \land \lenv', \stk', \tshp', \ts' \models_{g} \gpost \land \ts < \ts' \\
-                                                                     & & \implies \exists \hp = \func{startstate}(\tshp, \ts), \hp' = \func{startstate}(\tshp', \ts'), \hp'', \ws',\rs' \ldotp \\
+                                                                     & & \implies \exists \hp = \func{startstate}{\tshp, \ts}, \hp' = \func{startstate}{\tshp', \ts'}, \hp'', \ws',\rs' \ldotp \\
                                                                      & & \lenv, \stk, \hp, \emptyset, \emptyset \models_{l} \lpre \land \lenv', \stk', \hp'', \rs', \ws' \models_{l} \lpost \land {} \Set{\loc \mapsto \val \middle| \loc \in \ws' \land \hp''(\loc) = \val} \subseteq \hp' \land {} \\
                                                                      & & \forall \lpre_{r}, \lpost_{r} \ldotp (\lpre_{r} \transfersto \lpost_{r}) \in \rely \land \pred{compatible}{\lpre,\lpost, \lpre_{r}, \lpost_{r}} \land \exists \lenv_{r}, \stk_{r}, \hp_{r}, \rs_{r}, \ws_{r} \ldotp \\
                                                                      & & \lenv_{r}, \stk_{r}, \hp_{r}, \rs_{r}, \ws_{r} \models_{l} \lpost_{r} \land \Set{\loc \mapsto \val \middle| \loc \in \ws_{r} \cap \dom(\hp'') \land \hp_{r}(\loc) = \val} \subseteq \hp' \\
+    \end{rclarray}
+\]
+
+The \predn{compatible}, intuitively, means all the assertions within the pre-conditions \( \lpre_{1} \) and \( \lpre_{2} \) must be tagged with empty-set and if they assert overlapped heap, the overlapped part must agree.
+Then, the post-conditions \( \post_{1} \) and \( \post_{2} \) write to different locations.
+Note that for post-conditions, it is enough to only check the finger-print because of the constraint of actions and the constraint of pre-conditions.
+
+\[
+    \begin{rclarray}
         \pred{compatible}{\lpre_{1},\lpost_{1}, \lpre_{2}, \lpost_{2}} & \defeq & \pred{pre}{\lpre_{1}, \lpre_{2}} \land \pred{post}{\lpost_{1},\lpost_{2}} \\
         \pred{pre}{\lpre_{1},\lpre_{2}} & \defeq & \forall \lenv_{1}, \lenv_{2}, \stk_{1}, \stk_{2}, \hp, \hp_{1}, \hp_{2} \ldotp \lenv_{1}, \stk_{1}, \hp \uplus \hp_{1}, \emptyset, \emptyset \models_{l} \lpre_{1} \land {} \\
                                         & & \lenv_{2}, \stk_{2}, \hp \uplus \hp_{2}, \emptyset, \emptyset \models_{l} \lpre_{2} \land ( \hp \uplus \hp_{1} \uplus \hp_{2} )\isdef \\
