@@ -28,8 +28,8 @@ Local assertions, also transaction assertions, describe the state inside transac
             \quad \assemp \quad                    |
             \quad \expr \pt_{\op} \expr \quad      | 
             \quad \lpre \sep \lpost \quad          | 
-            \quad \lpre \land \lpost \quad         |
-            \quad \lpre \lor \lpost \quad          |
+            \quad \lpre \land \lpost \quad         | \\
+            & &   \lpre \lor \lpost \quad          |
             \quad \exists \lvar \ldotp \lpre \quad |
     \end{rclarray}
 \]                                  
@@ -77,6 +77,8 @@ The semantics of local assertions, where \( \rs \) and \( \ws \) represent the r
 \]
 
 The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
+The \rf{TRDeref} rule add read finger-print in finger-tracking set, only if there is no write finger-print.
+This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
 
 \[
     \infer[\rl{TRDeref}]{%
@@ -84,7 +86,7 @@ The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
     }{%
         \var \notin \func{fv}{\expr_{1}} \quad
         \var \notin \func{fv}{\expr_{2}} \quad 
-        \op = \op' = \Set{\wop} \lor \op' = \op \cup \Set{\rop}
+        ( \op = \op' \land \wop \in \op ) \lor \op' = \op \cup \Set{\rop}
     }
 \]
 
@@ -96,53 +98,92 @@ The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
 
 \subsection{Global/Program}
 
-How to form a negative assertion?
-
 \[
     \begin{rclarray}
-        \gpre , \gpost \in \Globalassertion & \defeq & 
+        \bpre , \bpost \in \texttt{InBoxAssertion} & \defeq & 
                   \assfalse \quad                     |
             \quad \asstrue \quad                      |
             \quad \assemp \quad                       |
             \quad \expr \pointsto \expr \quad         |
-            \quad \gpre \sep \gpost \quad             | \\
-         & &      \gpre \land \gpost \quad    |
-            \quad \gpre \lor \gpost \quad             |
-            \quad \exists \lvar \ldotp \gpre \quad    |
-            \quad \boxass{\gpre}_{\intf}^{\rid} \quad |
-            \quad \capb{\capid(\vec{\lvar})} \quad    | \\
-            \intf \in \Interference & \defeq & 
+            \quad \bpre \sep \bpost \quad             | 
+            \quad \bpre \land \bpost \quad            | \\
+            & &   \bpre \lor \bpost \quad             | 
+            \quad \exists \lvar \ldotp \bpre \quad    | \\
+            \gpre , \gpost \in \Globalassertion & \defeq & 
+                  \assfalse \quad                         |
+            \quad \asstrue \quad                          |
+            \quad \assemp \quad                           |
+            \quad \boxass{\bpre}_{\intf}^{\rid} \quad     |
+            \quad \capb{\capid(\vec{\lvar})}_{\rid} \quad |
+            \quad \gpre \sep \gpost \quad                 |
+            \quad \gpre \land \gpost \quad                | \\
+            & &   \gpre \lor \gpost \quad                 |
+            \quad \exists \lvar \ldotp \gpre \quad        | \\
+            \intf_{1}, \intf_{2} \in \Interference & \defeq & 
+                  \capb{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpre \transfersto \lpost \quad | 
+            \quad \intf_{1}, \intf_{2}
     \end{rclarray}
 \]
 
-The semantics of global assertions.
-How to give semantics to a negative assertion?
-
+The semantics of in-box assertions.
+\textbf{How to give semantics to a negative assertion?}
 
 \[
     \begin{array}{l c l}
-        \lenv, \stk, \tshp, \ts \models_{g} \assfalse & \iff & \texttt{never} \\
-        \lenv, \stk, \tshp, \ts \models_{g} \asstrue & \iff & \texttt{always} \\
-        \lenv, \stk, \tshp, \ts \models_{g} \assemp & \iff & \hp = \emptyset \\
-        \lenv, \stk, \tshp, \ts \models_{g} \expr_{1} \pt \expr_{2} & \iff & \dom(\tshp) = \Set{ \loc } \land \tshp(\loc)(\ts') =  \val \\
+        \lenv, \stk, \tshp, \ts \models_{b} \assfalse & \iff & \texttt{never} \\
+        \lenv, \stk, \tshp, \ts \models_{b} \asstrue & \iff & \texttt{always} \\
+        \lenv, \stk, \tshp, \ts \models_{b} \assemp & \iff & \hp = \emptyset \\
+        \lenv, \stk, \tshp, \ts \models_{b} \expr_{1} \pt \expr_{2} & \iff & \dom(\tshp) = \Set{ \loc } \land \tshp(\loc)(\ts') =  \val \\
                                                              & & \texttt{where} \ \loc = \eval{\expr_{1}}_{\lenv, \stk} \land \val = \eval{\expr_{2}}_{\lenv, \stk} \land \ts' \leq \ts \land {} \\
                                                              & & \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) \land \forall \ts'' \in ( \ts', \ts) \ldotp \tshp(\loc)(\ts'')\undef \\
-        \lenv, \stk, \tshp, \ts \models_{g} \gpre \sep \gpost & \iff & \exists \tshp_{1}, \tshp_{2} \ldotp \tshp = \tshp_{1} \uplus \tshp_{2} \land ( \lenv, \stk, \tshp_{1}, \ts \models_{g} \gpre ) \land ( \lenv, \stk, \tshp_{2}, \ts \models_{g} \gpost ) \\
-        \lenv, \stk, \tshp, \ts \models_{g} \gpre \land \gpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \gpre ) \land ( \lenv, \stk, \tshp, \ts \models_{g} \gpost ) \\
-        \lenv, \stk, \tshp, \ts \models_{g} \gpre \lor \gpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \gpre ) \lor ( \lenv, \stk, \tshp, \ts \models_{g} \gpost ) \\
-        \lenv, \stk, \tshp, \ts \models_{g} \exists \lvar \ldotp \gpre & \iff & \exists \val \ldotp \lenv\remapsto{\lvar}{\val}, \stk, \tshp, \ts \models_{g} \gpre \\
+        \lenv, \stk, \tshp, \ts \models_{b} \bpre \sep \bpost & \iff & \exists \tshp_{1}, \tshp_{2} \ldotp \tshp = \tshp_{1} \uplus \tshp_{2} \land ( \lenv, \stk, \tshp_{1}, \ts \models_{b} \bpre ) \land ( \lenv, \stk, \tshp_{2}, \ts \models_{b} \bpost ) \\
+        \lenv, \stk, \tshp, \ts \models_{b} \bpre \land \bpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \bpre ) \land ( \lenv, \stk, \tshp, \ts \models_{b} \bpost ) \\
+        \lenv, \stk, \tshp, \ts \models_{b} \bpre \lor \bpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \bpre ) \lor ( \lenv, \stk, \tshp, \ts \models_{b} \bpost ) \\
+        \lenv, \stk, \tshp, \ts \models_{b} \exists \lvar \ldotp \bpre & \iff & \exists \val \ldotp \lenv\remapsto{\lvar}{\val}, \stk, \tshp, \ts \models_{b} \bpre \\
     \end{array}
 \]
 
-Action is pair of local assertions, where the first element, also pre-condition, only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \).
+The global assertion should be interpreted as a tuple consisting of world and a set of owned capabilities.
+A capability 
+\[
+    \begin{rclarray}
+        \Regionid & \defeq & \Set{\rid, \dots} \\
+        \Capabilityid & \defeq & \Set{\capid, \dots } \\
+        \captuple \in \Capability & \defeq & \Capabilityid \times \Val^{*} \\
+        \world = (\wstate, \wcap) \in \World & \defeq & ( \Regionid \parfinfun \Timestampheap \times \Capabilityid ) \times ( \Regionid \parfinfun \Capability )
+    \end{rclarray}
+\]
+
+The composition of capabilities and worlds.
+\[
+    \begin{rclarray}
+        \wcap_{1} \compos \wcap_{2} & \defeq & 
+        \begin{funcarray}
+        \lambda \rid \ldotp 
+            \begin{funcarray}
+                \wcap_{1}(\rid) & \rid \in \wcap_{1} \land \rid \notin \wcap_{2} \\
+                \wcap_{2}(\rid) & \rid \notin \wcap_{1} \land \rid \in \wcap_{2} \\
+                \wcap_{1}(\rid) \compos \wcap_{2}(\rid) & \rid \in \wcap_{1} \cap \wcap_{2} \\
+            \end{funcarray} & \forall \rid \in \wcap_{1} \cap \wcap_{2} \ldotp ( \wcap_{1}(\rid) \compos \wcap_{2}(\rid) )\isdef \\
+            \texttt{undefined} & o.w. \\
+        \end{funcarray} \\
+        \world_{1} \compos \world_{2} & \defeq & 
+        \begin{funcarray}
+            (\wstate, \wcap_{1} \compos \wcap_{2}) & \world_{1} = (\wstate, \wcap_{1}) \land \world_{2} = (\wstate, \wcap_{2}) \land (\wcap_{1} \compos \wcap_{2} )\isdef \\
+            \texttt{undefined} & o.w. \\
+        \end{funcarray}
+    \end{rclarray}
+\]
+
+The first element, also pre-condition, only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \).
 The second element, also called post-condition, should contain the same resource as pre-condition and if locations have been updated, they must be tagged with \( \wop \).
 
 \[
     \begin{rclarray}
-        \action \in \Action & \defeq & \Set{ \lpre \transfersto \lpost \ \middle| \ \lpre , \lpost \in \Localassertion } \\
-        \eval{\lpre \transfersto \lpost }_{\lenv, \stk} & \defeq & \Set{(\hp, \hp') \middle| 
+        %\action \in \Action & \defeq & \Set{ \lpre \transfersto \lpost \ \middle| \ \lpre , \lpost \in \Localassertion } \\
+        \eval{\capb{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpre \transfersto \lpost }_{\lenv, \stk} & \defeq & \Set{(\hp, \hp') \middle| 
         \begin{array}{@{}l@{}}
-            \exists \lenv, \stk, \rs, \ws \ldotp \lenv, \stk, \hp, \emptyset,\emptyset \models_{l} \lpre \land \lenv, \stk, \hp, \rs, \ws \models_{l}\lpost \land {}\\
+            \exists \rs, \ws \ldotp \lenv, \stk, \hp, \emptyset,\emptyset \models_{l} \lpre \land \lenv, \stk, \hp, \rs, \ws \models_{l}\lpost \land {}\\
             \dom(\hp') = \dom(\hp') \land \hp \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws} = \hp' \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws}  
         \end{array}} 
     \end{rclarray}
@@ -152,12 +193,11 @@ The repartition is redefined by adding a merging process.
 
 \[
     \infer[\rl{PRCommit}]{%
-        \judgement{\rely, \grte}{\gpre}{ \ptrans{\cmd} }{\gpost}
+        \judgement{}{\gpre}{ \ptrans{\cmd} }{\gpost}
     }{%
         \begin{array}{l}
             \judgement{}{\lpre}{\cmd}{\lpost} \quad 
-            ( \lpre \transfersto \lpost ) \in \grte \quad 
-            \rely \vdash \gpre \Rrightarrow^{\{\lpre\}\{\lpost\}} \gpost
+            \vdash \gpre \Rrightarrow^{\{\lpre\}\{\lpost\}} \gpost
         \end{array}
     }
 \]
