@@ -22,36 +22,42 @@ Local assertions, also transaction assertions, describe the state inside transac
 
 \[ 
     \begin{rclarray}
+        \fp \subseteq \Fingerprint & \defeq & \Set{\wfp,\rfp} \\
         \lpre , \lpost \in \Localassertion & \defeq & 
                   \assfalse \quad                  |
             \quad \asstrue \quad                   |
             \quad \assemp \quad                    |
-            \quad \expr \pt_{\op} \expr \quad      | 
+            \quad \expr \pt_{\fp} \expr \quad      | 
             \quad \lpre \sep \lpost \quad          | 
             \quad \lpre \land \lpost \quad         | \\
             & &   \lpre \lor \lpost \quad          |
             \quad \exists \lvar \ldotp \lpre \quad |
     \end{rclarray}
-\]                                  
-
-where,
-
-\[
-    \op \subseteq \Set{\wop,\rop}
 \]
 
-We also define the order of \( \op \) like follows,
-
-\begin{tikzpicture}
-    \node (emp) {\(\emptyset\)};
-    \node[above right=0.3cm and 0.3cm of emp] (r) {\(\Set{\rop}\)};
-    \node[above left=0.3cm and 0.3cm of emp] (w) {\(\Set{\wop}\)};
-    \node[above=0.3cm of r] (rw) {\(\Set{\rop, \wop}\)};
-    
-    \draw[->] (emp) -- (r);
-    \draw[->] (emp) -- (w);
-    \draw[->] (r) -- (rw);
-\end{tikzpicture}
+We define the order of fingerprint \( \fp \) like follows.
+\begin{center}
+    \begin{tikzpicture}
+        \node (emp) {\(\emptyset\)};
+        \node[above right=0.3cm and 0.3cm of emp] (r) {\(\Set{\rfp}\)};
+        \node[above left=0.3cm and 0.3cm of emp] (w) {\(\Set{\wfp}\)};
+        \node[above=0.3cm of r] (rw) {\(\Set{\rfp, \wfp}\)};
+        
+        \draw[->] (emp) -- (r);
+        \draw[->] (emp) -- (w);
+        \draw[->] (r) -- (rw);
+    \end{tikzpicture}
+\end{center}
+Given the order we define a left merge operator on fingerprints.
+\[
+    \begin{rclarray}
+        \fp_{1} \fpmrg \fp_{2} & \defeq & 
+        \begin{funcarray}
+            \fp_{1} \cup \fp_{2}  & \exists \fp \ldotp \fp_{1} \sqsubseteq \fp \land  \fp_{2} \sqsubseteq \fp \\
+            \fp_{1}  & o.w. \\
+        \end{funcarray}
+    \end{rclarray}
+\]
 
 
 
@@ -62,11 +68,11 @@ The semantics of local assertions, where \( \rs \) and \( \ws \) represent the r
         \lenv, \stk, \hp, \rs, \ws \models_{l} \assfalse & \iff & \texttt{never} \\
         \lenv, \stk, \hp, \rs, \ws \models_{l} \asstrue & \iff & \texttt{always} \\
         \lenv, \stk, \hp, \rs, \ws \models_{l} \assemp & \iff & \hp = \emptyset \land \rs = \emptyset \land \ws = \emptyset \\
-        \lenv, \stk, \hp, \rs, \ws \models_{l} \expr_{1} \pt_{\op} \expr_{2} & \iff & \hp = \Set{\eval{\expr_{1}}_{\lenv, \stk} \mapsto \eval{\expr_{2}}_{\lenv, \stk}} \land {} \\
-                                                                             & & \op = \emptyset \implies \rs = \emptyset \land \ws = \emptyset \\
-                                                                             & & \op = \Set{\rop} \implies \rs = \Set{\eval{\expr_{1}}_{\lenv, \stk}} \land \ws = \emptyset \\
-                                                                             & & \op = \Set{\wop} \implies \rs = \emptyset \land \ws = \Set{\eval{\expr_{1}}_{\lenv, \stk}}  \\
-                                                                             & & \op = \Set{\rop,\wop} \implies \rs = \Set{\eval{\expr_{1}}_{\lenv, \stk}} \land \ws = \Set{\eval{\expr_{1}}_{\lenv, \stk}}  \\
+        \lenv, \stk, \hp, \rs, \ws \models_{l} \expr_{1} \pt_{\fp} \expr_{2} & \iff & \hp = \Set{\eval{\expr_{1}}_{\lenv, \stk} \mapsto \eval{\expr_{2}}_{\lenv, \stk}} \land {} \\
+                                                                             & & \fp = \emptyset \implies \rs = \emptyset \land \ws = \emptyset \\
+                                                                             & & \fp = \Set{\rfp} \implies \rs = \Set{\eval{\expr_{1}}_{\lenv, \stk}} \land \ws = \emptyset \\
+                                                                             & & \fp = \Set{\wfp} \implies \rs = \emptyset \land \ws = \Set{\eval{\expr_{1}}_{\lenv, \stk}}  \\
+                                                                             & & \fp = \Set{\rfp,\wfp} \implies \rs = \Set{\eval{\expr_{1}}_{\lenv, \stk}} \land \ws = \Set{\eval{\expr_{1}}_{\lenv, \stk}}  \\
         \lenv, \stk, \hp, \rs, \ws \models_{l} \lpre \sep \lpost & \iff &  \exists \hp_{1}, \hp_{2}, \rs_{1}, \rs_{2}, \ws_{1}, \ws_{2} \ldotp \\
                                                                  & & \hp = \hp_{1} \uplus \hp_{2} \land \rs = \rs_{1} \uplus \rs_{2} \land \ws = \ws_{1} \uplus \ws_{2} \land {} \\
                                                                  & &  ( \lenv, \stk, \hp_{1}, \rs_{1}, \ws_{1} \models_{l} \lpre ) \land ( \lenv, \stk, \hp_{2}, \rs_{2}, \ws_{2} \models_{l} \lpost ) \\
@@ -77,22 +83,21 @@ The semantics of local assertions, where \( \rs \) and \( \ws \) represent the r
 \]
 
 The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
-The \rf{TRDeref} rule add read finger-print in finger-tracking set, only if there is no write finger-print.
+The \rl{TRDeref} rule add read finger-print in finger-tracking set, only if there is no write finger-print.
 This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
 
 \[
     \infer[\rl{TRDeref}]{%
-        \judgement{}{\var = \dontcare \land \expr_{1} \pt_{\op} \expr_{2} }{ \pderef{\var}{\expr_{1}} }{\var = \expr_{2} \land \expr_{1} \pt_{\op'} \expr_{1} }
+        \judgement{}{\var = \dontcare \land \expr_{1} \pt_{\fp} \expr_{2} }{ \pderef{\var}{\expr_{1}} }{\var = \expr_{2} \land \expr_{1} \pt_{\fp \fpmrg \Set{\rfp}} \expr_{1} }
     }{%
         \var \notin \func{fv}{\expr_{1}} \quad
         \var \notin \func{fv}{\expr_{2}} \quad 
-        ( \op = \op' \land \wop \in \op ) \lor \op' = \op \cup \Set{\rop}
     }
 \]
 
 \[
     \infer[\rl{TRMutate}]{%
-        \judgement{}{\expr_{1} \pt_{\op} \dontcare }{ \pmutate{\expr_{1}}{\expr_{2}} }{ \expr_{1} \pt_{\op \cup \Set{\wop}} \expr_{1} }
+        \judgement{}{\expr_{1} \pt_{\fp} \dontcare }{ \pmutate{\expr_{1}}{\expr_{2}} }{ \expr_{1} \pt_{\fp \fpmrg \Set{\wfp}} \expr_{1} }
     }{}
 \]
 
@@ -100,57 +105,33 @@ This is because once a location has been re-written, the rest read are considere
 
 \[
     \begin{rclarray}
-        \bpre , \bpost \in \texttt{InBoxAssertion} & \defeq & 
-                  \assfalse \quad                     |
-            \quad \asstrue \quad                      |
-            \quad \assemp \quad                       |
-            \quad \expr \pointsto \expr \quad         |
-            \quad \bpre \sep \bpost \quad             | 
-            \quad \bpre \land \bpost \quad            | \\
-            & &   \bpre \lor \bpost \quad             | 
-            \quad \exists \lvar \ldotp \bpre \quad    | \\
+        \Regionid & \defeq & \Set{\rid, \dots} \\
+        \Capabilityid & \defeq & \Set{\capid, \dots } \\
             \gpre , \gpost \in \Globalassertion & \defeq & 
                   \assfalse \quad                         |
             \quad \asstrue \quad                          |
             \quad \assemp \quad                           |
-            \quad \boxass{\bpre}_{\intf}^{\rid} \quad     |
-            \quad \capb{\capid(\vec{\lvar})}_{\rid} \quad |
-            \quad \gpre \sep \gpost \quad                 |
-            \quad \gpre \land \gpost \quad                | \\
-            & &   \gpre \lor \gpost \quad                 |
+            \quad \expr \pointsto \expr \quad             |
+            \quad \boxass{\gpre}{\intf}{\rid} \quad       |
+            \quad \capb{\capid(\vec{\lvar})}_{\rid} \quad | \\
+            & &  \gpre \sep \gpost \quad                  |
+            \quad \gpre \land \gpost \quad                |
+            \quad \gpre \lor \gpost \quad                 |
             \quad \exists \lvar \ldotp \gpre \quad        | \\
-            \intf_{1}, \intf_{2} \in \Interference & \defeq & 
-                  \capb{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpre \transfersto \lpost \quad | 
-            \quad \intf_{1}, \intf_{2}
+            \intf \in \Interference & \defeq & 
+                  \emptyset \quad |
+                  \quad \Set{ \capb{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpre \transfersto \lpost } \uplus \intf \quad | 
     \end{rclarray}
 \]
 
-The semantics of in-box assertions.
+The global assertion should be interpreted as a tuple consisting of world and a set of owned capabilities.
+A capability is a pair of capability identifier and a vector of values as parameters.
 \textbf{How to give semantics to a negative assertion?}
 
 \[
-    \begin{array}{l c l}
-        \lenv, \stk, \tshp, \ts \models_{b} \assfalse & \iff & \texttt{never} \\
-        \lenv, \stk, \tshp, \ts \models_{b} \asstrue & \iff & \texttt{always} \\
-        \lenv, \stk, \tshp, \ts \models_{b} \assemp & \iff & \hp = \emptyset \\
-        \lenv, \stk, \tshp, \ts \models_{b} \expr_{1} \pt \expr_{2} & \iff & \dom(\tshp) = \Set{ \loc } \land \tshp(\loc)(\ts') =  \val \\
-                                                             & & \texttt{where} \ \loc = \eval{\expr_{1}}_{\lenv, \stk} \land \val = \eval{\expr_{2}}_{\lenv, \stk} \land \ts' \leq \ts \land {} \\
-                                                             & & \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) \land \forall \ts'' \in ( \ts', \ts) \ldotp \tshp(\loc)(\ts'')\undef \\
-        \lenv, \stk, \tshp, \ts \models_{b} \bpre \sep \bpost & \iff & \exists \tshp_{1}, \tshp_{2} \ldotp \tshp = \tshp_{1} \uplus \tshp_{2} \land ( \lenv, \stk, \tshp_{1}, \ts \models_{b} \bpre ) \land ( \lenv, \stk, \tshp_{2}, \ts \models_{b} \bpost ) \\
-        \lenv, \stk, \tshp, \ts \models_{b} \bpre \land \bpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \bpre ) \land ( \lenv, \stk, \tshp, \ts \models_{b} \bpost ) \\
-        \lenv, \stk, \tshp, \ts \models_{b} \bpre \lor \bpost & \iff & ( \lenv, \stk, \tshp, \ts  \models_{g} \bpre ) \lor ( \lenv, \stk, \tshp, \ts \models_{b} \bpost ) \\
-        \lenv, \stk, \tshp, \ts \models_{b} \exists \lvar \ldotp \bpre & \iff & \exists \val \ldotp \lenv\remapsto{\lvar}{\val}, \stk, \tshp, \ts \models_{b} \bpre \\
-    \end{array}
-\]
-
-The global assertion should be interpreted as a tuple consisting of world and a set of owned capabilities.
-A capability 
-\[
     \begin{rclarray}
-        \Regionid & \defeq & \Set{\rid, \dots} \\
-        \Capabilityid & \defeq & \Set{\capid, \dots } \\
         \captuple \in \Capability & \defeq & \Capabilityid \times \Val^{*} \\
-        \world = (\wstate, \wcap) \in \World & \defeq & ( \Regionid \parfinfun \Timestampheap \times \Capabilityid ) \times ( \Regionid \parfinfun \Capability )
+        \world = (\rstate, \wcap) \in \World & \defeq & ( \Regionid \parfinfun \Timestampheap \times \Capabilityid ) \times ( \Regionid \parfinfun \Capability )
     \end{rclarray}
 \]
 
@@ -161,30 +142,49 @@ The composition of capabilities and worlds.
         \begin{funcarray}
         \lambda \rid \ldotp 
             \begin{funcarray}
-                \wcap_{1}(\rid) & \rid \in \wcap_{1} \land \rid \notin \wcap_{2} \\
-                \wcap_{2}(\rid) & \rid \notin \wcap_{1} \land \rid \in \wcap_{2} \\
-                \wcap_{1}(\rid) \compos \wcap_{2}(\rid) & \rid \in \wcap_{1} \cap \wcap_{2} \\
+                \cstate_{1}(\rid) & \rid \in \wcap_{1} \land \rid \notin \wcap_{2} \\
+                \cstate_{2}(\rid) & \rid \notin \wcap_{1} \land \rid \in \wcap_{2} \\
+                \cstate_{1}(\rid) \compos \wcap_{2}(\rid) & \rid \in \wcap_{1} \cap \wcap_{2} \\
             \end{funcarray} & \forall \rid \in \wcap_{1} \cap \wcap_{2} \ldotp ( \wcap_{1}(\rid) \compos \wcap_{2}(\rid) )\isdef \\
             \texttt{undefined} & o.w. \\
         \end{funcarray} \\
         \world_{1} \compos \world_{2} & \defeq & 
         \begin{funcarray}
-            (\wstate, \wcap_{1} \compos \wcap_{2}) & \world_{1} = (\wstate, \wcap_{1}) \land \world_{2} = (\wstate, \wcap_{2}) \land (\wcap_{1} \compos \wcap_{2} )\isdef \\
+            (\rstate, \wcap_{1} \compos \wcap_{2}) & \world_{1} = (\rstate, \wcap_{1}) \land \world_{2} = (\rstate, \wcap_{2}) \land (\wcap_{1} \compos \wcap_{2} )\isdef \\
             \texttt{undefined} & o.w. \\
         \end{funcarray}
     \end{rclarray}
 \]
 
+
+\[
+    \begin{array}{l c l}
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \assfalse & \iff & \texttt{never} \\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \asstrue & \iff & \texttt{always} \\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \assemp & \iff & \tshp = \emptyset \land \rstate = \emptyset \land \cstate = \emptyset \\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \expr_{1} \pt \expr_{2} & \iff & \dom(\tshp) = \Set{ \loc } \land \tshp(\loc)(\ts') =  \val \land \rstate = \emptyset \land \cstate = \emptyset \\
+                                                             & & \texttt{where} \ \loc = \eval{\expr_{1}}_{\lenv, \stk} \land \val = \eval{\expr_{2}}_{\lenv, \stk} \land \ts' \leq \ts \land {} \\
+                                                             & & \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) \land \forall \ts'' \in ( \ts', \ts) \ldotp \tshp(\loc)(\ts'')\undef \\
+        \lenv, \stk, \tshp, \ts, \rstate, \wcap \models_{g} \boxass{\gpre}{\intf}{\rid} & \iff & \exists \tshp', \rstate', \cstate' \ldotp \lenv, \stk, \tshp \uplus \tshp' , \ts, \rstate', \cstate \compos \cstate' \models_{g} \gpre \land \rstate = \rstate' \uplus \Set{\rid \mapsto ( \tshp', \cstate' ) }\\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \capb{\capid(\vec{\lvar})}_{\rid} & \iff & \tshp = \emptyset \land \rstate = \emptyset \land \cstate = \Set{\rid \mapsto (\capid, \vec{\val}) } \\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \gpre \sep \gpost & \iff & \exists \tshp_{1}, \tshp_{2}, \rstate_{1}, \rstate_{2}, \cstate_{1}, \cstate_{2} \ldotp \tshp = \tshp_{1} \uplus \tshp_{2} \land \rstate = \rstate_{1} \compos \rstate_{2} \land \cstate = \cstate_{1} \compos \cstate_{2} \land {} \\
+                                                                               & & ( \lenv, \stk, \tshp_{1}, \ts, \rstate_{1}, \cstate_{1} \models_{g} \gpre ) \land ( \lenv, \stk, \ts, \tshp_{2}, \rstate_{2}, \cstate_{2} \models_{g} \gpost ) \\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate  \models_{g} \gpre \land \gpost & \iff & ( \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \gpre ) \land ( \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \gpost ) \\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \gpre \lor \gpost & \iff & ( \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \gpre ) \lor ( \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \gpost ) \\
+        \lenv, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \exists \lvar \ldotp \gpre & \iff & \exists \val \ldotp \lenv\remapsto{\lvar}{\val}, \stk, \tshp, \ts, \rstate, \cstate \models_{g} \gpre \\
+    \end{array}
+\]
+
 The first element, also pre-condition, only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \).
-The second element, also called post-condition, should contain the same resource as pre-condition and if locations have been updated, they must be tagged with \( \wop \).
+The second element, also called post-condition, should contain the same resource as pre-condition and if locations have been updated, they must be tagged with \( \wfp \).
 
 \[
     \begin{rclarray}
-        %\action \in \Action & \defeq & \Set{ \lpre \transfersto \lpost \ \middle| \ \lpre , \lpost \in \Localassertion } \\
-        \eval{\capb{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpre \transfersto \lpost }_{\lenv, \stk} & \defeq & \Set{(\hp, \hp') \middle| 
+        \eval{\capb{\capid(\vec{\lvar})}_{r} : \exists \vec{y} \ldotp \lpre \transfersto \lpost }_{\lenv, \stk} & \defeq & \lambda \vec{\val} \ldotp \Set{(\hp, \hp') \middle| 
         \begin{array}{@{}l@{}}
-            \exists \rs, \ws \ldotp \lenv, \stk, \hp, \emptyset,\emptyset \models_{l} \lpre \land \lenv, \stk, \hp, \rs, \ws \models_{l}\lpost \land {}\\
-            \dom(\hp') = \dom(\hp') \land \hp \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws} = \hp' \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws}  
+            \exists \rs', \ws', \vec{\val}', \lenv' = \lenv[\vec{\var} \mapsto \vec{\val}, \vec{y} \mapsto \vec{\val}'] \ldotp \\
+            \lenv', \stk, \hp, \emptyset,\emptyset \models_{l} \lpre \land \lenv', \stk, \hp', \rs', \ws' \models_{l}\lpost \land {}\\
+            \dom(\hp) = \dom(\hp') \land \hp \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws} = \hp' \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws}  
         \end{array}} 
     \end{rclarray}
 \]
@@ -208,18 +208,18 @@ Then if the post-conditions write to different locations, the \emph{merge} (to t
 
 \[
     \begin{rclarray}
-        \func{writeSet}{\lvar \pointsto_{\op \cup \Set{\wop}} \dontcare } & \defeq & \Set{\lvar} \\
-        \func{writeSet}{\lvar \pointsto_{\op \setminus \Set{\wop}} \dontcare } & \defeq & \emptyset \\
+        \func{writeSet}{\lvar \pointsto_{\fp \cup \Set{\wfp}} \dontcare } & \defeq & \Set{\lvar} \\
+        \func{writeSet}{\lvar \pointsto_{\fp \setminus \Set{\wfp}} \dontcare } & \defeq & \emptyset \\
         \func{writeSet}{ \lpre \sep \lpost } & \defeq & \func{writeSet}{\lpre} \uplus \func{writeSet}{\lpost} \\
-        \lpre \mrg \lpost & \defeq & 
+        \lpre \assmrg \lpost & \defeq & 
         \begin{funcarray}
-            ( \lpre' \mrg \lpost' ) \sep \lvar \pointsto_{\op \cup \Set{\wop}} \dontcare  &  ( \lpre = \lpre' \sep \lvar \pointsto_{\dontcare} \dontcare ) \land  ( \lpost = \lpost' \sep \lvar \pointsto_{\op \cup \Set{\wop}} \dontcare ) \\
+            ( \lpre' \assmrg \lpost' ) \sep \lvar \pointsto_{\fp \cup \Set{\wfp}} \dontcare  &  ( \lpre = \lpre' \sep \lvar \pointsto_{\dontcare} \dontcare ) \land  ( \lpost = \lpost' \sep \lvar \pointsto_{\fp \cup \Set{\wfp}} \dontcare ) \\
             \lpre & o.w. \\
         \end{funcarray} \\
         \pred{agree}{\lpre , \lpost} & \iff & \exists \lpre', \lpost', \lframe \ldotp ( \lpre = \lpre \sep \lframe ) \land ( \lpost = \lpost' \sep \lframe)  \land (\lpre' \sep \lpost' \sep \lframe)\isdef \\
         ( \lpre \transfersto \lpost ) \actmrg ( \lpre' \transfersto \lpost' ) & \defeq & 
         \begin{funcarray}
-            \lpre \transfersto (\lpost \mrg \lpost') & \pred{agree}{\lpre , \lpre'} \land \func{writeSet}{\lpost} \cap \func{writeSet}{\lpost'} = \emptyset \\
+            \lpre \transfersto (\lpost \assmrg \lpost') & \pred{agree}{\lpre , \lpre'} \land \func{writeSet}{\lpost} \cap \func{writeSet}{\lpost'} = \emptyset \\
             \texttt{undefined} & o.w.
         \end{funcarray}
     \end{rclarray}
@@ -236,7 +236,7 @@ Then if the post-conditions write to different locations, the \emph{merge} (to t
 \]
 
 The \predn{compatible}, intuitively, means all the assertions within the pre-conditions \( \lpre_{1} \) and \( \lpre_{2} \) must be tagged with empty-set and if they assert overlapped heap, the overlapped part must agree.
-Then, the post-conditions \( \post_{1} \) and \( \post_{2} \) write to different locations.
+Then, the post-conditions \( \lpost_{1} \) and \( \lpost_{2} \) write to different locations.
 Note that for post-conditions, it is enough to only check the finger-print because of the constraint of actions and the constraint of pre-conditions.
 
 \[
@@ -248,4 +248,3 @@ Note that for post-conditions, it is enough to only check the finger-print becau
                                           & & \lenv_{2}, \stk_{2}, \hp \uplus \hp_{2}, \ws_{2}, \rs_{2} \models_{l} \lpre_{1} \land \ws_{1} \cap \ws_{2} = \emptyset \\
     \end{rclarray}
 \]
-
