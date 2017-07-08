@@ -17,8 +17,9 @@ Assume a logical environment \( \lenv \), we extend the evaluation of arithmetic
 \]
 
 \subsection{Local/Transaction}
-
 Local assertions, also transaction assertions, describe the state inside transactions.
+Note that transactions always work on their own copies of the global memory.
+Therefore, one can think the local assertions describe local resources.
 
 \[ 
     \begin{rclarray}
@@ -35,14 +36,26 @@ Local assertions, also transaction assertions, describe the state inside transac
     \end{rclarray}
 \]
 
-We define the order of fingerprint \( \fp \) like follows.
+Compared with sequential separation logic, we annotated assertions with \emph{fingerprint}.
+The \emph{fingerprint} tracks how a transactions access heap.
+
+\begin{tabular}{c | l}
+    \hline
+    fingerprint & meaning \\ \hline
+    \(\emptyset\) & no access \\ 
+    \(\Set{\wfp}\) & write \\ 
+    \(\Set{\rfp}\) & read before any write \\ 
+    \(\Set{\rfp, \wfp}\) & read before any write, and then write \\ \hline
+\end{tabular}
+
+We define a order of fingerprint \( \fp \) like follows.
+
 \begin{center}
     \begin{tikzpicture}
         \node (emp) {\(\emptyset\)};
         \node[above right=0.3cm and 0.3cm of emp] (r) {\(\Set{\rfp}\)};
         \node[above left=0.3cm and 0.3cm of emp] (w) {\(\Set{\wfp}\)};
         \node[above=0.3cm of r] (rw) {\(\Set{\rfp, \wfp}\)};
-        
         \draw[->] (emp) -- (r);
         \draw[->] (emp) -- (w);
         \draw[->] (r) -- (rw);
@@ -50,17 +63,20 @@ We define the order of fingerprint \( \fp \) like follows.
 \end{center}
 
 Given the order we define a left merge operator on fingerprints.
+It reflects the fact that once a transaction writes to a location, the following reads from the same location are local.
 
 \[
     \begin{rclarray}
         \fp_{1} \bmrg \fp_{2} & \defeq & 
         \begin{funcarray}
-            \fp_{1} \cup \fp_{2}  & \exists \fp \ldotp \fp_{1} \sqsubseteq \fp \land  \fp_{2} \sqsubseteq \fp \\
+            \fp_{1} \cup \fp_{2}  & \fp_{1} \sqsubseteq \fp_{1} \cup \fp_{2} \\
             \fp_{1}  & o.w. \\
         \end{funcarray}
     \end{rclarray}
 \]
 
+The local assertions are interrupted as a set of possible heap associated fingerprint.
+We use \( \fphp \) to refer to a tuple of of a (plain) heap, a write set and a read set.
 
 \[
     \begin{rclarray}
@@ -70,10 +86,8 @@ Given the order we define a left merge operator on fingerprints.
     \end{rclarray}
 \]
 
-The semantics of local assertions, where \( \rs \) and \( \ws \) represent the read and write sets respectively.
-
 \[
-    \begin{array}{l c l}
+    \begin{rclarray}
         \eval{\assfalse}_{\lenv, \stk} & \defeq & \emptyset  \\
         \eval{\asstrue}_{\lenv, \stk} & \defeq & \powerset{ \Heapwithfingerprint}  \\
         \eval{\assemp}_{\lenv, \stk} & \defeq & \Set{\unitelem{\fphp}}  \\
@@ -87,10 +101,10 @@ The semantics of local assertions, where \( \rs \) and \( \ws \) represent the r
             \end{array}
         }  \\
         \eval{\lpre \sep \lpost}_{\lenv, \stk} & \defeq & \Set{ \fphp_{1} \compos_{\fphp} \fphp_{2} \middle| \fphp_{1} \in \eval{\lpre}_{\lenv, \stk} \land \fphp_{2} \in \eval{\lpost}_{\lenv, \stk} }  \\
-        \eval{\lpre \land \lpost}{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv, \stk} \land \fphp \in \eval{\lpost}_{\lenv, \stk}}  \\
-        \eval{\lpre \lor \lpost}{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv, \stk} \lor \fphp \in \eval{\lpost}_{\lenv, \stk}}  \\
-        \eval{\exists \lvar \ldotp \lpre}{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv\remapsto{\lvar}{\val}, \stk}}  \\
-    \end{array}
+        \eval{\lpre \land \lpost}_{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv, \stk} \land \fphp \in \eval{\lpost}_{\lenv, \stk}}  \\
+        \eval{\lpre \lor \lpost}_{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv, \stk} \lor \fphp \in \eval{\lpost}_{\lenv, \stk}}  \\
+        \eval{\exists \lvar \ldotp \lpre}_{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv\remapsto{\lvar}{\val}, \stk}}  \\
+    \end{rclarray}
 \]
 
 The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
@@ -114,6 +128,9 @@ This is because once a location has been re-written, the rest read are considere
 
 \subsection{Global/Program}
 
+The box assertion \( \boxass{\gpre}{\rid}{\intf} \) asserts part of heap that can be shared, where \( \rid \) is region identifier and \( \intf \) is the interference, i.e.\ all the possible transitions.
+The interference is a set of transitions that are labelled by capabilities.
+
 \[
     \begin{rclarray}
         \Regionid & \defeq & \Set{\rid, \dots} \\
@@ -135,9 +152,10 @@ This is because once a location has been re-written, the rest read are considere
     \end{rclarray}
 \]
 
-The global assertion should be interpreted as a tuple consisting of world and a set of owned capabilities.
-A capability is a pair of capability identifier and a vector of values as parameters.
-\textbf{How to give semantics to a negative assertion?}
+The global assertions are interpreted as a tuple of a world and a time-stamp.
+A world is a pair of shared state and logical state.
+The logical state is a pair of time-stamp heap and capability, where capability is a partial finite function from region identifier to a token.
+The shared state is a partial finite function from region identifier to logical state and its interference.
 
 \[
     \begin{rclarray}
@@ -148,7 +166,7 @@ A capability is a pair of capability identifier and a vector of values as parame
     \end{rclarray}
 \]
 
-Assume each region \( \rid \) associates capabilities, which forms a PCM:
+All capabilities associated with a region forms a partial commutative monoid (PCM):
 
 \[
     \begin{rclarray}
@@ -196,10 +214,10 @@ The composition of capabilities and worlds.
     \end{rclarray}
 \]
 
-\textbf{HOW TO INTERPRET TIME?}
+The global assertions are interpreted as a set of worlds and their corresponding times.
 
 \[
-    \begin{array}{l c l}
+    \begin{rclarray}
         \eval{\assfalse}_{\lenv, \stk} & \defeq & \emptyset \\
         \eval{\asstrue}_{\lenv, \stk} & \defeq & \powerset{\World \times \Timestamp } \\
         \eval{\assemp}_{\lenv, \stk} & \defeq & \Set{(\emptyset, \ts)} \\
@@ -216,11 +234,13 @@ The composition of capabilities and worlds.
         \eval{\gpre \land \gpost}_{\lenv, \stk} & \defeq & \Set{ ( \world, \ts ) \middle| ( \world, \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \land ( \world, \ts ) \in \eval{\gpost}_{\lenv, \stk, \ts} } \\
         \eval{\gpre \lor \gpost}_{\lenv, \stk} & \defeq & \Set{( \world, \ts ) \middle| ( \world, \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \lor ( \world, \ts ) \in \eval{\gpost}_{\lenv, \stk, \ts} } \\
         \eval{\exists \lvar \ldotp \gpre}_{\lenv, \stk} & \defeq & \Set{( \world, \ts ) \middle| ( \world, \ts )\in \eval{\gpre}_{\lenv\remapsto{\lvar}{\val}, \stk, \ts} } \\
-    \end{array}
+    \end{rclarray}
 \]
 
-The first element, also pre-condition, only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \).
-The second element, also called post-condition, should contain the same resource as pre-condition and if locations have been updated, they must be tagged with \( \wfp \).
+The first element, also pre-condition \( \lpre \), only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \), because the semantics requires the pre-condition interpreted as a heap with empty write set and empty read set.
+The second element, also called post-condition \( \lpost \), should contain the same resources as pre-condition.
+If a location has only been read, the value should remain the same pre-condition.
+\sx{For resource moving in can be tagged with write but don't know how to tag resource move out}
 
 \[
     \begin{rclarray}
@@ -233,7 +253,6 @@ The second element, also called post-condition, should contain the same resource
     \end{rclarray}
 \]
 
-The repartition is redefined by adding a merging process.
 
 \[
     \infer[\rl{PRCommit}]{%
@@ -246,53 +265,78 @@ The repartition is redefined by adding a merging process.
     }
 \]
 
-Before defining repartition, we define the meaning of \emph{merge}.
-The merge with respect to \( \fphp \).
+Before defining repartition, we define \emph{merge} with respect to two heaps associated with their read sets and write sets.
+The operation \( \wmrg \) eagerly merge the left-hand side to the right-hand side.
+This means that, first, the domain of the result is the same as the domain of left-hand side.
+Second, the result takes left-hand side but propagate all the write effects from right-hand side.
 
 \[
     \begin{rclarray}
-        \pred{noFingerPrint}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \rs_{l}, \rs_{r}, \ws_{l}, \ws_{r} \ldotp \\ 
-                                                   & & \fphp_{l} = (\dontcare, \rs_{l}, \ws_{l}) \land \fphp_{r} = (\dontcare, \rs_{r}, \ws_{r}) \land \rs_{l} = \rs_{r} = \ws_{l} = \ws_{r} = \emptyset \\
+        \dom(\fphp) & \defeq & \dom(\fphp\projection{1}) \\
+        \fphp \wmrg \fphp' & \defeq & 
+        \left( \begin{array}{@{}l@{}}
+        \lambda \loc \ldotp  
+        \begin{funcarray}
+            \hp'(\loc) & \loc \in \ws' \cap \dom(\hp) \\
+            \hp(\loc) & \loc \notin \ws' \land \loc \in \dom(\hp) \\
+            \texttt{undefined} & o.w. \\
+        \end{funcarray},\ 
+        \rs \cup ( \dom(\hp) \cap \rs' ),\ 
+        \ws \cup ( \dom(\hp) \cap \ws')
+        \end{array} \right)\\
+        & & \texttt{where} \ \fphp = (\hp, \rs, \ws) \land \fphp' = (\hp', \rs', \ws') \\
+    \end{rclarray}
+\]
+
+Given the \emph{merge} in heap, we can define \emph{merge} on transitions.
+The predicate \( \predn{noFingerPrint} \) asserts the read set and write set are empty sets, and \( \predn{noWriteConflict} \) asserts the write sets are disjointed.
+The predicate \( \predn{agree} \) has similar meaning as overlapped separation found in CoLoSL, which means that the state of the overlapped parts must agree.
+To merge two transactions, if the pre-conditions agree and both of them have no fingerprint, and if the post-conditions agree and they write to different locations, the merged result is a set of transitions including the left-hand side and another transition by merging the post-condition of right-hand side to left-hand side.
+Otherwise, the merge only returns a singleton set of left-hand side.
+
+\[
+    \begin{rclarray}
+        \dom(\fphp) & \defeq & \dom(\fphp\projection{1}) \\
+        \fphp \wmrg \fphp' & \defeq & 
+        \left( \begin{array}{@{}l@{}}
+        \lambda \loc \ldotp  
+        \begin{funcarray}
+            \hp'(\loc) & \loc \in \ws' \cap \dom(\hp) \\
+            \hp(\loc) & \loc \notin \ws' \land \loc \in \dom(\hp) \\
+            \texttt{undefined} & o.w. \\
+        \end{funcarray},\ 
+        \rs \cup ( \dom(\hp) \cap \rs' ),\ 
+        \ws \cup ( \dom(\hp) \cap \ws')
+        \end{array} \right)\\
+        & & \texttt{where} \ \fphp = (\hp, \rs, \ws) \land \fphp' = (\hp', \rs', \ws') \\
+        \pred{noFingerPrint}{\fphp} & \defeq & \exists \rs, \ws, \ldotp \fphp = (\dontcare, \rs, \ws) \land \rs = \ws = \emptyset \\
         \pred{noWriteConflict}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \ws_{l} = \fphp_{l}\projection{3}, \ws_{r} = \fphp_{r}\projection{3} \ldotp \ws_{l} \cap \ws_{r} = \emptyset \\
         \pred{agree}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \fphp'_{l}, \fphp_{m}, \fphp'_{r}, \fphp \ldotp \fphp_{l} = \fphp'_{l} \compos_{\fphp} \fphp_{m} \land \fphp_{r} = \fphp'_{r} \compos_{\fphp} \fphp_{m} \land \fphp = \fphp'_{l} \compos_{\fphp} \fphp_{m} \compos_{\fphp} \fphp'_{r} \\
-        \fphp \wmrg \fphp' & \defeq & \lambda \loc \ldotp  
-        \begin{funcarray}
-            \hp'(\loc) & \loc \in \ws' \\
-            \hp(\loc) & \loc \in \ws \land \loc \notin \ws \\
-            \texttt{undefined} & o.w. \\
-        \end{funcarray} \\
-        & & \texttt{where} \ \fphp = (\hp, \dontcare, \ws) \land \fphp' = (\hp', \dontcare, \ws') \\
-        ( \fphp_{\lpre}, \fphp_{\lpost} ) \bmrg ( \fphp'_{\lpre}, \fphp'_{\lpost} ) & \defeq & \Set{( \fphp_{\lpre}, \fphp_{\lpost} )} \cup \Set{(\fphp_{\lpre}, \fphp_{\lpost} \bmrg \fphp'_{\lpost}) \middle| 
+        ( \fphp_{\lpre}, \fphp_{\lpost} ) \bmrg ( \fphp'_{\lpre}, \fphp'_{\lpost} ) & \defeq & \Set{( \fphp_{\lpre}, \fphp_{\lpost} )} \cup \Set{(\fphp_{\lpre}, \fphp_{\lpost} \wmrg \fphp'_{\lpost}) \middle| 
         \begin{array}{@{}l@{}}
-            \pred{noFingerPrint}{\fphp_{\lpre}, \fphp_{\lpost}} \land \pred{agree}{\fphp_{\lpre}, \fphp_{\lpost}} \land {} \\
+            \pred{noFingerPrint}{\fphp_{\lpre}} \land \pred{noFingerPrint}{\fphp_{\lpost}} \land \pred{agree}{\fphp_{\lpre}, \fphp_{\lpost}} \land {} \\
             \pred{noWriteConflict}{\fphp'_{\lpre}, \fphp'_{\lpost}} \land \pred{agree}{\fphp'_{\lpre}, \fphp'_{\lpost}} 
         \end{array}
     }
     \end{rclarray}
 \]
 
+The repartition is redefined by adding a merging process.
+The notation \( \clps{\world} \) collapses a world to a time-stamp heap by compositing the private logical state \( \lstate' \) and all the shared logical states \( \sstate(\rid_{i}) \) and then taking its first projection.
+To simplify we reuse the same notation for \( \clps{( \world, \ts) } \), it collapses a world with its time-stamp to a plain heap by first collapsing the world and then taking a snapshot at the time \( \ts \).
+
+The repartition means, for all possible world and time, (\world, \ts), that satisfies global assertion \( \gpre \), there exists a heap with its read set and write set, \( \fphp \), that satisfies local assertion \( \lpre \) and their states match, i.e.\ \( \fphp\projection{1} = \clps{(\world, \ts)} \).
+Given the \( \lpre \)
+aaaaaaaaaaaaaaa
 
 \[
     \begin{rclarray}
-        \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \iff & \exists \lenv, \lenv', \stk, \stk', \world, \world', \ts, \ts' \ldotp  \world \in \eval{\gpre}_{\lenv, \stk, \ts} \land \world' \in \eval{\gpost}_{\lenv', \stk', \ts'} \land \ts < \ts' \\
-                                                                     & & \implies \exists \hp = \func{startstate}{\tshp, \ts}, \hp' = \func{startstate}{\tshp', \ts'}, \hp'', \ws',\rs' \ldotp \\
-                                                   & & ( \hp, \emptyset, \emptyset ) \in \eval{\lpre}_{\lenv, \stk} \land ( \hp'', \rs', \ws' ) \in \eval{\lpost}_{\lenv', \stk'} \land {} \Set{\loc \mapsto \val \middle| \loc \in \ws' \land \hp''(\loc) = \val} \subseteq \hp' \land {} \\
-                                                                     & & \forall \lpre_{r}, \lpost_{r} \ldotp (\lpre_{r} \transfersto \lpost_{r}) \in \rely \land \pred{compatible}{\lpre,\lpost, \lpre_{r}, \lpost_{r}} \land \exists \lenv_{r}, \stk_{r}, \hp_{r}, \rs_{r}, \ws_{r} \ldotp \\
-                                                                     & & \lenv_{r}, \stk_{r}, \hp_{r}, \rs_{r}, \ws_{r} \models_{l} \lpost_{r} \land \Set{\loc \mapsto \val \middle| \loc \in \ws_{r} \cap \dom(\hp'') \land \hp_{r}(\loc) = \val} \subseteq \hp' \\
-    \end{rclarray}
-\]
-
-The \predn{compatible}, intuitively, means all the assertions within the pre-conditions \( \lpre_{1} \) and \( \lpre_{2} \) must be tagged with empty-set and if they assert overlapped heap, the overlapped part must agree.
-Then, the post-conditions \( \lpost_{1} \) and \( \lpost_{2} \) write to different locations.
-Note that for post-conditions, it is enough to only check the finger-print because of the constraint of actions and the constraint of pre-conditions.
-
-\[
-    \begin{rclarray}
-        \pred{compatible}{\lpre_{1},\lpost_{1}, \lpre_{2}, \lpost_{2}} & \defeq & \pred{pre}{\lpre_{1}, \lpre_{2}} \land \pred{post}{\lpost_{1},\lpost_{2}} \\
-        \pred{pre}{\lpre_{1},\lpre_{2}} & \defeq & \forall \lenv_{1}, \lenv_{2}, \stk_{1}, \stk_{2}, \hp, \hp_{1}, \hp_{2} \ldotp \lenv_{1}, \stk_{1}, \hp \uplus \hp_{1}, \emptyset, \emptyset \models_{l} \lpre_{1} \land {} \\
-                                        & & \lenv_{2}, \stk_{2}, \hp \uplus \hp_{2}, \emptyset, \emptyset \models_{l} \lpre_{2} \land ( \hp \uplus \hp_{1} \uplus \hp_{2} )\isdef \\
-        \pred{post}{\lpost_{1},\lpost_{2}} & \defeq & \forall \lenv_{1}, \lenv_{2}, \stk_{1}, \stk_{2}, \hp_{1}, \hp_{2}, \rs_{1}, \rs_{2}, \ws_{1}, \ws_{2} \ldotp \lenv_{1}, \stk_{1}, \hp \uplus \hp_{1}, \rs_{1}, \ws_{1} \models_{l} \lpre_{1} \land {} \\
-                                          & & \lenv_{2}, \stk_{2}, \hp \uplus \hp_{2}, \ws_{2}, \rs_{2} \models_{l} \lpre_{1} \land \ws_{1} \cap \ws_{2} = \emptyset \\
+        \clps{\world} & \defeq & \lstate\projection{1} \\
+                      & & \texttt{where} \ \exists \sstate, \lstate', \rid_{1}, \dots, \rid_{n} \ldotp \world = (\sstate, \lstate') \land \Set{\rid_{1}, \dots, \rid_{n}} = \dom(\sstate) \land \lstate = \lstate' \compos_{\lstate} \sstate(\rid_{1}) \compos_{\lstate} \dots \compos_{\lstate} \sstate(\rid_{n})\\
+        \clps{(\world, \ts)} & \defeq & \hp \ \texttt{where} \ \hp=\func{startstate}{\clps{\world}, \ts}\\
+        \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \iff & \forall \lenv, \stk, \world, \ts  \ldotp (\world, \ts) \in \eval{\gpre}_{\lenv, \stk} \land \exists \fphp \in \eval{\lpre}_{\lenv, \stk} \ldotp \fphp\projection{1} = \clps{(\world, \ts)} \\
+                                                   & & \implies \exists \lenv', \stk', \hpfp' \in \eval{\lpost}_{\lenv', \stk'} \ldotp (\fphp, \fphp' ) \in \grte(\world) \\
+                                                   & & \implies \forall \fphp'' \ \ldotp ( \dontcare, \fphp'') \in ( (\fphp, \fphp') \bmrg \rely(\world) ) \land \exists \world',\ts' \ldotp \fphp''\projection{1} = \cpls{(\world',\ts')} \land  (\world',\ts') \in \eval{\gpost}_{\lenv', \stk'} \land \ts < \ts' \\
     \end{rclarray}
 \]
 
@@ -301,7 +345,7 @@ Note that for post-conditions, it is enough to only check the finger-print becau
 
 To merge two actions \( \lpre \transfersto \lpost \) and \( \lpre' \transfersto \lpost' \), it requires the pre-conditions agrees, which means that if they describe some common heaps, the state of the common part should be consistent.
 Then if the post-conditions write to different locations, the \emph{merge} (to the left) operator \( \wmrg \) returns a new action where the effect of right hands side propagate to the left hand side.
-\textbf{Not sure how to do it properly considering there is \(\vec{x}\) binder and extension \(\vec{y}\) }.
+\sx{Not sure how to do it properly considering there is \(\vec{x}\) binder and extension \(\vec{y}\) }.
 
 \[
     \begin{rclarray}
