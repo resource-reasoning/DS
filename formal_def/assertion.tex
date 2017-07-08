@@ -237,35 +237,7 @@ The global assertions are interpreted as a set of worlds and their corresponding
     \end{rclarray}
 \]
 
-The first element, also pre-condition \( \lpre \), only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \), because the semantics requires the pre-condition interpreted as a heap with empty write set and empty read set.
-The second element, also called post-condition \( \lpost \), should contain the same resources as pre-condition.
-If a location has only been read, the value should remain the same pre-condition.
-\sx{For resource moving in can be tagged with write but don't know how to tag resource move out}
-
-\[
-    \begin{rclarray}
-        \eval{\capb{\capid(\vec{\lvar})}_{r} : \exists \vec{y} \ldotp \lpre \transfersto \lpost }_{\lenv, \stk}(\rid,\capid,\vec{\val}) & \defeq & \Set{(\hp, \hp') \middle| 
-        \begin{array}{@{}l@{}}
-            \exists \rs', \ws', \vec{\val}', \lenv' = \lenv[\vec{\lvar} \mapsto \vec{\val}, \vec{y} \mapsto \vec{\val}'] \ldotp ( \hp, \emptyset,\emptyset ) \in \eval{\lpre}_{\lenv, \stk} \land  {} \\
-            ( \hp', \rs', \ws' ) \in \eval{\lpost}_{\lenv, \stk} \land \dom(\hp) = \dom(\hp') \land {} \\
-            \hp \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws} = \hp' \setminus \Set{\loc \mapsto \dontcare | \loc \in \ws}  
-        \end{array}} 
-    \end{rclarray}
-\]
-
-
-\[
-    \infer[\rl{PRCommit}]{%
-        \judgement{}{\gpre}{ \ptrans{\cmd} }{\gpost}
-    }{%
-        \begin{array}{l}
-            \judgement{}{\lpre}{\cmd}{\lpost} \quad 
-            \vdash \gpre \Rrightarrow^{\{\lpre\}\{\lpost\}} \gpost
-        \end{array}
-    }
-\]
-
-Before defining repartition, we define \emph{merge} with respect to two heaps associated with their read sets and write sets.
+We define \emph{merge} with respect to two heaps associated with their read sets and write sets.
 The operation \( \wmrg \) eagerly merge the left-hand side to the right-hand side.
 This means that, first, the domain of the result is the same as the domain of left-hand side.
 Second, the result takes left-hand side but propagate all the write effects from right-hand side.
@@ -288,7 +260,43 @@ Second, the result takes left-hand side but propagate all the write effects from
     \end{rclarray}
 \]
 
-Given the \emph{merge} in heap, we can define \emph{merge} on transitions.
+The first element, also pre-condition \( \lpre \), only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \), because the semantics requires the pre-condition interpreted as a heap with empty write set and empty read set.
+The second element, also called post-condition \( \lpost \), should contain the same resources as pre-condition.
+If a location has only been read, the value should remain the same pre-condition.
+\sx{For resource moving in can be tagged with write but don't know how to tag resource move out. This is not very right.}
+
+\[
+    \begin{rclarray}
+        \eval{\emptyset}_{ \lenv, \stk} & \defeq & \emptyset \\
+        \eval{\Set{\capb{\capid(\vec{\lvar})}_{r} : \exists \vec{y} \ldotp \lpre \transfersto \lpost} \uplus \intf}_{\lenv, \stk} & \defeq & \lambda (\rid',\capid',\vec{\val}) \ldotp 
+        \begin{funcarray}
+            \Set{(\hp, \hp') \middle| 
+            \begin{array}{@{}l@{}}
+                \exists \fphp, \fphp', \vec{\val}', \lenv' = \lenv[\vec{\lvar} \mapsto \vec{\val}, \vec{y} \mapsto \vec{\val}'] \ldotp \\
+                \fphp \in \eval{\lpre}_{\lenv', \stk} \land  \fphp' \in \eval{\lpost}_{\lenv', \stk} \land {} \\
+                \fphp\projection{2} = \fphp\projection{3} = \emptyset \land \fphp \wmrg \fphp' = \fphp'
+            \end{array}} & \rid = \rid' \land \capid = \capid' \\ 
+            \eval{\intf}_{\lenv, \stk}(\rid', \capid', \vec{\val}) & o.w.
+        \end{funcarray} 
+    \end{rclarray}
+\]
+
+The \rl{PRCommit} rule looks the same but the repartition is much more complicated by  merging all possible transitions from the environment that are allowed to run concurrently and commit in the same time.
+Note that after the merging, one still need to check stabilisation.
+
+\[
+    \infer[\rl{PRCommit}]{%
+        \judgement{}{\gpre}{ \ptrans{\cmd} }{\gpost}
+    }{%
+        \begin{array}{l}
+            \judgement{}{\lpre}{\cmd}{\lpost} \quad 
+            \vdash \gpre \Rrightarrow^{\{\lpre\}\{\lpost\}} \gpost
+        \end{array}
+    }
+\]
+
+
+Given the \emph{merge}for \( \fphp \), we can define \emph{merge} on transitions.
 The predicate \( \predn{noFingerPrint} \) asserts the read set and write set are empty sets, and \( \predn{noWriteConflict} \) asserts the write sets are disjointed.
 The predicate \( \predn{agree} \) has similar meaning as overlapped separation found in CoLoSL, which means that the state of the overlapped parts must agree.
 To merge two transactions, if the pre-conditions agree and both of them have no fingerprint, and if the post-conditions agree and they write to different locations, the merged result is a set of transitions including the left-hand side and another transition by merging the post-condition of right-hand side to left-hand side.
@@ -317,7 +325,7 @@ Otherwise, the merge only returns a singleton set of left-hand side.
             \pred{noFingerPrint}{\fphp_{\lpre}} \land \pred{noFingerPrint}{\fphp_{\lpost}} \land \pred{agree}{\fphp_{\lpre}, \fphp_{\lpost}} \land {} \\
             \pred{noWriteConflict}{\fphp'_{\lpre}, \fphp'_{\lpost}} \land \pred{agree}{\fphp'_{\lpre}, \fphp'_{\lpost}} 
         \end{array}
-    }
+    } \\
     \end{rclarray}
 \]
 
@@ -326,8 +334,7 @@ The notation \( \clps{\world} \) collapses a world to a time-stamp heap by compo
 To simplify we reuse the same notation for \( \clps{( \world, \ts) } \), it collapses a world with its time-stamp to a plain heap by first collapsing the world and then taking a snapshot at the time \( \ts \).
 
 The repartition means, for all possible world and time, (\world, \ts), that satisfies global assertion \( \gpre \), there exists a heap with its read set and write set, \( \fphp \), that satisfies local assertion \( \lpre \) and their states match, i.e.\ \( \fphp\projection{1} = \clps{(\world, \ts)} \).
-Given the \( \lpre \)
-aaaaaaaaaaaaaaa
+Given the \( \fphp \), if there exists a \( \fphp' \) that associated with \( \lpost \) and the transition \( (\fphp, \fphp') \)  is allowed by the guarantees \( \grte(\world) \), then for all the possible post-state \( \fphp'' \) by merging the transition \( (\fphp, \fphp') \) with relies, there must exist a world and its time \( (\world', \ts') \) that satisfies global post-condition \( \gpost \) and their collation equals to the first projection of \( \fphp'' \) which is the plain heap.
 
 \[
     \begin{rclarray}
