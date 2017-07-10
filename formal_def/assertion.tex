@@ -101,9 +101,9 @@ We use \( \fphp \) to refer to a tuple of of a (plain) heap, a write set and a r
             \end{array}
         }  \\
         \eval{\lpre \sep \lpost}_{\lenv, \stk} & \defeq & \Set{ \fphp_{1} \compos_{\fphp} \fphp_{2} \middle| \fphp_{1} \in \eval{\lpre}_{\lenv, \stk} \land \fphp_{2} \in \eval{\lpost}_{\lenv, \stk} }  \\
-        \eval{\lpre \land \lpost}_{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv, \stk} \land \fphp \in \eval{\lpost}_{\lenv, \stk}}  \\
-        \eval{\lpre \lor \lpost}_{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv, \stk} \lor \fphp \in \eval{\lpost}_{\lenv, \stk}}  \\
-        \eval{\exists \lvar \ldotp \lpre}_{\lenv, \stk} & \defeq & \Set{\fphp \middle| \fphp \in \eval{\lpre}_{\lenv\remapsto{\lvar}{\val}, \stk}}  \\
+        \eval{\lpre \land \lpost}_{\lenv, \stk} & \defeq & \eval{\lpre}_{\lenv, \stk} \cap \eval{\lpost}_{\lenv, \stk} \\
+        \eval{\lpre \lor \lpost}_{\lenv, \stk} & \defeq & \eval{\lpre}_{\lenv, \stk} \cup \eval{\lpost}_{\lenv, \stk} \\
+        \eval{\exists \lvar \ldotp \lpre}_{\lenv, \stk} & \defeq & \eval{\lpre}_{\lenv\remapsto{\lvar}{\val}, \stk}  \\
     \end{rclarray}
 \]
 
@@ -128,41 +128,15 @@ This is because once a location has been re-written, the rest read are considere
 
 \subsection{Global/Program}
 
-The box assertion \( \boxass{\gpre}{\rid}{\intf} \) asserts part of heap that can be shared, where \( \rid \) is region identifier and \( \intf \) is the interference, i.e.\ all the possible transitions.
-The interference is a set of transitions that are labelled by capabilities.
+The capability assertion are interpreted as a set of tuples of region identifiers, a capability identifiers and values.
 
 \[
     \begin{rclarray}
         \Regionid & \defeq & \Set{\rid, \dots} \\
         \Capabilityid & \defeq & \Set{\capid, \dots } \\
-            \gpre , \gpost \in \Globalassertion & \defeq & 
-                  \assfalse \quad                         |
-            \quad \asstrue \quad                          |
-            \quad \assemp \quad                           |
-            \quad \expr \pointsto \expr \quad             |
-            \quad \boxass{\gpre}{\intf}{\rid} \quad       |
-            \quad \capb{\capid(\vec{\lvar})}_{\rid} \quad | \\
-            & &  \gpre \sep \gpost \quad                  |
-            \quad \gpre \land \gpost \quad                |
-            \quad \gpre \lor \gpost \quad                 |
-            \quad \exists \lvar \ldotp \gpre \quad        | \\
-            \intf \in \InterferenceAssertion & \defeq & 
-                  \emptyset \quad |
-                  \quad \Set{ \capb{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpre \transfersto \lpost } \uplus \intf \quad | 
-    \end{rclarray}
-\]
-
-The global assertions are interpreted as a tuple of a world and a time-stamp.
-A world is a pair of shared state and logical state.
-The logical state is a pair of time-stamp heap and capability, where capability is a partial finite function from region identifier to a token.
-The shared state is a partial finite function from region identifier to logical state and its interference.
-
-\[
-    \begin{rclarray}
-        \cstate \in \Capability & \defeq & \Regionid \parfinfun \Capabilityid \times \Val^{*} \\
-        \lstate \in \Logicalstate & \defeq & \Timestampheap \times \Capability \\
-        \sstate \in \Sharestate & \defeq & \Regionid \parfinfun \Logicalstate \times \Interference \\
-        \world \in \World & \defeq & \Sharestate \times \Logicalstate
+        \capass \in \Capabilityassertion & \defeq & \captk{\capid(\vec{\lvar})}_{\rid}  \\
+        \capb \in \cstate \subseteq \Capability & \defeq & \Regionid \times \Capabilityid \times \Val^{*} \\
+        \eval{\captk{\capid(\vec{\lvar})}_{\rid}}_{\lenv, \stk} & \defeq & \Set{(\rid, \capid, \lenv(\vec{\lvar}))} \\
     \end{rclarray}
 \]
 
@@ -175,22 +149,50 @@ All capabilities associated with a region forms a partial commutative monoid (PC
     \end{rclarray}
 \]
 
-Given that, the composition of capabilities:
+Given that, the composition of  sets of capabilities \( \cstate_{1} \) and \( \cstate_{2} \):
 
 \[
     \begin{rclarray}
         \cstate_{1} \compos_{\cstate} \cstate_{2} & \defeq & 
         \begin{funcarray}
-        \lambda \rid \ldotp 
-            \begin{funcarray}
-                \cstate_{1}(\rid) & \rid \in \cstate_{1} \land \rid \notin \cstate_{2} \\
-                \cstate_{2}(\rid) & \rid \notin \cstate_{1} \land \rid \in \cstate_{2} \\
-                \cstate_{1}(\rid) \compos_{\cstate} \cstate_{2}(\rid) & \rid \in \cstate_{1} \cap \cstate_{2} \\
-            \end{funcarray} & \forall \rid \in \cstate_{1} \cap \cstate_{2} \ldotp ( \cstate_{1}(\rid) \compos_{\cstate} \cstate_{2}(\rid) )\isdef \\
+            \cstate_{1} \uplus \cstate_{2} & \forall \capb_{1} \in \cstate_{1}, \capb_{2} \in \cstate_{2} \ldotp \capb_{1}\projection{1} = \capb_{2}\projection{1} \land  ((\capb_{1}\projection{2}, \capb_{1}\projection{3}) \compos_{\setcap} (\capb_{2}\projection{2}, \capb_{2}\projection{3}))\isdef \\
             \texttt{undefined} & o.w. \\
         \end{funcarray} \\
     \end{rclarray}
 \]
+
+The box assertion \( \boxass{\gpre}{\rid}{\intass} \) asserts part of heap that can be shared, where \( \rid \) is region identifier and \( \intass \) is the interference, i.e.\ all the possible transitions.
+The interference is a set of transitions that are labelled by capabilities.
+
+\[
+    \begin{rclarray}
+            \gpre , \gpost \in \Globalassertion & \defeq & 
+                  \assfalse \quad                   |
+            \quad \asstrue \quad                    |
+            \quad \assemp \quad                     |
+            \quad \expr \pointsto \expr \quad       |
+            \quad \boxass{\gpre}{\intass}{\rid} \quad |
+            \quad \capass \quad                     | \\
+            & &  \gpre \sep \gpost \quad            |
+            \quad \gpre \land \gpost \quad          |
+            \quad \gpre \lor \gpost \quad           |
+            \quad \exists \lvar \ldotp \gpre \quad  | \\
+    \end{rclarray}
+\]
+
+The global assertions are interpreted as a tuple of a world and a time-stamp.
+A world is a pair of shared state and logical state.
+The logical state is a pair of time-stamp heap and capability, where capability is a partial finite function from region identifier to a token.
+The shared state is a partial finite function from region identifier to logical state and its interference.
+
+\[
+    \begin{rclarray}
+        \lstate \in \Logicalstate & \defeq & \Timestampheap \times \powerset{\Capability} \\
+        \sstate \in \Sharestate & \defeq & \Regionid \parfinfun \Logicalstate \times \Interference \\
+        \world \in \World & \defeq & \Sharestate \times \Logicalstate
+    \end{rclarray}
+\]
+
 
 The composition of logical states.
 
@@ -228,12 +230,12 @@ The global assertions are interpreted as a set of worlds and their corresponding
                 \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) \land \forall \ts'' \in ( \ts', \ts) \ldotp \tshp(\loc)(\ts'')\undef \\
             \end{array}
         } \\
-        \eval{\boxass{\gpre}{\intf}{\rid}}_{\lenv, \stk} & \defeq & \Set{ ( ( \sstate, \lstate ), \ts ) \middle| \exists \sstate', \lstate' \ldotp ( ( \sstate', \lstate \compos_{\lstate} \lstate' ), \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \land \sstate = \sstate' \uplus \Set{\rid \mapsto ( \lstate', \eval{\intf}_{\lenv,\stk} ) } } \\
-        \eval{ \capb{\capid(\vec{\lvar})}_{\rid} }_{\lenv, \stk} & \defeq & \Set{ ( ( \sstate, ( \tshp, \cstate ) ), \ts ) \middle| \sstate = \emptyset \land \tshp = \emptyset \land \cstate = \Set{\rid \mapsto (\capid, \vec{\val}) } } \\
+        \eval{\boxass{\gpre}{\intass}{\rid}}_{\lenv, \stk} & \defeq & \Set{ ( ( \sstate, \lstate ), \ts ) \middle| \exists \sstate', \lstate' \ldotp ( ( \sstate', \lstate \compos_{\lstate} \lstate' ), \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \land \sstate = \sstate' \uplus \Set{\rid \mapsto ( \lstate', \eval{\intass}_{\lenv,\stk} ) } } \\
+        \eval{ \capass }_{\lenv, \stk} & \defeq & \Set{ ( ( \sstate, ( \tshp, \cstate ) ), \ts ) \middle| \sstate = \emptyset \land \tshp = \emptyset \land \cstate = \eval{ \capass }_{\lenv, \stk} } \\
         \eval{ \gpre \sep \gpost }_{\lenv, \stk} & \defeq & \Set{ ( \world_{1} \compos_{\world} \world_{2}, \ts ) \middle| ( \world_{1}, \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \land ( \world_{2}, \ts ) \in \eval{\gpost}_{\lenv, \stk, \ts} } \\
-        \eval{\gpre \land \gpost}_{\lenv, \stk} & \defeq & \Set{ ( \world, \ts ) \middle| ( \world, \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \land ( \world, \ts ) \in \eval{\gpost}_{\lenv, \stk, \ts} } \\
-        \eval{\gpre \lor \gpost}_{\lenv, \stk} & \defeq & \Set{( \world, \ts ) \middle| ( \world, \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \lor ( \world, \ts ) \in \eval{\gpost}_{\lenv, \stk, \ts} } \\
-        \eval{\exists \lvar \ldotp \gpre}_{\lenv, \stk} & \defeq & \Set{( \world, \ts ) \middle| ( \world, \ts )\in \eval{\gpre}_{\lenv\remapsto{\lvar}{\val}, \stk, \ts} } \\
+        \eval{\gpre \land \gpost}_{\lenv, \stk} & \defeq & \eval{\gpre}_{\lenv, \stk} \cap \eval{\gpost}_{\lenv, \stk} \\
+        \eval{\gpre \lor \gpost}_{\lenv, \stk} & \defeq & \eval{\gpre}_{\lenv, \stk} \cup \eval{\gpost}_{\lenv, \stk} \\
+        \eval{\exists \lvar \ldotp \gpre}_{\lenv, \stk} & \defeq & \eval{\gpre}_{\lenv\remapsto{\lvar}{\val}, \stk} \\
     \end{rclarray}
 \]
 
@@ -260,24 +262,30 @@ Second, the result takes left-hand side but propagate all the write effects from
     \end{rclarray}
 \]
 
-The first element, also pre-condition \( \lpre \), only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \), because the semantics requires the pre-condition interpreted as a heap with empty write set and empty read set.
-The second element, also called post-condition \( \lpost \), should contain the same resources as pre-condition.
+The first element, also pre-condition \( \lpreext \), only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \), because the semantics requires the pre-condition interpreted as a heap with empty write set and empty read set.
+The second element, also called post-condition \( \lpostext \), should contain the same resources as pre-condition.
 If a location has only been read, the value should remain the same pre-condition.
 \sx{For resource moving in can be tagged with write but don't know how to tag resource move out. This is not very right.}
 
 \[
     \begin{rclarray}
+        \lpreext, \lpostext & \in & \Localassertion \uplus \Capabilityassertion \\
+        \fphpcap \in \Heapwithfingerprintcapability & \defeq & \Heapwithfingerprint \times \powerset{\Capability} \\
+        \intass \in \Interferenceassertion & \defeq & 
+              \emptyset \quad |
+              \quad \Set{ \captk{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpreext \transfersto \lpostext } \uplus \intass \quad \\
         \eval{\emptyset}_{ \lenv, \stk} & \defeq & \emptyset \\
-        \eval{\Set{\capb{\capid(\vec{\lvar})}_{r} : \exists \vec{y} \ldotp \lpre \transfersto \lpost} \uplus \intf}_{\lenv, \stk} & \defeq & \lambda (\rid',\capid',\vec{\val}) \ldotp 
-        \begin{funcarray}
-            \Set{(\hp, \hp') \middle| 
+        \eval{\Set{\captk{\capid(\vec{\lvar})}_{r} : \exists \vec{y} \ldotp \lpre \transfersto \lpost} \uplus \intass}_{\lenv, \stk} & \defeq & \lambda (\rid',\capid',\vec{\val}) \ldotp \\
+                                                                                                                                     & & \begin{funcarray}
+            \Set{(\fphpcap,\fphpcap') \middle| 
             \begin{array}{@{}l@{}}
-                \exists \fphp, \fphp', \vec{\val}', \lenv' = \lenv[\vec{\lvar} \mapsto \vec{\val}, \vec{y} \mapsto \vec{\val}'] \ldotp \\
+                \exists \fphp, \fphp', \setcap, \setcap', \vec{\val}', \lenv' = \lenv[\vec{\lvar} \mapsto \vec{\val}, \vec{y} \mapsto \vec{\val}'] \ldotp \\
+                \fphpcap = (\fphp, \cstate) \land \fphpcap = (\fphp', \cstate') \land \\
                 \fphp \in \eval{\lpre}_{\lenv', \stk} \land  \fphp' \in \eval{\lpost}_{\lenv', \stk} \land {} \\
                 \fphp\projection{2} = \fphp\projection{3} = \emptyset \land \fphp \wmrg \fphp' = \fphp'
             \end{array}} & \rid = \rid' \land \capid = \capid' \\ 
-            \eval{\intf}_{\lenv, \stk}(\rid', \capid', \vec{\val}) & o.w.
-        \end{funcarray} 
+            \eval{\intass}_{\lenv, \stk}(\rid', \capid', \vec{\val}) & o.w.
+        \end{funcarray} \\
     \end{rclarray}
 \]
 
@@ -295,7 +303,6 @@ Note that after the merging, one still need to check stabilisation.
     }
 \]
 
-
 Given the \emph{merge}for \( \fphp \), we can define \emph{merge} on transitions.
 The predicate \( \predn{noFingerPrint} \) asserts the read set and write set are empty sets, and \( \predn{noWriteConflict} \) asserts the write sets are disjointed.
 The predicate \( \predn{agree} \) has similar meaning as overlapped separation found in CoLoSL, which means that the state of the overlapped parts must agree.
@@ -304,26 +311,15 @@ Otherwise, the merge only returns a singleton set of left-hand side.
 
 \[
     \begin{rclarray}
-        \dom(\fphp) & \defeq & \dom(\fphp\projection{1}) \\
-        \fphp \wmrg \fphp' & \defeq & 
-        \left( \begin{array}{@{}l@{}}
-        \lambda \loc \ldotp  
-        \begin{funcarray}
-            \hp'(\loc) & \loc \in \ws' \cap \dom(\hp) \\
-            \hp(\loc) & \loc \notin \ws' \land \loc \in \dom(\hp) \\
-            \texttt{undefined} & o.w. \\
-        \end{funcarray},\ 
-        \rs \cup ( \dom(\hp) \cap \rs' ),\ 
-        \ws \cup ( \dom(\hp) \cap \ws')
-        \end{array} \right)\\
-        & & \texttt{where} \ \fphp = (\hp, \rs, \ws) \land \fphp' = (\hp', \rs', \ws') \\
         \pred{noFingerPrint}{\fphp} & \defeq & \exists \rs, \ws, \ldotp \fphp = (\dontcare, \rs, \ws) \land \rs = \ws = \emptyset \\
         \pred{noWriteConflict}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \ws_{l} = \fphp_{l}\projection{3}, \ws_{r} = \fphp_{r}\projection{3} \ldotp \ws_{l} \cap \ws_{r} = \emptyset \\
-        \pred{agree}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \fphp'_{l}, \fphp_{m}, \fphp'_{r}, \fphp \ldotp \fphp_{l} = \fphp'_{l} \compos_{\fphp} \fphp_{m} \land \fphp_{r} = \fphp'_{r} \compos_{\fphp} \fphp_{m} \land \fphp = \fphp'_{l} \compos_{\fphp} \fphp_{m} \compos_{\fphp} \fphp'_{r} \\
-        ( \fphp_{\lpre}, \fphp_{\lpost} ) \bmrg ( \fphp'_{\lpre}, \fphp'_{\lpost} ) & \defeq & \Set{( \fphp_{\lpre}, \fphp_{\lpost} )} \cup \Set{(\fphp_{\lpre}, \fphp_{\lpost} \wmrg \fphp'_{\lpost}) \middle| 
+        \pred{agreeState}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \fphp'_{l}, \fphp_{m}, \fphp'_{r}, \fphp \ldotp \fphp_{l} = \fphp'_{l} \compos_{\fphp} \fphp_{m} \land \fphp_{r} = \fphp'_{r} \compos_{\fphp} \fphp_{m} \land \fphp = \fphp'_{l} \compos_{\fphp} \fphp_{m} \compos_{\fphp} \fphp'_{r} \\
+        \pred{agreeCapability}{\cstate_{l}, \cstate_{r}} & \defeq & \exists \cstate'_{l}, \cstate_{m}, \cstate'_{r}, \fphp \ldotp \cstate_{l} = \cstate'_{l} \compos_{\cstate} \cstate_{m} \land \cstate_{r} = \cstate'_{r} \compos_{\cstate} \cstate_{m} \land \cstate = \cstate'_{l} \compos_{\cstate} \cstate_{m} \compos_{\cstate} \cstate'_{r} \\
+        \pred{agree}{\fphpcap_{l},\fphpcap_{r}} & \defeq & \pred{agreeState}{\fphpcap_{l}\projection{1}, \fphpcap_{r}\projection{1}} \land \pred{agreeCapability}{\fphpcap_{l}\projection{2}, \fphpcap_{r}\projection{2}} \\
+        ( \fphpcap_{\lpre}, \fphpcap_{\lpost} ) \bmrg ( \fphpcap'_{\lpre}, \fphpcap'_{\lpost} ) & \defeq & \Set{( \fphpcap_{\lpre}, \fphpcap_{\lpost} )} \cup \Set{(\fphpcap_{\lpre}, ( \fphp_{\lpost} \wmrg \fphp'_{\lpost}, \cstate_{q} \compos_{\cstate} \cstate'_{q} ) ) \middle| 
         \begin{array}{@{}l@{}}
-            \pred{noFingerPrint}{\fphp_{\lpre}} \land \pred{noFingerPrint}{\fphp_{\lpost}} \land \pred{agree}{\fphp_{\lpre}, \fphp_{\lpost}} \land {} \\
-            \pred{noWriteConflict}{\fphp'_{\lpre}, \fphp'_{\lpost}} \land \pred{agree}{\fphp'_{\lpre}, \fphp'_{\lpost}} 
+            \pred{noWriteConflict}{\fphp'_{\lpre}, \fphp'_{\lpost} } \land {} \\
+            \pred{agree}{\fphpcap_{\lpre}, \fphpcap_{\lpost}} \land \pred{agree}{\fphpcap'_{\lpre}, \fphpcap'_{\lpost}} 
         \end{array}
     } \\
     \end{rclarray}
