@@ -180,8 +180,8 @@ For brevity, sometime we only mention and quantify few elements of this tuple bu
 \end{proof}
 
 
-\begin{lem}[Acyclic]
-    \label{lem:acyclic_relations}
+\begin{lem}[Semi-acyclic]
+    \label{lem:semi-acyclic}
     Both \( \vis \) and \( \tar \) are acyclic.
 \end{lem}
 \begin{proof}
@@ -195,19 +195,20 @@ For brevity, sometime we only mention and quantify few elements of this tuple bu
 \end{proof}
 
 We can extend partial order \( \tar \) to a total order \( \ar \) by pick orders between those unrelated transactions.
-First, we define an auxiliary function that returns a set that includes first transactions (might be more than two) that have branch.
-To simplify, assume there is a unique initial transactions denoted by \( \tsid_{init} \), where \( (\tsid_{init}, \tsid) \in \tar \).
+First, we define an auxiliary function that returns a set that includes the first transactions (might be more than two) that branch.
+To simplify, assume there is a unique initial transactions denoted by \( \tsid_{init} \), where \( (\tsid_{init}, \tsid) \in \tar \) for all \( \tsid \).
 
 \begin{defn}[First Branch]
     \[
         \begin{rclarray}
-            \func{firstBranch}{\tsid_{init},\settrans, \tar} & \defeq &
+            \func{firstTrans}{\settrans, \tar} & \defeq & \transid \ \texttt{where} \ \forall \transid' \in \settrans \ldotp \transid = \transid' \lor (\transid, \transid') \in \tar \\
+            \func{firstBranch}{\settrans, \tar} & \defeq &
             \begin{funcarray}
                 \emptyset & \settrans = \emptyset \\
-                \func{dec}{\tsid_{init},\settrans, \tar} & |\func{dec}{\tsid_{init},\settrans, \tar}| > 1 \\
-                \func{firstBranch}(\tsid,\settrans \setminus \Set{\tsid_{init}}, \tar) & \func{dec}{\tsid_{init},\settrans, \tar} = \Set{\tsid} 
+                \func{firstBranch}{\settrans \setminus \Set{\func{firstTrans}{\settrans, \tar}}, \tar} & |\func{dec}{\settrans, \tar}| = 1 \\
+                \func{dec}{\settrans, \tar} & |\func{dec}{\settrans, \tar}| > 1 \\
             \end{funcarray} \\
-            \func{dec}{\tsid_{init},\settrans, \tar} & \defeq & \Set{\tsid \middle| (\tsid_{init}, \tsid) \in \tar \land \nexists \tsid' \ldotp (\tsid_{init}, \tsid'),(\tsid', \tsid) \in \tar}
+            \func{dec}{\settrans, \tar} & \defeq & \Set{\tsid \middle| \exists \tsid_{init} = \func{firstTrans}{\settrans, \tar} \ldotp (\tsid_{init}, \tsid) \in \tar \land \nexists \tsid' \ldotp (\tsid_{init}, \tsid'),(\tsid', \tsid) \in \tar}
         \end{rclarray}
     \]
 \end{defn}
@@ -215,29 +216,60 @@ To simplify, assume there is a unique initial transactions denoted by \( \tsid_{
 Intuitively, we take the first two transactions that are not connected, which definitely touch different locations by Lemma \ref{lem:seperate}, therefore we can simply pick a order and take the transitive closure.
 We continue the process until it is a total order.
 
-\begin{defn}[Total Order]
+\begin{defn}[Total relation]
+    \label{defn:tototal}
     \[
         \begin{rclarray}
-
+            \func{toTotal}{\settrans, \tar} & \defeq & 
+                \begin{funcarray}
+                    (\settrans, \tar) & \func{firstBranch}{\settrans, \tar} = \emptyset\\ 
+                    \func{toTotal}{\settrans, ( \tar \uplus \Set{(\tsid, \tsid')})^{+}} & \tsid, \tsid' \in \func{firstBranch}{\settrans, \tar} \\    
+                \end{funcarray}
+            \\
         \end{rclarray}
     \]
 \end{defn}
 
+We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element of the set:
+\[
+\Set{(\settrans, \po, \vis, \ar, \tshp) \middle| ( \settrans, \ar ) = \func{toTotal}{\settrans, \tar}} \\
+\]
+
+\begin{lem}[Visibility]
+    \label{lem:visibility}
+    Visibility relation should be a subset of arbitration relation, i.e.\ \( \vis \subseteq \ar \).
+\end{lem}
+\begIn{proof}
+    For all transactions \( \tsid \) and \( \tsid' \), if \( ( \tsid, \tsid' ) \in \vis \), it means that transaction \( \tsid \) commits before \( \tsid' \) starts, so that \( \tsid \) must start before \( \tsid' \) starts, by Lemma \ref{lem:start-before-end}.
+    This means \( (\tsid, \tsid') \in \tar \) by the definition of \( \tar \), and because \( \tar \subseteq \ar \), so \( (\tsid, \tsid') \in \ar \).
+\end{proof}
+
+\begin{lem}[Monotonic time]
+    \label{lem:mono-time}
+    Given a trace the local time monotonically increase inside a thread, at fork point and at the join point.
+\end{lem}
+\begin{proof}
+\end{proof}
+
 \begin{lem}[Session]
+    \label{lem:session}
     \( \po \subseteq \vis \).
 \end{lem}   
 \begin{proof}
-    Given the definition of \( \funcn{sessionOrder} \), assume a sequence of \( \po_n \), each of which represents the result of the \( n \)-steps \(\funcn{sessionOrder} \), so \( \po = \bigcup\limits_{n} \po_n \land \forall n, n' \ldotp n < n' \implies \po_n \subseteq \po_{n'} \).
-    Therefore, if \( ( \tsid , \tsid' ) \in \po \), there must exist a \( n \) that \( ( \tsid , \tsid' ) \notin \po_{n-1} \) but \( ( \tsid , \tsid' ) \in \po_{n} \).
-    This means there exists \( lc \) for same thread \( \thid \), such that \( \tsid \in lc(\thid) \).
-    Since the \( lc \) is a partial function that records the last committed transactions of each thread.
-    Note that if there is a new thread, it records the last committed transactions of its parent thread, while if it is a join point, it records both the parent and child last committed transactions.
-    Then if the new transaction \( \tsid' \) commits, it must pick a starting time greater than any transactions included in \( lc(\thid) \).
-    Assuming the time-stamp heap \( \tshp \) after the new transaction \( \tsid' \) committing and by the Lemma \ref{lem:happen-in-same-time}, we have \( \forall \loc, \loc', \ts, \ts', \op \in \Set{\wop,\eop}, \op' \in \Set{\rop,\sop} \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid') \implies \ts < \ts' \), which implies \( (\tsid, \tsid') \in \po \).
+    By a case analysis of the definition of \( \po \).
+    For \( \tsid \) and \( \tsid' \) where \( \lcmt{\thid,\tsid} < \lcmt{\thid,\tsid'} \), it means that transaction \( \tsid \) takes effect to the time-stamp heap before \( \tsid' \) takes effect by the same thread \( \thid \).
+    Then by Lemma \ref{lem:mono-time}, the commit time of \( \tsid \) is smaller than the start time of \( \tsid' \), so that \( (\tsid, \tsid') \in \vis \).
+
+    For \( \tsid \) and \( \tsid' \) where \( \lcmt{\thid,\tsid} < \lfork{\thid,\thid', \dontcare} < \lcmt{\thid',\tsid'} \), by Lemma \ref{lem:mono-time}, all the transactions by thread \( \thid \) before the fork point, which have taken effect to the time-stamp heap, must have smaller start and end times than all the transactions by the forked thread \( \thid' \).
+    Therefore, \( (\tsid, \tsid') \in \vis \).
+
+    Similarly, for \( \tsid \) and \( \tsid' \) where \( \lcmt{\thid,\tsid} < \ljoin{\thid',\thid, \dontcare} < \lcmt{\thid',\tsid'} \), by Lemma \ref{lem:mono-time}, all the transactions by thread \( \thid \) must have smaller start and end times than all the transactions by thread \( \thid' \) after the join point.
+    Therefore, \( (\tsid, \tsid') \in \vis \).
+
 \end{proof}
 
-\begin{lem}[prefix]
-    \label{lem:prefix}
+\begin{lem}[Semi-prefix]
+    \label{lem:semi-prefix}
     \( \tar; \vis \subseteq \vis \).
 \end{lem}
 \begin{proof}
@@ -245,7 +277,19 @@ We continue the process until it is a total order.
     Thus there must exist \( \loc, \loc'', \ts, \ts' , \ts'', \op \in \Set{\wop, \eop}  \) and \( \op'' \in \Set{\rop, \sop } \) such that  \( \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \), \( \tshp(\loc'')(\ts'') = (\dontcare, \op'', \tsid'') \) and \( \ts < \ts'' \), thus \( ( \tsid, \tsid'' ) \in \vis \).
 \end{proof}
 
-\begin{lem}[nocoflict]
+\begin{lem}[Prefix]
+    \label{lem:prefix}
+    \( \ar; \vis \subseteq \vis \).
+\end{lem}
+\begin{proof}
+    For all \( \tsid, \tsid', \tsid'' \) that \( (\tsid, \tsid') \in \ar \) and \( (\tsid', \tsid'') \in \vis \), if \( (\tsid, \tsid') \in \tar \), it is proven by Lemma \ref{lem:semi-prefix}.
+    If \( ( \tsid, \tsid' ) \notin \tar \), it means it is a new edge by the \funcn{toTotal} function from Definition \ref{defn:tototal}.
+    By the Lemma \ref{lem:seperate}, \( \tsid \) and \( \tsid' \) commit at the same time.
+    By the definition of \( \vis \), the commit time of \( \tsid' \) is smaller than the start time of \( \tsid'' \).
+    Therefore, the commit time of \( \tsid \) is also smaller than the start time of \( \tsid'' \), so that \( ( \tsid, \tsid'' ) \in \vis \).
+\end{proof}
+
+\begin{lem}[No conflict]
     \label{lem:nocoflict}
     Two transactions cannot concurrently write to the same location, this means that one must observe another one.
     This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid) \land  \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\).
@@ -254,13 +298,13 @@ We continue the process until it is a total order.
     Prove by contradiction.
     Assume \( (\tsid, \tsid') \notin \vis \land (\tsid', \tsid) \notin \vis \), this intuitively means one transaction is overlapped with another.
     Let \( \ts_{s}, \ts_{e}, \ts'_{s} \) and \( \ts'_{e} \) be the start time and end time of transaction \( \tsid \) and \( \tsid' \) respectively.
-    Because of the symmetric,  we can assume that the start time of \( \tsid \) is in between \( \tsid' \), witch means \( \ts'_{s} < \ts_{s} < \ts'_{e} \).
+    Because of the symmetry,  we can assume that the start time of \( \tsid \) is in between \( \tsid' \), witch means \( \ts'_{s} < \ts_{s} < \ts'_{e} \).
     Now we consider \( \ts_{e} \).
     First note that \( \ts_{e} > \ts_{s} \) by Lemma \ref{lem:start-before-end}, therefore we need to consider two cases \( \ts'_{s} < \ts_{s} < \ts_{e} < \ts'_{e} \) and  \( \ts'_{s} < \ts_{s} < \ts'_{e} < \ts_{e}  \).
-    Since both transaction write the same location \( \loc \), those two cases violate the \( \pred{consist} \) requirement in the semantics, so one of the transactions must pick another start and end time.
+    Since both transaction write the same location \( \loc \), those two cases violate the \( \predn{consist} \) requirement in the semantics, so one of the transactions must pick another start and end time.
 \end{proof}
 
-\begin{lem}[ext]
+\begin{lem}[External]
     \label{lem:ext}
     A transaction should read the last values it can observe.
     This means that for all transaction \( \tsid \) and heap location \( \loc \), if the transaction read a value \( \val \) from the location, i.e.\ \( \exists \ts \ldotp \tshp(\loc)(\ts) = (\val, \rop, \tsid) \), the last transaction \( \tsid' \) who writes to the same location and can be observe by \( \tsid \), i.e.\ \( (\tsid, \tsid') \in \vis\), should have written the same value, meaning \( \exists \val', \ts' \ldotp \tshp(\loc)(\ts') = (\val', \wop, \tsid') \implies \val' = \val\)
@@ -271,37 +315,38 @@ We continue the process until it is a total order.
     Thus by the \( \funcn{startstate} \) in the semantics, we have \( \val' = \val \).
 \end{proof}
 
-
-\begin{lem}[totalorder]
-    The arbitration relations \( \tar \) can be extended to a total order \( \ar \) that does not violate Lemma \ref{lem:prefix}, Lemma \ref{lem:ext} and Lemma \ref{lem:acyclic_relations}.
+\begin{lem}[Acyclic]
+    \label{lem:acyclic}
+    Both \( \vis \) and \( \ar \) are acyclic.
 \end{lem}
 \begin{proof}
-    We construct \( \ar \) from \( \tar \).
-    Assume there is an initialisation transaction \( \tsid_{init} \) that happens before all other transactions, which means \( \forall \tsid \in \settrans \ldotp (\tsid_{init} , \tsid ) \in \tar\).
-    Now we extend \( \tar \) until it is a total order.
-    Let \( \tar_{0} = \tar \), and clearly \( \tar_{0} \) satisfies those Lemmas.
+    For \( \vis \), it is proven by Lemma \ref{lem:semi-acyclic}.
 
-    Now assume that we have \( \tar_{n} \) for some \( n \) that satisfies Lemma \ref{lem:prefix}, Lemma \ref{lem:ext} and Lemma \ref{lem:acyclic_relations}.
-    We pick first two transactions \( \tsid_{1} \) and \( \tsid_{2} \) that satisfies the following.
-    First, if a transaction can reach \( \tsid_{1} \), it also can reach \( \tsid_{2} \), and vice versa, \( \forall \tsid \in \settrans \uplus \Set{\tsid_{init}} \ldotp (\tsid, \tsid_{1}) \in \tar_{n} \iff (\tsid, \tsid_{2}) \in \tar_{n} \).
-    Second, let \( \mathcal{S} \) be the set of such transactions, we requires it is a strict total order with respect to \( \tar_{n} \), i.e.\ \( \forall \tsid, \tsid' \in \mathcal{S} \ldotp (\tsid,\tsid') \in \tar_{n} \lor (\tsid',\tsid) \in \tar_{n}  \).
-    Intuitively, \( \tsid_{1} \) and \( \tsid_{2} \) is a branching point since \( \tsid_{init} \) with respect to \( \tar_{n} \).
-
-    Immediately, there are two important properties of the transactions.
-    Since that each step we add a new relations, so \( \vis \subseteq \tar \subseteq \tar_{0} \subseteq \dots \subseteq \tar_{n} \).
-    Therefore, given \( ( \tsid_{1}, \tsid_{2} ) \notin \tar \land ( \tsid_{2}, \tsid_{1} ) \notin \tar \) and Lemma \ref{lem:atoic-rw}, these two transactions write locations in exactly the same time and given \( ( \tsid_{1}, \tsid_{2} ) \notin \vis \land ( \tsid_{2}, \tsid_{1} ) \notin \vis \) and the contrapositive of Lemma \ref{lem:nocoflict}, the transactions must write different locations.
-    Now we claim that we can extend \( \tar_{n} \) by arbitrarily adding a relation between the two transactions and then taking the transitive closure, for instance \( \tar_{n+1} = ( \tar_{n} \uplus \Set{(\tsid_{1}, \tsid_{2})} )^{+}  \), and this new \( \tar_{n+1} \) still satisfies Lemma \ref{lem:prefix}, Lemma \ref{lem:ext} and Lemma \ref{lem:acyclic_relations}.
-
-    Lemma \ref{lem:prefix}  holds, because \( \tsid_{1} \) and \( \tsid_{2} \) commit at the same time, so \( \forall \tsid \ldotp (\tsid_{1}, \tsid) \in \vis \iff  (\tsid_{2}, \tsid) \in \vis \).
-    Then, by the assumption \( \tar_{n} ; \vis \subseteq \vis \), we have \( \tar_{n+1} ; \vis \subseteq \vis \).
-
-    Lemma \ref{lem:ext} holds because \( \tsid_{1} \) and \( \tsid_{2} \) write different locations.
-    Therefore, even though there is a new relation \( (\tsid_{1}, \tsid_{2}) \), the transaction \( \tsid_{2} \) still reads the newest values it can observe.
-    Similarly for those transactions who depends on the values written by \( \tsid_{1} \), they still read the newest values they can observe.
-                                                   
-    Note that \( \vis \) remains the same some we only need to check \( \tar_{n+1} \).
-    Assume that the new relation intrudes a circle, this circle must contain \( \tsid_{1} \) and \( \tsid_{2} \), for instance \( \tsid, \dots \tsid_{1}, \tsid_{2}, \dots \tsid' \).
-    Given how we pick \( \tsid_{1} \) and \( \tsid_{2} \), all the transactions before \( \tsid_{1} \) in the circle also can reach \( \tsid_{2} \).
-    This means \( \tsid, \dots \tsid_{1}, \dots \tsid' \) is also a circle, which contradict with assumption that \( \tar_{n} \) has no circle.
+    To prove \( \ar \) is acyclic, we prove inductively \( \tar_{i} \) is acyclic, where \( \tar_{0} = \tar \), \( \tar_{n} = \ar \) and \( \tar_{i+1} = (\tar_{i} \uplus \Set{(\tsid, \tsid')})^{+} \) for some \( \tsid \) and \( \tsid' \), which follows the process of \funcn{toTotal} from Definition \ref{defn:tototal}.
+    For base case \( \tar_{0} \), it is proven by Lemma \ref{lem:semi-acyclic}.
+    Now assume \( \tar_{i} \) is acyclic and \( \tar_{i+1} = (\tar_{i} \uplus \Set{(\tsid, \tsid')})^{+} \) for some \( \tsid \) and \( \tsid' \), we prove by contradiction that \( \tar_{i+1} \) is acyclic.
+    Given the hypothesis, if there is circle in \( \tar_{i+1} \), such circle either contain the edge \( (\tsid, \tsid') \), or can be broken down to a circle containing the edge \( (\tsid, \tsid') \), because of the transitive closure.
+    Note that by breaking down to a circle containing \( ( \tsid, \tsid' ) \), the rest edges inside the circle must be in \( \tar_{i} \).
+    Let assume the circle is \( \tsid_{0}, \tsid_{1}, \dots, \tsid_{i}, \tsid, \tsid', \tsid_{i+1}, \dots, \tsid_{n} \) where \( \tsid_{0} = \tsid_{n} \).
+    By the \( \funcn{toTotal} \) function from Definition \ref{defn:tototal}, \( \tsid, \tsid' \in \func{firstBranch}{\settrans, \tar_{i}}\), which means that for all \( \tsid'' \), \( (\tsid'', \tsid) \in \tar_{i} \) if and only if \( ( \tsid'', \tsid') \in \tar_{i} \), therefore \( (\tsid'', \tsid) \in \tar_{i+1} \) if and only if \( ( \tsid'', \tsid') \in \tar_{i+1} \).
+    This means that the sequence without \( \tsid \), i.e.\ \( \tsid_{0}, \tsid_{1}, \dots, \tsid_{i}, \tsid', \tsid_{i+1}, \dots, \tsid_{n} \), is still a sequence where two adjacent transactions are connected by \( \tar_{i+1} \), and this new sequence is a circle.
+    Now all the edges in the new sequence/circle already exist in \( \tar_{i} \), which violates our hypothesis.
+    Therefore by contradiction, \( \tar_{i+1} \) is acyclic.
+    Given that, \( \ar \) is acyclic.
 \end{proof}
 
+\begin{lem}[Total order]
+    \label{lem:totalorder}
+    \( \ar \) is a total order.
+\end{lem}
+\begin{proof}
+    By Lemma \ref{lem:acyclic}, \( \ar \) is acyclic, and by Definition \ref{defn:tototal}, for all \( \tsid \) and \( \tsid' \), either \( (\tsid, \tsid') \in \ar \) or \( (\tsid', \tsid) \in \ar \).
+    Therefore, it is a total order.
+\end{proof}
+
+\begin{thm}[Soundness of the semantics]
+    The time-stamp heap operational semantics is sound with respect to Andrea :))))))).
+\end{thm}
+\begin{proof}
+    By Lemma \ref{lem:visibility}, \ref{lem:session}, \ref{lem:prefix}, \ref{lem:nocoflict}, \ref{lem:ext}, \ref{lem:totalorder}.
+\end{proof}
