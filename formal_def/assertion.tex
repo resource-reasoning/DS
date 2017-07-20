@@ -17,13 +17,18 @@ Assume a logical environment \( \lenv \), we extend the evaluation of arithmetic
 \]
 
 \subsection{Local/Transaction}
+\azalea{
+I would define local assertions as you have PLUS the capability assertion $\captk{\capid(\vec{\lvar})}_{\rid}$. Local assertions are what you gain when you open boxes and they may very well contain capabilities. If you add this here now, then you don't need to redefine $\lpre\uparrow$ later for interference assertions. I would also define LOCAL STATES (pairs of fingerprint heaps and capabilities) over which local assertions are interpreted. \\
+
+Note that if you do this, you need to slightly change your repartitioning definition to ensure that the capability components of $\lpre$ and $\lpost$ are empty.}
+
 Local assertions, also transaction assertions, describe the state inside transactions.
 Note that transactions always work on their own copies of the global memory.
 Therefore, one can think the local assertions describe local resources.
 
 \[ 
     \begin{rclarray}
-        \fp \subseteq \Fingerprint & \defeq & \Set{\wfp,\rfp} \\
+        \fp \in \Fingerprint & \defeq & \powerset{\Set{\wfp,\rfp}} \\
         \lpre , \lpost \in \Localassertion & \defeq & 
                   \assfalse \quad                  |
             \quad \asstrue \quad                   |
@@ -48,7 +53,7 @@ The \emph{fingerprint} tracks how a transactions access heap.
     \(\Set{\rfp, \wfp}\) & read before any write, and then write \\ \hline
 \end{tabular}
 
-We define a order of fingerprint \( \fp \) like follows.
+We define an ordering $\sqsubseteq$ on fingerprints as follows:
 
 \begin{center}
     \begin{tikzpicture}
@@ -62,6 +67,28 @@ We define a order of fingerprint \( \fp \) like follows.
     \end{tikzpicture}
 \end{center}
 
+\azalea{Your diagram excludes the reflexive and transitive closure. So instead I would write:
+%
+\[
+	\sqsubseteq \ \defeq\ \subseteq \setminus \{(\Set{\wfp}, \Set{\rfp, \wfp})\}
+\]
+%
+where $\subseteq$ denotes the standard subset relation. Or write:
+%
+\[
+	\sqsubseteq \defeq \{(\emptyset, f), (\Set{\rfp}, \Set{\rfp, \wfp})\}^{*}
+\]
+%
+where $*$ denotes the reflexive transitive closure of the relation.
+%
+The diagram is intuitive. If you want to keep it, then write:
+%
+\[
+	\sqsubseteq \defeq \rightarrow^{*}
+\]
+%
+where $\rightarrow$ is as depicted in the diagram and $*$ denotes the reflexive transitive closure of the $\rightarrow$ relation.
+}
 Given the order we define a left merge operator on fingerprints.
 It reflects the fact that once a transaction writes to a location, the following reads from the same location are local.
 
@@ -106,7 +133,10 @@ We use \( \fphp \) to refer to a tuple of of a (plain) heap, a write set and a r
         \eval{\exists \lvar \ldotp \lpre}_{\lenv, \stk} & \defeq & \eval{\lpre}_{\lenv\remapsto{\lvar}{\val}, \stk}  \\
     \end{rclarray}
 \]
-
+%
+\azalea{
+$\eval{\exists \lvar \ldotp \lpre}_{\lenv, \stk} \defeq \bigcup\limits_{\val \in \Val} \eval{\lpre}_{\lenv\remapsto{\lvar}{\val}, \stk}$
+}
 The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
 The \rl{TRDeref} rule add read finger-print in finger-tracking set, only if there is no write finger-print.
 This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
@@ -127,6 +157,22 @@ This is because once a location has been re-written, the rest read are considere
 \]
 
 \subsection{Global/Program}
+\azalea{I would take my capabilities as elements of a PCM instead and make the logic parametric in it. Then, given a \emph{primitive capability} PCM $\textsc{PrimCap} \defeq (\Gamma, \compos_{\Gamma}, \unitelem{\Gamma})$ with $\gamma \in \Gamma$, you can introduce the capability assertion $[\gamma]^{\rid}.$ This way, you don't need to worry about parameterising your capabilities with $\vec{x}$ as the user can instantiate it just so.
+
+Capability assertions are interpreted over the \emph{capability} PCM $\textsc{CAP} \defeq (\mathbb{K}, \compos_{\kappa}, \emptyset)$ where $\kappa \in \mathbb{K} \defeq (\Regionid \parfinfun \Gamma)$, the $\emptyset$ denotes the function with empty domain and 
+%
+\[
+	(\kappa_1 \compos_{\kappa} \kappa_2)(\rid) \defeq 
+	\begin{cases}
+		\kappa_1(\rid) \compos_{\Gamma} \kappa_2(\rid) & \text{if } \rid \in \dom(\kappa_1) \text{ and } \rid \in \dom(\kappa_2) \\
+		\kappa_1(\rid) & \text{if } \rid \in \dom(\kappa_1) \text{ and } \rid \not\in \dom(\kappa_2) \\
+		\kappa_2(\rid) & \text{if } \rid \in \dom(\kappa_2) \text{ and } \rid \in \dom(\kappa_1) \\
+		\text{undefined} & \text{otherwise}
+	\end{cases}
+\]
+
+Also $\capass$ is a bad name for capability assertions because i) you use $t$ for time stamps; and ii) it conveys no information.
+}
 
 The capability assertion are interpreted as a set of tuples of region identifiers, a capability identifiers and values.
 
@@ -160,7 +206,12 @@ Given that, the composition of  sets of capabilities \( \cstate_{1} \) and \( \c
         \end{funcarray} \\
     \end{rclarray}
 \]
-
+%
+\azalea{
+%	For now, I recommend disallowing nested boxes. In CAP it was necessary as we were building up layers of abstraction and it was necessary to nest the resources of one module in another. Here, you do not have abstraction so disallowing nested boxes is not a big loss. So instead of $\boxass{\gpre}{\intass}{\rid}$ in your grammar write $\boxass{\lpre}{\intass}{\rid}$ where $\lpre$ is a local assertion (extended with capability assertions as described earlier).\\
+	For the sake of consistency with CAP and CoLoSL, I'd write $\boxass{\gpre}{\rid}{\intass}$ instead of $\boxass{\gpre}{\intass}{\rid}$. 
+}
+%
 The box assertion \( \boxass{\gpre}{\rid}{\intass} \) asserts part of heap that can be shared, where \( \rid \) is region identifier and \( \intass \) is the interference, i.e.\ all the possible transitions.
 The interference is a set of transitions that are labelled by capabilities.
 
@@ -185,6 +236,13 @@ A world is a pair of shared state and logical state.
 The logical state is a pair of time-stamp heap and capability, where capability is a partial finite function from region identifier to a token.
 The shared state is a partial finite function from region identifier to logical state and its interference.
 
+\azalea{Again, for the sake of consistency with CAP and CoLoSL, I'd swap the order of logical and shared states in Worlds and have $\World \defeq \Logicalstate \times \Sharestate$ instead.\\
+
+Also I would define worlds as TRIPLES with logical state (capturing privately-owned resources), shared state AND time stamp.  Worlds are what global assertions are interpreted over so add the time stamp here and not later. If you do this here, later when  you give the semantics of global assertions it is just on worlds and not worlds $\times$ time stamps.\\
+
+If you choose to define capabilities as I described above, make sure you propagate the notation changes here too. }
+
+\azalea{You are missing some well-formedness conditions on worlds. This is very important. For instance, you need the local (logical) state to be compatible with the global state. For instance you don't want to have the same resource in both places. Look at CAP or CoLoSL.}
 \[
     \begin{rclarray}
         \lstate \in \Logicalstate & \defeq & \Timestampheap \times \powerset{\Capability} \\
@@ -216,6 +274,8 @@ The composition of capabilities and worlds.
     \end{rclarray}
 \]
 
+\azalea{The world unit must be a SET with arbitrary state as its shared state component and NOT the empty function: $\unitelem{\world} \defeq \{(\sstate, \unitelem{\lstate}) \mid \sstate \in \Sharestate\}$.}
+
 The global assertions are interpreted as a set of worlds and their corresponding times.
 
 \[
@@ -239,11 +299,39 @@ The global assertions are interpreted as a set of worlds and their corresponding
     \end{rclarray}
 \]
 
+\azalea{
+	If you redefine worlds as described above, make sure you propagate the changes here. For instance, you will instead have: $\eval{\asstrue}_{\lenv, \stk} \defeq \World$.\\
+	
+	There are a few issues:
+\[
+\begin{array}{r c l}
+	\eval{\assemp}_{\lenv, \stk} 
+	& \defeq 
+	&\Set{(\world, \ts) \mid \world \in \unitelem{\world}} \\
+%
+	\eval{\exists \lvar \ldotp \gpre}_{\lenv, \stk} & \defeq & \bigcup\limits_{\val \in \Val}\eval{\gpre}_{\lenv\remapsto{\lvar}{\val}, \stk} 
+%	
+\end{array}        
+\]	
+%
+The boxed assertion must have an EMPTY local component. Also you must allow the region identifier to be a logical variable (this is useful when you existentially quantify them upon creation) and look it up in the logical environment.\\
+
+%I am not sure about the interpretation of $\expr_{1} \pt \expr_{2}$. 
+%Given that my time stamp is $t$, you are asking for the value of $\expr_{1}$ to be looked up for the latest time stamp $t'$  such that for all other time stamps between $t$ and $t'$ the value of $\expr_{1}$ is undefined. Now 
+%Suppose that I have the world $(\sstate, \lstate)$ with $\lstate {=} (\tshp, \emptyset)$ where $\tshp(x)(t_1) {=} (1, \wfp, \alpha)$; $\tshp(x)(t_2) {=} (1, \rfp, \beta)$; $\tshp(y)(t_3) {=} (2, \wfp, beta)$ such that $t_1 < t_2 < t_3$ and $\tshp$ is undefined for all other locations and time stamps. That is, $\tshp$ is a time stamp heap where transaction $\alpha$ has written $1$ location $x$ at time $t_1$ and then transaction $\beta$ had read 1 from $x$ at time $t_2$ and written $2$ to location $y$ at time $t_3$.
+%Intuitively, the $\tshp$ heap must satisfy the $x \mapsto 1 * y \mapsto 2$ assertion. According to the interpretation of $*$, I must find $\tshp_1, \tshp_2$ and $t$ such that $(\sstate, (\tshp_1, \emptyset), t)$ satisfies $x \mapsto 1$ and $(\sstate, (\tshp_2, \emptyset), t)$ satisfies $y \mapsto 2$. The choice of $\tshp_1, \tshp_2$  is simple. I just pick $\tshp_1(x)(t_1) {=} 1$ and undefined for all other locations. Similarly, I pick $\tshp_2(y)(t_2) {=} 2$ and undefined for all other locations. Now, what should I pick for $t$?
+%If I pick $t {=} t_1$ then $(\sstate, (\tshp_2, \emptyset), t)$ does NOT satisfy $y \mapsto 2$. On the other hand, if I pick $t {=} t_2$
+% where $t_1 < t_2$
+}
 We define \emph{merge} with respect to two heaps associated with their read sets and write sets.
 The operation \( \wmrg \) eagerly merge the left-hand side to the right-hand side.
 This means that, first, the domain of the result is the same as the domain of left-hand side.
 Second, the result takes left-hand side but propagate all the write effects from right-hand side.
 
+\azalea{I don't quite understand this definition. First, what do you mean by the domain of $\fphp$? $\fphp$ is a triple and not a function.
+
+Second, What is the intuition behind $\wmrg$? When is it used? I think it is used to calculate the postcondition of actions?
+}
 \[
     \begin{rclarray}
         \dom(\fphp) & \defeq & \dom(\fphp\projection{1}) \\
@@ -265,6 +353,16 @@ Second, the result takes left-hand side but propagate all the write effects from
 The first element, also pre-condition \( \lpreext \), only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \), because the semantics requires the pre-condition interpreted as a heap with empty write set and empty read set.
 The second element, also called post-condition \( \lpostext \), should contain the same resources as pre-condition.
 If a location has only been read, the value should remain the same pre-condition.
+
+%\azalea{What happens when I write bad actions where I pretend that I have the value of $x$ but I have actually changed its value:
+%%
+%\[
+%	x \pt_{\emptyset} 1 \transfersto x \pt_{\Set{\rfp}} 2
+%\]
+%%
+%These bad actions must be undefined and have empty interpretation. However, I believe at the moment their badness is ignored and they are treated as ID actions.
+%}
+
 \sx{For resource moving in can be tagged with write but don't know how to tag resource move out. This is not very right.}
 
 \[
