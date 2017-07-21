@@ -1,80 +1,32 @@
 \section{semantics\label{sec:semantics}}
+\begin{definition}[Program values]\label{def:prgram_values}
+Assume a countably infinite set of \emph{locations}, $\loc \in \Loc$, and a countably infinite set of \emph{program variables} $\vx \in {\Var}$. The set of \emph{program values} is $\val \in \Val \eqdef \Nat \cup \Loc$, where $\Nat$ denotes the set of natural numbers.
+\end{definition}
+%
+%
+\begin{definition}[Stacks]\label{def:stacks}
+Given the set of program variables $\Var$ and the set of program values $\Val$ (\defin\ref{def:prgram_values}), the set of variable stacks is $\stk \in \Stack \eqdef \Var \parfinfun \Val$.
+\end{definition}
+%
+%
+Our programs (ranged over by $\prog$) are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\prog; \prog$), non-deterministic choice ($\prog+\prog$), loops ($\prog^*$) and parallel composition ($\prog \ppar \prog$). Additionally, our programming language contains the \emph{transaction} construct $\ptrans{\cmd}$ denoting the \emph{atomic} execution of the transaction $\cmd$. The atomicity guarantees of this execution are dictated by the underlying consistency model (snapshot isolation in this case).
+Transactions (ranged over by $\cmd$) are defined by a similar inductive grammar comprising $\pskip$, non-deterministic choice, loops and sequential composition, as well as constructs for assignment, lookup and update. Transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are to be executed atomically.
 
-We model the state of a database by a time-stamp heap that is a partial function from locations to their histories.
-The history is a partial function from times to a set of events.
-A event is a triple consisting of the value being read or written, the operation, i.e. either read or write, and the transaction identifier.
-We use thread pool to model the concurrency.
-Each thread has a local stack and a local time, but a globally shared time-stamp heap.
-Therefore a thread pool is a partial functions from thread identifiers to the corresponding stack, time and transactions.
-The state of each transaction, i.e.\ local state, are a stack which is shared between transactions from the same thread, a heap that is a  snapshot of the time-stamp heap, and fingerprints that are the heap locations being read and written.
-
+\begin{definition}[Programming language]
+The set of \emph{programs}, $\prog \in \Programs$, is defined by the following grammar:
 \[
-    \begin{rclarray}
-        \loc \in \Loc & \defeq & \Nat \\
-        \val \in \Val & \defeq & \Nat \cup \Loc \\
-        \Var & \defeq & \Set{ \vx, \vy, \dots } \\
-        \ts \in \Timestamp & \defeq & \texttt{rational number or real number} \\
-        \hp \in \Heap & \defeq & \Loc \parfinfun \Val \\
-        \stk \in \Stack & \defeq & \Var \parfinfun \Val \\
-        \op \in \Operation & \defeq & \Set{\opr, \opw, \ops, \ope} \\
-        \settrans \subseteq \TransID & \defeq & \Set{ \alpha , \beta, \dots } \\
-        \ThreadID & \defeq & \Set{ i , j, \dots } \\
-        \rs \in \Readset, \ws \in \Writeset & \defeq & \powerset{\Loc} \\
-        %\tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \powerset{\Val \times \Operation \times \TransID}) \\
-        \tshp \in \Timestampheap & \defeq & \Loc \parfinfun ( \Timestamp \parfun ( \Val \times \Operation \times \TransID ) ) \\
-        (\stk, \tshp, \ts) \in \Threadstate & \defeq & \Stack \times \Timestampheap \times \Timestamp \\
-        \tdpl \in \Threadpool & \defeq & \ThreadID \parfun \Stack \times \Timestamp \times \prog \\
-        \stt \in \State & \defeq & \Timestampheap \times \Threadpool \\
-        \lstt = (\stk, \hp, \rs, \ws ) \in \Localstate & \defeq & \Stack \times \Heap \times \Readset \times \Writeset \\
-    \end{rclarray}
-\]
-
-The arithmetic expression and boolean expression are standard and have no side effect.
-
-\[
-    \begin{syntax}{\expr}
-              \val \quad          |
-        \quad \var \quad          |
-        \quad \expr + \expr \quad |
-        \quad \expr * \expr \quad |
-        \quad \dots 
+    \begin{syntax}{\prog}
+              \pskip \quad        |
+        \quad \ptrans{\cmd} \quad |
+        \quad \prog ; \prog \quad |
+        \quad \prog + \prog \quad |
+        \quad \prog^{*} \quad     |
+        \quad \prog \ppar \prog 
     \end{syntax}
 \]
-
-\[
-    \begin{rclarray}
-        \eval{\val}_{\stk} & \defeq & \val \\
-        \eval{\var}_{\stk} & \defeq & \stk(\val) \\
-        \eval{\expr_{1} + \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} + \eval{\expr_{2}}_{\stk}   \\
-        \eval{\expr_{1} * \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} * \eval{\expr_{2}}_{\stk}  
-    \end{rclarray}
-\]
-
-\[
-    \begin{syntax}{\bool}
-              \true \quad                |
-        \quad \false \quad               |
-        \quad \expr = \expr \quad        |
-        \quad \expr < \expr \quad        |
-        \quad \boolnot \bool \quad       |
-        \quad \bool \booland \bool \quad |
-        \quad \bool \boolor \bool \quad  |
-        \quad \dots 
-    \end{syntax}
-\]
-
-\[
-    \begin{rclarray}
-        \eval{\true}_{\stk}& \defeq & \true \\
-        \eval{\false}_{\stk} & \defeq & \false \\
-        \eval{\expr_{1} = \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} = \eval{\expr_{2}}_{\stk}   \\
-        \eval{\expr_{1} < \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} < \eval{\expr_{2}}_{\stk}   \\
-        \eval{\boolnot \bool}_{\stk} & \defeq & \neg \eval{\bool}_{\stk} \\
-        \eval{\bool_{1} \booland \bool_{2}}_{\stk} & \defeq & \eval{\bool_{1}}_{\stk} \land \eval{\bool_{2}}_{\stk}  \\
-        \eval{\bool_{1} \boolor \bool_{2}}_{\stk}& \defeq & \eval{\bool_{1}}_{\stk} \lor \eval{\bool_{2}}_{\stk}  
-    \end{rclarray}
-\]
-
+%
+The $\cmd \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar:
+%
 \[
     \begin{syntax}{\cmd}
               \pskip \quad                 |
@@ -86,6 +38,135 @@ The arithmetic expression and boolean expression are standard and have no side e
         \quad \cmd ; \cmd
     \end{syntax}
 \]
+%
+where $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar below with $\val \in \Val$ and $\vx \in \Var$ (\defin\ref{def:prgram_values}).
+%
+\[
+    \begin{syntax}{\expr}
+              \val \quad          |
+        \quad \var \quad          |
+        \quad \expr + \expr \quad |
+        \quad \expr * \expr \quad |
+        \quad \dots 
+    \end{syntax}
+\]
+%
+Given a stack $\stk \in \Stack$ (\defin\ref{def:stacks}), the \emph{expression evaluation} function, $\eval{.}_{(.)}:\Expressions \times \Stack \rightharpoonup \Val$, is defined inductively over the structure of expressions as follows: 
+%
+\[
+    \begin{rclarray}
+        \eval{\val}_{\stk} & \defeq & \val \\
+        \eval{\var}_{\stk} & \defeq & \stk(\val) \\
+        \eval{\expr_{1} + \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} + \eval{\expr_{2}}_{\stk}   \\
+        \eval{\expr_{1} * \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} * \eval{\expr_{2}}_{\stk}  
+    \end{rclarray}
+\]
+%
+\end{definition}
+%
+
+We model the database state as a \emph{timestamp heap}. A timestamp heap is a partial function from locations to \emph{histories}.
+A history is a partial function from timestamps to a set of \emph{events}.
+An event is a triple comprising the value read or written, the identifier of the transaction carrying out the event, and an \emph{event tag} denoting a \emph{start event} ($\ops$), an \emph{end} event ($\ope$), a \emph{read} event ($\opr$) or a \emph{write} event ($\opw$).
+We model our timestamps, $\ts \in \Timestamp$, as elements of an (uncountably) infinite set with a total order relation $<$. To ensure the availability of an appropriate timestamp, we assume that the timestamp set $\Timestamp$ is \emph{dense}. That is, given any two timestamps $\ts_1$ and $\ts_2$ such that $\ts_1 < \ts_2$, an intermediate timestamp $\ts$ can be found such that $\ts_1 < \ts < \ts_2$.
+
+\begin{definition}[Timestamp heaps]\label{def:timestamp_heaps}
+Assume a set of \emph{timestamps}, $\ts \in \Timestamp$. Assume a \emph{total order} relation on timestamps, $<\ : \Timestamp \times \Timestamp$, such that:
+%
+\[
+	\for{\ts_1, \ts_2 \in \Timestamp} \ts_1 < \ts_2 \lor \ts_2 < \ts_1
+\]
+%
+Assume that the timestamp set $\Timestamp$ is \emph{dense} with respect to the ordering relation $<$. That is,
+\[
+	\for{\ts_1, \ts_2} \ts_1 < \ts_2 
+	\Rightarrow 
+	\exsts{\ts} \ts_1 < \ts < \ts_2	
+\]
+%
+The set of \emph{event tags} is: $\op \in \Operation \eqdef \{\ops, \ope, \opr, \opw \}$. 
+
+\noindent Assume a countably infinite set of \emph{transaction identifiers} $\alpha, \beta \in \TransID$.
+Given the set of program values $\Val$ (\defin\ref{def:prgram_values}), the set of \emph{timestamp heaps} is defined as $\tshp \in \Timestampheap \eqdef \Loc \parfinfun (\Val \times \TransID \times \Operation)$.
+\end{definition}
+
+We use thread pools to model the concurrency.
+A thread pool is modelled as a finite partial map from thread identifiers to triples of the form $(\stk, \ts, \prog)$. That is, each thread is associated with a stack $\stk$,a timestamp $\ts$ and a program $\prog$ to be executed. 
+
+\begin{definition}[Thread pools]
+Assume a countably infinite set of thread identifiers $i,j \in \ThreadID$.
+Given the sets of stacks $\Stack$ (\defin\ref{def:stacks}) and the set of timestamps $\Timestamp$ (\ref{def:timestamp_heaps}), the set of \emph{thread pools} is: $\tdpl \in \Threadpool \eqdef \ThreadID \parfinfun \Stack \times \Timestamp \times \Programs$.
+\end{definition}
+%
+%
+Therefore a thread pool is a partial functions from thread identifiers to the corresponding stack, time and transactions.
+The state of each transaction, i.e.\ local state, are a stack which is shared between transactions from the same thread, a heap that is a  snapshot of the time-stamp heap, and fingerprints that are the heap locations being read and written.
+
+
+%
+\[
+    \begin{rclarray}
+%        \loc \in \Loc & \defeq & \Nat \\
+%        \val \in \Val & \defeq & \Nat \cup \Loc \\
+%        \Var & \defeq & \Set{ \vx, \vy, \dots } \\
+%        \ts \in \Timestamp & \defeq & \texttt{rational number or real number} \\
+%        \hp \in \Heap & \defeq & \Loc \parfinfun \Val \\
+%        \stk \in \Stack & \defeq & \Var \parfinfun \Val \\
+%        \op \in \Operation & \defeq & \Set{\opr, \opw, \ops, \ope} \\
+%        \settrans \subseteq \TransID & \defeq & \Set{ \alpha , \beta, \dots } \\
+%        \ThreadID & \defeq & \Set{ i , j, \dots } \\
+        \rs \in \Readset, \ws \in \Writeset & \defeq & \powerset{\Loc} \\
+        %\tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \powerset{\Val \times \Operation \times \TransID}) \\
+%        \tshp \in \Timestampheap & \defeq & \Loc \parfinfun ( \Timestamp \parfun ( \Val \times \Operation \times \TransID ) ) \\
+        (\stk, \tshp, \ts) \in \Threadstate & \defeq & \Stack \times \Timestampheap \times \Timestamp \\
+%        \tdpl \in \Threadpool & \defeq & \ThreadID \parfun \Stack \times \Timestamp \times \prog \\
+        \stt \in \State & \defeq & \Timestampheap \times \Threadpool \\
+        \lstt = (\stk, \hp, \rs, \ws ) \in \Localstate & \defeq & \Stack \times \Heap \times \Readset \times \Writeset \\
+    \end{rclarray}
+\]
+
+%The arithmetic expression and boolean expression are standard and have no side effect.
+%
+%
+%
+%
+%
+%\[
+%    \begin{syntax}{\bool}
+%              \true \quad                |
+%        \quad \false \quad               |
+%        \quad \expr = \expr \quad        |
+%        \quad \expr < \expr \quad        |
+%        \quad \boolnot \bool \quad       |
+%        \quad \bool \booland \bool \quad |
+%        \quad \bool \boolor \bool \quad  |
+%        \quad \dots 
+%    \end{syntax}
+%\]
+%
+%\[
+%    \begin{rclarray}
+%        \eval{\true}_{\stk}& \defeq & \true \\
+%        \eval{\false}_{\stk} & \defeq & \false \\
+%        \eval{\expr_{1} = \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} = \eval{\expr_{2}}_{\stk}   \\
+%        \eval{\expr_{1} < \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} < \eval{\expr_{2}}_{\stk}   \\
+%        \eval{\boolnot \bool}_{\stk} & \defeq & \neg \eval{\bool}_{\stk} \\
+%        \eval{\bool_{1} \booland \bool_{2}}_{\stk} & \defeq & \eval{\bool_{1}}_{\stk} \land \eval{\bool_{2}}_{\stk}  \\
+%        \eval{\bool_{1} \boolor \bool_{2}}_{\stk}& \defeq & \eval{\bool_{1}}_{\stk} \lor \eval{\bool_{2}}_{\stk}  
+%    \end{rclarray}
+%\]
+%
+%\[
+%    \begin{syntax}{\cmd}
+%              \pskip \quad                 |
+%        \quad \pass{\vx}{\expr} \quad      |
+%        \quad \pmutate{\expr}{\expr} \quad |
+%        \quad \pderef{\vx}{\expr} \quad    |
+%        \quad \cmd + \cmd \quad            |
+%        \quad \cmd^{*} \quad               |
+%        \quad \cmd ; \cmd
+%    \end{syntax}
+%\]
 
 The syntax and semantics of a single transaction are standard except \rl{Mutate} and \rl{Seref}.
 The \rl{Mutate} also adds the location being written to the write fingerprint set \( \ws \) and the \rl{Deref} adds the location to \( \rs \).
