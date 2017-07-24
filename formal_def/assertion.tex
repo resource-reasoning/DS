@@ -1,71 +1,12 @@
 \section{Assertion and Rules\label{sec:assertion}}
 
-Before introducing assertion, we extend arithmetic expressions with logical variables, ranging over \( \lvar \).
-
-\[
-    \begin{syntax}{\expr}
-        \lvar \quad | \quad \dots 
-    \end{syntax}
-\]
-
-Assume a logical environment \( \lenv \), we extend the evaluation of arithmetic expressions.
-
-\[
-\begin{rclarray}
-    \eval{\lvar}_{\lenv, \stk} & \defeq & \lenv(\lvar)
-\end{rclarray}
-\]
-
 \subsection{Local/Transaction}
-%Local assertions, also transaction assertions, describe the state inside transactions.
-%Note that transactions always work on their own copies of the global memory.
-%Therefore, one can think the local assertions describe local resources.
-%
-%\[ 
-%    \begin{rclarray}
-%        \fp \in \Fingerprint & \defeq & \powerset{\Set{\wfp,\rfp}} \\
-%        \lpre , \lpost \in \Localassertion & \defeq & 
-%                  \assfalse \quad                  |
-%            \quad \asstrue \quad                   |
-%            \quad \assemp \quad                    |
-%            \quad \expr \pt_{\fp} \expr \quad      | 
-%            \quad \lpre \sep \lpost \quad          | 
-%            \quad \lpre \land \lpost \quad         | \\
-%            & &   \lpre \lor \lpost \quad          |
-%            \quad \exists \lvar \ldotp \lpre \quad |
-%    \end{rclarray}
-%\]
-%
-%Compared with sequential separation logic, we annotated assertions with \emph{fingerprint}.
-%The \emph{fingerprint} tracks how a transactions access heap.
-%
-%\begin{tabular}{c | l}
-%    \hline
-%    fingerprint & meaning \\ \hline
-%    \(\emptyset\) & no access \\ 
-%    \(\Set{\wfp}\) & write \\ 
-%    \(\Set{\rfp}\) & read before any write \\ 
-%    \(\Set{\rfp, \wfp}\) & read before any write, and then write \\ \hline
-%\end{tabular}
-%
-%We define an ordering $\sqsubseteq$ on fingerprints as follows:
-%
-%\begin{center}
-%    \begin{tikzpicture}
-%        \node (emp) {\(\emptyset\)};
-%        \node[above right=0.3cm and 0.3cm of emp] (r) {\(\Set{\rfp}\)};
-%        \node[above left=0.3cm and 0.3cm of emp] (w) {\(\Set{\wfp}\)};
-%        \node[above=0.3cm of r] (rw) {\(\Set{\rfp, \wfp}\)};
-%        \draw[->] (emp) -- (r);
-%        \draw[->] (emp) -- (w);
-%        \draw[->] (r) -- (rw);
-%    \end{tikzpicture}
-%\end{center}
 
 \azalea{
 I would define local assertions as you have PLUS the capability assertion $\captk{\capid(\vec{\lvar})}_{\rid}$. Local assertions are what you gain when you open boxes and they may very well contain capabilities. If you add this here now, then you don't need to redefine $\lpre\uparrow$ later for interference assertions. I would also define LOCAL STATES (pairs of fingerprint heaps and capabilities) over which local assertions are interpreted. \\
 
 Note that if you do this, you need to slightly change your repartitioning definition to ensure that the capability components of $\lpre$ and $\lpost$ are empty.}
+\sx{Change repartition}
 
 \begin{definition}[capabilities]\label{def:capabilities}
 Assume a partial commutative monoid for \emph{primitive capabilities} $(\Kaps, \composeK, \unitK)$ with $\kap \in \Kaps$.
@@ -104,7 +45,7 @@ The set of \emph{logical expressions}, $ \lexpr \in \LExpressions$ is defined by
 \]
 %
 Given the set of values $\Val$ (\defin\ref{def:prgram_values}), assume a set of \emph{logical environments} $\lenv \in \LEnv: \LVars \rightharpoonup \Val$.
-Given a stack $\stk \in \Stack$ (\defin\ref{def:stacks}) and a logical environment $\lenv: \LEnv$, the \emph{logical expression evaluation} function, $\leval{.}{(., .)}:\Expressions \times \Stack \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions as follows: 
+Given a stack $\stk \in \Stack$ (\defin\ref{def:stacks}) and a logical environment $\lenv: \LEnv$, the \emph{logical expression evaluation} function, $\leval{.}{(., .)}:\LExpressions \times \Stack \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions as follows: 
 %
 \[
     \begin{rclarray}
@@ -121,7 +62,7 @@ The set of \emph{local assertions}, $\lpre,  \lpost \in \Localassertion$, is def
 \[
 \begin{array}{r @{\hspace{2pt}} l}
 	\lpre, \lpost ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\V x} \lpre \\
-	& \mid \emp \mid \lexpr \pt_{\fp} \lexpr \mid \cass{\kap}{\V r}\mid \lpre * \lpost 
+	& \mid \emp \mid \lexpr \pt_{\fp} \lexpr \mid \cass{\kap}{\V r} \mid \lpre * \lpost 
 \end{array}	 
 \]
 %
@@ -171,6 +112,8 @@ Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation fu
 %
 \end{definition}
 %
+
+\subsection{Fingerprint (temp)}
 We define an ordering $\sqsubseteq$ on fingerprints as follows:
 
 \begin{center}
@@ -213,7 +156,7 @@ where $\rightarrow$ is as depicted in the diagram and $*$ denotes the reflexive 
     This part is minor, I will change later.
 }
 
-Given the order we define a left merge operator on fingerprints.
+Given the order, we define a left merge operator on fingerprints.
 It reflects the fact that once a transaction writes to a location, the following reads from the same location are local.
 
 \[
@@ -226,37 +169,62 @@ It reflects the fact that once a transaction writes to a location, the following
     \end{rclarray}
 \]
 
-%The local assertions are interrupted as a set of possible heap associated fingerprint.
-%We use \( \fphp \) to refer to a tuple of of a (plain) heap, a write set and a read set.
+\subsection{Interference}
 
-%\[
-    %\begin{rclarray}
-        %\fphp \in \Heapwithfingerprint & \defeq & \Heap \times \Readset \times \Writeset \\
-        %(\hp_{1}, \rs_{1}, \ws_{1}) \compos_{\fphp} (\hp_{2}, \rs_{2}, \ws_{2}) & \defeq &  (\hp_{1} \uplus \hp_{2}, \rs_{1} \uplus \rs_{2}, \ws_{1} \uplus \ws_{2}) \\
-        %\unitelem{\fphp} & \defeq & (\emptyset, \emptyset, \emptyset) \\
-    %\end{rclarray}
-%\]
+\begin{defn}[Interferences]
+\label{def:interferences}
+The set of \emph{Interferences} is \( \Interference \defeq \Regionid \parfun \Kaps \parfun \powerset{\FPHeaps \times \FPHeaps } \),  which are all the possible transitions for a given region identifier \( \rid \in \Regionid \) and primitive capability \( \kap \in \Kaps \).
+\end{defn}
 
-%\[
-    %\begin{rclarray}
-        %\eval{\assfalse}_{\lenv, \stk} & \defeq & \emptyset  \\
-        %\eval{\asstrue}_{\lenv, \stk} & \defeq & \powerset{ \Heapwithfingerprint}  \\
-        %\eval{\assemp}_{\lenv, \stk} & \defeq & \Set{\unitelem{\fphp}}  \\
-        %\eval{\expr_{1} \pt_{\fp} \expr_{2}}_{\lenv, \stk} & \defeq & \Set{(\Set{ \loc \mapsto \val }, \rs, \ws) \middle|
-            %\begin{array}{@{}l@{}}
-                %\exists \loc = \eval{\expr_{1}}_{\lenv, \stk}, \val =  \eval{\expr_{2}}_{\lenv, \stk} \ldotp \\
-                %\fp = \emptyset \implies \rs = \emptyset \land \ws = \emptyset \\
-                %\fp = \Set{\rfp} \implies \rs = \Set{\loc} \land \ws = \emptyset \\
-                %\fp = \Set{\wfp} \implies \rs = \emptyset \land \ws = \Set{\loc}  \\
-                %\fp = \Set{\rfp,\wfp} \implies \rs = \ws = \Set{\loc} \\
-            %\end{array}
-        %}  \\
-        %\eval{\lpre \sep \lpost}_{\lenv, \stk} & \defeq & \Set{ \fphp_{1} \compos_{\fphp} \fphp_{2} \middle| \fphp_{1} \in \eval{\lpre}_{\lenv, \stk} \land \fphp_{2} \in \eval{\lpost}_{\lenv, \stk} }  \\
-        %\eval{\lpre \land \lpost}_{\lenv, \stk} & \defeq & \eval{\lpre}_{\lenv, \stk} \cap \eval{\lpost}_{\lenv, \stk} \\
-        %\eval{\lpre \lor \lpost}_{\lenv, \stk} & \defeq & \eval{\lpre}_{\lenv, \stk} \cup \eval{\lpost}_{\lenv, \stk} \\
-        %\eval{\exists \lvar \ldotp \lpre}_{\lenv, \stk} & \defeq & \bigcup\limits_{\val \in \Val} \eval{\lpre}_{\lenv\remapsto{\lvar}{\val}, \stk}  \\
-    %\end{rclarray}
-%\]
+\begin{defn}[Interference assertions]
+\label{def:interference-assertion}
+The \emph{interference assertions} are sets of transitions labelled by \emph{primitive capabilities}, where \( \lpre, \lpost \in \Localassertion} \) and \( \kap \in \Kaps \) for same \( \Kaps \):
+
+\[
+    \begin{rclarray}
+        \intass \in \Interferenceassertion & \defeq & 
+              \emptyset \mid \Set{ \captk{\kap} : \exists \vec{\V x} \ldotp \lpre \transfersto \lpost } \uplus \intass \\
+    \end{rclarray}
+\]
+\end{defn}
+
+Given the set of interferences (\defin \ref{def:interferences}), the \emph{interference assertion evaluation} function, \( \eval{.}_{(.,.)}: \Interferenceassertion \parfun \Interference \) is defined inductively over the structure of interference assertions:
+
+\[
+    \begin{rclarray}
+        \eval{\emptyset}_{ \lenv, \stk}(\dontcare)(\dontcare) & \defeq & \emptyset \\
+        \eval{\Set{\cass{\kap}{\V \rid} : \exists \vec{\V x} \ldotp \lpre \transfersto \lpost} \uplus \intass}_{\lenv, \stk}(\rid)(\kap') & \defeq & 
+        \begin{funcarray}
+            \Set{(\ls,\ls') \middle| 
+            \begin{array}{@{}l@{}}
+                \exists \vec{\val}, \lenv' = \lenv[\vec{\V x} \mapsto \vec{\val}'] \ldotp \\
+                \ls \in \eval{\lpre}_{\lenv', \stk} \land  \ls' \in \eval{\lpost}_{\lenv', \stk} 
+            \end{array}} & {\V \rid} = \rid \land \capid = \capid' \\ 
+            \eval{\intass}_{\lenv, \stk}(\rid, \capid') & \text{otherwise}
+        \end{funcarray} \\
+    \end{rclarray}
+\]
+
+Given the evaluation, the well-formedness of interference assertions is defined as follows:
+\[
+    \begin{rclarray} 
+        \pred{wfIntf}{\intf} & \defeq & \forall \rid, \kap, \ls, \ls' \ldotp (\ls, \ls' ) \in \eval{\intf}(\rid)(\kap) \land \pred{wf}{\ls, \ls'}\\
+        \pred{wf}{\ls,\ls'} & \defeq & \forall \loc \ldotp \lsFPH{\ls} = (\dontcare, \emptyset) \land \dom(\lsFPH{\ls}) = \dom(\lsFPH{\ls'})
+    \end{rclarray}
+\]
+
+
+
+\sx{
+How to interpret interference parametrised \( \kap \)?
+For example,
+\[
+    \cass{T(n)}{} \lvar \pt_{\emptyset} n \transfersto \lvar \pt_{\Set{\wfp}} n+1
+\]
+}
+
+
+\subsection{Rules for Local}
 The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
 The \rl{TRDeref} rule add read finger-print in finger-tracking set, only if there is no write finger-print.
 This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
@@ -277,56 +245,20 @@ This is because once a location has been re-written, the rest read are considere
 \]
 
 \subsection{Global/Program}
-\azalea{I would take my capabilities as elements of a PCM instead and make the logic parametric in it. Then, given a \emph{primitive capability} PCM $\textsc{PrimCap} \defeq (\Gamma, \compos_{\Gamma}, \unitelem{\Gamma})$ with $\gamma \in \Gamma$, you can introduce the capability assertion $[\gamma]^{\rid}.$ This way, you don't need to worry about parameterising your capabilities with $\vec{x}$ as the user can instantiate it just so.
+%\azalea{I would take my capabilities as elements of a PCM instead and make the logic parametric in it. Then, given a \emph{primitive capability} PCM $\textsc{PrimCap} \defeq (\Gamma, \compos_{\Gamma}, \unitelem{\Gamma})$ with $\gamma \in \Gamma$, you can introduce the capability assertion $[\gamma]^{\rid}.$ This way, you don't need to worry about parameterising your capabilities with $\vec{x}$ as the user can instantiate it just so.
 
-Capability assertions are interpreted over the \emph{capability} PCM $\textsc{CAP} \defeq (\mathbb{K}, \compos_{\kappa}, \emptyset)$ where $\kappa \in \mathbb{K} \defeq (\Regionid \parfinfun \Gamma)$, the $\emptyset$ denotes the function with empty domain and 
-%
-\[
-	(\kappa_1 \compos_{\kappa} \kappa_2)(\rid) \defeq 
-	\begin{cases}
-		\kappa_1(\rid) \compos_{\Gamma} \kappa_2(\rid) & \text{if } \rid \in \dom(\kappa_1) \text{ and } \rid \in \dom(\kappa_2) \\
-		\kappa_1(\rid) & \text{if } \rid \in \dom(\kappa_1) \text{ and } \rid \not\in \dom(\kappa_2) \\
-		\kappa_2(\rid) & \text{if } \rid \in \dom(\kappa_2) \text{ and } \rid \in \dom(\kappa_1) \\
-		\text{undefined} & \text{otherwise}
-	\end{cases}
-\]
+%Capability assertions are interpreted over the \emph{capability} PCM $\textsc{CAP} \defeq (\mathbb{K}, \compos_{\kappa}, \emptyset)$ where $\kappa \in \mathbb{K} \defeq (\Regionid \parfinfun \Gamma)$, the $\emptyset$ denotes the function with empty domain and 
+%%
+%\[
+	%(\kappa_1 \compos_{\kappa} \kappa_2)(\rid) \defeq 
+	%\begin{cases}
+		%\kappa_1(\rid) \compos_{\Gamma} \kappa_2(\rid) & \text{if } \rid \in \dom(\kappa_1) \text{ and } \rid \in \dom(\kappa_2) \\
+		%\kappa_1(\rid) & \text{if } \rid \in \dom(\kappa_1) \text{ and } \rid \not\in \dom(\kappa_2) \\
+		%\kappa_2(\rid) & \text{if } \rid \in \dom(\kappa_2) \text{ and } \rid \in \dom(\kappa_1) \\
+		%\text{undefined} & \text{otherwise}
+	%\end{cases}
+%\]
 
-Also $\capass$ is a bad name for capability assertions because i) you use $t$ for time stamps; and ii) it conveys no information.
-}
-
-The capability assertion are interpreted as a set of tuples of region identifiers, a capability identifiers and values.
-
-\[
-    \begin{rclarray}
-        \Regionid & \defeq & \Set{\rid, \dots} \\
-        \Capabilityid & \defeq & \Set{\capid, \dots } \\
-        \capass \in \Capabilityassertion & \defeq & \captk{\capid(\vec{\lvar})}_{\rid}  \\
-        \capb \in \cstate \subseteq \Capability & \defeq & \Regionid \times \Capabilityid \times \Val^{*} \\
-        \eval{\captk{\capid(\vec{\lvar})}_{\rid}}_{\lenv, \stk} & \defeq & \Set{(\rid, \capid, \lenv(\vec{\lvar}))} \\
-    \end{rclarray}
-\]
-
-All capabilities associated with a region forms a partial commutative monoid (PCM):
-
-\[
-    \begin{rclarray}
-        \setcap & \in & \powerset{\Capabilityid \times \Val^{*}} \\
-        \func{cap}{\rid} & \defeq & (\setcap, \compos_{\setcap}, \unitelem{\setcap}) \\
-    \end{rclarray}
-\]
-
-Given that, the composition of  sets of capabilities \( \cstate_{1} \) and \( \cstate_{2} \):
-
-\[
-    \begin{rclarray}
-        \cstate_{1} \compos_{\cstate} \cstate_{2} & \defeq & 
-        \begin{funcarray}
-            \cstate_{1} \uplus \cstate_{2} & \forall \capb_{1} \in \cstate_{1}, \capb_{2} \in \cstate_{2} \ldotp \capb_{1}\projection{1} = \capb_{2}\projection{1} \land  ((\capb_{1}\projection{2}, \capb_{1}\projection{3}) \compos_{\setcap} (\capb_{2}\projection{2}, \capb_{2}\projection{3}))\isdef \\
-            \texttt{undefined} & o.w. \\
-        \end{funcarray} \\
-    \end{rclarray}
-\]
-%
 \azalea{
 %	For now, I recommend disallowing nested boxes. In CAP it was necessary as we were building up layers of abstraction and it was necessary to nest the resources of one module in another. Here, you do not have abstraction so disallowing nested boxes is not a big loss. So instead of $\boxass{\gpre}{\intass}{\rid}$ in your grammar write $\boxass{\lpre}{\intass}{\rid}$ where $\lpre$ is a local assertion (extended with capability assertions as described earlier).\\
 	For the sake of consistency with CAP and CoLoSL, I'd write $\boxass{\gpre}{\rid}{\intass}$ instead of $\boxass{\gpre}{\intass}{\rid}$. 
@@ -341,16 +273,8 @@ The interference is a set of transitions that are labelled by capabilities.
 \[
     \begin{rclarray}
             \gpre , \gpost \in \Globalassertion & \defeq & 
-                  \assfalse \quad                   |
-            \quad \asstrue \quad                    |
-            \quad \assemp \quad                     |
-            \quad \expr \pointsto \expr \quad       |
-            \quad \boxass{\gpre}{\intass}{\rid} \quad |
-            \quad \capass \quad                     | \\
-            & &  \gpre \sep \gpost \quad            |
-            \quad \gpre \land \gpost \quad          |
-            \quad \gpre \lor \gpost \quad           |
-            \quad \exists \lvar \ldotp \gpre \quad  | \\
+            \assfalse \mid \asstrue \mid \gpre \land \gpost \mid \gpre \lor \gpost  \mid \exists \lvar \ldotp \gpre \mid \\
+            & & \assemp \mid \lexpr \pointsto \lexpr \mid \cass{\kap}{\V r} \mid \boxass{\gpre}{\V r}{\intass} \mid \gpre \sep \gpost \\
     \end{rclarray}
 \]
 
@@ -366,14 +290,16 @@ Also I would define worlds as TRIPLES with logical state (capturing privately-ow
 If you choose to define capabilities as I described above, make sure you propagate the notation changes here too. }
 
 \azalea{You are missing some well-formedness conditions on worlds. This is very important. For instance, you need the local (logical) state to be compatible with the global state. For instance you don't want to have the same resource in both places. Look at CAP or CoLoSL.}
+
 \sx{ I am not happy with the rest formalisation yet. 
 So purposely ignore the well-formedness for now.
 }
+
 \[
     \begin{rclarray}
         \lstate \in \Logicalstate & \defeq & \Timestampheap \times \powerset{\Capability} \\
         \sstate \in \Sharestate & \defeq & \Regionid \parfinfun \Logicalstate \times \Interference \\
-        \world \in \World & \defeq & \Sharestate \times \Logicalstate
+        \world \in \World & \defeq & \Logicalstate \times \Sharestate
     \end{rclarray}
 \]
 
@@ -497,27 +423,6 @@ If a location has only been read, the value should remain the same pre-condition
 
 \sx{For resource moving in can be tagged with write but don't know how to tag resource move out. This is not very right.}
 
-\[
-    \begin{rclarray}
-        \lpreext, \lpostext & \in & \Localassertion \uplus \Capabilityassertion \\
-        \fphpcap \in \Heapwithfingerprintcapability & \defeq & \Heapwithfingerprint \times \powerset{\Capability} \\
-        \intass \in \Interferenceassertion & \defeq & 
-              \emptyset \quad |
-              \quad \Set{ \captk{\capid(\vec{\lvar})} : \exists \vec{y} \ldotp \lpreext \transfersto \lpostext } \uplus \intass \quad \\
-        \eval{\emptyset}_{ \lenv, \stk} & \defeq & \emptyset \\
-        \eval{\Set{\captk{\capid(\vec{\lvar})}_{r} : \exists \vec{y} \ldotp \lpre \transfersto \lpost} \uplus \intass}_{\lenv, \stk} & \defeq & \lambda (\rid',\capid',\vec{\val}) \ldotp \\
-                                                                                                                                     & & \begin{funcarray}
-            \Set{(\fphpcap,\fphpcap') \middle| 
-            \begin{array}{@{}l@{}}
-                \exists \fphp, \fphp', \setcap, \setcap', \vec{\val}', \lenv' = \lenv[\vec{\lvar} \mapsto \vec{\val}, \vec{y} \mapsto \vec{\val}'] \ldotp \\
-                \fphpcap = (\fphp, \cstate) \land \fphpcap = (\fphp', \cstate') \land \\
-                \fphp \in \eval{\lpre}_{\lenv', \stk} \land  \fphp' \in \eval{\lpost}_{\lenv', \stk} \land {} \\
-                \fphp\projection{2} = \fphp\projection{3} = \emptyset \land \fphp \wmrg \fphp' = \fphp'
-            \end{array}} & \rid = \rid' \land \capid = \capid' \\ 
-            \eval{\intass}_{\lenv, \stk}(\rid', \capid', \vec{\val}) & o.w.
-        \end{funcarray} \\
-    \end{rclarray}
-\]
 
 The \rl{PRCommit} rule looks the same but the repartition is much more complicated by  merging all possible transitions from the environment that are allowed to run concurrently and commit in the same time.
 Note that after the merging, one still need to check stabilisation.
