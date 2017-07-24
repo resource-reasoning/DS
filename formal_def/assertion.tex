@@ -35,7 +35,7 @@ Given the set of fingerprint heaps $\FPHeaps$ (\defin\ref{def:fingerprint_heaps}
 Given a local state $\ls$, we write $\lsFPH{\ls}$ and $\lsCap{\ls}$ for the first and second projections of $\ls$, respectively.
 %
 %
-\begin{definition}[Local assertions]
+\begin{definition}[Local assertions]\label{def:local_assertions}
 %Given the set of program expressions $\Expressions$ (\defin\ref{def:language}), 
 Assume a countably infinite set of \emph{logical variables} $\V x \in \LVars$.
 The set of \emph{logical expressions}, $ \lexpr \in \LExpressions$ is defined by the following inductive grammar, where $\val \in \Val$, $\vx \in \Var$ (\defin\ref{def:prgram_values}) and $\V x \in \LVars$:
@@ -113,7 +113,7 @@ Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation fu
 \end{definition}
 %
 
-\subsection{Fingerprint (temp)}
+\subsection{Fingerprint (temp) -- Shale}
 We define an ordering $\sqsubseteq$ on fingerprints as follows:
 
 \begin{center}
@@ -154,7 +154,7 @@ It reflects the fact that once a transaction writes to a location, the following
     \end{rclarray}
 \]
 
-\subsection{Interference}
+\subsection{Interference -- Shale}
 
 \begin{defn}[Interferences]
 \label{def:interferences}
@@ -273,17 +273,175 @@ Given the set of timestamps $\Timestamp$ (\defin\ref{def:timestamp_heaps}), the 
 The \emph{world composition function}, $\composeW: \World \times \World \parfun \World$, is defined component-wise as: $\World \eqdef (\composeLGS, \composeS, \composeEq)$.
 The \emph{world unit set} is $\unitW \eqdef \myset{(\unitLGS, \gs, \ts)}{\gs \in \SStates \land \ts \in \Timestamp}$.
 The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
-
-
 \end{definition}
+%
+%
+\begin{definition}[Assertions]
+The set of \emph{assertions}, $\gpre, \gpost \in \Globalassertion$, are defined by the following inductive grammar:
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\Globalassertion \ni \gpre , \gpost \in \Globalassertion \defeq & 
+	\False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost  \mid \exsts{\V x}\gpre \\
+    & \mid \emp \mid \lexpr_1 \pointsto \lexpr_2 \mid \cass{\kap}{\V r} \mid \boxass{\gpre}{\V r}{\intass} \mid \gpre \sep \gpost \\
+\end{array}
+\]
+%
+where $\V x, \V r \in \LVars$, $\lexpr_1, \lexpr_2 \in \LExpressions$ (\defin\ref{def:local_assertions}), $\kap \in \Kaps$ (\defin\ref{def:capabilities}) and $\intass \in \IAssertions$ denotes an \emph{interference assertion} defined by the following grammar:
+%
+\[
+	\IAssertions \ni \intass \eqdef 
+	\emptyset \mid \Set{ \captk{\kap} : \exsts{\vec{\V x}} \lpre \transfersto \lpost } \cup \intass 
+\]
+%
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stack$, the \emph{interference interpretation} function, $\ieval[(., .)]{.}: \IAssertions \times \LEnv \times \Stack \rightarrow \Interference$, is defined as follows, for all $\kap \in \Kaps$:
+%
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\ieval{\emptyset}(\kap) \eqdef & \emptyset \\
+	\ieval{\Set{ \captk{\kap} : \exsts{\vec{\V x}} \lpre \transfersto \lpost } \cup \intass }(\kap) \eqdef &
+	\myset{
+		(\ls_\lpre, \ls_\lpost)	
+	}{
+		(\ls_\lpre, \ls_\lpost)	\in \Actions 
+		\land \exsts{\rid, \vec v, \lenv'} 
+			\lenv(\V r) = \rid 
+			\land \lenv' = \lenv \remapsto{\vec{\V x}}{\vec v} \\
+			\land\ \ls_\lpre \in \aeval{\lpre}{\lenv', \stk}
+			\land \ls_\lpost \in \aeval{\lpost}{\lenv', \stk}
+	}
+	\cup 
+	\ieval{I}(\kap)
+\end{array}
+\] 
+%
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stack$, the \emph{assertion interpretation} function, $\aeval[(., .)]{.}: \Globalassertion \times \LEnv \times \Stack \rightarrow \World$, is defined as follows:
+%
+\newcommand{\auxeval}[2][\lenv, \stk, \ts]{\denote{#2}^{\mathsf{A}}_{#1}}
+\[
+\begin{rclarray}
+	\aeval{\False}{\lenv, \stk} & \defeq & \emptyset \\
+%
+	\aeval{\True}{\lenv, \stk} & \defeq & \World \\
+%
+	\aeval{\emp}{\lenv, \stk} & \defeq & \unitW \\
+%
+	\aeval{\gpre \land \gpost}{\lenv, \stk} & \defeq & \aeval{\gpre}{\lenv, \stk} \cap \aeval{\gpost}{\lenv, \stk} \\
+%	
+	\aeval{\gpre \lor \gpost}{\lenv, \stk} & \defeq & \aeval{\gpre}{\lenv, \stk} \cup \aeval{\gpost}{\lenv, \stk} \\
+%  
+	\aeval{\exists \lvar \ldotp \gpre}{\lenv, \stk} & \defeq 
+	& \bigcup\limits_{\val \in \Val} \aeval{\gpre}{\lenv\remapsto{\lvar}{\val}, \stk} \\
+%
+	\aeval{\lexpr_1 \pt \lexpr_2}{\lenv, \stk} & \defeq 
+	& \myset{
+		((\tshp, \unitC), \gs, \ts)
+	}{
+		\exsts{\loc, \val, \ts'} 
+		\leval{\lexpr_1}{\lenv, \stk} {=} \loc 
+		\land \leval{\lexpr_2}{\lenv, \stk} {=} \val 
+		\land \ts' \leq \ts 
+		\land \dom(\tshp) {=} \Set{\loc} \\
+		\land\ \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) 
+		\land \for{\ts'' \in ( \ts', \ts)} \tshp(\loc)(\ts'') \undef \\
+		\land\ \gs \in \SStates
+	} \\
+%	
+	\aeval{\cass{\kap}{\V r}}{\lenv, \stk} & \defeq 
+	& \myset{
+		((\unitTS, \ca), \gs, \ts)
+	}{
+		\exsts{\rid} 
+		\lenv(\V r) = \rid 
+		\land \dom(\ca) = \Set{\rid}
+		\land \ca(\rid) = \kap
+	} \\
+%	
+	\aeval{\boxass{\gpre}{\rid}{\intass}}{\lenv, \stk} & \defeq 
+	& \myset{
+		(\unitLGS, \gs, \ts) 
+	}{	
+		\exsts{\rid, \lgs} 
+		\lenv(\V r) = \rid 
+		\land \gs(\rid) = (\lgs, \ieval{I})		
+		\land (\lgs, \gs) \in \auxeval{P} 
+	}\\
+%
+	\aeval{ \gpre \sep \gpost }{\lenv, \stk} & \defeq & 
+	\myset{
+		(\world_1 \composeW \world_2)
+	}{
+		\world_1 \in \aeval{\gpre}{\lenv, \stk, \ts} 
+		\land \world_2 \in \aeval{\gpost}{\lenv, \stk, \ts}
+	}   
+\end{rclarray}
+\]
+%
+with the \emph{auxiliary interpretation function}, $\auxeval[(., ., .)]{(.)}: \Globalassertion \times \LEnv \times \Stack \times \Timestamp \rightarrow \powerset{\LGStates \times \SStates}$, defined as follows:
+%
+\[
+\begin{rclarray}
+	\auxeval{\False} & \defeq & \emptyset \\
+%
+	\auxeval{\True} & \defeq & \LGStates \times \SStates \\
+%
+	\auxeval{\emp} & \defeq & \myset{(\unitLGS, \gs}{\gs \in \SStates} \\
+%
+	\auxeval{\gpre \land \gpost} & \defeq & \auxeval{\gpre} \cap \auxeval{\gpost} \\
+%	
+	\auxeval{\gpre \lor \gpost} & \defeq & \auxeval{\gpre} \cup \auxeval{\gpost} \\
+%  
+	\auxeval{\exists \lvar \ldotp \gpre} & \defeq 
+	& \bigcup\limits_{\val \in \Val} \auxeval[\lenv\remapsto{\lvar}{\val}, \stk, \ts]{\gpre} \\
+%
+	\auxeval{\lexpr_1 \pt \lexpr_2} & \defeq 
+	& \myset{
+		((\tshp, \unitC), \gs)
+	}{
+		\exsts{\loc, \val, \ts'} 
+		\leval{\lexpr_1}{\lenv, \stk} {=} \loc 
+		\land \leval{\lexpr_2}{\lenv, \stk} {=} \val 
+		\land \ts' \leq \ts 
+		\land \dom(\tshp) {=} \Set{\loc} \\
+		\land\ \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) 
+		\land \for{\ts'' \in ( \ts', \ts)} \tshp(\loc)(\ts'') \undef \\
+		\land\ \gs \in \SStates
+	} \\
+%	
+	\auxeval{\cass{\kap}{\V r}} & \defeq 
+	& \myset{
+		((\unitTS, \ca), \gs)
+	}{
+		\exsts{\rid} 
+		\lenv(\V r) = \rid 
+		\land \dom(\ca) = \Set{\rid}
+		\land \ca(\rid) = \kap
+	} \\
+%	
+	\auxeval{\boxass{\gpre}{\rid}{\intass}} & \defeq 
+	& \myset{
+		(\lgs, \gs) 
+	}{	
+		(\lgs, \gs, \ts) \in \aeval{\boxass{\gpre}{\rid}{\intass}}{\lenv, \stk}
+	}\\
+%
+	\auxeval{ \gpre \sep \gpost } & \defeq & 
+	\myset{
+		((\lgs_1 \composeLGS \lgs_2), (\gs_1 \composeS \gs_2)
+	}{
+		(\lgs_1, \gs_1) \in \auxeval{\gpre}
+		\land (\lgs_2, \gs_2) \in \auxeval{\gpost}
+	}   
+\end{rclarray}
+\]
+%
+\end{definition}
+
+\subsection{Old text from Shale}
 %\azalea{I would take my capabilities as elements of a PCM instead and make the logic parametric in it. Then, given a \emph{primitive capability} PCM $\textsc{PrimCap} \defeq (\Gamma, \compos_{\Gamma}, \unitelem{\Gamma})$ with $\gamma \in \Gamma$, you can introduce the capability assertion $[\gamma]^{\rid}.$ This way, you don't need to worry about parameterising your capabilities with $\vec{x}$ as the user can instantiate it just so.
 
-\azalea{
-%	For now, I recommend disallowing nested boxes. In CAP it was necessary as we were building up layers of abstraction and it was necessary to nest the resources of one module in another. Here, you do not have abstraction so disallowing nested boxes is not a big loss. So instead of $\boxass{\gpre}{\intass}{\rid}$ in your grammar write $\boxass{\lpre}{\intass}{\rid}$ where $\lpre$ is a local assertion (extended with capability assertions as described earlier).\\
-	For the sake of consistency with CAP and CoLoSL, I'd write $\boxass{\gpre}{\rid}{\intass}$ instead of $\boxass{\gpre}{\intass}{\rid}$. 
-}
+
 \sx{ The nested box is interpreted as flatten box assertion.
-Yes, \( \rid \) and \( \intf \) should change position.
+Yes, \( \rid \) and \( \intass \) should change position.
 }
 %
 The box assertion \( \boxass{\gpre}{\rid}{\intass} \) asserts part of heap that can be shared, where \( \rid \) is region identifier and \( \intass \) is the interference, i.e.\ all the possible transitions.
