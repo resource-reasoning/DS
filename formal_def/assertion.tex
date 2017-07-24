@@ -17,42 +17,160 @@ Assume a logical environment \( \lenv \), we extend the evaluation of arithmetic
 \]
 
 \subsection{Local/Transaction}
+%Local assertions, also transaction assertions, describe the state inside transactions.
+%Note that transactions always work on their own copies of the global memory.
+%Therefore, one can think the local assertions describe local resources.
+%
+%\[ 
+%    \begin{rclarray}
+%        \fp \in \Fingerprint & \defeq & \powerset{\Set{\wfp,\rfp}} \\
+%        \lpre , \lpost \in \Localassertion & \defeq & 
+%                  \assfalse \quad                  |
+%            \quad \asstrue \quad                   |
+%            \quad \assemp \quad                    |
+%            \quad \expr \pt_{\fp} \expr \quad      | 
+%            \quad \lpre \sep \lpost \quad          | 
+%            \quad \lpre \land \lpost \quad         | \\
+%            & &   \lpre \lor \lpost \quad          |
+%            \quad \exists \lvar \ldotp \lpre \quad |
+%    \end{rclarray}
+%\]
+%
+%Compared with sequential separation logic, we annotated assertions with \emph{fingerprint}.
+%The \emph{fingerprint} tracks how a transactions access heap.
+%
+%\begin{tabular}{c | l}
+%    \hline
+%    fingerprint & meaning \\ \hline
+%    \(\emptyset\) & no access \\ 
+%    \(\Set{\wfp}\) & write \\ 
+%    \(\Set{\rfp}\) & read before any write \\ 
+%    \(\Set{\rfp, \wfp}\) & read before any write, and then write \\ \hline
+%\end{tabular}
+%
+%We define an ordering $\sqsubseteq$ on fingerprints as follows:
+%
+%\begin{center}
+%    \begin{tikzpicture}
+%        \node (emp) {\(\emptyset\)};
+%        \node[above right=0.3cm and 0.3cm of emp] (r) {\(\Set{\rfp}\)};
+%        \node[above left=0.3cm and 0.3cm of emp] (w) {\(\Set{\wfp}\)};
+%        \node[above=0.3cm of r] (rw) {\(\Set{\rfp, \wfp}\)};
+%        \draw[->] (emp) -- (r);
+%        \draw[->] (emp) -- (w);
+%        \draw[->] (r) -- (rw);
+%    \end{tikzpicture}
+%\end{center}
+
 \azalea{
 I would define local assertions as you have PLUS the capability assertion $\captk{\capid(\vec{\lvar})}_{\rid}$. Local assertions are what you gain when you open boxes and they may very well contain capabilities. If you add this here now, then you don't need to redefine $\lpre\uparrow$ later for interference assertions. I would also define LOCAL STATES (pairs of fingerprint heaps and capabilities) over which local assertions are interpreted. \\
 
 Note that if you do this, you need to slightly change your repartitioning definition to ensure that the capability components of $\lpre$ and $\lpost$ are empty.}
 
-Local assertions, also transaction assertions, describe the state inside transactions.
-Note that transactions always work on their own copies of the global memory.
-Therefore, one can think the local assertions describe local resources.
-
-\[ 
+\begin{definition}[capabilities]\label{def:capabilities}
+Assume a partial commutative monoid for \emph{primitive capabilities} $(\Kaps, \composeK, \unitK)$ with $\kap \in \Kaps$.
+Assume a countably infinite set of region identifiers $\rid \in \Regionid$. The set of \emph{capabilities} is $\ca \in \Caps \eqdef \Regionid \rightharpoonup \Kaps$.
+The \emph{capability composition function}, $\composeC: \Caps \times \Caps \rightharpoonup \Caps$, is defined as follows:
+%
+\[
+	(\ca_1 \compos_{\kappa} \ca_2)(\rid) \defeq 
+	\begin{cases}
+		\ca_1(\rid) \composeK \ca_2(\rid) & \text{if } \rid \in \dom(\ca_1) \text{ and } \rid \in \dom(\ca_2) \\
+		\ca_1(\rid) & \text{if } \rid \in \dom(\ca_1) \text{ and } \rid \not\in \dom(\ca_2) \\
+		\ca_2(\rid) & \text{if } \rid \in \dom(\ca_2) \text{ and } \rid \not\in \dom(\ca_1) \\
+		\text{undefined} & \text{otherwise}
+	\end{cases}
+\]
+%
+The \emph{capability unit set}, $\unitC$, denotes a function with an empty domain.
+The \emph{capability partial commutative monoid} is $(\Caps, \composeC, \unitC)$. 
+\end{definition}
+%
+%
+\begin{definition}[Local state]\label{def:local_state}
+Given the set of fingerprint heaps $\FPHeaps$ (\defin\ref{def:fingerprint_heaps}) and the set of capabilities $\Caps$ (\defin\ref{def:capabilities}), the set of \emph{local states} is $\ls \in \LStates \eqdef \FPHeaps \times \Caps$.
+\end{definition}
+%
+Given a local state $\ls$, we write $\lsFPH{\ls}$ and $\lsCap{\ls}$ for the first and second projections of $\ls$, respectively.
+%
+%
+\begin{definition}[Local assertions]
+%Given the set of program expressions $\Expressions$ (\defin\ref{def:language}), 
+Assume a countably infinite set of \emph{logical variables} $\V x \in \LVars$.
+The set of \emph{logical expressions}, $ \lexpr \in \LExpressions$ is defined by the following inductive grammar, where $\val \in \Val$, $\vx \in \Var$ (\defin\ref{def:prgram_values}) and $\V x \in \LVars$:
+%
+\[
+   \lexpr ::= \val \mid \var \mid \V x \mid \lexpr + \lexpr \mid \lexpr * \lexpr \mid \dots 
+\]
+%
+Given the set of values $\Val$ (\defin\ref{def:prgram_values}), assume a set of \emph{logical environments} $\lenv \in \LEnv: \LVars \rightharpoonup \Val$.
+Given a stack $\stk \in \Stack$ (\defin\ref{def:stacks}) and a logical environment $\lenv: \LEnv$, the \emph{logical expression evaluation} function, $\leval{.}{(., .)}:\Expressions \times \Stack \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions as follows: 
+%
+\[
     \begin{rclarray}
-        \fp \in \Fingerprint & \defeq & \powerset{\Set{\wfp,\rfp}} \\
-        \lpre , \lpost \in \Localassertion & \defeq & 
-                  \assfalse \quad                  |
-            \quad \asstrue \quad                   |
-            \quad \assemp \quad                    |
-            \quad \expr \pt_{\fp} \expr \quad      | 
-            \quad \lpre \sep \lpost \quad          | 
-            \quad \lpre \land \lpost \quad         | \\
-            & &   \lpre \lor \lpost \quad          |
-            \quad \exists \lvar \ldotp \lpre \quad |
+        \leval{\val}{\lenv, \stk} & \defeq & \val \\
+        \leval{\var}{\lenv, \stk} & \defeq & \stk(\val) \\
+        \leval{\V x}{\lenv, \stk} & \defeq & \lenv(\V x) \\
+        \leval{\lexpr_1 + \lexpr_2}{\lenv, \stk} & \defeq & \leval{\lexpr_1}{\lenv, \stk} + \leval{\lexpr_2}{\lenv, \stk}   \\
+        \leval{\lexpr_1 * \lexpr_2}{\lenv, \stk} & \defeq & \leval{\lexpr_1}{\lenv, \stk} * \leval{\lexpr_2}{\lenv, \stk}  
     \end{rclarray}
 \]
-
-Compared with sequential separation logic, we annotated assertions with \emph{fingerprint}.
-The \emph{fingerprint} tracks how a transactions access heap.
-
-\begin{tabular}{c | l}
-    \hline
-    fingerprint & meaning \\ \hline
-    \(\emptyset\) & no access \\ 
-    \(\Set{\wfp}\) & write \\ 
-    \(\Set{\rfp}\) & read before any write \\ 
-    \(\Set{\rfp, \wfp}\) & read before any write, and then write \\ \hline
-\end{tabular}
-
+%
+The set of \emph{local assertions}, $\lpre,  \lpost \in \Localassertion$, is defined inductively by the following grammar, where $\fp \in \Fingerprint$ denotes a fingerprint (\defin\ref{def:fingerprint_heaps}) and $\V x, \V r \in \LVars$: 
+%
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\lpre, \lpost ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\V x} \lpre \\
+	& \mid \emp \mid \lexpr \pt_{\fp} \lexpr \mid \cass{\kap}{\V r}\mid \lpre * \lpost 
+\end{array}	 
+\]
+%
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $: \Localassertion \times \LEnv \rightarrow \powerset{\LStates}$, is defined over the structure of local assertions as follows:
+%
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\aeval{\assfalse}{\lenv, \stk} \eqdef & \emptyset  \\
+%	
+	\aeval{\asstrue}{\lenv, \stk} \defeq & \LStates  \\
+%
+	\aeval{\lpre \land \lpost}{\lenv, \stk} \defeq & \aeval{\lpre}{\lenv, \stk} \cap \aeval{\lpost}{\lenv, \stk} \\
+%
+	\aeval{\lpre \lor \lpost}{\lenv, \stk} \defeq & \aeval{\lpre}{\lenv, \stk} \cup \aeval{\lpost}{\lenv, \stk} \\
+%
+	\aeval{\exsts{\V x} \ldotp \lpre}{\lenv, \stk} \defeq & \bigcup\limits_{\val \in \Val}\aeval{\lpre}{\lenv\remapsto{\V x}{\val}, \stk}  \\
+%
+	\aeval{\assemp}{\lenv, \stk} \defeq & \Set{(\unitFP, \unitC)}  \\
+%
+	\aeval{\lexpr_1 \pt_{\fp} \lexpr_2}{\lenv, \stk} \defeq 
+	& \Set{
+		(\fph, \unitC) \mid
+        \begin{array}{@{}l@{}}
+			\exsts{\loc, \val} 
+			\leval{\expr_1}{\lenv, \stk} = \loc 
+			\land \leval{\expr_2}{\lenv, \stk} = \val  
+			\land \dom(\fph) {=} \loc 
+			\land \fph(\loc) {=} (\val, \fp)
+		\end{array}
+	} \\
+%
+	\aeval{\cass{\kap}{\V r}}{\lenv, \stk} \eqdef
+	& \Set{
+		(\unitFP, \ca) \mid
+        \begin{array}{@{}l@{}}
+			\exsts{\rid} 
+			\lenv(\V r) {=} \rid 
+			\land \dom(\ca) {=} \rid 
+			\land \ca(\rid) {=} \kap
+		\end{array}
+	} \\
+%		
+	\aeval{\lpre \sep \lpost}{\lenv, \stk} \defeq 
+	& \Set{ \ls_1 \uplus \ls_2 \middle| \ls_1 \in \aeval{\lpre}{\lenv, \stk} \land \ls_2 \in \aeval{\lpost}{\lenv, \stk} } 
+\end{array}
+\]
+%
+\end{definition}
+%
 We define an ordering $\sqsubseteq$ on fingerprints as follows:
 
 \begin{center}
