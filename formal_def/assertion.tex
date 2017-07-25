@@ -111,59 +111,6 @@ Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation fu
 %
 
 Observe that program expressions ($\expr \in \Expressions$ in \defin\ref{def:language}) are contained in logical expressions ($\lexpr \in \LExpressions$ in \defin\ref{def:local_assertions} above). That is, $\Expressions \subset \LExpressions$. 
-\subsection{Interference -- Shale}
-
-\begin{defn}[Interferences]
-\label{def:interferences}
-The set of \emph{Interferences} is \( \Interference \defeq \Regionid \parfun \Kaps \parfun \powerset{\FPHeaps \times \FPHeaps } \),  which are all the possible transitions for a given region identifier \( \rid \in \Regionid \) and primitive capability \( \kap \in \Kaps \).
-\end{defn}
-
-\begin{defn}[Interference assertions]
-\label{def:interference-assertion}
-The \emph{interference assertions} are sets of transitions labelled by \emph{primitive capabilities}, where \( \lpre, \lpost \in \Localassertion \) and \( \kap \in \Kaps \) for same \( \Kaps \):
-
-\[
-    \begin{rclarray}
-        \intass \in \Interferenceassertion & \defeq & 
-              \emptyset \mid \Set{ \captk{\kap} : \exists \vec{\V x} \ldotp \lpre \transfersto \lpost } \uplus \intass \\
-    \end{rclarray}
-\]
-\end{defn}
-
-Given the set of interferences (\defin \ref{def:interferences}), the \emph{interference assertion evaluation} function, \( \eval{.}_{(.,.)}: \Interferenceassertion \parfun \Interference \) is defined inductively over the structure of interference assertions:
-
-\[
-    \begin{rclarray}
-        \eval{\emptyset}_{ \lenv, \stk}(\dontcare)(\dontcare) & \defeq & \emptyset \\
-        \eval{\Set{\cass{\kap}{\V \rid} : \exists \vec{\V x} \ldotp \lpre \transfersto \lpost} \uplus \intass}_{\lenv, \stk}(\rid)(\kap') & \defeq & 
-        \begin{funcarray}
-            \Set{(\ls,\ls') \middle| 
-            \begin{array}{@{}l@{}}
-                \exists \vec{\val}, \lenv' = \lenv[\vec{\V x} \mapsto \vec{\val}'] \ldotp \\
-                \ls \in \eval{\lpre}_{\lenv', \stk} \land  \ls' \in \eval{\lpost}_{\lenv', \stk} 
-            \end{array}} & {\V \rid} = \rid \land \capid = \capid' \\ 
-            \eval{\intass}_{\lenv, \stk}(\rid, \capid') & \text{otherwise}
-        \end{funcarray} \\
-    \end{rclarray}
-\]
-
-Given the evaluation, the well-formedness of interference assertions is defined as follows:
-\[
-    \begin{rclarray} 
-        \pred{wfIntf}{\intf} & \defeq & \forall \rid, \kap, \ls, \ls' \ldotp (\ls, \ls' ) \in \eval{\intf}(\rid)(\kap) \land \pred{wf}{\ls, \ls'}\\
-        \pred{wf}{\ls,\ls'} & \defeq & \forall \loc \ldotp \lsFPH{\ls} = (\dontcare, \emptyset) \land \dom(\lsFPH{\ls}) = \dom(\lsFPH{\ls'})
-    \end{rclarray}
-\]
-
-
-
-\sx{
-How to interpret interference parametrised \( \kap \)?
-For example,
-\[
-    \cass{T(n)}{} \lvar \pt_{\emptyset} n \transfersto \lvar \pt_{\Set{\wfp}} n+1
-\]
-}
 
 
 \subsection{Rules for Local}
@@ -250,6 +197,12 @@ a triple $(\lgs, \gs, \ts) \in \LGStates \times \SStates \times \Timestamp$ is \
 \]
 %
 \azalea{Shale, check  the last condition of $\wf{.}$ with regards to the timestamps.}
+\sx{  Here is what my understanding.
+The first line says a world that is able to collapse down to a TSheap and a time, which is the must important part for prove soundness.
+The second line meanings all capabilities must have a corresponding region, which is similar to all other logics.
+The third line I think says a location must at least be initialised?
+Since we don't have allocation and we make assumption all resources initialised, but I think it is fine we still make this constrains?
+}
 %
 The set of \emph{worlds}, $\world \in \World$, is defined as follows:
 %
@@ -422,6 +375,69 @@ with the \emph{auxiliary interpretation function}, $\auxeval[(., ., .)]{(.)}: \G
 \]
 %
 \end{definition}
+
+\subsection{Another hack of merge - shale}
+
+Function that returns all locations being written.
+Another function that separates the written locations from the rest.
+\[
+    \begin{rclarray}
+        \func{ws}{\hp} & \defeq & \Set{\loc \middle| \exsts{ \fp } \hp(\loc) = (\dontcare, \addWFP{\fp}, \dontcare)} \\
+        \func{separate\_heap}{\hp } & \defeq & (\hp_{w}, \hp_{r} ) \ \text{where} \ \hp_{w} \uplus \hp_{r} = \hp \land \dom(\hp_{w}) = \pred{ws}{\hp}
+
+    \end{rclarray}
+\]
+
+Agreement predicate.
+
+\[
+    \begin{rclarray}
+        \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \eqdef & \pred{agree\_local}{\ls_{l}^{p}, \ls_{r}^{p}} \land \pred{agree\_local}{\ls_{l}^{q}, \ls_{r}^{q}} \land {}\\
+        & & \pred{agree\_local}{\ls_{l}^{p}, \ls_{r}^{q}} \land \pred{agree\_local}{\ls_{l}^{q}, \ls_{r}^{p}} \\
+        \pred{agree\_local}{(\hp_{l}, \ca_{l} ),(\hp_{r}, \ca_{r})} & \eqdef & \exsts{ \hp_{l}', \hp_{r}', \ca } \ca = \ca_{l} \composeC \ca_{r} \land \pred{ws}{\hp_{l}} \cap \pred{ws}{\hp_{r}} = \emptyset \land {} \\
+        & & ( \dontcare, \hp_{l}') = \func{separate\_heap}{\hp_{l} } \land ( \dontcare, \hp_{r}') = \func{separate\_heap}{\hp_{r} } \land \pred{agree\_heap}{\hp_{l}', \hp_{r}'} \\
+        \pred{agree\_heap}{\hp_{l},\hp_{r}} & \defeq  & \exsts{ \hp_{l}', \hp_{r}', \hp_{m}, \hp } \hp_{l} = \hp_{l}' \composeFP \hp_{m} \land \hp_{r} = \hp_{r}' \composeFP \hp_{m} \land \hp = \hp_{l} \composeFP \hp_{r} \composeFP \hp_{m}  \\
+    \end{rclarray}
+\]
+\sx{
+The first line of agreement on actions is to stop merging of the following two actions:
+\[
+\begin{array}{@{}l@{}}
+\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\rfp}} 0 \sep \vy \pt_{\Set{\wfp}} 1 \\
+\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\wfp}} 1 \sep \vy \pt_{\Set{\rfp}} 0
+\end{array}
+\]
+The second line of agreement on actions is to stop merging of the following two actions:
+\[
+\begin{array}{@{}l@{}}
+\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \transfersto  \vx \pt_{\Set{\rfp}} 0 \sep \vy \pt_{\Set{\wfp}} 1 \sep \cass{C}{}\\
+\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\wfp}} 1 \sep \vy \pt_{\Set{\rfp}} 0
+\end{array}
+\]
+}
+
+Eager merge (from the right) to the left function.
+
+\[
+    \begin{rclarray}
+        \func{merge\_to\_left}{(\hp_{l}, \ca_{l} ),(\hp_{r}, \ca_{r})} & \defeq & (\func{merge\_heap}{\hp_{l},\hp_{r}}, \ca_{l} \composeC \ca_{r} ) \\
+        \func{merge\_heap}{\hp_{l}, \hp_{r}} & \defeq & \lambda \loc \ldotp 
+        \begin{funcarray}
+            \hp_{r}(\loc) & \loc \in \dom(\hp_{l}) \cap \pred{ws}{\hp_{r}} \\
+            \hp_{l}(\loc) & \loc \in \dom(\hp_{l}) \setminus \pred{ws}{\hp_{r}} \\
+            \text{undefined} & \loc \notin \dom(\hp_{l})
+        \end{funcarray}
+        \\
+    \end{rclarray}
+\]
+
+Action merge
+
+\[
+    \begin{rclarray}
+        \func{merge\_action\_to\_left}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \defeq & ( \ls_{l}^{p}, \func{merge\_to\_left}{\ls_{l}^{q}, \ls_{r}^{q}} ) \ \text{where} \ \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )}
+    \end{rclarray}
+\]
 
 \subsection{Old text from Shale}
 %\azalea{I would take my capabilities as elements of a PCM instead and make the logic parametric in it. Then, given a \emph{primitive capability} PCM $\textsc{PrimCap} \defeq (\Gamma, \compos_{\Gamma}, \unitelem{\Gamma})$ with $\gamma \in \Gamma$, you can introduce the capability assertion $[\gamma]^{\rid}.$ This way, you don't need to worry about parameterising your capabilities with $\vec{x}$ as the user can instantiate it just so.
