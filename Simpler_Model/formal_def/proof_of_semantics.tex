@@ -1,0 +1,373 @@
+\section{Proof of semantics\label{sec:proof_semantics}}
+\begin{lem}
+    \label{lem:no-over-write}
+    Threads can only write to values that are originally undefined,
+    \[ 
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\tll,\loc, \ts \ldotp ( \stk, \tshp, \ts ), \progext \threadtransfer{\tll} ( \stk', \tshp', \ts' ), {\progext}' \implies \tshp(\loc)(\ts)\undef \lor \tshp(\loc)(\ts) = \tshp'(\loc)(\ts)
+    \]
+\end{lem}
+\begin{proof}
+    Prove by structural induction on the semantics.
+    For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip}, \rl{PPar} and \rl{Pwait}, it is trivial because those rules do not change the state of time-stamp heap \( \tshp \).
+    For base case \rl{Commit}, the new state \( \tshp' = \func{commitTrans}{\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}} \) for some \( \hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e} \).
+    It only changes the values corresponding to times \( \ts_{s} \) or \( \ts_{e} \) of locations that are included in either the read set \( \rs \) or the write set \( \ws \).
+    Those must be undefined in the original time-stamp heap \( \tshp \), because of the constrain \( \texttt{allowcommit} \), especially the \( \texttt{wellformhist} \).
+    For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
+\end{proof}
+
+\begin{lem}
+    \label{lem:start-before-end}
+    \label{lem:read-before-write}
+    All the reads/starts operations of a transaction happen before all the writes/ends. 
+    Formally,
+    \[
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\tll \ldotp \pred{rw}{\tshp} \land ( \stk, \tshp, \ts ), \progext \threadtransfer{\tll} ( \stk', \tshp', \ts' ), {\progext}' \implies \pred{rw}{\tshp'}
+    \]
+    Where,
+    \[
+        \pred{rw}{\tshp} \defeq \forall \loc, \loc', \ts, \ts',\op \in \Set{\sop, \rop}, \op' \in \Set{\eop,\wop} \tsid \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \implies \ts < \ts' 
+    \]
+\end{lem}
+\begin{proof}
+    Prove by structural induction on the semantics.
+    For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip}, \rl{PPar} and \rl{PWait}, it is trivial because those rules do not change the state of time-stamp heap \( \tshp \).
+    For base case \rl{Commit}, the new state \( \tshp' = \func{commitTrans}{\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}} \) for some \( \hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e} \). 
+    Because the functions associates \( \rop \), \( \sop \) to time \( \ts_{s} \), and \( \wop \), \( \eop \) to \( \ts_{e} \), and the fact that  \( \ts_{s} < \ts_{e} \), so \( \pred{rw}{\tshp'}\) holds.
+    For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
+\end{proof}
+
+
+\begin{lem}
+    \label{lem:atoic-rw}
+    \label{lem:happen-in-same-time}
+    All the reads/starts operations among all locations of a transaction happen in the same time, so do all the writes/ends operations. 
+    \[
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\tll \ldotp \pred{atom}{\tshp} \land ( \stk, \tshp, \ts ), \progext \threadtransfer{\tll} ( \stk', \tshp', \ts' ), {\progext}' \implies \pred{atom}{\tshp'}
+    \]
+    Where,
+    \[
+        \pred{atom}{\tshp} \defeq \forall \loc, \loc', \ts, \ts', \tsid, \op, \op'\ldotp \tshp(\loc)(\ts) (\dontcare, \op, \tsid)  \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \land (\op, \op' \in \Set{\sop, \rop} \lor \op, \op' \in \Set{\eop, \wop} ) \implies \ts = \ts'
+    \]
+\end{lem}
+\begin{proof}
+    Prove by structural induction on the semantics.
+    For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip}, \rl{PPar} and \rl{Pwait}, it is trivial because those rules do not change the state of time-stamp heap \( \tshp \).
+    For base case \rl{Commit}, the new state \( \tshp' = \func{commitTrans}{\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}} \) for some \( \hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e} \). 
+    Because the functions associates all reads/starts operations, \( \rop \) and \(\sop \), of all locations to the same time \( \ts_{s} \), and writes/ends operations of all locations to the same time \( \ts_{e} \), so \( \pred{atom}{\tshp'}\) holds.
+    For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
+\end{proof}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Define the po in one go
+%\begin{defn}
+%Program order \( \po \).
+%\[ 
+    %\begin{rclarray}
+        %lc \in \texttt{LastCommit} & \defeq & \Threadid \parfun \powerset{\Transid} \\
+        %\func{programOrder}^{0}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set{(\emptyset, \emptyset, \tshp_{init}, \tdpl_{init}, \emptyset)} \\
+        %\func{programOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) & \defeq & 
+        %\Set{(\settrans, \po, \tshp, \tdpl, lc) \middle| \ \dagger \ } \\
+        %\dagger & \equiv & 
+            %\begin{array}{@{}l@{}}
+                %\exists \settrans', \po', \tshp', \tdpl', lc', \tll \ldotp (\settrans', \po', \tshp', \tdpl' , lc') \in \func{sessionOrder}^{\nat -1}(\tdpl_{init}, \tshp_{init}) \land {} \\
+                %( \tshp', \tdpl' ) \globaltransfer{\tll} ( \tshp, \tdpl ) \land {} \\
+                %\tll = \lid \implies 
+                %\begin{formulea}
+                    %\settrans = \settrans' \land \po = \po' \land \tdpl = \tdpl' \land lc = lc'
+                %\end{formulea} \land {} \\
+                %\exists \tsid \ldotp \tll = \lcmt{\tsid} \implies  
+                %\begin{formulea}
+                    %\exists \tdpl'', \stk,\stk', \ts, \ts', \progext, {\progext}', \thid \ldotp \settrans = \settrans' \uplus \Set{\tsid} \land {} \\
+                        %\po = \po' \uplus \Set{(\tsid', \tsid) \middle| \tsid' \in lc'(\thid)} \land {} \\
+                        %\tdpl = \tdpl'' \uplus \Set{\thid \mapsto (\stk,\ts,\progext)} \land {} \\
+                        %\tdpl' = \tdpl'' \uplus \Set{\thid \mapsto (\stk',\ts',{\progext}')} \land {}\\
+                        %lc = lc'\remapsto{\thid}{\Set{\tsid}}
+                %\end{formulea} \land {} \\
+                %\exists \thid, \prog \ldotp \tll = \lfork{\thid, \prog} \implies 
+                %\begin{formulea}
+                    %\exists \tdpl'', \stk, \ts, \progext, {\progext}', \thid' \ldotp \settrans = \settrans' \land \po = \po' \land {} \\
+                    %lc = lc' \uplus \Set{\thid \mapsto lc'(\thid')} \land {} \\
+                    %\tdpl = \tdpl'' \uplus \Set{\thid \mapsto (\emptyset,\ts,\prog), \thid' \mapsto (\stk,\ts,{\progext}')} \land {} \\
+                    %\tdpl' = \tdpl'' \uplus \Set{\thid' \mapsto (\stk,\ts,\progext)} 
+                %\end{formulea} \land {} \\
+                %\exists \thid,\ts \ldotp \tll = \ljoin{\thid, \ts} \implies 
+                %\begin{formulea}
+                    %\exists \tdpl'', \stk,\stk',  \ts', \progext, \progext', \thid' \ldotp
+                    %\settrans = \settrans' \land \po = \po' \land {} \\
+                    %lc = lc'\remapsto{\thid'}{lc'(\thid) \uplus lc'(\thid')} \setminus \Set{\thid \mapsto \dontcare} \land {} \\
+                    %\tdpl = \tdpl'' \uplus \Set{\thid' \mapsto (\stk',\max\Set{\ts,\ts'},\progext)} \land {} \\
+                    %\tdpl' = \tdpl'' \uplus \Set{\thid \mapsto (\stk,\ts,\pskip), \thid' \mapsto (\stk',\ts',{\progext}')}
+                %\end{formulea} 
+            %\end{array} \\
+        %\func{histories}(\tshp_{init}, \tdpl_{init}) & \defeq & \Set { (\settrans,\po,\tshp) \middle| (\settrans,\po,\tshp, \dontcare, \dontcare) \in  \bigcup\limits_{\nat \in \Nat } \func{sessionOrder}^{\nat}(\tshp_{init}, \tdpl_{init}) }
+    %\end{rclarray}
+%\]
+%\end{defn}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Define the po in one go
+
+To define trace and then program order, we first extend the labels used in the semantics.
+Each label has one extra parameter to record the thread that preforms the step, so the label looks like \( \lcommit{\thid,\tsid} \), \( \lfork{\thid,\thid',\prog} \) and \( \ljoin{\thid,\thid',\ts} \).
+
+\begin{defn}[Traces]
+    Given a initial state \( \tshp \) and \( \tdpl \), a trace \( \trc \) is define as a tuple \( (\setlabels,<) \) that satisfies predicate \( \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat} \), for some number \( \nat \).
+\[
+    \begin{rclarray}
+        \func{traces}{\tshp,\tdpl,0} & \defeq & \Set{(\emptyset, \emptyset,\tshp,\tdpl)} \\
+        \func{traces}{\tshp,\tdpl,\nat} & \defeq & \Set{(\setlabels,<,\tshp',\tdpl') \middle| (\tshp'', \tdpl'') \globaltransfer{\lid} (\tshp', \tdpl' ) \land (\setlabels,<,\tshp'',\tdpl'') \in \func{trace}{\tshp,\tdpl,\setlabels,<,\nat-1}} \\
+                                                    & & \uplus \Set{(\setlabels \uplus \Set{\tll} ,< \uplus \Set{(\tll',\tll) \middle| \tll' \in \setlabels}, \tshp',\tdpl') \middle| 
+        \begin{array}{@{}l@{}}
+            (\tshp'', \tdpl'') \globaltransfer{\tll} (\tshp', \tdpl' ) \land \tll \neq \lid \land {} \\
+            (\setlabels,<,\tshp'',\tdpl'') \in \func{trace}{\tshp,\tdpl,\setlabels,<,\nat-1}
+        \end{array}
+}  \\
+    \end{rclarray}
+\]
+\end{defn}
+
+\begin{defn}[Program Order]
+\[ 
+    \begin{rclarray}
+        \func{programOrder}{\setlabels, <} & \defeq & ( \settrans, \po ) \\
+        \settrans & \equiv & \Set{\tsid \middle| \lcmt{\thid,\tsid} \in \setlabels } \\
+        \po & \equiv & \Set{(\tsid, \tsid') \middle| \lcmt{\thid,\tsid} < \lcmt{\thid,\tsid'} } \uplus \Set{(\tsid, \tsid') \middle| \lcmt{\thid,\tsid} < \lfork{\thid,\thid', \dontcare} < \lcmt{\thid',\tsid'} } \\
+            & & \uplus \Set{(\tsid, \tsid') \middle| \lcmt{\thid,\tsid} < \ljoin{\thid',\thid, \dontcare} < \lcmt{\thid',\tsid'} }
+    \end{rclarray}
+\]
+\end{defn}
+
+\begin{defn}
+    Visibility and potential arbitration relations.
+    \[
+        \begin{rclarray}
+            \func{graph}{\settrans,\tshp} & \defeq & (\vis,\tar) \\
+            \vis & \equiv & \Set{(\tsid,\tsid') \in \settrans \middle| 
+            \begin{array}{@{}l@{}}
+                \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop,\eop}, \op' \in \Set{\rop,\sop} \ldotp \ts < \ts' \land {} \\
+                \tshp(\loc)(\ts) = (\dontcare, \op,\tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op',\tsid') 
+            \end{array} } \\
+            \tar & \defeq & \Set{(\tsid,\tsid')  \in \settrans \middle| 
+            \begin{array}{@{}l@{}}
+                \exists \loc, \loc', \ts, \ts', \op, \op' \in \Set{\wop,\eop} \ldotp \ts < \ts' \land {} \\
+                \tshp(\loc)(\ts) = (\dontcare, \op,\tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op',\tsid') 
+            \end{array} }
+        \end{rclarray}
+    \]
+\end{defn}
+
+We will use notations \( (\settrans,\po,\vis,\tar, \tshp) \) to refer an element of the set:
+\[
+    \Set{(\settrans,\po,\vis,\tar, \tshp) \middle| 
+        \begin{array}{@{}l@{}}
+            (\settrans,\po) = \func{programOrder}{\setlabels,<} \land (\vis,\tar) = \func{graph}{\settrans,\tshp} \land {} \\
+            (\setlabels,<,\tshp,\tdpl) \in \bigcup\limits_{\nat \in \Nat}\func{traces}{\tshp',\tdpl',\nat}
+        \end{array}
+    } 
+\]
+For brevity, sometime we only mention and quantify few elements of this tuple but one should think they are quantified as an entire tuple.
+
+
+\begin{lem}[Separation]
+    \label{lem:seperate}
+    If two transactions that are not associated by potentially arbitration relation \( \tar \), they access different locations but commit at the same time.
+    \[
+        \begin{array}{@{}l@{}}
+            \forall \tshp, \tar, \tsid, \tsid' \ldotp (\tsid, \tsid'), (\tsid',\tsid) \notin \tar \\
+            \qquad \implies \forall \loc, \loc', \ts, \ts', \op, \op \in \Set{\wop, \eop } \ldotp \tshp(\loc)(\ts) = ( \dontcare, \op, \tsid) \land  \tshp(\loc')(\ts') = ( \dontcare, \op', \tsid') \implies \ts = \ts' \land \loc \neq \loc'
+        \end{array}
+    \]
+\end{lem}
+\begin{proof}
+    Given the definition of \( \tar \), \( \ts = \ts' \) holds, and \( \loc \neq \loc' \) is derived from Lemma \ref{lem:atoic-rw}.
+\end{proof}
+
+
+\begin{lem}[Semi-acyclic]
+    \label{lem:semi-acyclic}
+    Both \( \vis \) and \( \tar \) are acyclic.
+\end{lem}
+\begin{proof}
+    Proof by contradiction.
+    Assume that there is a circle by \( \vis \), which means that \( \bigwedge\limits_{0 \leq i \leq n} (\tsid_{i}, \tsid_{i+1}) \in \vis \land \tsid_{0} = \tsid_{n} \) for some \( \tsid_{0} \) to \( \tsid_{n}\).
+    By Lemma \ref{lem:atoic-rw}, each transaction has a start time and a end time, thus let \( \ts^{s}_{i} \) and \( \ts^{e}_{i} \) be the start time and end time of the transaction \( \tsid_{i} \) respectively.
+    By Lemma \ref{lem:read-before-write}, we have \( \ts^{s}_{i} < \ts^{e}_{i} \), and by definition of \( \vis \), thus \( \ts^{e}_{i} < \ts^{s}_{i+1} \).
+    Therefore, \( \ts^{s}_{0} < \ts^{e}_{0} < \ts^{s}_{1} < \dots <  \ts^{s}_{n} \), and we have contradiction that \( \ts^{s}_{0} < \ts^{s}_{n} \).
+
+    Similarly for \( \tar \), we have contradiction that \( \ts^{e}_{0} < \ts^{e}_{1} < \dots  < \ts^{e}_{n} \).
+\end{proof}
+
+We can extend partial order \( \tar \) to a total order \( \ar \) by pick orders between those unrelated transactions.
+First, we define an auxiliary function that returns a set that includes the first transactions (might be more than two) that branch.
+To simplify, assume there is a unique initial transactions denoted by \( \tsid_{init} \), where \( (\tsid_{init}, \tsid) \in \tar \) for all \( \tsid \).
+
+\begin{defn}[First Branch]
+    \[
+        \begin{rclarray}
+            \func{firstTrans}{\settrans, \tar} & \defeq & \transid \ \texttt{where} \ \forall \transid' \in \settrans \ldotp \transid = \transid' \lor (\transid, \transid') \in \tar \\
+            \func{firstBranch}{\settrans, \tar} & \defeq &
+            \begin{funcarray}
+                \emptyset & \settrans = \emptyset \\
+                \func{firstBranch}{\settrans \setminus \Set{\func{firstTrans}{\settrans, \tar}}, \tar} & |\func{dec}{\settrans, \tar}| = 1 \\
+                \func{dec}{\settrans, \tar} & |\func{dec}{\settrans, \tar}| > 1 \\
+            \end{funcarray} \\
+            \func{dec}{\settrans, \tar} & \defeq & \Set{\tsid \middle| \exists \tsid_{init} = \func{firstTrans}{\settrans, \tar} \ldotp (\tsid_{init}, \tsid) \in \tar \land \nexists \tsid' \ldotp (\tsid_{init}, \tsid'),(\tsid', \tsid) \in \tar}
+        \end{rclarray}
+    \]
+\end{defn}
+
+Intuitively, we take the first two transactions that are not connected, which definitely touch different locations by Lemma \ref{lem:seperate}, therefore we can simply pick a order and take the transitive closure.
+We continue the process until it is a total order.
+
+\begin{defn}[Total relation]
+    \label{defn:tototal}
+    \[
+        \begin{rclarray}
+            \func{toTotal}{\settrans, \tar} & \defeq & 
+                \begin{funcarray}
+                    (\settrans, \tar) & \func{firstBranch}{\settrans, \tar} = \emptyset\\ 
+                    \func{toTotal}{\settrans, ( \tar \uplus \Set{(\tsid, \tsid')})^{+}} & \tsid, \tsid' \in \func{firstBranch}{\settrans, \tar} \\    
+                \end{funcarray}
+            \\
+        \end{rclarray}
+    \]
+\end{defn}
+
+We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element of the set:
+\[
+\Set{(\settrans, \po, \vis, \ar, \tshp) \middle| ( \settrans, \ar ) = \func{toTotal}{\settrans, \tar}} \\
+\]
+
+\begin{lem}[Visibility]
+    \label{lem:visibility}
+    Visibility relation should be a subset of arbitration relation, i.e.\ \( \vis \subseteq \ar \).
+\end{lem}
+\begin{proof}
+    For all transactions \( \tsid \) and \( \tsid' \), if \( ( \tsid, \tsid' ) \in \vis \), it means that transaction \( \tsid \) commits before \( \tsid' \) starts, so that \( \tsid \) must start before \( \tsid' \) starts, by Lemma \ref{lem:start-before-end}.
+    This means \( (\tsid, \tsid') \in \tar \) by the definition of \( \tar \), and because \( \tar \subseteq \ar \), so \( (\tsid, \tsid') \in \ar \).
+\end{proof}
+
+\begin{lem}[Monotonic time in a thread]
+    \label{lem:mono-time-thread}
+    The thread's local time monotonically increase.
+    This is  
+    \[ 
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\tll,\loc, \ts \ldotp ( \stk, \tshp, \ts ), \progext \threadtransfer{\tll} ( \stk', \tshp', \ts' ), {\progext}' \implies \ts < \ts'
+    \]
+\end{lem}
+\begin{proof}
+    Indication on the structure of the operational semantics.
+    For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip} and \rl{PPar}, it is trivial since those rules do not change the time.
+    For \rl{Commit}, the premiss implies that \( \ts' > \ts \) and for \rl{PWait}, \( \ts' = \max\Set{\ts, \dontcare} \geq \ts\).
+    For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
+\end{proof}
+
+\begin{lem}[Monotonic time for fork and join]
+    \label{lem:mono-time-fork-join}
+    The local times of two threads are greater then the time when the fork happens.
+    \[
+        \forall \tshp, \tshp', \tdpl, \thid, \thid', \stk, \stk', \progext, {\progext}', \ts, \ts' \ldotp
+    \]
+\end{lem}
+\begin{proof}
+\end{proof}
+
+\begin{lem}[Session]
+    \label{lem:session}
+    \( \po \subseteq \vis \).
+\end{lem}   
+\begin{proof}
+    By a case analysis of the definition of \( \po \).
+    For \( \tsid \) and \( \tsid' \) where \( \lcmt{\thid,\tsid} < \lcmt{\thid,\tsid'} \), it means that transaction \( \tsid \) is reduced by the semantics before \( \tsid' \) is reduced.
+    Then by Lemma \ref{lem:mono-time-thread}, the commit time of \( \tsid \) is smaller than the start time of \( \tsid' \), so that \( (\tsid, \tsid') \in \vis \).
+
+    For \( \tsid \) and \( \tsid' \) where \( \lcmt{\thid,\tsid} < \lfork{\thid,\thid', \dontcare} < \lcmt{\thid',\tsid'} \), first note that in the \rl{PFork} the parent thread starts at time \( \ts \) and ends at \( \ts' \), and the child thread initialises with the time \( \ts' \), where  in fact \( \ts = \ts' \)
+    By \( \lcmt{\thid,\tsid} < \lfork{\thid,\thid', \dontcare}  \), the transaction \( \thid \) is reduced before the fork, so by Lemma \ref{lem:mono-time-thread}, the end time of \( \thid \) is smaller than \( \ts \).
+    By \( \lfork{\thid,\thid', \dontcare} < \lcmt{\thid',\tsid'} \), the transaction \( \thid' \) is reduced after the fork and also by Lemma \ref{lem:mono-time-thread}, the start time of \( \thid \) is greater or equal to \( \ts' \).
+    Therefore, \( (\tsid, \tsid') \in \vis \).
+
+    Similarly, for \( \tsid \) and \( \tsid' \) where \( \lcmt{\thid,\tsid} < \ljoin{\thid',\thid, \dontcare} < \lcmt{\thid',\tsid'} \), by Lemma \ref{lem:mono-time-fork-join}, all the transactions by thread \( \thid \) must have smaller start and end times than all the transactions by thread \( \thid' \) after the join point.
+    Therefore, \( (\tsid, \tsid') \in \vis \).
+\end{proof}
+
+\sx{The session lemma I feel slightly unhappy, because it seems not very formal.}
+
+\begin{lem}[Semi-prefix]
+    \label{lem:semi-prefix}
+    \( \tar; \vis \subseteq \vis \).
+\end{lem}
+\begin{proof}
+    For all \( \tsid, \tsid', \tsid'' \), if \( (\tsid, \tsid') \in \tar \) and \( (\tsid', \tsid'') \in \vis \), by the definitions of \( \po \) and \( \vis \), the commit time of \( \tsid' \) is greater than the one of \( \tsid \) but smaller than the start time of \( \tsid'' \).
+    Thus there must exist \( \loc, \loc'', \ts, \ts' , \ts'', \op \in \Set{\wop, \eop}  \) and \( \op'' \in \Set{\rop, \sop } \) such that  \( \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \), \( \tshp(\loc'')(\ts'') = (\dontcare, \op'', \tsid'') \) and \( \ts < \ts'' \), thus \( ( \tsid, \tsid'' ) \in \vis \).
+\end{proof}
+
+\begin{lem}[Prefix]
+    \label{lem:prefix}
+    \( \ar; \vis \subseteq \vis \).
+\end{lem}
+\begin{proof}
+    For all \( \tsid, \tsid', \tsid'' \) that \( (\tsid, \tsid') \in \ar \) and \( (\tsid', \tsid'') \in \vis \), if \( (\tsid, \tsid') \in \tar \), it is proven by Lemma \ref{lem:semi-prefix}.
+    If \( ( \tsid, \tsid' ) \notin \tar \), it means it is a new edge by the \funcn{toTotal} function from Definition \ref{defn:tototal}.
+    By the Lemma \ref{lem:seperate}, \( \tsid \) and \( \tsid' \) commit at the same time.
+    By the definition of \( \vis \), the commit time of \( \tsid' \) is smaller than the start time of \( \tsid'' \).
+    Therefore, the commit time of \( \tsid \) is also smaller than the start time of \( \tsid'' \), so that \( ( \tsid, \tsid'' ) \in \vis \).
+\end{proof}
+
+\begin{lem}[No conflict]
+    \label{lem:nocoflict}
+    Two transactions cannot concurrently write to the same location, this means that one must observe another one.
+    This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid) \land  \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\).
+\end{lem}
+\begin{proof}
+    Prove by contradiction.
+    Assume \( (\tsid, \tsid') \notin \vis \land (\tsid', \tsid) \notin \vis \), this intuitively means one transaction is overlapped with another.
+    Let \( \ts_{s}, \ts_{e}, \ts'_{s} \) and \( \ts'_{e} \) be the start time and end time of transaction \( \tsid \) and \( \tsid' \) respectively.
+    Because of the symmetry,  we can assume that the start time of \( \tsid \) is in between \( \tsid' \), witch means \( \ts'_{s} < \ts_{s} < \ts'_{e} \).
+    Now we consider \( \ts_{e} \).
+    First note that \( \ts_{e} > \ts_{s} \) by Lemma \ref{lem:start-before-end}, therefore we need to consider two cases \( \ts'_{s} < \ts_{s} < \ts_{e} < \ts'_{e} \) and  \( \ts'_{s} < \ts_{s} < \ts'_{e} < \ts_{e}  \).
+    Since both transaction write the same location \( \loc \), those two cases violate the \( \predn{consist} \) requirement in the semantics, so one of the transactions must pick another start and end time.
+\end{proof}
+
+\begin{lem}[External]
+    \label{lem:ext}
+    A transaction should read the last values it can observe.
+    This means that for all transaction \( \tsid \) and heap location \( \loc \), if the transaction read a value \( \val \) from the location, i.e.\ \( \exists \ts \ldotp \tshp(\loc)(\ts) = (\val, \rop, \tsid) \), the last transaction \( \tsid' \) who writes to the same location and can be observe by \( \tsid \), i.e.\ \( (\tsid, \tsid') \in \vis\), should have written the same value, meaning \( \exists \val', \ts' \ldotp \tshp(\loc)(\ts') = (\val', \wop, \tsid') \implies \val' = \val\)
+\end{lem}
+\begin{proof}
+    Given the definition of \( \vis \), we have \( \ts' < \ts \).
+    Because transaction \( \tsid' \) is the last one who write to the location, this means that \( \forall \tsid'', \ts'', \op'' \ldotp \tshp(\loc)(\ts'') = (\dontcare, \op'', \tsid'') \implies \op'' \neq \wop \).
+    Thus by the \( \funcn{startstate} \) in the semantics, we have \( \val' = \val \).
+\end{proof}
+
+\begin{lem}[Acyclic]
+    \label{lem:acyclic}
+    Both \( \vis \) and \( \ar \) are acyclic.
+\end{lem}
+\begin{proof}
+    For \( \vis \), it is proven by Lemma \ref{lem:semi-acyclic}.
+
+    To prove \( \ar \) is acyclic, we prove inductively \( \tar_{i} \) is acyclic, where \( \tar_{0} = \tar \), \( \tar_{n} = \ar \) and \( \tar_{i+1} = (\tar_{i} \uplus \Set{(\tsid, \tsid')})^{+} \) for some \( \tsid \) and \( \tsid' \), which follows the process of \funcn{toTotal} from Definition \ref{defn:tototal}.
+    For base case \( \tar_{0} \), it is proven by Lemma \ref{lem:semi-acyclic}.
+    Now assume \( \tar_{i} \) is acyclic and \( \tar_{i+1} = (\tar_{i} \uplus \Set{(\tsid, \tsid')})^{+} \) for some \( \tsid \) and \( \tsid' \), we prove by contradiction that \( \tar_{i+1} \) is acyclic.
+    Given the hypothesis, if there is circle in \( \tar_{i+1} \), such circle either contain the edge \( (\tsid, \tsid') \), or can be broken down to a circle containing the edge \( (\tsid, \tsid') \), because of the transitive closure.
+    Note that by breaking down to a circle containing \( ( \tsid, \tsid' ) \), the rest edges inside the circle must be in \( \tar_{i} \).
+    Let assume the circle is \( \tsid_{0}, \tsid_{1}, \dots, \tsid_{i}, \tsid, \tsid', \tsid_{i+1}, \dots, \tsid_{n} \) where \( \tsid_{0} = \tsid_{n} \).
+    By the \( \funcn{toTotal} \) function from Definition \ref{defn:tototal}, \( \tsid, \tsid' \in \func{firstBranch}{\settrans, \tar_{i}}\), which means that for all \( \tsid'' \), \( (\tsid'', \tsid) \in \tar_{i} \) if and only if \( ( \tsid'', \tsid') \in \tar_{i} \), therefore \( (\tsid'', \tsid) \in \tar_{i+1} \) if and only if \( ( \tsid'', \tsid') \in \tar_{i+1} \).
+    This means that the sequence without \( \tsid \), i.e.\ \( \tsid_{0}, \tsid_{1}, \dots, \tsid_{i}, \tsid', \tsid_{i+1}, \dots, \tsid_{n} \), is still a sequence where two adjacent transactions are connected by \( \tar_{i+1} \), and this new sequence is a circle.
+    Now all the edges in the new sequence/circle already exist in \( \tar_{i} \), which violates our hypothesis.
+    Therefore by contradiction, \( \tar_{i+1} \) is acyclic.
+    Given that, \( \ar \) is acyclic.
+\end{proof}
+
+\begin{lem}[Total order]
+    \label{lem:totalorder}
+    \( \ar \) is a total order.
+\end{lem}
+\begin{proof}
+    By Lemma \ref{lem:acyclic}, \( \ar \) is acyclic, and by Definition \ref{defn:tototal}, for all \( \tsid \) and \( \tsid' \), either \( (\tsid, \tsid') \in \ar \) or \( (\tsid', \tsid) \in \ar \).
+    Therefore, it is a total order.
+\end{proof}
+
+\begin{thm}[Soundness of the semantics]
+    The thread pool operational semantics $\globaltransfer{}$ (\defin\ref{def:thread_pool_semantics}) is sound.
+\end{thm}
+\begin{proof}
+    By Lemma \ref{lem:visibility}, \ref{lem:session}, \ref{lem:prefix}, \ref{lem:nocoflict}, \ref{lem:ext}, \ref{lem:totalorder}.
+\end{proof}
