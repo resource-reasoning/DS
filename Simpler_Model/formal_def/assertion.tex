@@ -1,0 +1,707 @@
+\section{Assertion and Rules\label{sec:assertion}}
+
+\subsection{Local/Transaction}
+
+\begin{definition}[capabilities]\label{def:capabilities}
+Assume a partial commutative monoid for \emph{primitive capabilities} $(\Kaps, \composeK, \unitK)$ with $\kap \in \Kaps$.
+Assume a countably infinite set of region identifiers $\rid \in \Regionid$. The set of \emph{capabilities} is $\ca \in \Caps \eqdef \Regionid \rightharpoonup \Kaps$.
+The \emph{capability composition function}, $\composeC: \Caps \times \Caps \rightharpoonup \Caps$, is defined as follows:
+%
+\[
+	(\ca_1 \composeC \ca_2)(\rid) \defeq 
+	\begin{cases}
+		\ca_1(\rid) \composeK \ca_2(\rid) & \text{if } \rid \in \dom(\ca_1) \text{ and } \rid \in \dom(\ca_2) \\
+		\ca_1(\rid) & \text{if } \rid \in \dom(\ca_1) \text{ and } \rid \not\in \dom(\ca_2) \\
+		\ca_2(\rid) & \text{if } \rid \not\in \dom(\ca_1) \text{ and } \rid \in \dom(\ca_2) \\
+		\text{undefined} & \text{otherwise}
+	\end{cases}
+\]
+%
+The \emph{capability unit element}, $\unitC$, denotes a function with an empty domain.
+The \emph{capability partial commutative monoid} is $(\Caps, \composeC, \{\unitC\})$. 
+\end{definition}
+%
+%
+\begin{definition}[Local state]\label{def:local_state}
+Given the set of fingerprint heaps $\FPHeaps$ (\defin\ref{def:fingerprint_heaps}) and the set of capabilities $\Caps$ (\defin\ref{def:capabilities}), the set of \emph{local states} is $\ls \in \LStates \eqdef \FPHeaps \times \Caps$.
+The \emph{local state composition function}, $\composeLS: \LStates \times \LStates \parfun \LStates$, is defined component-wise as: $\composeLS \eqdef (\composeFP, \composeC)$.
+The \emph{local state unit element} is $\unitLS \eqdef (\unitFP, \unitC)$.
+The \emph{partial commutative monoid of local states} is $(\LStates, \composeLS, \{\unitLS\})$.
+\end{definition}
+%
+Given a local state $\ls$, we write $\lsFPH{\ls}$ and $\lsCap{\ls}$ for the first and second projections of $\ls$, respectively.
+%
+%
+\begin{definition}[Local assertions]\label{def:local_assertions}
+%Given the set of program expressions $\Expressions$ (\defin\ref{def:language}), 
+Assume a countably infinite set of \emph{logical variables} $\V x \in \LVars$.
+The set of \emph{logical expressions}, $ \lexpr \in \LExpressions$ is defined by the following inductive grammar, where $\val \in \Val$, $\vx \in \Var$ (\defin\ref{def:prgram_values}) and $\V x \in \LVars$:
+%
+\[
+   \lexpr ::= \val \mid \var \mid \V x \mid \lexpr + \lexpr \mid \lexpr * \lexpr \mid \dots 
+\]
+%
+Given the set of values $\Val$ (\defin\ref{def:prgram_values}), assume a set of \emph{logical environments} $\lenv \in \LEnv: \LVars \rightharpoonup \Val$.
+Given a stack $\stk \in \Stack$ (\defin\ref{def:stacks}) and a logical environment $\lenv: \LEnv$, the \emph{logical expression evaluation} function, $\leval{.}{(., .)}:\LExpressions \times \Stack \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions as follows: 
+%
+\[
+    \begin{rclarray}
+        \leval{\val}{\lenv, \stk} & \defeq & \val \\
+        \leval{\var}{\lenv, \stk} & \defeq & \stk(\val) \\
+        \leval{\V x}{\lenv, \stk} & \defeq & \lenv(\V x) \\
+        \leval{\lexpr_1 + \lexpr_2}{\lenv, \stk} & \defeq & \leval{\lexpr_1}{\lenv, \stk} + \leval{\lexpr_2}{\lenv, \stk}   \\
+        \leval{\lexpr_1 * \lexpr_2}{\lenv, \stk} & \defeq & \leval{\lexpr_1}{\lenv, \stk} * \leval{\lexpr_2}{\lenv, \stk}  
+    \end{rclarray}
+\]
+%
+The set of \emph{local assertions}, $\lpre,  \lpost \in \Localassertion$, is defined inductively by the following grammar, where $\fp \in \Fingerprint$ denotes a fingerprint (\defin\ref{def:fingerprint_heaps}) and $\V x, \V r \in \LVars$: 
+%
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\lpre, \lpost ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\V x} \lpre \\
+	& \mid \emp \mid \lexpr \pt_{\fp} \lexpr \mid \cass{\kap}{\V r} \mid \lpre * \lpost 
+\end{array}	 
+\]
+%
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $: \Localassertion \times \LEnv \rightarrow \powerset{\LStates}$, is defined over the structure of local assertions as follows:
+%
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\aeval{\assfalse}{\lenv, \stk} \eqdef & \emptyset  \\
+%	
+	\aeval{\asstrue}{\lenv, \stk} \defeq & \LStates  \\
+%
+	\aeval{\lpre \land \lpost}{\lenv, \stk} \defeq & \aeval{\lpre}{\lenv, \stk} \cap \aeval{\lpost}{\lenv, \stk} \\
+%
+	\aeval{\lpre \lor \lpost}{\lenv, \stk} \defeq & \aeval{\lpre}{\lenv, \stk} \cup \aeval{\lpost}{\lenv, \stk} \\
+%
+	\aeval{\exsts{\V x} \lpre}{\lenv, \stk} \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\aeval{\lpre}{\lenv\remapsto{\V x}{\val}, \stk}  \\
+%
+	\aeval{\assemp}{\lenv, \stk} \defeq & \Set{\unitLS}  \\
+%
+	\aeval{\lexpr_1 \pt_{\fp} \lexpr_2}{\lenv, \stk} \defeq 
+	& \Set{
+		(\fph, \unitC) \mid
+        \begin{array}{@{}l@{}}
+			\exsts{\loc, \val} 
+			\leval{\lexpr_1}{\lenv, \stk} = \loc 
+			\land \leval{\lexpr_2}{\lenv, \stk} = \val  
+			\land \dom(\fph) {=} \Set{\loc }
+			\land \fph(\loc) {=} (\val, \fp)
+		\end{array}
+	} \\
+%
+	\aeval{\cass{\kap}{\V r}}{\lenv, \stk} \eqdef
+	& \Set{
+		(\unitFP, \ca) \mid
+        \begin{array}{@{}l@{}}
+			\exsts{\rid} 
+			\lenv(\V r) {=} \rid 
+			\land \dom(\ca) {=} \Set{\rid }
+			\land \ca(\rid) {=} \kap
+		\end{array}
+	} \\
+%		
+	\aeval{\lpre \sep \lpost}{\lenv, \stk} \defeq 
+	& \Set{ \ls_1 \composeLS \ls_2 \middle| \ls_1 \in \aeval{\lpre}{\lenv, \stk} \land \ls_2 \in \aeval{\lpost}{\lenv, \stk} } 
+\end{array}
+\]
+%
+\end{definition}
+%
+
+Observe that program expressions ($\expr \in \Expressions$ in \defin\ref{def:language}) are contained in logical expressions ($\lexpr \in \LExpressions$ in \defin\ref{def:local_assertions} above). That is, $\Expressions \subset \LExpressions$. 
+
+
+\subsection{Rules for Local}
+The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
+The \rl{TRDeref} rule add read finger-print in finger-tracking set, only if there is no write finger-print.
+This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
+
+\[
+    \infer[\rl{TRDeref}]{%
+        \judgement{}{\expr \pt_{\fp} \lexpr}{ \pderef{\var}{\expr} }{\var \dot= \lexpr \sep \expr \pt_{\addRFP{\fp}} \lexpr }
+    }{%
+        \var \notin \func{fv}{\expr} &&
+        \var \notin \func{fv}{\lexpr}  
+    }
+\]
+
+\[
+    \infer[\rl{TRMutate}]{%
+        \judgement{}{\expr_1 \pt_{\fp} \dontcare }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \pt_{\addWFP{\fp}} \expr_2} 
+    }{}
+\]
+
+\subsection{Global/Program}
+\begin{definition}[Actions]
+Given the set of local states $\LStates$ (\defin\ref{def:local_state}), the set of \emph{actions}, $\action \in \Actions$, is defined as follows:
+%
+\[
+	\Actions \eqdef 
+	\myset{
+		((\fph, \ca), (\fph', \ca'))
+	}{
+		((\fph, \ca), (\fph', \ca')) \in \LStates \times \LStates \\
+		\land\ \dom(\fph) = \dom(\fph') \\
+		\land\ \for{\loc} \fph(\loc) = (\val, \fp) \Rightarrow \\
+			\quad 	\big(\fph'(\loc) = (-, \fp') \land \fp' \subseteq \addWFP{\fp} \big)
+			\lor
+			\big(\fph'(\loc) = (\val, \fp') \land \fp' = \addRFP{\fp} \big)
+	}
+\] 
+\sx{Change the write part to \( \subseteq \), because the post condition could be write and read }
+%
+Given the set of primitive capabilities $\Kaps$ (\defin\ref{def:capabilities}), the set of \emph{interference environments} is $\inter \in \Interference \eqdef \Kaps \parfun \powerset{\Actions}$.
+\end{definition}
+
+\begin{definition}[Logical states]\label{def:logical_states}
+Given the partial commutative monoid of time timestamp heaps $(\TSHeaps, \composeTS, \unitTS)$ in \defin\ref{def:timestamp_heaps}), and the partial commutative monoid of capabilities ($\Caps$, \composeC, \unitC) in \defin\ref{def:capabilities}, the set of \emph{logical states} is: $\lgs \in \LGStates \eqdef \TSHeaps \times \Caps$. 
+The \emph{logical state composition function}, $\composeLGS: \LGStates \times \LGStates \parfun \LGStates$, is defined component-wise as: $\composeLGS \eqdef (\composeTS, \composeC)$.
+The \emph{logical state unit element} is $\unitLGS \eqdef (\unitTS, \unitC)$.
+The \emph{partial commutative monoid of logical states} is $(\LGStates, \composeLGS, \{\unitLGS\})$.
+%
+\end{definition}
+\begin{definition}[Worlds]
+Given the set of region identifiers $\Regionid$ (\defin\ref{def:capabilities}) and the partial commutative monoid of logical states $(\LGStates, \composeLGS, \{\unitLGS\})$ in \defin\ref{def:logical_states}, the set of \emph{shared states} is $\SStates \eqdef \Regionid \parfinfun \LGStates$.
+The \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as: $\composeS \eqdef \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$: 
+%
+\[
+	m \composeEq m' \eqdef 
+	\begin{cases}
+		m & \text{if } m = m'\\
+		\text{undefined} & \text{otherwise}
+	\end{cases}
+\]
+%
+The \emph{flattening} function for shared states, $\flattenS{.}: \SStates \parfun \LGStates$, is defined as follows, for all $\gs \in \SStates$:
+%
+\[
+	\flattenS{\gs} \eqdef \prod\limits_{\rid \in \dom(\gs)}^{\composeLGS} \gs(\rid)
+\]
+%
+Given the set of timestamps $\Timestamp$ (\defin\ref{def:timestamp_heaps}), 
+a triple $(\lgs, \gs, \ts) \in \LGStates \times \SStates \times \Timestamp$ is \emph{well-formed}, written $\wf{\lgs, \gs, \ts}$, if and only if:
+%
+\[
+\begin{rclarray}
+	\wf{\lgs, \gs, \ts} 
+	& \iffdef
+	& \exsts{\tshp, \ca} \;\lgs \composeLS \flattenS{\gs} {=} (\tshp, \ca) \\
+	&& \qqquad \land\ \dom(\ca) \subseteq \dom(\gs) \\
+	&& \qqquad \land\ \for{\loc, \ts'} \tshp(\loc)(\ts') \isdef \;\Rightarrow\; \ts' \leq \ts
+\end{rclarray}
+\]
+%
+\azalea{Shale, check  the last condition of $\wf{.}$ with regards to the timestamps.}
+\sx{  Here is my understanding.
+The first line says a world that is able to collapse down to a TSheap and a time, which is the most important part for proving soundness.
+The second line means all capabilities must have existed corresponding regions, which is similar to all other logics.
+The third line I think says a location must at least be initialised?
+Since we don't have allocation and we make assumption all resources initialised, but I think it is fine we still make this constrains?
+}
+%
+The set of \emph{worlds}, $\world \in \World$, is defined as follows:
+%
+\[
+	\world \in \World \eqdef \myset{(\lgs, \gs, \ts)}{(\lgs, \gs, \ts) \in \LGStates \times \SStates \times \Timestamp \land \wf{\lgs, \gs, \ts}}
+\]
+% 
+The \emph{world composition function}, $\composeW: \World \times \World \parfun \World$, is defined component-wise as: $\composeW \eqdef (\composeLGS, \composeS, \composeEq)$.
+The \emph{world unit set} is $\unitW \eqdef \myset{(\unitLGS, \gs, \ts)}{(\unitLGS, \gs, \ts) \in \World}$.
+The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
+\end{definition}
+%
+%
+\begin{definition}[Assertions]
+The set of \emph{assertions}, $\gpre, \gpost \in \Globalassertion$, are defined by the following inductive grammar:
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\Globalassertion \ni \gpre , \gpost \in \Globalassertion \defeq & 
+	\False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost  \mid \exsts{\V x}\gpre \\
+    & \mid \emp \mid \lexpr_1 \pointsto \lexpr_2 \mid \cass{\kap}{\V r} \mid \boxass{\gpre}{\V r}{\intass} \mid \gpre \sep \gpost \\
+\end{array}
+\]
+%
+where $\V x, \V r \in \LVars$, $\lexpr_1, \lexpr_2 \in \LExpressions$ (\defin\ref{def:local_assertions}), $\kap \in \Kaps$ (\defin\ref{def:capabilities}) and $\intass \in \IAssertions$ denotes an \emph{interference assertion} defined by the following grammar:
+%
+\[
+	\IAssertions \ni \intass \eqdef 
+	\emptyset \mid \Set{ \captk{\kap} : \exsts{\vec{\V x}} \lpre \transfersto \lpost } \cup \intass 
+\]
+%
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stack$, the \emph{interference interpretation} function, $\ieval[(., .)]{.}: \IAssertions \times \LEnv \times \Stack \rightarrow \Interference$, is defined as follows, for all $\kap \in \Kaps$:
+%
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\ieval{\emptyset}(\kap) \eqdef & \emptyset \\
+	\ieval{\Set{ \captk{\kap} : \exsts{\vec{\V x}} \lpre \transfersto \lpost } \cup \intass }(\kap) \eqdef &
+	\myset{
+		(\ls_\lpre, \ls_\lpost)	
+	}{
+		(\ls_\lpre, \ls_\lpost)	\in \Actions 
+		\land \exsts{\rid, \vec v, \lenv'} 
+			\lenv(\V r) = \rid 
+			\land \lenv' = \lenv \remapsto{\vec{\V x}}{\vec v} \\
+			\land\ \ls_\lpre \in \aeval{\lpre}{\lenv', \stk}
+			\land \ls_\lpost \in \aeval{\lpost}{\lenv', \stk}
+	}
+	\cup 
+	\ieval{I}(\kap)
+\end{array}
+\] 
+%
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stack$, the \emph{assertion interpretation} function, $\aeval[(., .)]{.}: \Globalassertion \times \LEnv \times \Stack \rightarrow \World$, is defined as follows:
+%
+\[
+\begin{rclarray}
+	\aeval{\False} & \defeq & \emptyset \\
+%
+	\aeval{\True} & \defeq & \World \\
+%
+	\aeval{\emp} & \defeq & \unitW \\
+%
+	\aeval{\gpre \land \gpost} & \defeq & \aeval{\gpre} \cap \aeval{\gpost} \\
+%	
+	\aeval{\gpre \lor \gpost} & \defeq & \aeval{\gpre} \cup \aeval{\gpost} \\
+%  
+	\aeval{\exists \lvar \ldotp \gpre} & \defeq 
+	& \bigcup\limits_{\val \in \textnormal{\Val}} \aeval[\lenv\remapsto{\lvar}{\val}, \stk]{\gpre} \\
+%
+	\aeval{\lexpr_1 \pt \lexpr_2} & \defeq 
+	& \myset{
+		((\tshp, \unitC), \gs, \ts)
+	}{
+		\exsts{\loc, \val, \ts'} 
+		\leval{\lexpr_1}{\lenv, \stk} {=} \loc 
+		\land \leval{\lexpr_2}{\lenv, \stk} {=} \val 
+		\land \ts' \leq \ts 
+		\land \dom(\tshp) {=} \Set{\loc} \\
+		\land\ \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) 
+		\land \for{\ts'' \in ( \ts', \ts)} \tshp(\loc)(\ts'') \undef \\
+		\land\ \gs \in \SStates
+	} \\
+%	
+	\aeval{\cass{\kap}{\V \rid}} & \defeq 
+	& \myset{
+		((\unitTS, \ca), \gs, \ts)
+	}{
+		\exsts{\rid} 
+		\lenv(\V r) = \rid 
+		\land \dom(\ca) = \Set{\rid}
+		\land \ca(\rid) = \kap
+	} \\
+%	
+	\aeval{\boxass{\gpre}{\V \rid}{\intass}} & \defeq 
+	& \myset{
+		(\unitLGS, \gs, \ts) 
+	}{	
+		\exsts{\rid, \lgs} 
+		\lenv(\V r) = \rid 
+		\land \gs(\rid) = (\lgs, \ieval{I})		
+		\land (\lgs, \gs) \in \auxeval{P} 
+	}\\
+%
+	\aeval{ \gpre \sep \gpost } & \defeq & 
+	\myset{
+		(\world_1 \composeW \world_2)
+	}{
+		\world_1 \in \aeval{\gpre} 
+		\land \world_2 \in \aeval{\gpost}
+	}   
+\end{rclarray}
+\]
+%
+with the \emph{auxiliary interpretation function}, $\auxeval[(., ., .)]{(.)}: \Globalassertion \times \LEnv \times \Stack \times \Timestamp \rightarrow \powerset{\LGStates \times \SStates}$, defined as follows:
+%
+\[
+\begin{rclarray}
+	\auxeval{\False} & \defeq & \emptyset \\
+%
+	\auxeval{\True} & \defeq & \LGStates \times \SStates \\
+%
+	\auxeval{\emp} & \defeq & \myset{(\unitLGS, \gs)}{\gs \in \SStates} \\
+%
+	\auxeval{\gpre \land \gpost} & \defeq & \auxeval{\gpre} \cap \auxeval{\gpost} \\
+%	
+	\auxeval{\gpre \lor \gpost} & \defeq & \auxeval{\gpre} \cup \auxeval{\gpost} \\
+%  
+	\auxeval{\exists \lvar \ldotp \gpre} & \defeq 
+	& \bigcup\limits_{\val \in \textnormal{\Val}} \auxeval[\lenv\remapsto{\lvar}{\val}, \stk, \ts]{\gpre} \\
+%
+	\auxeval{\lexpr_1 \pt \lexpr_2} & \defeq 
+	& \myset{
+		((\tshp, \unitC), \gs)
+	}{
+		\exsts{\loc, \val, \ts'} 
+		\leval{\lexpr_1}{\lenv, \stk} {=} \loc 
+		\land \leval{\lexpr_2}{\lenv, \stk} {=} \val 
+		\land \ts' \leq \ts 
+		\land \dom(\tshp) {=} \Set{\loc} \\
+		\land\ \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) 
+		\land \for{\ts'' \in ( \ts', \ts)} \tshp(\loc)(\ts'') \undef \\
+		\land\ \gs \in \SStates
+	} \\
+%	
+	\auxeval{\cass{\kap}{\V r}} & \defeq 
+	& \myset{
+		((\unitTS, \ca), \gs)
+	}{
+		\exsts{\rid} 
+		\lenv(\V r) = \rid 
+		\land \dom(\ca) = \Set{\rid}
+		\land \ca(\rid) = \kap
+	} \\
+%	
+	\auxeval{\boxass{\gpre}{\V \rid}{\intass}} & \defeq 
+	& \myset{
+		(\lgs, \gs) 
+	}{	
+		(\lgs, \gs, \ts) \in \aeval{\boxass{\gpre}{\V \rid}{\intass}}
+	}\\
+%
+	\auxeval{ \gpre \sep \gpost } & \defeq & 
+	\myset{
+		\big((\lgs_1 \composeLGS \lgs_2), (\gs_1 \composeS \gs_2)\big)
+	}{
+		(\lgs_1, \gs_1) \in \auxeval{\gpre}
+		\land (\lgs_2, \gs_2) \in \auxeval{\gpost}
+	}   
+\end{rclarray}
+\]
+%
+\end{definition}
+
+\subsection{Merge - shale}
+
+\begin{defn}[Fingerprint heap agreement]
+Given two fingerprint heaps, the \emph{fingerprint heap agreement} is defined as follows:
+\[
+    \begin{rclarray}
+        \pred{agree\_heap}{\hp_{l},\hp_{r}} & \defeq  & \exsts{ \hp_{l}' = \func{get\_no\_write}{\hp_{l}}, \hp_{l}'', \hp_{r}' = \func{get\_no\_write}{\hp_{r}}, \hp_{r}'', \hp_{m} } \\
+        & & \pred{ws}{\hp_{l}} \cap \pred{ws}{\hp_{r}} = \emptyset  \land \hp_{l}' = \hp_{l}'' \composeFP \hp_{m} \land \hp_{r}' = \hp_{r}'' \composeFP \hp_{m} \land ( \hp_{l} \composeFP \hp_{r} \composeFP \hp_{m}  )\isdef \\
+    \end{rclarray}
+\]
+where,
+\[
+    \begin{rclarray}
+        %\funcn{ws} & : & \FPHeaps \to \powerset{\Loc} \\
+        \func{ws}{\hp} & \defeq & \Set{\loc \middle| \exsts{ \fp } \hp(\loc) = (\dontcare, \addWFP{\fp}, \dontcare)} \\
+        %\funcn{get\_no\_write} & :  & \FPHeaps \to \FPHeaps \\
+        \func{get\_no\_write}{\hp } & \defeq & \hp \setminus \Set{\loc \mapsto \dontcare \middle| \loc \in \pred{ws}{\hp}} \\
+    \end{rclarray}
+\]
+The agreement between two fingerprint heaps means that they write different locations, and for the rest parts, if there is overlap, the overlapped part must be at the same state.
+\end{defn}
+
+\begin{defn}[Action agreement]
+The \emph{action agreement} is defined as follows:
+\[
+    \begin{rclarray}
+        \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \eqdef & \pred{agree\_local}{\ls_{l}^{p}, \ls_{r}^{p}} \land \pred{agree\_local}{\ls_{l}^{q}, \ls_{r}^{q}} \land {}\\
+        & & \pred{agree\_local}{\ls_{l}^{p}, \ls_{r}^{q}} \land \pred{agree\_local}{\ls_{l}^{q}, \ls_{r}^{p}} \\
+        \pred{agree\_local}{(\hp_{l}, \ca_{l} ),(\hp_{r}, \ca_{r})} & \eqdef & \pred{agree\_heap}{\hp_{l}, \hp_{r}} \land ( \ca_{l} \composeC \ca_{r} )\isdef  \\
+    \end{rclarray}
+\]
+\sx{
+The first line of agreement on actions is to stop merging of the following two actions:
+\[
+\begin{array}{@{}l@{}}
+\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\rfp}} 0 \sep \vy \pt_{\Set{\wfp}} 1 \\
+\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\wfp}} 1 \sep \vy \pt_{\Set{\rfp}} 0
+\end{array}
+\]
+The second line of agreement on actions is to stop merging of the following two actions:
+\[
+\begin{array}{@{}l@{}}
+\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \transfersto  \vx \pt_{\Set{\rfp}} 0 \sep \vy \pt_{\Set{\wfp}} 1 \sep \cass{C}{}\\
+\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\wfp}} 1 \sep \vy \pt_{\Set{\rfp}} 0
+\end{array}
+\]
+}
+For two actions to agree, their pre- and post-conditions must agree on the heaps and the capabilities.
+Additional, one's pre-condition should agree with another's post-condition, so that when merging these two actions, the merged result does not have invalid capabilities transfer.
+\end{defn}
+
+\begin{defn}[Merge actions]
+The \emph{merge actions}, specifically merge the right-hand side to the left-hand side, is defined as follows:
+\[
+    \begin{rclarray}
+        \funcn{merge\_action} & : & \Actions \times \Actions \parfun \Actions \\
+        \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \defeq &
+        \begin{funcarray}
+        ( \ls_{l}^{p}, \func{merge\_state}{\ls_{l}^{q}, \ls_{r}^{q}} )  &  \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} \\
+        \text{undefined} & \text{otherwise} \\
+        \end{funcarray} \\
+    \end{rclarray}
+\]
+where,
+\[
+    \begin{rclarray}
+        \func{merge\_state}{(\hp_{l}, \ca_{l} ),(\hp_{r}, \ca_{r})} & \defeq & (\func{eager\_merge\_heap}{\hp_{l},\hp_{r}}, \ca_{l} \composeC \ca_{r} ) \\
+        \func{eager\_merge\_heap}{\hp_{l}, \hp_{r}} & \defeq & \lambda \loc \ldotp 
+        \begin{funcarray}
+            \hp_{r}(\loc) & \loc \in \dom(\hp_{l}) \cap \pred{ws}{\hp_{r}} \\
+            \hp_{l}(\loc) & \loc \in \dom(\hp_{l}) \setminus \pred{ws}{\hp_{r}} \\
+            \text{undefined} & \loc \notin \dom(\hp_{l})
+        \end{funcarray}
+        \\
+    \end{rclarray}
+\]
+\end{defn}
+
+
+
+\subsection{Old text from Shale}
+%\azalea{I would take my capabilities as elements of a PCM instead and make the logic parametric in it. Then, given a \emph{primitive capability} PCM $\textsc{PrimCap} \defeq (\Gamma, \compos_{\Gamma}, \unitelem{\Gamma})$ with $\gamma \in \Gamma$, you can introduce the capability assertion $[\gamma]^{\rid}.$ This way, you don't need to worry about parameterising your capabilities with $\vec{x}$ as the user can instantiate it just so.
+
+
+\sx{ The nested box is interpreted as flatten box assertion.
+Yes, \( \rid \) and \( \intass \) should change position.
+}
+%
+The box assertion \( \boxass{\gpre}{\rid}{\intass} \) asserts part of heap that can be shared, where \( \rid \) is region identifier and \( \intass \) is the interference, i.e.\ all the possible transitions.
+The interference is a set of transitions that are labelled by capabilities.
+
+\[
+    \begin{rclarray}
+            \gpre , \gpost \in \Globalassertion & \defeq & 
+            \assfalse \mid \asstrue \mid \gpre \land \gpost \mid \gpre \lor \gpost  \mid \exists \lvar \ldotp \gpre \mid \\
+            & & \assemp \mid \lexpr \pointsto \lexpr \mid \cass{\kap}{\V r} \mid \boxass{\gpre}{\V r}{\intass} \mid \gpre \sep \gpost \\
+    \end{rclarray}
+\]
+
+The global assertions are interpreted as a tuple of a world and a time-stamp.
+A world is a pair of shared state and logical state.
+The logical state is a pair of time-stamp heap and capability, where capability is a partial finite function from region identifier to a token.
+The shared state is a partial finite function from region identifier to logical state and its interference.
+
+\azalea{Again, for the sake of consistency with CAP and CoLoSL, I'd swap the order of logical and shared states in Worlds and have $\World \defeq \Logicalstate \times \Sharestate$ instead.\\
+
+Also I would define worlds as TRIPLES with logical state (capturing privately-owned resources), shared state AND time stamp.  Worlds are what global assertions are interpreted over so add the time stamp here and not later. If you do this here, later when  you give the semantics of global assertions it is just on worlds and not worlds $\times$ time stamps.\\
+
+If you choose to define capabilities as I described above, make sure you propagate the notation changes here too. }
+
+\[
+    \begin{rclarray}
+        \lstate \in \Logicalstate & \defeq & \Timestampheap \times \powerset{\Capability} \\
+        \sstate \in \Sharestate & \defeq & \Regionid \parfinfun \Logicalstate \times \Interference \\
+        \world \in \World & \defeq & \Logicalstate \times \Sharestate
+    \end{rclarray}
+\]
+
+
+The composition of logical states.
+
+\[
+    \begin{rclarray}
+        \lstate_{1} \compos_{\lstate} \lstate_{2} & \defeq & (\lstate_{1}\projection{1} \ \uplus \ \lstate_{2}\projection{1}, \lstate_{1}\projection{2} \ \compos_{\cstate} \ \lstate_{2}\projection{2}) \\
+        \unitelem{\lstate} & \defeq & ( \emptyset, \emptyset ) \\
+    \end{rclarray}
+\]
+
+The composition of capabilities and worlds.
+
+\[
+    \begin{rclarray}
+        \world_{1} \compos_{\world} \world_{2} & \defeq & 
+        \begin{funcarray}
+            (\sstate, \lstate_{1} \compos_{\lstate} \lstate_{2}) & \world_{1} = (\sstate, \lstate_{1}) \land \world_{2} = (\sstate, \lstate_{2}) \\
+            \texttt{undefined} & o.w. \\
+        \end{funcarray} \\
+        \unitelem{\world} & \defeq & ( \emptyset, \unitelem{\lstate} ) \\
+    \end{rclarray}
+\]
+
+\azalea{The world unit must be a SET with arbitrary state as its shared state component and NOT the empty function: $\unitelem{\world} \defeq \{(\sstate, \unitelem{\lstate}) \mid \sstate \in \Sharestate\}$.}
+
+The global assertions are interpreted as a set of worlds and their corresponding times.
+
+\[
+    \begin{rclarray}
+        \eval{\assfalse}_{\lenv, \stk} & \defeq & \emptyset \\
+        \eval{\asstrue}_{\lenv, \stk} & \defeq & \powerset{\World \times \Timestamp } \\
+        \eval{\assemp}_{\lenv, \stk} & \defeq & \Set{(\emptyset, \ts)} \\
+        \eval{\expr_{1} \pt \expr_{2}}_{\lenv, \stk} & \defeq & \Set{ ( ( \emptyset, ( \tshp, \emptyset ) ), \ts ) \middle| 
+            \begin{array}{@{}l@{}}
+                \exists \loc = \eval{\expr_{1}}_{\lenv, \stk}, \val = \eval{\expr_{2}}_{\lenv, \stk}, \ts' \ldotp \ts' \leq \ts \land 
+                \dom(\tshp) = \Set{ \loc } \land \tshp(\loc)(\ts') =  \val \\
+                \tshp(\loc)(\ts') = (\val,\dontcare, \dontcare) \land \forall \ts'' \in ( \ts', \ts) \ldotp \tshp(\loc)(\ts'')\undef \\
+            \end{array}
+        } \\
+        \eval{\boxass{\gpre}{\intass}{\rid}}_{\lenv, \stk} & \defeq & \Set{ ( ( \sstate, \lstate ), \ts ) \middle| \exists \sstate', \lstate' \ldotp ( ( \sstate', \lstate \compos_{\lstate} \lstate' ), \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \land \sstate = \sstate' \uplus \Set{\rid \mapsto ( \lstate', \eval{\intass}_{\lenv,\stk} ) } } \\
+        \eval{ \capass }_{\lenv, \stk} & \defeq & \Set{ ( ( \sstate, ( \tshp, \cstate ) ), \ts ) \middle| \sstate = \emptyset \land \tshp = \emptyset \land \cstate = \eval{ \capass }_{\lenv, \stk} } \\
+        \eval{ \gpre \sep \gpost }_{\lenv, \stk} & \defeq & \Set{ ( \world_{1} \compos_{\world} \world_{2}, \ts ) \middle| ( \world_{1}, \ts ) \in \eval{\gpre}_{\lenv, \stk, \ts} \land ( \world_{2}, \ts ) \in \eval{\gpost}_{\lenv, \stk, \ts} } \\
+        \eval{\gpre \land \gpost}_{\lenv, \stk} & \defeq & \eval{\gpre}_{\lenv, \stk} \cap \eval{\gpost}_{\lenv, \stk} \\
+        \eval{\gpre \lor \gpost}_{\lenv, \stk} & \defeq & \eval{\gpre}_{\lenv, \stk} \cup \eval{\gpost}_{\lenv, \stk} \\
+        \eval{\exists \lvar \ldotp \gpre}_{\lenv, \stk} & \defeq & \eval{\gpre}_{\lenv\remapsto{\lvar}{\val}, \stk} \\
+    \end{rclarray}
+\]
+
+\azalea{
+	If you redefine worlds as described above, make sure you propagate the changes here. For instance, you will instead have: $\eval{\asstrue}_{\lenv, \stk} \defeq \World$.\\
+	
+	There are a few issues:
+\[
+\begin{array}{r c l}
+	\eval{\assemp}_{\lenv, \stk} 
+	& \defeq 
+	&\Set{(\world, \ts) \mid \world \in \unitelem{\world}} \\
+%
+	\eval{\exists \lvar \ldotp \gpre}_{\lenv, \stk} & \defeq & \bigcup\limits_{\val \in \Val}\eval{\gpre}_{\lenv\remapsto{\lvar}{\val}, \stk} 
+%	
+\end{array}        
+\]	
+%
+The boxed assertion must have an EMPTY local component. Also you must allow the region identifier to be a logical variable (this is useful when you existentially quantify them upon creation) and look it up in the logical environment.\\
+
+%I am not sure about the interpretation of $\expr_{1} \pt \expr_{2}$. 
+%Given that my time stamp is $t$, you are asking for the value of $\expr_{1}$ to be looked up for the latest time stamp $t'$  such that for all other time stamps between $t$ and $t'$ the value of $\expr_{1}$ is undefined. Now 
+%Suppose that I have the world $(\sstate, \lstate)$ with $\lstate {=} (\tshp, \emptyset)$ where $\tshp(x)(t_1) {=} (1, \wfp, \alpha)$; $\tshp(x)(t_2) {=} (1, \rfp, \beta)$; $\tshp(y)(t_3) {=} (2, \wfp, beta)$ such that $t_1 < t_2 < t_3$ and $\tshp$ is undefined for all other locations and time stamps. That is, $\tshp$ is a time stamp heap where transaction $\alpha$ has written $1$ location $x$ at time $t_1$ and then transaction $\beta$ had read 1 from $x$ at time $t_2$ and written $2$ to location $y$ at time $t_3$.
+%Intuitively, the $\tshp$ heap must satisfy the $x \mapsto 1 * y \mapsto 2$ assertion. According to the interpretation of $*$, I must find $\tshp_1, \tshp_2$ and $t$ such that $(\sstate, (\tshp_1, \emptyset), t)$ satisfies $x \mapsto 1$ and $(\sstate, (\tshp_2, \emptyset), t)$ satisfies $y \mapsto 2$. The choice of $\tshp_1, \tshp_2$  is simple. I just pick $\tshp_1(x)(t_1) {=} 1$ and undefined for all other locations. Similarly, I pick $\tshp_2(y)(t_2) {=} 2$ and undefined for all other locations. Now, what should I pick for $t$?
+%If I pick $t {=} t_1$ then $(\sstate, (\tshp_2, \emptyset), t)$ does NOT satisfy $y \mapsto 2$. On the other hand, if I pick $t {=} t_2$
+% where $t_1 < t_2$
+}
+We define \emph{merge} with respect to two heaps associated with their read sets and write sets.
+The operation \( \wmrg \) eagerly merge the left-hand side to the right-hand side.
+This means that, first, the domain of the result is the same as the domain of left-hand side.
+Second, the result takes left-hand side but propagate all the write effects from right-hand side.
+
+\azalea{I don't quite understand this definition. First, what do you mean by the domain of $\fphp$? $\fphp$ is a triple and not a function.
+
+Second, What is the intuition behind $\wmrg$? When is it used? I think it is used to calculate the postcondition of actions?
+}
+\[
+    \begin{rclarray}
+        \dom(\fphp) & \defeq & \dom(\fphp\projection{1}) \\
+        \fphp \wmrg \fphp' & \defeq & 
+        \left( \begin{array}{@{}l@{}}
+        \lambda \loc \ldotp  
+        \begin{funcarray}
+            \hp'(\loc) & \loc \in \ws' \cap \dom(\hp) \\
+            \hp(\loc) & \loc \notin \ws' \land \loc \in \dom(\hp) \\
+            \texttt{undefined} & o.w. \\
+        \end{funcarray},\ 
+        \rs \cup ( \dom(\hp) \cap \rs' ),\ 
+        \ws \cup ( \dom(\hp) \cap \ws')
+        \end{array} \right)\\
+        & & \texttt{where} \ \fphp = (\hp, \rs, \ws) \land \fphp' = (\hp', \rs', \ws') \\
+    \end{rclarray}
+\]
+
+The first element, also pre-condition \( \lpreext \), only contains empty label, \( \dontcare \pt_{\emptyset} \dontcare \), because the semantics requires the pre-condition interpreted as a heap with empty write set and empty read set.
+The second element, also called post-condition \( \lpostext \), should contain the same resources as pre-condition.
+If a location has only been read, the value should remain the same pre-condition.
+
+%\azalea{What happens when I write bad actions where I pretend that I have the value of $x$ but I have actually changed its value:
+%%
+%\[
+%	x \pt_{\emptyset} 1 \transfersto x \pt_{\Set{\rfp}} 2
+%\]
+%%
+%These bad actions must be undefined and have empty interpretation. However, I believe at the moment their badness is ignored and they are treated as ID actions.
+%}
+
+\sx{For resource moving in can be tagged with write but don't know how to tag resource move out. This is not very right.}
+
+
+The \rl{PRCommit} rule looks the same but the repartition is much more complicated by  merging all possible transitions from the environment that are allowed to run concurrently and commit in the same time.
+Note that after the merging, one still need to check stabilisation.
+
+\[
+    \infer[\rl{PRCommit}]{%
+        \judgement{}{\gpre}{ \ptrans{\cmd} }{\gpost}
+    }{%
+        \begin{array}{l}
+            \judgement{}{\lpre}{\cmd}{\lpost} \quad 
+            \vdash \gpre \Rrightarrow^{\{\lpre\}\{\lpost\}} \gpost
+        \end{array}
+    }
+\]
+
+Given the \emph{merge}for \( \fphp \), we can define \emph{merge} on transitions.
+The predicate \( \predn{noFingerPrint} \) asserts the read set and write set are empty sets, and \( \predn{noWriteConflict} \) asserts the write sets are disjointed.
+The predicate \( \predn{agree} \) has similar meaning as overlapped separation found in CoLoSL, which means that the state of the overlapped parts must agree.
+To merge two transactions, if the pre-conditions agree and both of them have no fingerprint, and if the post-conditions agree and they write to different locations, the merged result is a set of transitions including the left-hand side and another transition by merging the post-condition of right-hand side to left-hand side.
+Otherwise, the merge only returns a singleton set of left-hand side.
+
+\[
+    \begin{rclarray}
+        \pred{noFingerPrint}{\fphp} & \defeq & \exists \rs, \ws, \ldotp \fphp = (\dontcare, \rs, \ws) \land \rs = \ws = \emptyset \\
+        \pred{noWriteConflict}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \ws_{l} = \fphp_{l}\projection{3}, \ws_{r} = \fphp_{r}\projection{3} \ldotp \ws_{l} \cap \ws_{r} = \emptyset \\
+        \pred{agreeState}{\fphp_{l}, \fphp_{r}} & \defeq & \exists \fphp'_{l}, \fphp_{m}, \fphp'_{r}, \fphp \ldotp \fphp_{l} = \fphp'_{l} \compos_{\fphp} \fphp_{m} \land \fphp_{r} = \fphp'_{r} \compos_{\fphp} \fphp_{m} \land \fphp = \fphp'_{l} \compos_{\fphp} \fphp_{m} \compos_{\fphp} \fphp'_{r} \\
+        \pred{agreeCapability}{\cstate_{l}, \cstate_{r}} & \defeq & \exists \cstate'_{l}, \cstate_{m}, \cstate'_{r}, \fphp \ldotp \cstate_{l} = \cstate'_{l} \compos_{\cstate} \cstate_{m} \land \cstate_{r} = \cstate'_{r} \compos_{\cstate} \cstate_{m} \land \cstate = \cstate'_{l} \compos_{\cstate} \cstate_{m} \compos_{\cstate} \cstate'_{r} \\
+        \pred{agree}{\fphpcap_{l},\fphpcap_{r}} & \defeq & \pred{agreeState}{\fphpcap_{l}\projection{1}, \fphpcap_{r}\projection{1}} \land \pred{agreeCapability}{\fphpcap_{l}\projection{2}, \fphpcap_{r}\projection{2}} \\
+        ( \fphpcap_{\lpre}, \fphpcap_{\lpost} ) \bmrg ( \fphpcap'_{\lpre}, \fphpcap'_{\lpost} ) & \defeq & \Set{( \fphpcap_{\lpre}, \fphpcap_{\lpost} )} \cup \Set{(\fphpcap_{\lpre}, ( \fphp_{\lpost} \wmrg \fphp'_{\lpost}, \cstate_{q} \compos_{\cstate} \cstate'_{q} ) ) \middle| 
+        \begin{array}{@{}l@{}}
+            \pred{noWriteConflict}{\fphp'_{\lpre}, \fphp'_{\lpost} } \land {} \\
+            \pred{agree}{\fphpcap_{\lpre}, \fphpcap_{\lpost}} \land \pred{agree}{\fphpcap'_{\lpre}, \fphpcap'_{\lpost}} 
+        \end{array}
+    } \\
+    \end{rclarray}
+\]
+
+The repartition is redefined by adding a merging process.
+The notation \( \clps{\world} \) collapses a world to a time-stamp heap and capabilities by compositing the private logical state \( \lstate' \) and all the shared logical states \( \sstate(\rid_{i}) \).
+To simplify we reuse the same notation for \( \clps{( \world, \ts) } \), it further collapses the time-stamp heap to a plain heap by taking a snapshot at the time \( \ts \).
+The lift of a plain heap is a set of all possible worlds with their times that collapse to the plain heap with any possible capabilities, and similarly the lift of a plain heap with its read and write sets is the lift of the plain heap but lose the information about read and write sets.
+Given that \( \fphpcap \) talks about interference, either pre- or post-condition, of a certain region, the lift of \( \fphpcap \) is all possible worlds with their times where the lift of the plain heap, i.e.\ the first projection of \( \fphpcap \) is subset of the time-stamp heap corresponding to the region \( \rid \) and the capabilities of \( \fphpcap \), the second projection, is the subset of the capabilities of region \( \rid \).
+
+The repartition means, for all possible world and time, (\world, \ts), that satisfies global assertion \( \gpre \), there exist a heap with its read set and write set, \( \fphp \), that satisfies local assertion \( \lpre \), \( \fphp' \) for assertion \( \lpost \) and a transition \( (\fphpcap, \fphpcap' ) \) that is allowed by the guarantees.
+The \( \fphp \) should agree with \( \fphpcap \), which means \( \fphp = \fphpcap\projection{1} \) and similarly \( \fphp' = \fphpcap'\projection{1} \).
+Also, the \( (\world, \ts) \) corresponding to \( \gpre \) should agree with the pre-condition of the transition, i.e.\ \( (\world, \ts) \in \lift{\fphpcap} \).
+Then for all possible merging between transition \( (\fphpcap, \fphpcap' ) \) and relies, there must exist a corresponding world and its time satisfies the global assertion \( \gpost \).
+It means that the world and its time \( (\world', \ts') \) is in the lift of post-condition of the merging result \( \fphpcap'' \).
+At last the worlds \( \world \) and \( \world' \) should be balanced, meaning no creation or destruction of resources.
+
+%Given the \( \fphp \), if there exists a \( \fphp' \) that associated with \( \lpost \) and the transition \( (\fphp, \fphp') \)  is allowed by the guarantees \( \grte(\world) \), then for all the possible post-state \( \fphp'' \) by merging the transition \( (\fphp, \fphp') \) with relies, there must exist a world and its time \( (\world', \ts') \) that satisfies global post-condition \( \gpost \) and their collation equals to the first projection of \( \fphp'' \) which is the plain heap.
+
+\[
+    \begin{rclarray}
+        \clps{\world} & \defeq & (\tshp, \cstate) \ \texttt{where} \ \exists \sstate, \lstate, \lstate', \rid_{0}, \dots, \rid_{n} \ldotp \\
+                      & & \qquad \qquad \world = (\sstate, \lstate') \land \Set{\rid_{0}, \dots, \rid_{n}} = \dom(\sstate) \land \lstate = \lstate' \compos_{\lstate} \sstate(\rid_{1}) \compos_{\lstate} \dots \compos_{\lstate} \sstate(\rid_{n})\\
+                             & & \qquad \qquad \tshp = \lstate\projection{1} \land \cstate = \lstate\projection{2} \\
+        \clps{(\world, \ts)} & \defeq & ( \hp,\cstate ) \ \texttt{where} \ \hp = \func{startstate}{\clps{\world}\projection{1}, \ts} \land \cstate = \clps{\world}\projection{2} \\
+        \clps{\fphpcap} & \defeq & ( \hp,\cstate ) \ \texttt{where} \ \hp = \fphp\projection{1}\projection{1} \land \cstate = \fphpcap\projection{2} \\
+        %\lift{\hp} & \defeq & \Set{(\world, \ts) \middle| ( \hp , \cstate ) = \clps{(\world, \ts)}}\\
+        %\lift{\fphp} & \defeq & \lift{\fphp\projection{1}} \\
+        %\lift{\fphpcap} & \defeq &  \Set{(\world, \ts) \middle| \exists \rid, \tshp, \cstate \ldotp \world\projection{1}(\rid) = ((\tshp, \cstate), \dontcare) \land \lift{\fphpcap\projection{1}} \subseteq \tshp \land \fphpcap\projection{2} \subseteq \cstate}\\
+        \pred{balance}{\world_{1}, \world_{2}} & \defeq & \exists \tshp_{1}, \cstate_{1}, \tshp_{2}, \cstate_{2} \ldotp (\tshp_{1}, \cstate_{1}) = \clps{\world_{1} } \land  (\tshp_{2}, \cstate_{2}) = \clps{\world_{2} } \land \dom(\tshp_{1}) = \dom(\tshp_{2} ) \land \cstate_{1} = \cstate_{2} \\
+        \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \iff & \forall \lenv, \stk, \world, \ts  \ldotp (\world, \ts) \in \eval{\gpre}_{\lenv, \stk} \ldotp \\
+                                                   & & \implies \exists \lenv', \stk', \fphp \in \eval{\lpre}_{\lenv, \stk}, \hpfp' \in \eval{\lpost}_{\lenv', \stk'}, \fphpcap, \fphpcap', \fphpcap_{r} \ldotp \\
+                                                   & & \qquad (\fphpcap, \fphpcap' ) \in \grte(\world) \land \fphp = \fphpcap\projection{1} \land \fphp' = \fphpcap'\projection{1} \land \clps{(\world, \ts)} = \clps{\fphpcap \compos_{\fphpcap} \fphpcap_{r}}\\ 
+                                                   & & \implies \forall \fphpcap'' \ \ldotp ( \dontcare, \fphpcap'') \in ( (\fphpcap, \fphpcap') \bmrg \rely(\world) ) \\
+                                                   & & \exists \world',\ts' \ldotp  \ts < ts' \land (\world',\ts') \in \eval{\gpost}_{\lenv', \stk'} \land \clps{(\world', \ts' )} = \clps{\fphpcap''\compos_{\fphpcap} \fphpcap_{r}} \land \pred{balance}{\world, \world'}
+    \end{rclarray}
+\]
+
+The relies and guarantees.
+
+\[
+    \begin{rclarray}
+        \grte & \defeq & \lambda \world \ldotp \Set{(\fphpcap, \fphpcap') \middle| \forall \capb \in \world\projection{2}\projection{2} \land (\fphpcap, \fphpcap') \in \world\projection{1}(\capb\projection{1})\projection{2}(\capb)}\\
+        \rely & \defeq & \lambda \world \ldotp \Set{(\fphpcap, \fphpcap') \middle| \forall \capb \ldotp \exists \capb' \in \world\projection{2}\projection{2} \ldotp \capb\projection{1} = \capb'\projection{1} \land ((\capb\projection{2}, \capb\projection{3}) \compos_{\setcap} (\capb'\projection{2}, \capb'\projection{3}))\isdef \land (\fphpcap, \fphpcap') \in \world\projection{1}(\capb\projection{1})\projection{2}(\capb')}
+    \end{rclarray}
+\]
+
+\section{temp}
+
+To merge two actions \( \lpre \transfersto \lpost \) and \( \lpre' \transfersto \lpost' \), it requires the pre-conditions agrees, which means that if they describe some common heaps, the state of the common part should be consistent.
+Then if the post-conditions write to different locations, the \emph{merge} (to the left) operator \( \wmrg \) returns a new action where the effect of right hands side propagate to the left hand side.
+\sx{Not sure how to do it properly considering there is \(\vec{x}\) binder and extension \(\vec{y}\) }.
+
+\[
+    \begin{rclarray}
+        \func{writeSet}{\lvar \pointsto_{\fp \cup \Set{\wfp}} \dontcare } & \defeq & \Set{\lvar} \\
+        \func{writeSet}{\lvar \pointsto_{\fp \setminus \Set{\wfp}} \dontcare } & \defeq & \emptyset \\
+        \func{writeSet}{ \lpre \sep \lpost } & \defeq & \func{writeSet}{\lpre} \uplus \func{writeSet}{\lpost} \\
+        \lpre \bmrg \lpost & \defeq & 
+        \begin{funcarray}
+            ( \lpre' \bmrg \lpost' ) \sep \lvar \pointsto_{\fp \cup \Set{\wfp}} \dontcare  &  ( \lpre = \lpre' \sep \lvar \pointsto_{\dontcare} \dontcare ) \land  ( \lpost = \lpost' \sep \lvar \pointsto_{\fp \cup \Set{\wfp}} \dontcare ) \\
+            \lpre & o.w. \\
+        \end{funcarray} \\
+        \pred{agree}{\lpre , \lpost} & \defeq & \exists \lpre', \lpost', \lframe, m \ldotp ( \lpre = \lpre \sep \lframe ) \land ( \lpost = \lpost' \sep \lframe)  \land ( m = \lpre' \sep \lpost' \sep \lframe ) \\
+        ( \lpre \transfersto \lpost ) \wmrg ( \lpre' \transfersto \lpost' ) & \defeq & \Set{ \lpre \transfersto \lpost } \cup \Set{\lpre \transfersto (\lpost \bmrg \lpost') \middle| \pred{agree}{\lpre , \lpre'} \land \func{writeSet}{\lpost} \cap \func{writeSet}{\lpost'} = \emptyset}
+    \end{rclarray}
+\]
+

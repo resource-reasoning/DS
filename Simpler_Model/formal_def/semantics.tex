@@ -1,0 +1,577 @@
+\section{semantics\label{sec:semantics}}
+\begin{definition}[Program values]\label{def:prgram_values}
+Assume a countably infinite set of \emph{addresses}, $\loc \in \Loc$, and a countably infinite set of \emph{program variables} $\vx \in {\Var}$. The set of \emph{program values} is $\val \in \Val \eqdef \Nat \cup \Loc$, where $\Nat$ denotes the set of natural numbers.
+\end{definition}
+%
+%
+\begin{definition}[Stacks]\label{def:stacks}
+Given the set of program variables $\Var$ and the set of program values $\Val$ (\defin\ref{def:prgram_values}), the set of variable stacks is $\stk \in \Stack \eqdef \Var \parfinfun \Val$.
+\end{definition}
+%
+%
+Our programs (ranged over by $\prog$) are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\prog; \prog$), non-deterministic choice ($\prog+\prog$), loops ($\prog^*$) and parallel composition ($\prog \ppar \prog$). Additionally, our programming language contains the \emph{transaction} construct $\ptrans{\cmd}$ denoting the \emph{atomic} execution of the transaction $\cmd$. The atomicity guarantees of this execution are dictated by the underlying consistency model (snapshot isolation in this case).
+Transactions (ranged over by $\cmd$) are defined by a similar inductive grammar comprising $\pskip$, non-deterministic choice, loops and sequential composition, as well as constructs for assignment, lookup and update. Transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are to be executed atomically.
+
+\begin{definition}[Programming language]\label{def:language}
+The set of \emph{programs}, $\prog \in \Programs$, is defined by the following grammar:
+\[
+    \begin{syntax}{\prog}
+              \pskip \quad        |
+        \quad \ptrans{\cmd} \quad |
+        \quad \prog ; \prog \quad |
+        \quad \prog + \prog \quad |
+        \quad \prog^{*} \quad     |
+        \quad \prog \ppar \prog 
+    \end{syntax}
+\]
+%
+The $\cmd \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar:
+%
+\[
+    \begin{syntax}{\cmd}
+              \pskip \quad                 |
+        \quad \pass{\vx}{\expr} \quad      |
+        \quad \pmutate{\expr}{\expr} \quad |
+        \quad \pderef{\vx}{\expr} \quad    |
+        \quad \cmd + \cmd \quad            |
+        \quad \cmd^{*} \quad               |
+        \quad \cmd ; \cmd
+    \end{syntax}
+\]
+%
+where $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar below with $\val \in \Val$ and $\vx \in \Var$ (\defin\ref{def:prgram_values}).
+%
+\[
+    \begin{syntax}{\expr}
+              \val \quad          |
+        \quad \var \quad          |
+        \quad \expr + \expr \quad |
+        \quad \expr * \expr \quad |
+        \quad \dots 
+    \end{syntax}
+\]
+%
+Given a stack $\stk \in \Stack$ (\defin\ref{def:stacks}), the \emph{expression evaluation} function, $\eval{.}_{(.)}:\Expressions \times \Stack \rightharpoonup \Val$, is defined inductively over the structure of expressions as follows: 
+%
+\[
+    \begin{rclarray}
+        \eval{\val}_{\stk} & \defeq & \val \\
+        \eval{\var}_{\stk} & \defeq & \stk(\val) \\
+        \eval{\expr_{1} + \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} + \eval{\expr_{2}}_{\stk}   \\
+        \eval{\expr_{1} * \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} * \eval{\expr_{2}}_{\stk}  
+    \end{rclarray}
+\]
+%
+\end{definition}
+%
+
+We model the global database state as a \emph{timestamp heap}. A timestamp heap is a partial function from addresses to \emph{histories}.
+A history is a partial function from timestamps to a set of \emph{events}.
+An event is a triple comprising the value read or written, the identifier of the transaction carrying out the event, and an \emph{event tag} denoting a \emph{start event} ($\ops$), an \emph{end} event ($\ope$), a \emph{read} event ($\opr$) or a \emph{write} event ($\opw$).
+We model our timestamps, $\ts \in \Timestamp$, as elements of an (uncountably) infinite set with a total order relation $<$. To ensure the availability of an appropriate timestamp, we assume that the timestamp set $\Timestamp$ is \emph{dense}. That is, given any two timestamps $\ts_1$ and $\ts_2$ such that $\ts_1 < \ts_2$, an intermediate timestamp $\ts$ can be found such that $\ts_1 < \ts < \ts_2$.
+
+\begin{definition}[Timestamp heaps]\label{def:timestamp_heaps}
+Assume a set of \emph{timestamps}, $\ts \in \Timestamp$. Assume a \emph{total order} relation on timestamps, $<\ : \Timestamp \times \Timestamp$, such that:
+%
+\[
+	\for{\ts_1, \ts_2 \in \Timestamp} \ts_1 < \ts_2 \lor \ts_2 < \ts_1
+\]
+%
+Assume that the timestamp set $\Timestamp$ is \emph{dense} with respect to the ordering relation $<$. That is,
+\[
+	\for{\ts_1, \ts_2} \ts_1 < \ts_2 
+	\Rightarrow 
+	\exsts{\ts} \ts_1 < \ts < \ts_2	
+\]
+%
+The set of \emph{event tags} is: $\op \in \Operation \eqdef \{\ops, \ope, \opr, \opw \}$. 
+
+\noindent Assume a countably infinite set of \emph{transaction identifiers} $\alpha, \beta \in \TransID$.
+Given the set of program values $\Val$ (\defin\ref{def:prgram_values}), the set of \emph{timestamp heaps} is defined as $\tshp \in \Timestampheap \eqdef \Loc \parfinfun (\Val \times \TransID \times \Operation)$.
+The \emph{timestamp heap composition function}, $\composeTS: \Timestampheap \times \Timestampheap \parfun \Timestampheap$, is defined as follows, for all $\loc \in \Loc$, where $\uplus$ denotes the standard disjoint function union:
+%
+\[
+	(\tshp_1 \composeTS \tshp_2)(\loc) \defeq 
+	\begin{cases}
+		\tshp_1(\loc) \uplus \tshp_2(\loc) & \text{if } \loc \in \dom(\tshp_1) \text{ and } \loc \in \dom(\tshp_2) \\
+		\tshp_1(\rid) & \text{if } \loc \in \dom(\tshp_1) \text{ and } \loc \not\in \dom(\tshp_2) \\
+		\tshp_2(\rid) & \text{if } \loc \not\in \dom(\tshp_1) \text{ and } \loc \in \dom(\tshp_2) \\
+		\text{undefined} & \text{otherwise}
+	\end{cases}
+\]
+%
+The \emph{timestamp heap unit element} is $\unitTS \eqdef \emptyset$, denoting a function with an empty domain.
+The \emph{partial commutative monoid of timestamp heaps} is $(\TSHeaps, \composeFP, \{\unitTS\})$. 
+\end{definition}
+%
+%
+We write $\ts_1 \leq \ts_2$ as a shorthand for $\ts_1 < \ts_2 \lor \ts_1 = \ts_2$.
+We write $\ts_1 \oplus \ts \odot \ts_2 $ for $\ts_1 \oplus \ts \land \ts \odot \ts_2 $, where $\oplus, \odot \in \{<, \leq\}$.
+We often use the mirrored symbols and write $\ts_1 > \ts_2$ (resp.~$\ts_1 \geq \ts_2$) for $\ts_2 < \ts_1$ (resp.~$\ts_2 \leq \ts_1$).
+Lastly, we use the standard interval notation and write:
+%
+\[
+\begin{array}{r @{\hspace{10pt}} c @{\hspace{10pt}} l}
+	(\ts_1, \ts_2) & \text{for} & \Set{\ts \mid \ts_1 < \ts < \ts_2 } \\
+	(\ts_1, \ts_2] & \text{for} & \Set{\ts \mid \ts_1 < \ts \leq \ts_2 } \\
+	{[\ts_1, \ts_2)} & \text{for} & \Set{\ts \mid \ts_1 \leq \ts < \ts_2 } \\	
+	{[\ts_1, \ts_2]} & \text{for} & \Set{\ts \mid \ts_1 \leq \ts \leq \ts_2 } 
+\end{array}
+\]
+%
+
+Whilst the state of the database is given by globally-accessed (by all threads) timestamp heaps, we use \emph{fingerprint heaps} to model a \emph{local snapshot} of the global timestamp heaps made available to transactions during their execution. In order to successfully commit a transaction and avoid conflicts, we must track the \emph{fingerprint} of a transaction, namely those addresses read from or written to by the transaction. As such, we model fingerprint heaps as finite partial maps from addresses to pairs comprising a value and a fingerprint. The fingerprint of an address may be 1) $\emptyset$ denoting that the address has not been touched; 2) $\Set{\rfp}$ denoting that the address has been read; 3) $\Set{\wfp}$ denoting that the address has been mutated (written to); and 4) $\Set{\rfp, \wfp}$ denoting that the address has been initially read and subsequently mutated.   
+
+\begin{definition}[Fingerprint heaps]\label{def:fingerprint_heaps}
+The set of \emph{fingerprints} is $\fp \in \Fingerprint \eqdef \powerset{\Set{\wfp,\rfp}}$.
+
+\noindent Given the sets of program values $\Val$ (\defin\ref{def:prgram_values}) and addresses $\Loc$ (\defin\ref{def:timestamp_heaps}), the set of \emph{fingerprint heaps} is: $\fph \in \FPHeaps \eqdef \Loc \parfinfun (\Val \times \Fingerprint)$.
+The \emph{fingerprint heap composition function}, $\composeFP: \FPHeaps \times \FPHeaps \parfun \FPHeaps$, is defined as $\composeFP \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{fingerprint heap unit element} is $\unitFP \eqdef \emptyset$, denoting a function with an empty domain.
+The \emph{partial commutative monoid of fingerprint heaps} is $(\FPHeaps, \composeFP, \{\unitFP\})$.  
+\end{definition}
+%
+Given a fingerprint heap $\fph$ and an address $\loc$, we write $\fphVal(\loc)$ and $\fphFP(\loc)$ for the first and second projections of $\fph(\loc)$, respectively. We write $\unitFP$ for a fingerprint heap with an empty domain. We write $\fph_1 \uplus \fph_2$ for the standard disjoint function union of $\fph_1$ and $\fph_2$. 
+
+We introduce two update functions on fingerprints, $\addRFP{\fp}$ and $\addWFP{\fp}$, for updating a fingerprint $\fp$. Intuitively, the $\addWFP{\fp}$ always \emph{extends} $\fp$ with the $\wfp$ fingerprint. On the other hand, the $\addRFP{\fp}$ extends $\fp$ with $\rfp$ \emph{only if} $\fp$ does not already contain the $\wfp$ fingerprint (i.e.~$\wfp \not\in \fp$). This is to capture the fact that once an address is written to and thus the fingerprint contains $\wfp$, the following reads from the same address are considered local and need not be recorded in the fingerprint.
+%
+%\begin{definition}[Fingerprint extension]
+%Given a fingerprint heap $\fph \in \FPHeaps$ (\defin\ref{def:fingerprint_heaps}) and an address $\loc \in \Loc$ (\defin\ref{def:prgram_values}), the \emph{write fingerprint extension} function, $\addWFP{(.)}{.}: \FPHeaps \times \Loc \rightharpoonup \FPHeaps$, is defined if and only if $\loc \in \dom(\fph)$ and is defined as follows, for all $\fph \in \FPHeaps$ and $\loc \in \Loc$:
+%\[
+%	\addWFP{\fph}{\loc}(\loc') \eqdef 
+%	\begin{cases}
+%		\big(\fphVal[\fph](\loc), \fphFP[\fph](\loc) \cup \{\wfp\}\big) & \text{if } \loc' {=} \loc \\
+%		\fph(\loc) & \text{otherwise}
+%	\end{cases}
+%\]
+%Similarly, \emph{read fingerprint extension} function, $\addRFP{(.)}{.}: \FPHeaps \times \Loc \rightharpoonup \FPHeaps$, is defined if and only if $\loc \in \dom(\fph)$ans is defined as follows, for all $\fph \in \FPHeaps$ and $\loc \in \Loc$:
+%\[
+%\begin{array}{r @{\hspace{2pt}} l}
+%	\addRFP{\fph}{\loc}(\loc') \eqdef 
+%	\begin{cases}
+%		\big(\fphVal[\fph](\loc), \fphFP[\fph](\loc) \cup \{\rfp\}\big)  & \text{if } \loc' {=} \loc \text{ and } \wfp \not\in \fphFP[\fph](\loc)\\
+%		\fph(\loc) & \text{otherwise}
+%	\end{cases}
+%\end{array}
+%\]
+%\end{definition}
+%
+%
+\begin{definition}[Fingerprint extension]
+Given the set of fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint_heaps}), the \emph{write fingerprint extension} function, $\addWFP{(.)}{.}: \Fingerprint \rightarrow \Fingerprint$, and the \emph{write fingerprint extension} function, $\addWFP{(.)}{.}: \Fingerprint \rightarrow \Fingerprint$, are defined as follows, for all $\fp \in \Fingerprint$:
+\[
+\begin{array}{r @{\hspace{2pt}} l}
+	\addWFP{\fp} & \eqdef \fp \cup \{\wfp\} \\
+	\addRFP{\fp} & \eqdef
+	\begin{cases}
+		\fp \cup \{\rfp\}  & \text{if } \wfp \not\in \fp \\
+		\fp & \text{otherwise}
+	\end{cases}
+\end{array}	
+\]
+\end{definition}
+
+We define the operational semantics of transactions $\cmd$ with respect to a pair of the form $(\stk, \fph)$ comprising a (local) stack and a (local) fingerprint heap corresponding to a snapshot of the global timestamp heap. The operational semantics of transactions is given in \fig\ref{fig:transaction_semantics}.
+The operational semantics of transactions is standard with the exception of the \rl{TRead} and \rl{TWrite} rules where the fingerprint of the address read from (resp.~written to) is extended with $\rfp$ (resp.~$\wfp$).
+
+
+\begin{definition}[Transaction semantics]
+Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref{def:fingerprint_heaps}) and transactions (\defin\ref{def:language}), the \emph{operational semantics of transactions}, $\localtransfer : ((\Stack \times \FPHeaps) \times \Transactions) \times ((\Stack \times \FPHeaps) \times \Transactions)$, is given in \fig\ref{fig:transaction_semantics}.
+\end{definition}
+
+\begin{figure}
+%\[
+%    \begin{rclarray}
+%        ( \dontcare, \dontcare ) \ \localtransfer \  ( \dontcare, \dontcare ) & \defeq &  ( \Localstate \times \cmd ) \times ( \Localstate \times \cmd ) \\
+%    \end{rclarray}
+%\]
+\hrule\vspace{5pt}
+%\[
+%	\localtransfer : ((\Stack \times \FPHeaps) \times \Transactions) \times ((\Stack \times \FPHeaps) \times \Transactions)
+%\]	
+%
+%
+\[	
+    \infer[\rl{TAss}]{%
+        ( \stk, \fph) , \pass{\var}{\expr} \ \localtransfer \  (\stk \remapsto{\var}{\val}, \fph) , \pskip
+    }{%
+    \eval{\expr}_{\stk} = \val
+    }
+\]
+
+\[
+    \infer[\rl{TWrite}]{%
+        ( \stk, \fph), \pmutate{\expr_{1}}{\expr_{2}} \ \localtransfer \  ( \stk, \hp \remapsto{\loc}{(\val, \addWFP{\fp})} , \pskip
+    }{%
+        \eval{\expr_{1}}_{\stk} = \loc && 
+        \eval{\expr_{2}}_{\stk} = \val && 
+        \fph(l) {=} (-, \fp)
+    }
+\]
+
+\[
+    \infer[\rl{TRead}]{
+        ( \stk, \fph) , \pderef{\var}{\expr} \ \localtransfer \  (\stk \remapsto{\var}{\val}, \fph \remapsto{\loc}{(\val, \addRFP{\fp})}, \pskip
+    }{
+        \eval{\expr}_{\stk} = \loc && 
+        \fph(\loc) {=} (\val, \fp) 
+    }
+\]
+
+\[
+    \infer[\rl{TChoiseL}]{%
+        (\stk, \fph) , \cmd_{1} + \cmd_{2} \ \localtransfer \  (\stk, \fph) , \cmd_{1}
+    }{}
+\]
+
+\[
+    \infer[\rl{TChoiseR}]{%
+        (\stk, \fph) , \cmd_{1} + \cmd_{2} \ \localtransfer \  (\stk, \fph), \cmd_{2}
+    }{%
+    }
+\]
+
+\[
+    \infer[\rl{TLoop}]{%
+        (\stk, \fph),  \cmd^{*} \ \localtransfer \  (\stk, \fph), \pskip + (\cmd ; \cmd^{*})
+    }{%
+    }
+\]
+
+
+\[
+    \infer[\rl{TSeqSkip}]{%
+        (\stk, \fph), \pskip ; \cmd_{2} \ \localtransfer \  (\stk, \fph), \cmd_{2}
+    }{%
+    }
+\]
+
+\[
+    \infer[\rl{TSeq}]{%
+        (\stk, \fph), \cmd_{1} ; \cmd_{2} \ \localtransfer \  (\stk', \fph'), \cmd_{1}' ; \cmd_{2}
+    }{%
+        (\stk, \fph), \cmd_{1} \ \localtransfer \  (\stk', \fph'), \cmd_{1}'
+    }
+\]
+\hrule\vspace{5pt}
+\caption{The transaction operational semantics}
+\label{fig:transaction_semantics}
+\end{figure}
+%\[
+%    \begin{rclarray}
+%        \loc \in \Loc & \defeq & \Nat \\
+%        \val \in \Val & \defeq & \Nat \cup \Loc \\
+%        \Var & \defeq & \Set{ \vx, \vy, \dots } \\
+%        \ts \in \Timestamp & \defeq & \texttt{rational number or real number} \\
+%%%%        \hp \in \Heap & \defeq & \Loc \parfinfun \Val \\
+%        \stk \in \Stack & \defeq & \Var \parfinfun \Val \\
+%        \op \in \Operation & \defeq & \Set{\opr, \opw, \ops, \ope} \\
+%        \settrans \subseteq \TransID & \defeq & \Set{ \alpha , \beta, \dots } \\
+%        \ThreadID & \defeq & \Set{ i , j, \dots } \\
+%%%%        \rs \in \Readset, \ws \in \Writeset & \defeq & \powerset{\Loc} \\
+%%%%        %\tshp \in \Timestampheap & \defeq & \Loc \parfun ( \Timestamp \parfun \powerset{\Val \times \Operation \times \TransID}) \\
+%        \tshp \in \Timestampheap & \defeq & \Loc \parfinfun ( \Timestamp \parfun ( \Val \times \Operation \times \TransID ) ) \\
+%%%        (\stk, \tshp, \ts) \in \Threadstate & \defeq & \Stack \times \Timestampheap \times \Timestamp \\
+%        \tdpl \in \Threadpool & \defeq & \ThreadID \parfun \Stack \times \Timestamp \times \prog \\
+%        \stt \in \State & \defeq & \Timestampheap \times \Threadpool \\
+%        \lstt = (\stk, \hp, \rs, \ws ) \in \Localstate & \defeq & \Stack \times \Heap \times \Readset \times \Writeset \\
+%    \end{rclarray}
+%\]
+
+%The arithmetic expression and boolean expression are standard and have no side effect.
+%
+%
+%
+%
+%
+%\[
+%    \begin{syntax}{\bool}
+%              \true \quad                |
+%        \quad \false \quad               |
+%        \quad \expr = \expr \quad        |
+%        \quad \expr < \expr \quad        |
+%        \quad \boolnot \bool \quad       |
+%        \quad \bool \booland \bool \quad |
+%        \quad \bool \boolor \bool \quad  |
+%        \quad \dots 
+%    \end{syntax}
+%\]
+%
+%\[
+%    \begin{rclarray}
+%        \eval{\true}_{\stk}& \defeq & \true \\
+%        \eval{\false}_{\stk} & \defeq & \false \\
+%        \eval{\expr_{1} = \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} = \eval{\expr_{2}}_{\stk}   \\
+%        \eval{\expr_{1} < \expr_{2}}_{\stk} & \defeq & \eval{\expr_{1}}_{\stk} < \eval{\expr_{2}}_{\stk}   \\
+%        \eval{\boolnot \bool}_{\stk} & \defeq & \neg \eval{\bool}_{\stk} \\
+%        \eval{\bool_{1} \booland \bool_{2}}_{\stk} & \defeq & \eval{\bool_{1}}_{\stk} \land \eval{\bool_{2}}_{\stk}  \\
+%        \eval{\bool_{1} \boolor \bool_{2}}_{\stk}& \defeq & \eval{\bool_{1}}_{\stk} \lor \eval{\bool_{2}}_{\stk}  
+%    \end{rclarray}
+%\]
+%
+%\[
+%    \begin{syntax}{\cmd}
+%              \pskip \quad                 |
+%        \quad \pass{\vx}{\expr} \quad      |
+%        \quad \pmutate{\expr}{\expr} \quad |
+%        \quad \pderef{\vx}{\expr} \quad    |
+%        \quad \cmd + \cmd \quad            |
+%        \quad \cmd^{*} \quad               |
+%        \quad \cmd ; \cmd
+%    \end{syntax}
+%\]
+
+
+In order to formulate the operational semantics of a program $\prog$, we extend the programming language with an auxiliary wait construct, \(\pwait{\thid} \), added to programs as a suffix to denote thread joining points.
+Intuitively, the \( \pwait{\thid} \) construct indicates that the current thread is waiting on the thread identified by \( \thid \) to finish its execution and join the current thread. We refer to the programs produced by this extended syntax as \emph{intermediate programs}. This is because the $\pwait{.}$ construct yields additional programs that cannot be written by the clients of the database and is merely used to capture intermediate steps during parallel execution. 
+%
+
+We define the per-thread operational semantics of programs with respect to a triple of the form $(\stk, \tshp, \ts)$ comprising a (locally-accessed) stack, a (globally-accessed) timestamp heap, and a (locally-recorded) timestamp. 
+Each step of the per-thread operational semantics is decorated with a \emph{label} recording the action taken by the thread. In particular, a label may be $\lid$, denoting an identity transition; $\lcmt{\tsid}$, denoting the committing of transaction $\tsid$; $\lfork{\thid, \prog}$, denoting the forking a new thread $\thid$ the execute program $\prog$; or $\ljoin{\thid, \ts}$, denoting the joining of thread $\thid$ with the local timestamp $\ts$.
+  
+The per-thread operational semantics of programs is given in \fig\ref{fig:thread_semantics}.
+With the exception of the \rl{PCommit}, \rl{PPar} and \rl{PWait}, the remaining rules are straightforward.
+
+
+\begin{definition}[Thread semantics]\label{def:thread_semantics}
+Assume a countably infinite set of thread identifiers $i,j \in \ThreadID$.
+The set of \emph{thread transition labels}, $\tll \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defin\ref{def:language}), the $\tsid$ demotes a transaction identifier and $\ts$ denotes a timestamp (\defin\ref{def:timestamp_heaps}):
+\[
+	\tll \in \Translabel ::= \lid \mid \lcmt{\tsid} \mid \lfork{\thid,\prog} \mid \ljoin{\thid,\ts} 
+\]
+%
+%
+The set of \emph{intermediate programs}, $\progext \in \IntermediatePrograms$, is defined by the following grammar:
+%
+\[
+    \progext \in \IntermediatePrograms ::= \prog \mid \progext; \pwait{\thid}
+\]
+%
+Given the set of stacks $\Stack$ (\defin\ref{def:stacks}), timestamp heaps $\Timestampheap$ and timestamps $\Timestamp$ (\defin\ref{def:timestamp_heaps}), The \emph{per-thread operational semantics} of programs:
+%
+\[
+	\threadtransfer{} : 
+	\big((\Stack \times \Timestampheap \times \Timestamp) \times \IntermediatePrograms \big) 
+	\;\times \Translabel \; \times  
+	\big((\Stack \times \Timestampheap \times \Timestamp) \times \IntermediatePrograms \big) 
+\]
+%
+is defined in \fig\ref{fig:thread_semantics}.
+\end{definition}
+
+
+
+
+
+The \rl{PCommit} rule states that a transaction prophesies a starting timestamp $\ts_s$ (at which point it takes a snapshot $\fph_s$ and runs locally), and an ending timestamp $\ts_e$ (at which point the transaction is successfully committed as ensured by the $\cancommitName$ predicate).
+
+The \rl{Par} rule forks a new thread and inserts the appropriate joining point by appending the auxiliary \( \pwait{\thid} \) operation, where $\thid$ denotes the identifier of the newly forked thread. 
+The \rl{Wait} rule dually awaits the termination of thread $\thid$ and subsequently updates its timestamp to the maximum value between its own timestamp and that of $\thid$.
+Note that these two rules are labelled with the $\lfork{\thid, \prog}$ and $\ljoin{\thid, \ts}$ which are used by the semantics of the thread pool described shortly.\\
+
+\begin{figure}
+%
+\hrule\vspace{5pt}
+%
+\[
+    \infer[\rl{Commit}]{%
+        ( \stk, \tshp, \ts ) , \ptrans{\cmd} \ \threadtransfer{\lcmt{\tsid}} \ ( \stk', \tshp', \ts_{e} ) , \pskip
+    }{%
+        \begin{array}{c}
+            \ts \leq \ts_s < \ts_e 
+            \qquad \fph_s = \snapshot{\tshp}{\ts_s}
+            \qquad ( \stk, \fph_s) , \cmd \localtransfer^{*} ( \stk', \fph_e) , \pskip \\
+            \cancommit{\tshp}{\fph_e}{\ts_s}{\ts_e} 
+            \quad \pred{fresh}{\tshp, \tsid}
+            \quad \tshp' = \commit{\tshp}{\fph_s}{\fph_e}{\tsid}{\ts_s}{\ts_e}
+        \end{array}
+    }
+\]
+%
+%
+
+\[
+    \infer[\rl{PChoiseL}]{%
+        ( \stk, \tshp, \ts ) , \prog_{1} + \prog_{2} \ \threadtransfer{\lid} \  ( \stk, \tshp, \ts ) , \prog_{1}
+    }{%
+    }
+\]
+%
+%
+
+\[
+    \infer[\rl{PChoiseR}]{%
+        ( \stk, \tshp, \ts ) , \prog_{1} + \prog_{2} \ \threadtransfer{\lid} \  ( \stk, \tshp, \ts ) , \prog_{2}
+    }{%
+    }
+\]
+%
+%
+
+\[
+    \infer[\rl{PLoop}]{%
+        ( \stk, \tshp, \ts ) , \prog^{*} \ \threadtransfer{\lid} \  ( \stk, \tshp, \ts ) , \pskip + (\prog ; \prog^{*})
+    }{%
+    }
+\]
+%
+%
+
+\[
+    \infer[\rl{PSeqSkip}]{%
+        ( \stk, \tshp, \ts ) , \pskip ; \progext \ \threadtransfer{\lid} \  ( \stk, \tshp, \ts ) , \progext
+    }{%
+    }
+\]
+%
+%
+
+\[
+    \infer[\rl{PSeq}]{%
+        ( \stk, \tshp, \ts ) , \progext_{1} ; \progext_{2} \ \threadtransfer{\tll} \ ( \stk', \tshp', \ts' ) , {\progext_{1}}' ; \progext_{2}
+    }{%
+        ( \stk, \tshp, \ts ) , \progext_{1} \ \threadtransfer{\tll} \  ( \stk', \tshp', \ts' ) , {\progext_{1}}' 
+    }
+\]
+%
+%
+
+\[
+    \infer[\rl{PPar}]{%
+        ( \stk, \tshp, \ts ) , \prog_{1} \ppar \prog_{2} \ \threadtransfer{\lfork{\thid, \prog_{2}}} \  ( \stk, \tshp, \ts ) , \prog_{1} ; \pwait{\thid}
+    }{%
+    }
+\]
+%
+%
+
+\[
+    \infer[\rl{PWait}]{%
+        ( \stk, \tshp, \ts ) , \pwait{\thid} \ \threadtransfer{\ljoin{\thid,\ts'}} \  ( \stk, \tshp , \max\Set{\ts,\ts'} ) , \pskip 
+    }{%
+    }
+\]
+%
+%
+
+
+where
+%
+%
+\[
+\begin{array}{@{}r @{\hspace{2pt}} c @{\hspace{2pt}} l@{}}
+	\snapshot{.}{.} &:& \Timestampheap \times \Timestamp \rightharpoonup \FPHeaps \\
+%	
+	\snapshot{\tshp}{\ts} 
+	& \defeq & 
+	\lambda \loc \ldotp
+	\begin{cases} 
+		(\val, \emptyset) & 
+		\exsts{\ts' \leq \ts} \tshp(\loc)(\ts') {=} (\val,\wop, \dontcare) 
+		\land \for{\ts'' \in ( \ts', \ts)} \tshp(\loc)(\ts'') {=} (\dontcare,\rop,\dontcare) \\\\
+        \text{undefined} & \text{otherwise}
+	\end{cases} 
+	\vspace{3pt}\\
+%
+%  
+	\commit{.}{.}{.}{.}{.}{.} & : & \Timestampheap \times \FPHeaps \times \FPHeaps \times \TransID \times \Timestamp \times \Timestamp \rightarrow \Timestampheap \\
+%	
+	\commit{\tshp}{\fph_s}{\fph_e}{\tsid}{\ts_s}{\ts_e} & \defeq &
+	\lambda \loc \ldotp
+	\begin{cases}
+		\tshp(\loc)\remapsto{\ts_s}{(\fphVal[\hp_s](\loc),\sop,\tsid)}\remapsto{\ts_e}{(\fphVal{\hp_e}(\loc),\wop,\tsid)} 
+		& \text{if \;} \fphFP[\fph_e](\loc) {=} \{\wfp\} \\
+		\tshp(\loc)\remapsto{\ts_s}{(\fphVal[\hp_s](\loc),\rop,\tsid)}\remapsto{\ts_e}{(\fphVal[\hp_e](\loc),\eop,\tsid)} 
+		& \text{if \;} \fphFP[\fph_e](\loc) {=} \{\rfp\} \\
+%       \tshp(\loc)\remapsto{\ts_{s}}{(\hp_{s}(\loc),\rop,\tsid)}\remapsto{\ts_{e}}{(\hp_{e}(\loc),\eop,\tsid)} & \loc \in \rs \setminus \ws \\
+		\tshp(\loc)\remapsto{\ts_s}{(\fphVal[\hp_s](\loc),\rop,\tsid)}\remapsto{\ts_e}{(\fphVal[\hp_e](\loc),\wop,\tsid)} & \text{if \;} \fphFP[\fph_e](\loc) {=} \{\rfp, \wfp\} \\
+%		\tshp(\loc)\remapsto{\ts_{s}}{(\hp_{s}(\loc),\rop,\tsid)}\remapsto{\ts_{e}}{(\hp_{e}(\loc),\wop,\tsid)} & \loc \in \rs \cap \ws \\
+		\tshp(\loc) & \text{otherwise}
+	\end{cases} 
+	\vspace{3pt}\\
+%
+%              
+	\cancommit{\tshp}{\fph}{\ts_s}{\ts_e} 
+	& \defeq & 
+	\wfhist{\tshp}{\fph}{\ts_s}{\ts_e} \land \consistent{\tshp}{\fph}{\ts_s}{\ts_e} 
+	\vspace{3pt}\\
+%
+%        
+	\wfhist{\tshp}{\fph}{\ts_s}{\ts_e} 
+	& \defeq  & 
+ 	\for{\loc} \for{\ts \in \Set{\ts_{s},\ts_{e}}} \fphFP(\loc) {\ne} \emptyset \Rightarrow \tshp(\loc)(\ts)\undef 
+	\vspace{3pt}\\
+%
+%        
+	\consistent{\tshp}{\fph}{\ts_s}{\ts_e}
+	& \defeq & 
+	\for{\loc} \wfp \in \fphFP(\loc) \Rightarrow \\
+	&& \quad \for{\ts \in (\ts_s,\ts_e)} \tshp(\loc)(\ts) {\ne} (-, \wop, -) \\
+	&& \quad \land\ \neg\exsts{\tsid, \ts'_s, \ts'_e} \ts'_s < \ts_e \land \ts'_e > \ts_e \land \tshp(\loc)(\ts'_s) = (\dontcare, \dontcare, \tsid) \land \tshp(\loc)(\ts'_e) = (\dontcare, \wop, \tsid) \\
+	&& \quad \land\ \for{\ts_m} \ts_m {=} \min(\Set{\ts'' \ \middle| \ \ts'' > \ts_{e} \land \tshp(\loc)(\ts'')\isdef}) \Rightarrow  \tshp(\loc)(\ts_{min}) \neq (\dontcare, \rop, \dontcare) 
+	\vspace{3pt}\\
+%
+%        
+	\pred{fresh}{\tshp, \tsid}  & \defeq & \neg\exsts{\loc, \ts} \tshp(\loc)(\ts) {=} (-, -, \tsid)
+%   \tid \ \texttt{where} \ \tsid \notin \Set{\tsid' \ \middle| \ (\dontcare,\dontcare,\tsid') \in \bigcup\limits_{\loc,\ts}\tshp(\loc)(\ts)} \\
+    \end{array}
+\]
+\hrule\vspace{5pt}
+\caption{Per-thread operational semantics}
+\label{fig:thread_semantics}
+\end{figure}
+
+In order to model concurrency, we use thread pools.
+A thread pool is modelled as a finite partial map from thread identifiers to triples of the form $(\stk, \ts, \prog)$. That is, each thread is associated with a stack $\stk$,a timestamp $\ts$ and a program $\prog$ to be executed. 
+
+\begin{definition}[Thread pools]\label{def:thread_pools}
+Given the sets of stacks $\Stack$ (\defin\ref{def:stacks}), timestamps $\Timestamp$ (\defin\ref{def:timestamp_heaps}) and programs $\Programs$ (\defin\ref{def:language}), the set of \emph{thread pools} is: $\tdpl \in \Threadpool \eqdef \ThreadID \parfinfun \Stack \times \Timestamp \times \Programs$.
+\end{definition}
+%
+%
+\begin{definition}[Thread pool semantics]\label{def:thread_pool_semantics}
+Given the sets of timestamp heaps $\Timestampheap$ (\defin\ref{def:timestamp_heaps}), transition labels (\defin\ref{def:thread_semantics}) and thread pools $\Threadpool$ (\defin\ref{def:thread_pools}), the \emph{thread pool semantics}, 
+%
+\[
+	\globaltransfer{} : (\Timestampheap \times \Threadpool) \times \Translabel \times (\Timestampheap \times \Threadpool) 
+\]
+%
+is defined in \fig\ref{fig:thread_pool_semantics}.
+%
+\end{definition}
+%
+The thread pool operational semantics is given in \fig\ref{fig:thread_pool_semantics}, where an arbitrary thread in the pool $\tdpl$ is picked to run for one step.
+If the next execution step is a thread fork, then a new thread $\thid$ is allocated in the pool to be executed with its stack and timestamp copied from those of the parent (forking) thread.
+Conversely, when the next execution step is the joining of thread $\thid'$, then $\thid'$ is removed from the thread pool and the local time stamp is accordingly updated to the maximum timestamp between the parent thread and that of $\thid'$ (as guaranteed by the per-thread semantic relation $\threadtransfer{}$ in the premise).
+%
+\begin{figure}
+\hrule\vspace{5pt}
+%
+\[
+    \infer[\rl{PSingle}]{%
+        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext) } ) \ \globaltransfer{\tll} \  ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}') } ) 
+    }{%
+        ( \stk, \tshp, \ts ) , \progext \ \threadtransfer{\tll} \  ( \stk', \tshp', \ts' ) , {\progext}' 
+        \quad \tll \in \Set{ \lid, \lcmt{\dontcare} }
+    }
+\]
+
+\[
+    \infer[\rl{PFork}]{%
+        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext) } ) \ \globaltransfer{\lfork{\thid', \prog''}} \  ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}'), \thid' \mapsto (\lambda \var \ldotp 0, \ts', \prog'') } )
+    }{%
+        ( \stk, \tshp, \ts ) , \progext \ \threadtransfer{\lfork{\thid', \prog''}} \  ( \stk', \tshp', \ts' ) , {\progext}' 
+    }
+\]
+
+\[
+    \infer[\rl{PJoin}]{%
+        ( \tshp, \tdpl \uplus \Set{ \thid \mapsto (\stk, \ts, \progext), \thid' \mapsto (\stk', \ts'', \pskip) } )  \ \globaltransfer{\ljoin{\thid',\ts''}} \ ( \tshp', \tdpl \uplus \Set{ \thid \mapsto (\stk', \ts', {\progext}')} )
+    }{%
+        ( \stk, \tshp, \ts ) , \progext \ \threadtransfer{\ljoin{\thid',\ts''}} \  ( \stk', \tshp', \ts' ) , {\progext}' 
+    }
+\]
+%
+\hrule\vspace{5pt}
+\caption{Thread pool semantics}
+\label{fig:thread_pool_semantics}
+\end{figure}
