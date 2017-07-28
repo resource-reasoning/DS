@@ -4,15 +4,15 @@
     \label{lem:no-over-write}
     For a given location and time, if there is a value, threads cannot overwrite the values.
     \[ 
-        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\lb,\loc, \ts \ldotp ( \stk, \tshp, \ts ), \progext \toT{\lb} ( \stk', \tshp', \ts' ), {\progext}' \implies \tshp(\loc)(\ts)\undef \lor \tshp(\loc)(\ts) = \tshp'(\loc)(\ts)
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \iprog, {\iprog}' ,\lb,\loc, \ts \ldotp ( \stk, \tshp, \ts ), \iprog \toT{\lb} ( \stk', \tshp', \ts' ), {\iprog}' \implies \tshp(\loc)(\ts)\undef \lor \tshp(\loc)(\ts) = \tshp'(\loc)(\ts)
     \]
 \end{lem}
 \begin{proof}
     Prove by structural induction on the semantics.
     For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip}, \rl{PPar} and \rl{Pwait}, it is trivial because those rules do not change the state of time-stamp heap \( \tshp \).
-    For base case \rl{Commit}, the new state \( \tshp' = \func{commitTrans}{\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}} \) for some \( \hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e} \).
-    It only changes the values corresponding to times \( \ts_{s} \) or \( \ts_{e} \) of locations that are included in either the read set \( \rs \) or the write set \( \ws \).
-    Those must be undefined in the original time-stamp heap \( \tshp \), because of the constrain \( \texttt{allowcommit} \), especially the \( \texttt{wellformhist} \).
+    For base case \rl{Commit}, the new state \( \tshp' = \commit{\tshp}{\fph_{s}}{\fph_{e}}{\tsid}{\ts_{s}}{\ts_{e}} \) for some \( \fph_{s},\fph_{e}, \tsid, \ts_{s},\ts_{e} \).
+    It only changes the values corresponding to times \( \ts_{s} \) or \( \ts_{e} \) of locations that are included in either tagged \( \etR \) or  \( \etW \).
+    Those must be undefined in the original time-stamp heap \( \tshp \), because of the constrain \( \cancommitName \), especially the \( \wfhistName \).
     For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
 \end{proof}
 
@@ -22,36 +22,36 @@
     All the reads/starts operations of a transaction happen before all the writes/ends. 
     Formally,
     \[
-        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\lb \ldotp \pred{rw}{\tshp} \land ( \stk, \tshp, \ts ), \progext \toT{\lb} ( \stk', \tshp', \ts' ), {\progext}' \implies \pred{rw}{\tshp'}
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \iprog, {\iprog}' ,\lb \ldotp \pred{rw}{\tshp} \land ( \stk, \tshp, \ts ), \iprog \toT{\lb} ( \stk', \tshp', \ts' ), {\iprog}' \implies \pred{rw}{\tshp'}
     \]
     Where,
     \[
-        \pred{rw}{\tshp} \defeq \forall \loc, \loc', \ts, \ts',\op \in \Set{\sop, \rop}, \op' \in \Set{\eop,\wop}, \tsid \ldotp \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \implies \ts < \ts' 
+        \pred{rw}{\tshp} \defeq \forall \loc, \loc', \ts, \ts',\etag \in \Set{\etS, \etR}, \etag' \in \Set{\etE,\etW}, \tsid \ldotp \tshp(\loc)(\ts) = (\stub, \etag, \tsid) \land \tshp(\loc')(\ts') = (\stub, \etag', \tsid) \implies \ts < \ts' 
     \]
 \end{lem}
 \begin{proof}
     Prove by structural induction on the semantics.
     For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip}, \rl{PPar} and \rl{PWait}, it is trivial because those rules do not change the state of time-stamp heap \( \tshp \).
-    For base case \rl{Commit}, the new state \( \tshp' = \func{commitTrans}{\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}} \) for some \( \hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e} \). 
-    Because the functions associates \( \rop \), \( \sop \) to time \( \ts_{s} \), and \( \wop \), \( \eop \) to \( \ts_{e} \), and the fact that  \( \ts_{s} < \ts_{e} \), so \( \pred{rw}{\tshp'}\) holds.
+    For base case \rl{Commit}, the new state \( \tshp' = \commit{\tshp}{\fph_{s}}{\fph_{e}}{\tsid}{\ts_{s}}{\ts_{e}} \) for some \( \fph_{s},\fph_{e}, \tsid, \ts_{s},\ts_{e} \). 
+    Because the functions associates \( \etR \), \( \etS \) to time \( \ts_{s} \), and \( \etW \), \( \etE \) to \( \ts_{e} \), and the fact that  \( \ts_{s} < \ts_{e} \), so \( \pred{rw}{\tshp'}\) holds.
     For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
 \end{proof}
 
 \begin{lem}[Pair of start and end]
     Reads/starts operations are writes/ends operations appear as pairs.
     \[
-            \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\lb \ldotp \pred{pair}{\tshp} \land ( \stk, \tshp, \ts ), \progext \toT{\lb} ( \stk', \tshp', \ts' ), {\progext}' \implies \pred{pair}{\tshp'}
+            \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \iprog, {\iprog}' ,\lb \ldotp \pred{pair}{\tshp} \land ( \stk, \tshp, \ts ), \iprog \toT{\lb} ( \stk', \tshp', \ts' ), {\iprog}' \implies \pred{pair}{\tshp'}
     \]
     where,
     \[
-        \pred{pair}{\tshp} \defeq \forall \loc, \loc', \ts, \ts',\op \in \Set{\sop, \rop}, \op' \in \Set{\eop,\wop}, \tsid \ldotp  (\tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \iff \tshp(\loc')(\ts') = (\dontcare, \op', \tsid)  )
+        \pred{pair}{\tshp} \defeq \forall \loc, \loc', \ts, \ts',\etag \in \Set{\etS, \etR}, \etag' \in \Set{\etE,\etW}, \tsid \ldotp  (\tshp(\loc)(\ts) = (\stub, \etag, \tsid) \iff \tshp(\loc')(\ts') = (\stub, \etag', \tsid)  )
     \]
 \end{lem}
 \begin{proof}
     Prove by structural induction on the semantics.
     For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip}, \rl{PPar} and \rl{PWait}, it is trivial because those rules do not change the state of time-stamp heap \( \tshp \).
-    For base case \rl{Commit}, the new state \( \tshp' = \func{commitTrans}{\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}} \) for some \( \hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e} \). 
-    Because the function \funcn{commit} always extends a location \( \loc \) with a pair of operations, so \( \pred{rw}{\tshp'}\) holds.
+    For base case \rl{Commit}, the new state \( \tshp' = \commit{\tshp}{\fph_{s}}{\fph_{e}}{\tsid}{\ts_{s}}{\ts_{e}} \) for some \( \fph_{s},\fph_{e}, \tsid, \ts_{s},\ts_{e} \). 
+    Because the function \(\commitName\) always extends a location \( \loc \) with a pair of operations, so \( \pred{rw}{\tshp'}\) holds.
     For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
 \end{proof}
 
@@ -61,18 +61,18 @@
     \label{lem:happen-in-same-time}
     All the reads/starts operations among all locations of a transaction happen in the same time, so do all the writes/ends operations. 
     \[
-        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\lb \ldotp \pred{atom}{\tshp} \land ( \stk, \tshp, \ts ), \progext \toT{\lb} ( \stk', \tshp', \ts' ), {\progext}' \implies \pred{atom}{\tshp'}
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \iprog, {\iprog}' ,\lb \ldotp \pred{atom}{\tshp} \land ( \stk, \tshp, \ts ), \iprog \toT{\lb} ( \stk', \tshp', \ts' ), {\iprog}' \implies \pred{atom}{\tshp'}
     \]
     Where,
     \[
-        \pred{atom}{\tshp} \defeq \forall \loc, \loc', \ts, \ts', \tsid, \op, \op'\ldotp \tshp(\loc)(\ts) (\dontcare, \op, \tsid)  \land \tshp(\loc')(\ts') = (\dontcare, \op', \tsid) \land (\op, \op' \in \Set{\sop, \rop} \lor \op, \op' \in \Set{\eop, \wop} ) \implies \ts = \ts'
+        \pred{atom}{\tshp} \defeq \forall \loc, \loc', \ts, \ts', \tsid, \etag, \etag'\ldotp \tshp(\loc)(\ts) (\stub, \etag, \tsid)  \land \tshp(\loc')(\ts') = (\stub, \etag', \tsid) \land (\etag, \etag' \in \Set{\etS, \etR} \lor \etag, \etag' \in \Set{\etE, \etW} ) \implies \ts = \ts'
     \]
 \end{lem}
 \begin{proof}
     Prove by structural induction on the semantics.
     For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip}, \rl{PPar} and \rl{Pwait}, it is trivial because those rules do not change the state of time-stamp heap \( \tshp \).
-    For base case \rl{Commit}, the new state \( \tshp' = \func{commitTrans}{\tshp,\hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e}} \) for some \( \hp_{s},\hp_{e},\ws,\rs, \tsid, \ts_{s},\ts_{e} \). 
-    Because the functions associates all reads/starts operations, \( \rop \) and \(\sop \), of all locations to the same time \( \ts_{s} \), and writes/ends operations of all locations to the same time \( \ts_{e} \), so \( \pred{atom}{\tshp'}\) holds.
+    For base case \rl{Commit}, the new state \( \tshp' = \commit{\tshp}{\fph_{s}}{\fph_{e}}{\tsid}{\ts_{s}}{\ts_{e}} \) for some \( \fph_{s},\fph_{e}, \tsid, \ts_{s},\ts_{e} \). 
+    Because the functions associates all reads/starts operations, \( \etR \) and \(\etS \), of all locations to the same time \( \ts_{s} \), and writes/ends operations of all locations to the same time \( \ts_{e} \), so \( \pred{atom}{\tshp'}\) holds.
     For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
 \end{proof}
 
@@ -81,15 +81,15 @@ Each label has one extra parameter to record the thread that preforms the step, 
 
 \begin{defn}[Traces]
 \label{def:traces}
-    Given a initial state \( \tshp \) and \( \tdpl \), a trace \( \trc \) is defined as a tuple \( (\setlabels,<) \) that satisfies predicate \( \pred{trace}{\tshp,\tdpl,\setlabels,<,\nat} \), for some number \( \nat \).
+    Given a initial state \( \tshp \) and \( \thpl \), a trace \( \trc \) is defined as a tuple \( (\setlabels,<) \) that satisfies predicate \( \pred{trace}{\tshp,\thpl,\setlabels,<,\nat} \), for some number \( \nat \).
 \[
     \begin{rclarray}
-        \func{traces}{\tshp,\tdpl,0} & \defeq & \Set{(\emptyset, \emptyset,\tshp,\tdpl)} \\
-        \func{traces}{\tshp,\tdpl,\nat} & \defeq & \Set{(\setlabels,<,\tshp',\tdpl') \middle| (\tshp'', \tdpl'') \toG{\lbID} (\tshp', \tdpl' ) \land (\setlabels,<,\tshp'',\tdpl'') \in \func{trace}{\tshp,\tdpl,\setlabels,<,\nat-1}} \\
-                                                    & & \uplus \Set{(\setlabels \uplus \Set{\lb} ,< \uplus \Set{(\lb',\lb) \middle| \lb' \in \setlabels}, \tshp',\tdpl') \middle| 
+        \func{traces}{\tshp,\thpl,0} & \defeq & \Set{(\emptyset, \emptyset,\tshp,\thpl)} \\
+        \func{traces}{\tshp,\thpl,\nat} & \defeq & \Set{(\setlabels,<,\tshp',\thpl') \middle| (\tshp'', \thpl'') \toG{\lbID} (\tshp', \thpl' ) \land (\setlabels,<,\tshp'',\thpl'') \in \func{trace}{\tshp,\thpl,\setlabels,<,\nat-1}} \\
+                                                    & & \uplus \Set{(\setlabels \uplus \Set{\lb} ,< \uplus \Set{(\lb',\lb) \middle| \lb' \in \setlabels}, \tshp',\thpl') \middle| 
         \begin{array}{@{}l@{}}
-            (\tshp'', \tdpl'') \toG{\lb} (\tshp', \tdpl' ) \land \lb \neq \lbID \land {} \\
-            (\setlabels,<,\tshp'',\tdpl'') \in \func{trace}{\tshp,\tdpl,\setlabels,<,\nat-1}
+            (\tshp'', \thpl'') \toG{\lb} (\tshp', \thpl' ) \land \lb \neq \lbID \land {} \\
+            (\setlabels,<,\tshp'',\thpl'') \in \func{trace}{\tshp,\thpl,\setlabels,<,\nat-1}
         \end{array}
 }  \\
     \end{rclarray}
@@ -102,8 +102,8 @@ Each label has one extra parameter to record the thread that preforms the step, 
     \begin{rclarray}
         \func{programOrder}{\setlabels, <} & \defeq & ( \settrans, \po ) \\
         \settrans & \equiv & \Set{\tsid \middle| \lbC{\thid,\tsid} \in \setlabels } \\
-        \po & \equiv & \Set{(\tsid, \tsid') \middle| \lbC{\thid,\tsid} < \lbC{\thid,\tsid'} } \uplus \Set{(\tsid, \tsid') \middle| \lbC{\thid,\tsid} < \lbF{\thid,\thid', \dontcare} < \lbC{\thid',\tsid'} } \\
-            & & \uplus \Set{(\tsid, \tsid') \middle| \lbC{\thid,\tsid} < \lbJ{\thid',\thid, \dontcare} < \lbC{\thid',\tsid'} }
+        \po & \equiv & \Set{(\tsid, \tsid') \middle| \lbC{\thid,\tsid} < \lbC{\thid,\tsid'} } \uplus \Set{(\tsid, \tsid') \middle| \lbC{\thid,\tsid} < \lbF{\thid,\thid', \stub} < \lbC{\thid',\tsid'} } \\
+            & & \uplus \Set{(\tsid, \tsid') \middle| \lbC{\thid,\tsid} < \lbJ{\thid',\thid, \stub} < \lbC{\thid',\tsid'} }
     \end{rclarray}
 \]
 \end{defn}
@@ -116,13 +116,13 @@ Each label has one extra parameter to record the thread that preforms the step, 
             \func{graph}{\settrans,\tshp} & \defeq & (\vis,\tar) \\
             \vis & \equiv & \Set{(\tsid,\tsid') \in \settrans \middle| 
             \begin{array}{@{}l@{}}
-                \exists \loc, \loc', \ts, \ts', \op \in \Set{\wop,\eop}, \op' \in \Set{\rop,\sop} \ldotp \ts < \ts' \land {} \\
-                \tshp(\loc)(\ts) = (\dontcare, \op,\tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op',\tsid') 
+                \exists \loc, \loc', \ts, \ts', \etag \in \Set{\etW,\etE}, \etag' \in \Set{\etR,\etS} \ldotp \ts < \ts' \land {} \\
+                \tshp(\loc)(\ts) = (\stub, \etag,\tsid) \land \tshp(\loc')(\ts') = (\stub, \etag',\tsid') 
             \end{array} } \\
             \tar & \defeq & \Set{(\tsid,\tsid')  \in \settrans \middle| 
             \begin{array}{@{}l@{}}
-                \exists \loc, \loc', \ts, \ts', \op, \op' \in \Set{\wop,\eop} \ldotp \ts < \ts' \land {} \\
-                \tshp(\loc)(\ts) = (\dontcare, \op,\tsid) \land \tshp(\loc')(\ts') = (\dontcare, \op',\tsid') 
+                \exists \loc, \loc', \ts, \ts', \etag, \etag' \in \Set{\etW,\etE} \ldotp \ts < \ts' \land {} \\
+                \tshp(\loc)(\ts) = (\stub, \etag,\tsid) \land \tshp(\loc')(\ts') = (\stub, \etag',\tsid') 
             \end{array} }
         \end{rclarray}
     \]
@@ -133,7 +133,7 @@ We will use notations \( (\settrans,\po,\vis,\tar, \tshp) \) to refer an element
     \Set{(\settrans,\po,\vis,\tar, \tshp) \middle| 
         \begin{array}{@{}l@{}}
             (\settrans,\po) = \func{programOrder}{\setlabels,<} \land (\vis,\tar) = \func{graph}{\settrans,\tshp} \land {} \\
-            (\setlabels,<,\tshp,\tdpl) \in \bigcup\limits_{\nat \in \Nat}\func{traces}{\tshp',\tdpl',\nat}
+            (\setlabels,<,\tshp,\thpl) \in \bigcup\limits_{\nat \in \Nat}\func{traces}{\tshp',\thpl',\nat}
         \end{array}
     } 
 \]
@@ -146,7 +146,7 @@ For brevity, sometime we only mention and quantify few elements of this tuple bu
     \[
         \begin{array}{@{}l@{}}
             \forall \tshp, \tar, \tsid, \tsid' \ldotp (\tsid, \tsid'), (\tsid',\tsid) \notin \tar \\
-            \qquad \implies \forall \loc, \loc', \ts, \ts', \op, \op \in \Set{\wop, \eop } \ldotp \tshp(\loc)(\ts) = ( \dontcare, \op, \tsid) \land  \tshp(\loc')(\ts') = ( \dontcare, \op', \tsid') \implies \ts = \ts' \land \loc \neq \loc'
+            \qquad \implies \forall \loc, \loc', \ts, \ts', \etag, \etag \in \Set{\etW, \etE } \ldotp \tshp(\loc)(\ts) = ( \stub, \etag, \tsid) \land  \tshp(\loc')(\ts') = ( \stub, \etag', \tsid') \implies \ts = \ts' \land \loc \neq \loc'
         \end{array}
     \]
 \end{lem}
@@ -176,13 +176,13 @@ To simplify, assume there is a unique initial transactions denoted by \( \tsid_{
 \begin{defn}[First Branch]
     \[
         \begin{rclarray}
-            \func{firstTrans}{\settrans, \tar} & \defeq & \transid \ \texttt{where} \ \forall \transid' \in \settrans \ldotp \transid = \transid' \lor (\transid, \transid') \in \tar \\
+            \func{firstTrans}{\settrans, \tar} & \defeq & \tsid \ \texttt{where} \ \forall \tsid' \in \settrans \ldotp \tsid = \tsid' \lor (\tsid, \tsid') \in \tar \\
             \func{firstBranch}{\settrans, \tar} & \defeq &
-            \begin{funcarray}
+            \begin{cases}
                 \emptyset & \settrans = \emptyset \\
                 \func{firstBranch}{\settrans \setminus \Set{\func{firstTrans}{\settrans, \tar}}, \tar} & |\func{dec}{\settrans, \tar}| = 1 \\
                 \func{dec}{\settrans, \tar} & |\func{dec}{\settrans, \tar}| > 1 \\
-            \end{funcarray} \\
+            \end{cases} \\
             \func{dec}{\settrans, \tar} & \defeq & \Set{\tsid \middle| \exists \tsid_{init} = \func{firstTrans}{\settrans, \tar} \ldotp (\tsid_{init}, \tsid) \in \tar \land \nexists \tsid' \ldotp (\tsid_{init}, \tsid'),(\tsid', \tsid) \in \tar}
         \end{rclarray}
     \]
@@ -196,10 +196,10 @@ We continue the process until it is a total order.
     \[
         \begin{rclarray}
             \func{toTotal}{\settrans, \tar} & \defeq & 
-                \begin{funcarray}
+                \begin{cases}
                     (\settrans, \tar) & \func{firstBranch}{\settrans, \tar} = \emptyset\\ 
                     \func{toTotal}{\settrans, ( \tar \uplus \Set{(\tsid, \tsid')})^{+}} & \tsid, \tsid' \in \func{firstBranch}{\settrans, \tar} \\    
-                \end{funcarray}
+                \end{cases}
             \\
         \end{rclarray}
     \]
@@ -224,13 +224,13 @@ We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element 
     The thread's local time monotonically increase.
     This is  
     \[ 
-        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \progext, {\progext}' ,\lb,\loc, \ts \ldotp ( \stk, \tshp, \ts ), \progext \toT{\lb} ( \stk', \tshp', \ts' ), {\progext}' \implies \ts < \ts'
+        \forall \stk, \stk', \tshp, \tshp', \ts, \ts', \iprog, {\iprog}' ,\lb,\loc, \ts \ldotp ( \stk, \tshp, \ts ), \iprog \toT{\lb} ( \stk', \tshp', \ts' ), {\iprog}' \implies \ts < \ts'
     \]
 \end{lem}
 \begin{proof}
     Indication on the structure of the operational semantics.
     For base cases \rl{PChoiseLeft}, \rl{PChoiseRight}, \rl{PLoop}, \rl{PSeqSkip} and \rl{PPar}, it is trivial since those rules do not change the time.
-    For \rl{Commit}, the premiss implies that \( \ts' > \ts \) and for \rl{PWait}, \( \ts' = \max\Set{\ts, \dontcare} \geq \ts\).
+    For \rl{Commit}, the premiss implies that \( \ts' > \ts \) and for \rl{PWait}, \( \ts' = \max\Set{\ts, \stub} \geq \ts\).
     For the inductive case \rl{PSeq}, prove directly by the inductive hypothesis.
 \end{proof}
 
@@ -243,12 +243,12 @@ We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element 
     For \( \tsid \) and \( \tsid' \) where \( \lbC{\thid,\tsid} < \lbC{\thid,\tsid'} \), it means that transaction \( \tsid \) is reduced by the semantics before \( \tsid' \) is reduced.
     Then by Lemma \ref{lem:mono-time-thread}, the commit time of \( \tsid \) is smaller than the start time of \( \tsid' \), so that \( (\tsid, \tsid') \in \vis \).
 
-    For \( \tsid \) and \( \tsid' \) where \( \lbC{\thid,\tsid} < \lbF{\thid,\thid', \dontcare} < \lbC{\thid',\tsid'} \), first note that in the \rl{PFork} the parent thread starts at time \( \ts \) and ends at \( \ts' \), and the child thread initialises with the time \( \ts' \), where  in fact \( \ts = \ts' \)
-    By \( \lbC{\thid,\tsid} < \lbF{\thid,\thid', \dontcare}  \), the transaction \( \thid \) is reduced before the fork, so by Lemma \ref{lem:mono-time-thread}, the end time of \( \thid \) is smaller than \( \ts \).
-    By \( \lbF{\thid,\thid', \dontcare} < \lbC{\thid',\tsid'} \), the transaction \( \thid' \) is reduced after the fork and also by Lemma \ref{lem:mono-time-thread}, the start time of \( \thid \) is greater or equal to \( \ts' \).
+    For \( \tsid \) and \( \tsid' \) where \( \lbC{\thid,\tsid} < \lbF{\thid,\thid', \stub} < \lbC{\thid',\tsid'} \), first note that in the \rl{PFork} the parent thread starts at time \( \ts \) and ends at \( \ts' \), and the child thread initialises with the time \( \ts' \), where  in fact \( \ts = \ts' \)
+    By \( \lbC{\thid,\tsid} < \lbF{\thid,\thid', \stub}  \), the transaction \( \thid \) is reduced before the fork, so by Lemma \ref{lem:mono-time-thread}, the end time of \( \thid \) is smaller than \( \ts \).
+    By \( \lbF{\thid,\thid', \stub} < \lbC{\thid',\tsid'} \), the transaction \( \thid' \) is reduced after the fork and also by Lemma \ref{lem:mono-time-thread}, the start time of \( \thid \) is greater or equal to \( \ts' \).
     Therefore, \( (\tsid, \tsid') \in \vis \).
 
-    Similarly, for \( \tsid \) and \( \tsid' \) where \( \lbC{\thid,\tsid} < \lbJ{\thid',\thid, \dontcare} < \lbC{\thid',\tsid'} \), by Lemma \ref{lem:mono-time-fork-join}, all the transactions by thread \( \thid \) must have smaller start and end times than all the transactions by thread \( \thid' \) after the join point.
+    Similarly, for \( \tsid \) and \( \tsid' \) where \( \lbC{\thid,\tsid} < \lbJ{\thid',\thid, \stub} < \lbC{\thid',\tsid'} \), all the transactions by thread \( \thid \) must have smaller start and end times than all the transactions by thread \( \thid' \) after the join point.
     Therefore, \( (\tsid, \tsid') \in \vis \).
 \end{proof}
 
@@ -260,7 +260,7 @@ We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element 
 \end{lem}
 \begin{proof}
     For all \( \tsid, \tsid', \tsid'' \), if \( (\tsid, \tsid') \in \tar \) and \( (\tsid', \tsid'') \in \vis \), by the definitions of \( \po \) and \( \vis \), the commit time of \( \tsid' \) is greater than the one of \( \tsid \) but smaller than the start time of \( \tsid'' \).
-    Thus there must exist \( \loc, \loc'', \ts, \ts' , \ts'', \op \in \Set{\wop, \eop}  \) and \( \op'' \in \Set{\rop, \sop } \) such that  \( \tshp(\loc)(\ts) = (\dontcare, \op, \tsid) \), \( \tshp(\loc'')(\ts'') = (\dontcare, \op'', \tsid'') \) and \( \ts < \ts'' \), thus \( ( \tsid, \tsid'' ) \in \vis \).
+    Thus there must exist \( \loc, \loc'', \ts, \ts' , \ts'', \etag \in \Set{\etW, \etE}  \) and \( \etag'' \in \Set{\etR, \etS } \) such that  \( \tshp(\loc)(\ts) = (\stub, \etag, \tsid) \), \( \tshp(\loc'')(\ts'') = (\stub, \etag'', \tsid'') \) and \( \ts < \ts'' \), thus \( ( \tsid, \tsid'' ) \in \vis \).
 \end{proof}
 
 \begin{lem}[Prefix]
@@ -278,7 +278,7 @@ We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element 
 \begin{lem}[No conflict]
     \label{lem:nocoflict}
     Two transactions cannot concurrently write to the same location, this means that one must observe another one.
-    This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid) \land  \tshp(\loc)(\dontcare) = (\dontcare, \wop, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\).
+    This is \( \forall \loc, \tsid, \tsid' \ldotp \tshp(\loc)(\stub) = (\stub, \etW, \tsid) \land  \tshp(\loc)(\stub) = (\stub, \etW, \tsid' ) \implies ((\tsid, \tsid') \in \vis \lor (\tsid', \tsid) \in \vis ))\).
 \end{lem}
 \begin{proof}
     Prove by contradiction.
@@ -293,11 +293,11 @@ We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element 
 \begin{lem}[External]
     \label{lem:ext}
     A transaction should read the last values it can observe.
-    This means that for all transaction \( \tsid \) and heap location \( \loc \), if the transaction read a value \( \val \) from the location, i.e.\ \( \exists \ts \ldotp \tshp(\loc)(\ts) = (\val, \rop, \tsid) \), the last transaction \( \tsid' \) who writes to the same location and can be observe by \( \tsid \), i.e.\ \( (\tsid, \tsid') \in \vis\), should have written the same value, meaning \( \exists \val', \ts' \ldotp \tshp(\loc)(\ts') = (\val', \wop, \tsid') \implies \val' = \val\)
+    This means that for all transaction \( \tsid \) and heap location \( \loc \), if the transaction read a value \( \val \) from the location, i.e.\ \( \exists \ts \ldotp \tshp(\loc)(\ts) = (\val, \etR, \tsid) \), the last transaction \( \tsid' \) who writes to the same location and can be observe by \( \tsid \), i.e.\ \( (\tsid, \tsid') \in \vis\), should have written the same value, meaning \( \exists \val', \ts' \ldotp \tshp(\loc)(\ts') = (\val', \etW, \tsid') \implies \val' = \val\)
 \end{lem}
 \begin{proof}
     Given the definition of \( \vis \), we have \( \ts' < \ts \).
-    Because transaction \( \tsid' \) is the last one who write to the location, this means that \( \forall \tsid'', \ts'', \op'' \ldotp \tshp(\loc)(\ts'') = (\dontcare, \op'', \tsid'') \implies \op'' \neq \wop \).
+    Because transaction \( \tsid' \) is the last one who write to the location, this means that \( \forall \tsid'', \ts'', \etag'' \ldotp \tshp(\loc)(\ts'') = (\stub, \etag'', \tsid'') \implies \etag'' \neq \etW \).
     Thus by the \( \funcn{startstate} \) in the semantics, we have \( \val' = \val \).
 \end{proof}
 
@@ -350,5 +350,5 @@ We will use notations \( (\settrans,\po,\vis,\ar, \tshp) \) to refer an element 
 \sx{Not really right but keep this way for now}
 
 \subsection{Completeness}
-\sx{Define a function from a graph to a set of possible \( \hp \) }
+\sx{Define a function from a graph to a set of possible \( \fph \) }
 

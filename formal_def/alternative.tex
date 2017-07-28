@@ -2,13 +2,12 @@
 \subsection{Weaken Atomic}
 
 We reuse some notations in Sect. \ref{sec:semantics}, but redefined the meaning.
-The \( \Timestampheap \) now is a partial function from locations to a tuple of \( \Timestamp \) and \( \Val \).
+The \( \TSHeaps \) now is a partial function from locations to a tuple of \( \Timestamp \) and \( \Val \).
 The thread state now is only a local stack and a global stack, and correspondingly, the join label is only parametrised by thread identifier.
 
 \[
     \begin{rclarray}
-        \tshp \in \Timestampheap & \defeq & \Loc \parfinfun ( \Timestamp \times  \Val ) \\
-        (\stk, \tshp) \in \Threadstate & \defeq & \Stack \times \Timestampheap \\
+        \tshp \in \TSHeaps & \defeq & \Loc \parfinfun ( \Timestamp \times  \Val ) \\
         \lb \in \Translabel & \defeq & 
               \lbID \quad               |
         \quad \lbS{\tsid} \quad         |
@@ -18,12 +17,12 @@ The thread state now is only a local stack and a global stack, and corresponding
     \end{rclarray}
 \]
 
-The notation \( \ptrans{\cmd}_{\tsid, \tshp} \) indicates that the transaction identifier by \( \tsid \) has been started with the snapshot of heap \( \tshp \), but does not commit so far.
+The notation \( \ptrans{\trans}_{\tsid, \tshp} \) indicates that the transaction identifier by \( \tsid \) has been started with the snapshot of heap \( \tshp \), but does not commit so far.
 
 \[
     \begin{syntax}{\iprog}
               \prog \quad                                       |
-        \quad \ptrans{\cmd}_{\tsid, \tshp} \pseq \iprog \quad |
+        \quad \ptrans{\trans}_{\tsid, \tshp} \pseq \iprog \quad |
         \quad \iprog \pseq \pwait{\thid} \quad 
     \end{syntax}
 \]
@@ -33,7 +32,7 @@ Here we assume there is a global functions \(\funcn{freshTransId} \) that return
 
 \[
     \infer[\rl{TakeSnapshot}]{%
-        ( \stk, \tshp ) , \ptrans{\cmd} \ \toT{\lbS{\tsid}} \ ( \stk, \tshp ) , \ptrans{\cmd}_{\tsid, \tshp}
+        ( \stk, \tshp ) , \ptrans{\trans} \ \toT{\lbS{\tsid}} \ ( \stk, \tshp ) , \ptrans{\trans}_{\tsid, \tshp}
     }{%
         \begin{array}{c}
             \quad \tsid = \func{freshTransId}{}
@@ -45,26 +44,26 @@ We also redefine some functions and predicates used before.
 
 \[
     \begin{rclarray}
-        \func{startstate}{\tshp} & \defeq & \lambda \loc \ldotp \val \ \texttt{where} \ \tshp(\loc) = (\dontcare, \val)\\
-        \pred{allowcommit}{\tshp,\tshp',\ws,\rs} & \defeq & \forall \loc \in \ws \ldotp \tshp(\loc) = \tshp'(\loc)\\
-        \func{commitTrans}{\tshp,\hp_{e}} & \defeq &
+        \func{startstate}{\tshp} & \defeq & \lambda \loc \ldotp (\val, \emptyset) \ \texttt{where} \ \tshp(\loc) = (\stub, \val)\\
+        \pred{allowcommit}{\tshp,\tshp', \fph} & \defeq & \forall \loc \ldotp \fpW \in \fphFP[\fph](\loc) \land \tshp(\loc) = \tshp'(\loc)\\
+        \func{commitTrans}{\tshp,\fph_{e}} & \defeq &
         \lambda \loc \ldotp
-        \begin{funcarray}
-            ( \tshp(\loc)\projection{1}+1, \hp_{e}(\loc)) & \loc \in \ws \\
-            \tshp(\loc) & o.w. \\
-        \end{funcarray} \\
+        \begin{cases}
+            ( \tshp(\loc)\projection{1}+1, \fphVal[\fph_{e}](\loc)) & \fpW \in \fphFP[\fph_{e}](\loc)  \\
+            \tshp(\loc) & \text{otherwise}
+        \end{cases} \\
     \end{rclarray}
 \]
 
 \[
     \infer[\rl{Commit}]{%
-        ( \stk, \tshp ) , \ptrans{\cmd}_{\tsid, \tshp'} \ \toT{\lbC{\tsid}} \ ( \stk', \tshp'' ) , \pskip
+        ( \stk, \tshp ) , \ptrans{\trans}_{\tsid, \tshp'} \ \toT{\lbC{\tsid}} \ ( \stk', \tshp'' ) , \pskip
     }{%
         \begin{array}{c}
-            \quad \hp_{s} = \func{startstate}{\tshp'}
-            \quad ( \stk, \hp_{s}, \emptyset, \emptyset ) , \cmd \toL^{*} ( \stk', \hp_{e}, \rs, \ws ) , \pskip \\
-            \pred{allowcommit}{\tshp,\tshp',\ws,\rs} 
-            \quad \tshp'' = \func{commitTrans}{\tshp,\hp_{e}}
+            \quad \fph_{s} = \func{startstate}{\tshp'}
+            \quad ( \stk, \fph_{s}) , \trans \toL^{*} ( \stk', \fph_{e}) , \pskip \\
+            \pred{allowcommit}{\tshp,\tshp', \fph}
+            \quad \tshp'' = \func{commitTrans}{\tshp,\fph_{e}}
         \end{array}
     }
 \]
