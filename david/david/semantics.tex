@@ -1,0 +1,474 @@
+\section{Operational Semantics}
+
+\subsubsection{Storage Values}
+
+The set of storage values is denoted by \textsf{Val} and is defined as the set of integers $\mathds{Z}$. It is ranged over by $v, v_1, v_2, \ldots$
+
+\subsubsection{Storage Keys}
+
+The set of keys used to index the storage is defined as \textsf{Key} and it is equivalent to the set of natural numbers $\mathds{N}$.
+
+\subsubsection{Transaction Stack}
+
+Every transaction is free to assign and use local variables as part of its body. They are defined as a partial function $\mathsf{Stack} \triangleq \mathsf{Var} \rightharpoonup \mathsf{Val}$ and ranged over by $s, s_1, s_2, \ldots$
+
+\subsubsection{Locking Phase}
+
+Under the \textsc{2pl} protocol a running transaction $\mathds{T}$ is initially in the \textit{growing} phase ($\curlywedge$), where it is free to lock any cell it needs. Once it releases a lock, the transaction enters the \textit{shrinking} phase ($\curlyvee$). Here $\mathds{T}$ is denied any new lock acquisitions while it is allowed to gradually release the locks that are still being held. Phases come from the set $\mathsf{Phase} \triangleq \{ \curlywedge, \curlyvee \}$ and are ranged over by $p$.
+
+\subsubsection{Storage and State}
+
+A storage is defined to be a partial function from storage keys to values and it is denoted by $\mathsf{Storage} \triangleq \mathsf{Key} \rightharpoonup \mathsf{Val}$. We use $h, h_1, h_2$ to range over it. Let the set $\mathsf{State} \triangleq \mathsf{Storage} \uplus \{\lightning\}$ be all the possible members of $\mathsf{Storage}$ together with a special, \textit{faulting}, state $\lightning$.
+
+\subsubsection{Transaction Identifiers}
+
+Every transaction that is executed as part of a program is associated with a numerical and unique identifier. The set of identifiers \textsf{Tid} is defined to be the set of positive integers $\mathds{Z}^+$. We denote a transaction with identifier $\iota$ as $\mathds{T}_\iota$.
+
+\subsubsection{Lock Manager}
+
+A lock manager is defined as a partial function from a set of storage keys to transaction identifiers and lock modes. Formally we say that $\mathsf{LMan} \triangleq \mathsf{Key} \rightharpoonup \mathcal{P}(\mathsf{Tid}) \times \mathsf{Lock}$ and we can range over the possible functions using $\Phi$. We also define a total function $\hat{-}(-) : \mathsf{LMan} \times \mathsf{Key} \rightarrow \mathcal{P}(\mathsf{Tid}) \times \mathsf{Lock}$ to cope with the initial lock state of storage cells.
+\[
+\hat{\Phi}(k) \triangleq
+\begin{cases}
+\Phi(k), & \text{if } k \in \pred{dom}{\Phi} \\
+(\emptyset, \textsc{u}), & \text{otherwise}
+\end{cases}
+\]
+
+\subsubsection{Transactions State}
+
+The state of all transactions running as part of a program is a partial function $\mathsf{TState} : \mathsf{Tid} \rightharpoonup \mathsf{Stack} \times \mathsf{Phase}$ which is ranged over by $S$. Informally, it associates each transaction which is currently being executed to its own stack and locking phase. We also define a total function $\hat{-}(-) : \mathsf{TState} \times \mathsf{Tid} \rightarrow \mathsf{Stack} \times \mathsf{Phase}$ that overrides the original function lookup in order to cope with newly created transactions with an empty stack starting on the growing phase.
+\[
+\hat{S}(\iota) \triangleq \begin{cases}
+S(\iota), & \text{if } \iota \in \pred{dom}{S} \\
+(\emptyset, \curlywedge), & \text{otherwise}
+\end{cases}
+\]
+
+\subsubsection{Action Labels}
+
+Actions performed by transactions are represented using transition labels from the set \textsf{Act} which is ranged over by $\alpha$ and comes from the following grammar, where $k, l, n, v \in \mathsf{Val}, \kappa \in \mathsf{Lock}, \iota \in \mathsf{Tid}$.
+\begin{align*}
+\alpha ::=&
+\ \actprog \\
+|&\ \actid{\iota} \\
+|&\ \actalloc{\iota}{n}{l} \\
+|&\ \actread{\iota}{k}{v} \\
+|&\ \actwrite{\iota}{k}{v} \\
+|&\ \actlock{\iota}{k}{\kappa} \\
+|&\ \actunlock{\iota}{k}
+\end{align*}
+
+\subsection{Numerical Expressions}
+
+We define the semantics of expressions with respect to a transaction stack, $\llbracket - \rrbracket_- : \mathsf{Expr} \times \mathsf{Stack} \rightarrow \mathsf{Val}$, as follows.
+\begin{align*}
+\llbracket v \rrbracket_s &\triangleq v \\
+\llbracket \pvar{x} \rrbracket_s &\triangleq
+\begin{cases}
+s(\pvar{x}), &\text{if } \pvar{x} \in \textsf{dom}(s)\\
+0,&\text{otherwise}
+\end{cases} \\
+\llbracket \mathds{E}_1 + \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s + \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 - \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s - \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 \times \mathds{E}_2 \rrbracket_s &\triangleq \llbracket \mathds{E}_1 \rrbracket_s \times \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 \div \mathds{E}_2 \rrbracket_s &\triangleq 
+\begin{cases}
+1, &\text{ if } \llbracket \mathds{E}_2 \rrbracket_s = 0 \\
+\llbracket \mathds{E}_1 \rrbracket_s \div \llbracket \mathds{E}_2 \rrbracket_s, &\text{ otherwise} \\
+\end{cases}
+\end{align*}
+
+\subsection{Boolean Expressions}
+
+We define the semantics of boolean expressions with respect to a transaction stack, $\llbracket - \rrbracket_-^\textsc{B} : \mathsf{BExpr} \times \mathsf{Stack} \rightarrow \mathsf{Bool}$, as follows.
+\begin{align*}
+\llbracket \true \rrbracket_s^\textsc{B} &\triangleq \top \\
+\llbracket \false \rrbracket_s^\textsc{B} &\triangleq \bot \\
+\llbracket \mathds{B}_1 \land \mathds{B}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{B}_1 \rrbracket_s^\textsc{B} \land \llbracket \mathds{B}_2 \rrbracket_s^\textsc{B} \\
+\llbracket \mathds{B}_1 \lor \mathds{B}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{B}_1 \rrbracket_s^\textsc{B} \lor \llbracket \mathds{B}_2 \rrbracket_s^\textsc{B} \\
+\llbracket \lnot \mathds{B} \rrbracket_s^\textsc{B} &\triangleq \lnot \llbracket \mathds{B} \rrbracket_s^\textsc{B} \\
+\llbracket \mathds{E}_1 = \mathds{E}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{E}_1 \rrbracket_s = \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 > \mathds{E}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{E}_1 \rrbracket_s > \llbracket \mathds{E}_2 \rrbracket_s \\
+\llbracket \mathds{E}_1 < \mathds{E}_2 \rrbracket_s^\textsc{B} &\triangleq \llbracket \mathds{E}_1 \rrbracket_s < \llbracket \mathds{E}_2 \rrbracket_s
+\end{align*}
+
+\subsection{Actions}
+
+We give a semantic interpretation to action labels through the following function.
+\[
+\llbracket - \rrbracket : \mathsf{Act} \rightarrow \mathsf{Storage} \times \mathsf{LMan} \rightarrow \mathsf{State} \times \mathsf{LMan}
+\]
+\begin{align*}
+	\llbracket \actprog \rrbracket = \llbracket \actid{\iota} \rrbracket &\triangleq \lambda h, \Phi \ldotp (h,\Phi)
+\\
+	\llbracket \actalloc{\iota}{n}{l} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+		\begin{cases}
+			(h[\vec{a} \mapsto 0], \Phi[\vec{a} \mapsto (\{ \iota \}, \textsc{x})]),
+			&
+			\text{if } n > 0 \text{ and } l \in \mathsf{Key} \text{ and } \\
+			& \vec{a} = (l, \ldots, l + n - 1) \text{ and } \\
+			& \{ l, \ldots, l + n - 1 \} \cap \pred{dom}{h} \equiv \emptyset \\
+			(\emptyset, \Phi), & \text{if } n > 0 \text{ and } l \in \mathsf{Key} \text{ and } \\
+			& \{ l, \ldots, l + n - 1 \} \cap \pred{dom}{h} \not\equiv \emptyset \\
+			& \text{ or } n > 0 \text{ and } k \not\in \mathsf{Key} \\
+			(\lightning, \emptyset), & \text{otherwise}
+		\end{cases}
+\\
+\llbracket \actread{\iota}{k}{v} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+\begin{cases}
+(h, \Phi), & \text{if } k \in \pred{dom}{h} \text{ and } h(k) = v \text{ and } (I, \kappa) = \hat{\Phi}(k) \\ & \text{and } \iota \in I \text{ and } \kappa \geq \textsc{s} \\
+(\emptyset, \Phi), & \text{if } k \in \pred{dom}{h} \text{ and } h(k) \neq v \\
+(\lightning, \emptyset), & \text{otherwise}
+\end{cases} \\
+\llbracket \actwrite{\iota}{k}{v} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+\begin{cases}
+(h[k \mapsto v], \Phi), & \text{if } k \in \pred{dom}{h} \text{ and } (\{\iota\}, \textsc{x}) = \hat{\Phi}(k) \\
+(\lightning, \emptyset), & \text{otherwise}
+\end{cases} \\
+\llbracket \actlock{\iota}{k}{\kappa} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+\begin{cases}
+(h, \Phi[k \mapsto (\{\iota\}, \kappa)]) & \text{if } k \in \pred{dom}{h} \text{ and } ( \kappa \geq \textsc{s} \text{ and } (\emptyset, \textsc{u}) = \hat{\Phi}(k) \\
+& \text{or } \kappa = \textsc{x} \text{ and } (\{\iota\}, \textsc{s}) = \hat{\Phi}(k) ) \\
+(h, \Phi[k \mapsto (\{\iota\} \cup I, \textsc{s})]) & \text{if } k \in \pred{dom}{h} \text{ and } \kappa = \textsc{s} \text{ and } (I, \textsc{s}) = \hat{\Phi}(k) \\
+& \text{and } I \not\equiv \emptyset \\
+(\lightning, \emptyset), & \text{otherwise}
+\end{cases} \\
+\llbracket \actunlock{\iota}{k} \rrbracket &\triangleq \lambda h, \Phi \ldotp
+\begin{cases}
+(h, \Phi[k \mapsto (\emptyset, \textsc{u})]) & \text{if } k \in \pred{dom}{h} \text{ and } (\{\iota\}, \kappa) = \hat{\Phi}(k) \\
+(h, \Phi[k \mapsto (I, \textsc{s})]) & \text{if } k \in \pred{dom}{h} \text{ and } (\{\iota\} \cup I, \textsc{s}) = \hat{\Phi}(k) \text{ and } I \not\equiv \emptyset \\
+(\lightning, \emptyset), & \text{otherwise}
+\end{cases}
+\end{align*}
+
+\subsection{Commands}
+
+The operational semantics of commands are defined as a transition relation through the following rules, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction as part of which the command is executed.
+\begin{gather*}
+(-, -, -) \xrightarrow{-}_- (-, -, -) 
+: \mathsf{Act} \times \mathsf{Tid} \times (\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Cmd})^2
+\end{gather*}
+
+The \textsc{Assign} rule works in a standard way, by updating the value associated to a variable in the transaction's stack with the assigned expression evaluated under $s$. It then resolves into a $\pskip$ command without touching the global storage or the lock manager.
+\[
+\infer[\textsc{Assign}]
+{
+	(s, p, \passign{\pvar{x}}{\mathds{E}})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s[\pvar{x} \mapsto v], p, \pskip)
+}
+{
+	v = \llbracket \mathds{E} \rrbracket_s
+}
+\]
+
+The two conditional rules cope with the two cases where the boolean condition $\mathds{B}$ is evaluated to $\top$ or $\bot$ under the current stack $s$. In the first case, the execution will proceed to the $\mathds{C}_1$ body while in the second one to $\mathds{C}_2$.
+
+\[
+\infer[\textsc{CondT}]
+{
+	(s, p, \pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C}_1)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{B} = \top
+}
+\]
+
+\[
+\infer[\textsc{CondF}]
+{
+	(s, p, \pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C}_2)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{B} = \bot
+}
+\]
+
+Loops are supported in a similar way to the if statement, with the \textsc{LoopT} and \textsc{LoopF} rules that either unroll the loop for an iteration at a time, or get out of the loop in the case where $\mathds{B}$ is semantically evaluated to $\bot$.
+
+\[
+\infer[\textsc{LoopT}]
+{
+	(s, p, \ploop{\mathds{B}}{\mathds{C}})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C}; \ploop{\mathds{B}}{\mathds{C}})
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{B} = \top
+}
+\]
+
+\[
+\infer[\textsc{LoopF}]
+{
+	(s, p, \ploop{\mathds{B}}{\mathds{C}})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \pskip)
+}
+{
+	\llbracket \mathds{B} \rrbracket_s^\textsc{B} = \bot
+}
+\]
+
+The \textsc{Seq} rules cope with sequential composition of commands inside a transaction. The first command in a composition is ran one step at a time until it is eventually resolved to $\pskip$ and at that point, the execution proceeds to the next command $\mathds{C}$.
+
+\[
+\infer[\textsc{SeqSkip}]
+{
+	(s, p, \pskip ; \mathds{C})
+	\xrightarrow{\actid{\iota}}_\iota
+	(s, p, \mathds{C})
+}
+{}
+\]
+
+\[
+\infer[\textsc{Seq}]
+{
+	(s, p, \mathds{C}_1 ; \mathds{C}_2)
+	\xrightarrow{\alpha}_\iota
+	(s', p', \mathds{C}_1' ; \mathds{C}_2)
+}
+{
+	(s, p, \mathds{C}_1)
+	\xrightarrow{\alpha}_\iota
+	(s', p', \mathds{C}_1')
+}
+\]
+
+A transaction can allocate fresh storage cells through the use of the $\mathtt{alloc}$ command by specifying the amount of necessary space $n$ needed. The \textsc{Alloc} rule's premiss requires $n$ to be a natural number and to pick a sequence of $n$ contiguous cells which have not yet been allocated and are therefore not currently part of the storage's domain.
+\[
+\infer[\textsc{Alloc}]
+{
+	(s, p, \palloc{\pvar{x}}{\mathds{E}})
+	\xrightarrow{\actalloc{\iota}{n}{l}}_\iota
+	(s[\pvar{x} \mapsto l], p, \pskip)
+}
+{
+	n = \llbracket \mathds{E} \rrbracket_s
+}
+\]
+
+In order to read a value from a storage cell we require the current transaction to hold the corresponding lock in a mode $\kappa$ such that $\kappa \geq \textsc{s}$. We indicate this by making sure that the transaction identifier $\iota$ is in the set of owners $I$ as recorded by the lock manager $\Phi$. In fact, there are two scenarios to consider: either $\kappa = \textsc{s}$ and all it's needed is for $\iota$ to already be in the set $I$, or $\kappa = \textsc{x}$ and we require that $I \equiv \{ \iota \}$, since in the exclusive case $I$ is a singleton set, which also implies that $\iota \in I$.
+
+\[
+\infer[\textsc{Read}]
+{
+	(s, p, \pderef{\pvar{x}}{\mathds{E}})
+	\xrightarrow{\actread{\iota}{k}{v}}_\iota
+	(s[\pvar{x} \mapsto v], p, \pskip)
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s
+}
+\]
+
+In order to write a value to a storage cell, it is mandatory for the transaction to be holding an exclusive lock to the cell or to be the sole owner of a shared one, as described by the \textsc{Write} rule's premiss. The latter case allows a transaction to \textit{upgrade} the shared lock it is currently holding on a cell $k$.
+
+\[
+\infer[\textsc{Write}]
+{
+	(s, p, \pmutate{\mathds{E}_1}{\mathds{E}_2})
+	\xrightarrow{\actwrite{\iota}{k}{v}}_\iota
+	(s, p, \pskip)
+}
+{
+	k = \llbracket \mathds{E}_1 \rrbracket_s &
+	v = \llbracket \mathds{E}_2 \rrbracket_s
+}
+\]
+
+Whenever the lock manager's entry associated to a cell is in the unlocked mode, a transaction can acquire that lock in shared or exclusive mode and set its identifier as the owner in a singleton set through the \textsc{Lock} rule. Note that this rule applies nondeterministically with any rule for a given command $\mathds{C}$. This means that at any point in time a transaction will either try and reduce command $\mathds{C}$ or acquire a lock for some cell $k$ in the domain of the storage $h$.
+
+\[
+\infer[\textsc{Lock}]
+{
+	(s, \curlywedge, \mathds{C})
+	\xrightarrow{\actlock{\iota}{k}{\kappa}}_\iota
+	(s, \curlywedge, \mathds{C})
+}
+{}
+\]
+
+The \textsc{LockS} rule deals with the situation where a transaction needs to lock a cell $k$ in shared mode and the lock manager already contains a locked entry for $k$. At this point, the transaction can proceed only if the current lock mode $\kappa$ is \textsc{s}.
+
+The two unlock rules have the effect of releasing any cells previously acquired by a transaction with identifier $\iota$. In the first case, \textsc{Unlock} will set the mode to \textsc{u} and clear the owners set when its only member is $\iota$ while \textsc{UnlockS} deals with releasing a shared lock that still has transactions holding the same lock. In this situation, we simply remove $\iota$ from the owners set.
+
+\[
+\infer[\textsc{Unlock}]
+{
+	(s, p, \mathds{C})
+	\xrightarrow{\actunlock{\iota}{k}}_\iota
+	(s, \curlyvee, \mathds{C})
+}
+{
+	k = \llbracket \mathds{E} \rrbracket_s
+}
+\]
+
+\subsection{Transactions}
+The operational semantics of transactions are defined as a transition relation through the following rule, where $\iota \in \mathsf{Tid}$ is the identifier of the transaction which is being executed.
+\begin{gather*}
+(-, -, -) \xrightarrow{-} (-, -, -) : \mathsf{Act} \times (\mathsf{Stack} \times \mathsf{Phase} \times \mathsf{Trans})^2
+\end{gather*}
+
+\[
+\infer[\textsc{Step}]
+{
+	(s, p, \mathtt{begin}\ \mathds{C}\ \mathtt{end}_\iota)
+	\xrightarrow{\alpha}
+	(s', p', \mathtt{begin}\ \mathds{C}'\ \mathtt{end}_\iota)
+}
+{
+	(s, p, \mathds{C})
+	\xrightarrow{\alpha}_\iota
+	(s', p', \mathds{C}')
+}
+\]
+
+\subsection{Programs}
+
+\sx{Here the grammar of \(\mathsf{Prog}\) does not have the form like \( (\mathtt{begin}\ - \mathtt{end})_\iota \), you can say, we extend the grammar when we give the semantics. }
+
+The operational semantics of programs are defined as a transition relation through the following rules.
+\begin{gather*}
+(-, -, -, -) \xrightarrow{-} (-, -, -, -) \\
+: \mathsf{Storage} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog} \times \mathsf{Act} \times \mathsf{State} \times \mathsf{LMan} \times \mathsf{TState} \times \mathsf{Prog}
+\end{gather*}
+
+\[
+\infer[\textsc{PSkip}]
+{
+	 (h, \Phi, S, \mathtt{begin}\ \pskip\ \mathtt{end}_\iota)
+	\xrightarrow{\actid{\iota}}
+	(h, \Phi, S, \pskip)
+}
+{
+	\{ k\ |\ (I, -) = \Phi(k) \land \iota \in I \} \equiv \emptyset
+}
+\]
+
+\[
+\infer[\textsc{Exec}]
+{
+	 (h, \Phi, S, \mathtt{begin}\ \mathds{C}\ \mathtt{end}_\iota)
+	\xrightarrow{\alpha}
+	(h', \Phi', S[\iota \mapsto (s', p')], \mathtt{begin}\ \mathds{C}'\ \mathtt{end}_\iota)
+}
+{
+	(s, p) = \hat{S}(\iota) &
+	(s, p, \mathtt{begin}\ \mathds{C}\ \mathtt{end}_\iota)
+	\xrightarrow{\alpha}
+	(s', p', \mathtt{begin}\ \mathds{C}'\ \mathtt{end}_\iota) &
+	(h', \Phi') = \llbracket \alpha \rrbracket (h, \Phi)
+}
+\]
+
+\[
+\infer[\textsc{Start}]
+{
+	(h, \Phi, S, \mathtt{begin}\ \mathds{C}\ \mathtt{end})
+	\xrightarrow{\actid{\iota}}
+	(h, \Phi, S, \mathtt{begin}\ \mathds{C}\ \mathtt{end}_\iota)
+}
+{
+	\iota \in \{ i\ |\ \forall j \in \pred{dom}{S} \ldotp j < i \}
+}
+\]
+
+\[
+\infer[\textsc{PSeqSkip}]
+{
+	 (h, \Phi, S, \pskip; \mathds{P})
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \mathds{P})
+}
+{}
+\]
+
+\[
+\infer[\textsc{PSeq}]
+{
+	 (h, \Phi, S, \mathds{P}_1; \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1'; \mathds{P}_2)
+}
+{
+	 (h, \Phi, S, \mathds{P}_1)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1')
+}
+\]
+
+\[
+\infer[\textsc{ParEnd}]
+{
+	 (h, \Phi, S, \pskip \| \pskip)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \pskip)
+}
+{}
+\]
+
+\[
+\infer[\textsc{ParL}]
+{
+	 (h, \Phi, S, \mathds{P}_1 \| \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1' \| \mathds{P}_2)
+}
+{
+	 (h, \Phi, S, \mathds{P}_1)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1')
+}
+\]
+
+\[
+\infer[\textsc{ParR}]
+{
+	 (h, \Phi, S, \mathds{P}_1 \| \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_1 \| \mathds{P}_2')
+}
+{
+	 (h, \Phi, S, \mathds{P}_2)
+	\xrightarrow{\alpha}
+	(h', \Phi', S', \mathds{P}_2')
+}
+\]
+
+\[
+\infer[\textsc{Loop}]
+{
+	 (h, \Phi, S, \mathds{P}^*)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \pskip + (\mathds{P} ; \mathds{P}^*))
+}
+{}
+\]
+
+\[
+\infer[\textsc{ChoiceL}]
+{
+	 (h, \Phi, S, \mathds{P}_1 + \mathds{P}_2)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \mathds{P}_1)
+}
+{}
+\]
+
+\[
+\infer[\textsc{ChoiceR}]
+{
+	 (h, \Phi, S, \mathds{P}_1 + \mathds{P}_2)
+	\xrightarrow{\actprog}
+	(h, \Phi, S, \mathds{P}_2)
+}
+{}
+\]

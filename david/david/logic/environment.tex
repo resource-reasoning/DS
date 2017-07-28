@@ -1,0 +1,157 @@
+\section{Environment Semantics}
+
+This section is dedicated to the description of how we shape concurrent behaviours at the model level. We start by formally defining what the rely and guarantee relations are for each thread. This allows us to describe the effects of a thread and of the environment on the current world. Such relations allow us to further state \textit{stability} for assertions and for predicate environments, a fundamental property to later on build our proofs. All of these components are then used to formalise the concept of \textit{repartitioning} that logically represents a thread's atomic actions included in its guarantee relation \cite{cap}\cite{colosl}. \\
+
+The rely relation models how the environment, i.e. other running threads, can reorganize or modify a world. All these behaviours are depicted as \textit{interference} from the environment and they can be divided into two kinds: region construction and region update. Before we move on, it is important to state what it means for a region identifier to be fresh inside of a world, as such definition will be used throughout the section.
+
+\begin{defn}
+	(Region freshness).
+	A region identifier $r$ is \emph{fresh} with respect to a world $w = (l, g, \mathcal{J})$, when $r$ does not appear as part of $w$'s shared state, $g$.
+	\[
+		\pred{fresh}{r, (l, g, \mathcal{J})}
+			\iff
+		r \not\in \pred{dom}{g}
+	\]
+\end{defn}
+
+We model how the environment can create a new region out of existing resources in its own logical local state through the construction rely relation between worlds.
+\begin{defn}
+	(Construction rely).
+	The \emph{construction rely} relation, $R^c : \mathsf{World} \times \mathsf{World}$, is defined as:
+	\[
+		R^c \triangleq \big\{ (w, w')\ |\ 
+			\exists r, l, a \ldotp \pred{fresh}{r, w} \land w'_\mathsf{L} = w_\mathsf{L} \land w'_\mathsf{S} = w_\mathsf{S}[r \mapsto l] \land w'_\mathsf{A} = w_\mathsf{A}[r \mapsto a]
+		\big\}
+	\]
+\end{defn}
+The created region must have a fresh identifier $r$, used to map the new shared resources inside of the global state and the allowed actions in the action model. The updated world's local state $w'_\mathsf{L}$, as seen by a thread, will obviously be unmodified given that the environment cannot touch it. The fact that $R^c$ is defined over worlds, which are well-defined by definition, ensures that $w'_\mathsf{L} \circ w'_\mathsf{S}$ is always defined. On top of this, it will also be the case that the local state will not contain any capability for the region that has just been constructed.
+
+The environment can also update an already existing region inside the global state, as long as it holds a capability that entitles it to perform the change.
+\begin{defn}
+	(Update rely).
+	The \emph{update rely} relation, $R^u : \mathsf{World} \times \mathsf{World}$, is defined as:
+	\[
+		R^u \triangleq \big\{ \left( (l, g, \mathcal{J}), (l, g', \mathcal{J}) \right)\ |\ \exists r, \kappa \ldotp  \kappa\ \sharp\ (l \oplus g)_\mathsf{K}(r) \land (g, g') \in \lceil \mathcal{J}(r) \rceil (\kappa) \big\}
+	\]
+\end{defn}
+An update done by the environment is only allowed to modify the world's shared state $g$, while the local state $l$ and action model $\mathcal{J}$ stay the same. The actual region update is only allowed when the environment makes use of a capability $\kappa$ that is compatible with the capabilities that are currently in the local and shared states. Moreover, $\kappa$ needs to enable the shared state transition as described by $\mathcal{J}(r)$. Since we allow actions to only describe a part of the region they are modifying, and not the entirety of it, we introduce and use the \emph{action framing} function, $\lceil - \rceil : \left( \mathbb{K} \rightarrow \mathcal{P}(\mathsf{Action}) \right) \times \mathbb{K} \rightarrow \mathcal{P}(\mathsf{Action})$.
+	\[
+		\lceil a \rceil (\kappa) \triangleq \{ (p \circ f, q \circ f)\ |\ (p, q) \in a(\kappa) \land f \in \mathsf{LState} \}
+	\]
+This way, all of the region resources that are not affected by the update, i.e. $f$, will stay the same in the resulting world.
+
+We now have all of the ingredients to define the overall rely relation between worlds, which describes any behaviour of the environment on the global state and action model.
+\begin{defn}
+	(Rely relation).
+	The \emph{rely} relation, $R : \mathsf{World} \times \mathsf{World}$, is defined as follows.
+	\[
+		R \triangleq (R^c \cup R^u)^*
+	\]
+\end{defn}
+This definition is noticeably different from CAP's \cite{cap} original one, since the latter only allowed one single update and multiple constructions. In fact, we generalize it and employ the transitive closure in order to allow the environment to perform multiple updates and region constructions in one single atomic step, as seen by a thread.
+
+\begin{defn}
+	(Stability).
+	An assertion $P$ is said to be stable with respect to a predicate environment $\delta \in \mathsf{PEnv}$, written $\mathsf{stable}_\delta(P)$, if and only if, for all $e \in \mathsf{LEnv}$ and $w, w' \in \mathsf{World}$, if $w, e, \delta \vDash P$ and $(w, w') \in R$, then $w', e, \delta \vDash P$.
+\end{defn}	
+Intuitively, we require the stability property as we need to be sure that any given assertion $P$ which is currently satisfiable, is not going to be invalidated by a rely step done by the environment and modelled through $R$.
+
+\begin{defn}
+	(Predicate environment stability).
+	A predicate environment $\delta$ is said to be stable, written $\pred{pstable}{\delta}$, if and only if, for all $W \in \pred{range}{\delta}$, for all $w, w' \in \mathsf{World}$, if $w \in W$ and $(w, w') \in R$, then $w' \in W$. The semantics of a syntactic predicate environment $\Delta \in \mathsf{Ax}$ are defined as a set of stable predicate environments that satisfy them:
+	\begin{align*}
+		\tsem{\emptyset}^\textsc{p} &\triangleq \{ \delta\ |\ \pred{pstable}{\delta} \} \\
+		\tsem{\forall \vec{x} \ldotp P \implies Q}^\textsc{p} &\triangleq \{ \delta\ |\ \pred{pstable}{\delta} \land \forall \vec{v} \ldotp \tsem{P}_{\emptyset[\vec{x} \mapsto \vec{v}], \delta} \subseteq \tsem{Q}_{\emptyset[\vec{x} \mapsto \vec{v}], \delta} \} \\
+		\tsem{\forall \vec{x} \ldotp \alpha(\vec{x}) \equiv P}^\textsc{p} &\triangleq \{ \delta\ |\ \pred{pstable}{\delta} \land \forall \vec{v} \ldotp \delta(\alpha, \vec{v}) = \tsem{P}_{\emptyset[\vec{x} \mapsto \vec{v}], \delta} \} \\
+		\tsem{\Delta_1, \Delta_2}^\textsc{p} &\triangleq \tsem{\Delta_1}^\textsc{p} \cap \tsem{\Delta_2}^\textsc{p}
+	\end{align*}
+\end{defn}
+
+The effect of a particular thread's actions is modelled through the guarantee relation. A thread can create a new region using currently owned resources in its local state and such behaviour is formally described through the $G^c$ between worlds. On the other hand, we leave region destruction as implicit, i.e. the user can encode it as a special action in the action model associated to the region, which gets rid of everything inside of it.
+\begin{defn}
+	(Construction guarantee).
+	The \emph{construction guarantee} relation, $G^c : \mathsf{World} \times \mathsf{World}$, is defined as:
+	\[
+	\begin{array}{r | l}
+		G^c \triangleq \Bigg\{ (w, w')
+		&
+		\begin{array}{c}
+			\exists r, m, l, l', a, \rho \ldotp \pred{fresh}{r, w} \land \pred{dom}{\rho} = \{r\} \land
+			\\
+			w_\mathsf{L} = l \circ l' \land w'_\mathsf{L} = l \circ (m, \rho) \land m \in \mathbf{0}_\mathbb{M} \land
+			\\
+			w'_\mathsf{S} = w_\mathsf{S}[r \mapsto l'] \land w'_\mathsf{A} = w_\mathsf{A}[r \mapsto a]
+		\end{array}
+		\Bigg\}
+	\end{array}
+	\]
+\end{defn}
+As we can see from the definition, a thread is allowed to create a region as long as its identifier $r$ is entirely fresh and the new shared state includes a part of its local state that is moved out of it. In exchange, $w'_\mathsf{L}$ will include capabilities for the new region. The action model is accordingly updated to describe all of the actions allowed on $r$.
+
+We instead model how a thread can modify an existing region in the shared state, for which it holds the appropriate capabilities, through the guarantee update relation between worlds. As part of the relation definition, we will make use of the orthogonal of the machine state and capability pcm which is generally defined in the following statement.
+
+\begin{defn}
+	\label{defn:orthogonal}
+	(Orthogonal).
+	Given a pcm $(\mathcal{M}, \bullet, \mathbf{0})$ and an element $m \in \mathcal{M}$, its \emph{orthogonal} $(-)^\bot_\mathcal{M} : \mathcal{M} \rightarrow \mathcal{P}(\mathcal{M})$ is the set of all elements in $\mathcal{M}$ which are compatible with it.
+\[
+	(m)^\bot_\mathcal{M} \triangleq \{m'\ |\ m\ \sharp\ m' \}
+\]
+\end{defn}
+
+\begin{defn}
+	(Update guarantee).
+	The \emph{update guarantee} relation, $G^u : \mathsf{World} \times \mathsf{World}$, is defined as:
+	\[
+	\begin{array}{r | l}
+		G^u \triangleq \Bigg\{ ((l, g, \mathcal{J}), (l', g', \mathcal{J}))
+		&
+		\begin{array}{c}
+			((l \oplus g)_\mathsf{K})_\mathbb{K}^\bot = ((l' \oplus g')_\mathsf{K})_\mathbb{K}^\bot \land \\
+			(g = g' \lor \exists r, \kappa \leq l_\mathsf{K}(r) \ldotp (g, g') \in \lceil \mathcal{J}(r) \rceil(\kappa)  \\ \land ((l \oplus g)_\mathsf{M})_\mathbb{M}^\bot = ((l' \oplus g')_\mathsf{M})_\mathbb{M}^\bot )
+		\end{array}
+		\Bigg\}
+	\end{array}
+	\]
+\end{defn}
+A guarantee update enables a thread to change $l$ and $g$ (while not introducing new regions), leaving the action model $\mathcal{J}$ unmodified. During the update, a thread cannot introduce new capabilities as part of its local state or the global shared one. This requirement is enforced by checking that the orthogonal (Definition \ref{defn:orthogonal}) of all capabilities stays the same as part of the transition from $l, g$ to $l', g'$. The update can further leave the global state unmodified (thus only performing a local change) or it is entitled to modify it through an action, as long as the running thread holds an appropriate capability in its local state. As part of an update, there can be a transfer of resources from the local to the shared state together with their mutation. Since we do not want to enable \textit{fictitious} resource creation, we require the guarantee relation to preserve the orthogonal of the local and global machine state's composition as well.
+
+We can finally define the overall guarantee relation between worlds, expressed through $G$.
+\begin{defn}
+	(Guarantee).
+	The \emph{guarantee} relation, $G : \mathsf{World} \times \mathsf{World}$, is defined as:
+	\[
+		G \triangleq (G^c \cup G^u)^*
+	\]
+\end{defn}
+Similar to the rely relation, the definition uses a transitive closure to allow multiple region creations and updates as part of a single atomic step performed by a thread. This gives the main reason behind the \textit{orthogonal} constraint as part of the update guarantee definition. A practical explanation of why this condition is required is illustrated in the following example. Assume a situation where we instantiate machine states as standard variable stores and we leave capabilities as abstract or not explicitly specified (through the use of $-$). Let's consider what happens when the action model $\mathcal{J}$ has the following action mapping for shared region $r$ and the orthogonal preservation is not required.
+\[
+	\mathcal{J}(r)
+		=
+	\left\{
+		\begin{array}{r r}
+			\kappa_1: & ([x \mapsto 1], \kappa_2) \transto ([x \mapsto 2, y \mapsto 1], \emptyset) \\
+			\kappa_2: & ([x \mapsto 2, y \mapsto 1], \emptyset) \transto ([x \mapsto 3], \kappa_2)
+		\end{array}
+	\right\}
+\]
+A thread holding capability $\kappa_1$ can use it when $r$ contains $x \mapsto 1$ to update it to $x \mapsto 2$ and introduce out of nowhere, a new resource $y \mapsto 1$, which was not previously held in the thread's local logical state. Moreover, if the obtained capability $\kappa_2$ is used by the same thread as part of the same atomic update to bring the state of the region $r$ directly from $x \mapsto 1$ to $x \mapsto 3$ without one noticing the introduction of the \textit{fictitious} resource $y$. We therefore have the strong constraint on the orthogonal preservation in order to cope with these kind of scenarios.
+
+At this point, we are enabled to explain the fundamental notion of repartitioning with respect to an update from $p$ to $q$, written $P \Rrightarrow^{\{p\}\{q\}} Q$ \cite{cap}. The latter indicates that any world $w_1$ satisfying the assertion $P$ has a machine-state component $(w_1)_\mathsf{M}$ that includes a part, $m_1$, which satisfies the separation logic assertion $p$. Moreover, when $m_1$ is replaced by $m_2$ that satisfies assertion $q$, we are able to reconstruct a world $w_2$ that satisfies $Q$ and for which the transition from $w_1$ to $w_2$ is allowed by the guarantee relation $G$.
+
+\begin{defn}
+	(Repartitioning).
+	\label{repartitioning}
+	The \emph{repartioning} of worlds, written $P \Rrightarrow^{\{p\}\{q\}} Q$, holds if and only if, for every logical environment $e \in \mathsf{LEnv}$, predicate environment $\delta \in \mathsf{PEnv}$, and world $w_1 = (l_1, g_1, \mathcal{J}_1) \in \mathsf{World}$ such that $w_1, e, \delta \vDash P$, there exist states $m_1, m' \in \mathbb{M}$, such that for a $\rho_1 \in \mathbf{0}_\mathsf{RK}$:
+	\begin{itemize}
+		\item $(m_1, \rho_1), e \vDash_\mathsf{SL} p$ and
+		\item $m_1 \bullet_\mathbb{M} m' = (l_1 \oplus g_1)_\mathsf{M}$ and
+		\item for every $m_2 \in \mathbb{M}$ and $\rho_2 \in  \mathbf{0}_\mathsf{RK}$ where $(m_2, \rho_2), e \vDash_\mathsf{SL} q$, there exists a world $w_2 = (l_2, g_2, \mathcal{J}_2) \in \mathsf{World}$ such that $w_2, e, \delta \vDash Q$ and
+			\begin{itemize}
+				\item $m_2 \bullet_\mathbb{M} m' = (l_2 \oplus g_2)_\mathsf{M}$
+				\item $(w_1, w_2) \in G$
+			\end{itemize}
+	\end{itemize}
+\end{defn}
+
+We write $P \Rrightarrow Q$ in order to express $P \Rrightarrow^{\{\mathtt{emp}\}\{\mathtt{emp}\}}Q$. The latter allows the shared state to be reorganized around but not to be effectively mutated.

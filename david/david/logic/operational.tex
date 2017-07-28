@@ -1,0 +1,71 @@
+\section{Semantics}
+\label{sec:mcapOpSem}
+The operational semantics of the programming language are defined in terms of the effects that elementary commands, sequential commands and transactions have on concrete program states. These differ from the machine states that we introduced in Parameter \ref{param:machineStates}, since they should describe \textit{real} system states. As a matter of fact, concurrent program logics often enhance their states with abstract information that enables particular aspects of their reasoning. mCAP accepts any kind of artificial construct as part of its machine states under the condition that they can be mapped to concrete states on which commands can apply their effects. In Section \ref{sec:mcapSound} we will see how the user is able to specify such conversion.
+
+Given the fact that we are defining an instantiation of the Views framework, the operational semantics described here follow the structure defined in \cite{views} provided with the set of concrete states and the interpretation of transactions (i.e. atomic commands).
+
+\begin{param}
+	(Concrete states).
+	Assume a set of \emph{concrete states} $\mathcal{S}$ ranged over by $\sigma, \sigma_1, \ldots, \sigma_n$.
+\end{param}
+
+We require instantiations of mCAP to additionally provide a function that interprets the semantics of boolean expressions at the level of concrete states. This is necessary since sequential commands support \texttt{if}-\texttt{then}-\texttt{else} and \texttt{while} and they both have a boolean expression as condition which needs to be evaluated in order to decide how to branch.
+\begin{param}
+	\label{param:boolConcrete}
+	(Boolean concrete state semantics).
+	Given the the set of concrete states $\mathcal{S}$, assume a \emph{boolean semantics} function:
+	\[
+		\tsem{-}^\textsc{b}_- : \mathds{B} \times \mathcal{S} \rightarrow \mathsf{Bool}
+	\]	
+\end{param}
+
+As elementary commands are given as a parameter to the mCAP framework, specifically Parameter \ref{param:ecmd}, we also expect the user to provide a function that gives the operational semantics intepretation for each of them. The latter returns a potentially nondeterministic state transformer function which, given a concrete state $\sigma$, returns a set of those that arise as a consequence of applying the elementary command to $\sigma$.
+\begin{param}
+	\label{param:ecmdInt}
+	(Elementary command interpretation).
+	Given the set of concrete states $\mathcal{S}$, assume an \emph{elementary command interpretation} function associating elementary commands to a state-transformer function:
+	\[
+		\tsem{\hat{\mathds{C}}}_{\hat{\mathsf{C}}} : \mathsf{ECmd} \rightarrow \mathcal{S} \rightarrow \mathcal{P}(\mathcal{S})
+	\]
+	The interpretation function is also lifted to a set of concrete states, such that for $S \in \mathcal{P}(\mathcal{S})$:
+	\[
+		\tsem{\hat{\mathds{C}}}_{\hat{\mathsf{C}}}(S) \triangleq \bigcup_{\sigma \in S} \tsem{\hat{\mathds{C}}}_{\hat{\mathsf{C}}}(\sigma)
+	\]
+\end{param}
+
+\begin{defn}
+	(Commands interpretation).
+	The interpretation function for elementary commands, formally $\tsem{-}^s_{\mathsf{C}} : \mathsf{Cmd} \rightarrow \mathcal{S} \rightarrow \mathcal{P}(\mathcal{S})$, is defined as:
+	\begin{align*}
+		\tsem{\hat{\mathds{C}}}_{\mathsf{C}}(\sigma) &\triangleq \tsem{\hat{\mathds{C}}}_{\hat{\mathsf{C}}}(\sigma)
+		\\
+		\tsem{\pskip}_{\mathsf{C}}(\sigma) &\triangleq \{ \sigma \}
+		\\
+		\tsem{\mathds{C}_1 ; \mathds{C}_2}_{\mathsf{C}}(\sigma) &\triangleq \{ \sigma'\ |\ S = \tsem{\mathds{C}_1}_\mathsf{C}(\sigma) \land \sigma' \in \tsem{\mathds{C}_2}_\mathsf{C}(S) \}
+		\\
+		\tsem{\pif{\mathds{B}}{\mathds{C}_1}{\mathds{C}_2}}_\mathsf{C}(\sigma) &\triangleq \mathbf{if}\ \tsem{\mathds{B}}^\textsc{b}_{\sigma}\ \mathbf{then}\ \tsem{\mathds{C}_1}_\mathsf{C}(\sigma)\ \mathbf{else}\ \tsem{\mathds{C}_2}_\mathsf{C}(\sigma)
+		\\
+		\tsem{\ploop{\mathds{B}}{\mathds{C}}}_\mathsf{C}(\sigma) &\triangleq \tsem{\pif{\mathds{B}}{\left(\mathds{C};\ploop{\mathds{B}}{\mathds{C}}\right)}{\pskip}}_\mathsf{C}(\sigma)
+	\end{align*}
+	The interpretation function is lifted to a set of concrete states such that for $S \in \mathcal{P}(\mathcal{S})$:
+	\[
+		\tsem{\mathds{C}}_\mathsf{C}(S) \triangleq \bigcup_{\sigma \in S} \tsem{\mathds{C}}_\mathsf{C}(\sigma)
+	\]	
+\end{defn}
+In the case of an elementary command, we simply use Definition \ref{param:ecmdInt} while the interpretation of $\pskip$ is the identity function on the input state $\sigma$. The effect of a sequential composition of two commands is defined as the set of all states arising from the execution of the first command, followed by the second command applied to the resulting states. Loops are rewritten as conditionals, where the if body contains the loop body composed with the same loop. If-statements are instead applied to a state by branching on the boolean condition, semantically evaluated under the concrete state $\sigma$.
+
+\begin{defn}
+	(Transactions interpretation).
+	Finally, we can provide the interpretation function for transactions, which is formally defined as $\tsem{-}_\mathsf{T} : \mathsf{Trans} \rightarrow \mathcal{S} \rightarrow \mathcal{P}(\mathcal{S})$,
+	\[
+		\tsem{\ptdef{\mathds{C}}}_\mathsf{T}(\sigma) \triangleq \tsem{\mathds{C}}_\mathsf{C}(\sigma)
+	\]
+	The interpretation function is lifted to a set of concrete states such that for $S \in \mathcal{P}(\mathcal{S})$:
+	\[
+		\tsem{\mathds{T}}_\mathsf{T}(S) \triangleq \bigcup_{\sigma \in S}  \tsem{\mathds{T}}_\mathsf{T}(\sigma)
+	\]
+\end{defn}
+Therefore, the semantic meaning of running an atomic transaction on the concrete state $\sigma$, is any resulting state that is the outcome from executing the transaction's body $\mathds{C}$, starting with the same state $\sigma$. On top of this, we also give a definition for the interpretation of system transactions. Given that these only differ from user transactions in terms of their identifier, and the operational semantics we define do not make use of such identifiers, we can simply drop the latter.
+\[
+	\tsem{\ptdef{\mathds{C}}_\iota}_\mathsf{T}(\sigma) \triangleq \tsem{\ptdef{\mathds{C}}}_\mathsf{T}(\sigma)
+\]

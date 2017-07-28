@@ -1,0 +1,239 @@
+\chapter[A Logic for Serializable Transactions]{A Logic for \\ Serializable Transactions}
+
+\label{sec:transLogic}
+
+The path towards a general logic for serializable transactions reaches its final stage. At this point, we can make effective use of the mCAP framework in order to formalise what we need.
+Given that the mCAP's model and program logic, described in Section \ref{sec:mcapModel} and Section \ref{sec:mcapLogic} respectively, contain several parameters, we proceed to their instantiation for our particular requirements. In fact, transactions need to be able to access a global storage through read and write operations as well as keeping a local stack for their private variables.
+
+By the end of this section, users will be able to verify programs containing transactions that are executed in an truly atomic fashion and in isolation. Later on, we take the logic one step further, by specifying the first application to programs that run under the two-phase locking protocol.
+
+\section{Model}
+
+\label{sec:transLogicMod}
+
+The abstract model that describes the ecosystem under which transactions run as part of programs is illustrated in this section. At the core of the model resides a concrete, low-level storage, which can be thought of as a contiguous space of memory cells or as a collection of database items. Each of the latter contains a single numerical value and is associated with a unique address, or key, used to index it. Transactions access the storage to read from and permanently write to it.
+
+\begin{defn}
+	(Storage values).
+	The set of \emph{storage values}, \textsf{Val}, is defined to be equivalent to the set of integers $\mathds{Z}$. It is ranged over by $v, v_1, \ldots v_n$.
+\end{defn}
+
+\begin{defn}
+	(Storage keys).
+	The set of \emph{keys} used in order to index elements in the storage is defined as \textsf{Key}, ranged over by $k, k_1, \ldots k_n$ and it is equivalent to the set of natural numbers $\mathds{N}$.
+\end{defn}
+
+\begin{defn}
+	(Storage).
+	A \emph{storage} is defined to be the set of partial functions with a finite domain from storage keys to storage values:
+	\[
+		\mathsf{Storage} \triangleq \mathsf{Key} \overset{\text{fin}}{\rightharpoonup} \mathsf{Val}
+	\]
+	The $\mathsf{Storage}$ set is ranged over by $h, h_1, \ldots, h_n$. Let $\mathsf{State} \triangleq \mathsf{Storage} \uplus \{\lightning\}$ be the set containing all of the possible members of $\mathsf{Storage}$ together with a special, \textit{faulting}, state $\lightning$ which indicates a program state where a failure happened.	
+\end{defn}
+
+Local variables are privately used by transactions inside of their bodies. They can be arbitrarily initialized, assigned and read and are recorded as part of a transaction's stack.
+\begin{defn}
+	(Transaction stack).
+	The set of \emph{transaction stacks} is defined as the set of partial functions with finite domain, mapping variable names to their respective value:
+	\[
+		\mathsf{Stack} \triangleq \mathsf{Var} \overset{\text{fin}}{\rightharpoonup} \mathsf{Val}
+	\]
+	The $\mathsf{Stack}$ set is ranged over by $s, s_1, \ldots, s_n$.
+\end{defn}
+
+The first and fundamental parameter to provide to mCAP is the one related to machine states. This describes the machine component of every logical state in the model. Considering that we treat transactions as atomic blocks of code that carry a local variable store and can access a global storage, we model the machine state monoid as tuples of elements coming from $\mathsf{Storage}$ and $\mathsf{Stack}$. It follows that every transaction's view on the world is based on those two components which fully describe what it can interact with.
+\begin{defn}
+	(Machine states pcm).
+	The partial commutative monoid with multiple units for machine states is instantiated to:
+	\[
+		(\mathsf{Storage} \times \mathsf{Stack}, \uplus_2, \{ (\emptyset, \emptyset) \})
+	\]
+	where the union of tuples of partial functions with disjoint domains, $\uplus_2$, is defined as:
+	\[
+		(h, s) \uplus_2 (h', s') \triangleq (h \uplus h', s \uplus s')
+	\]
+\end{defn}
+The unit set of the machine state pcm we provide contains a single element, which is a tuple of two functions with an empty domain, therefore not mapping any storage locations or local variable names to values.
+
+Even within our instantiation of mCAP, we leave the partial commutative monoid for capabilities as a parameter, in order not to constrain users of the latter and ease context-specific reasoning.
+
+We provide semantics for all the numerical expressions that appear as part of our programs in a standard way. The logical environment $e$ and variable stack $s$ components, are used to evaluate logical and program variables respectively. In the case where an expression continas a variable (either logical or program) which is not in the domain of the appropriate mapping, we adopt the convention of evaluating it to $0$. A similar thing happens when we return $1$ when encountering a zero denominator inside of an arithmetic division expression, $\div$.
+\begin{defn}
+	(Numerical expression semantics).
+	The semantics of numerical expressions are expressed through a function, $\tsem{-}_{-,-}^\textsc{e} : \mathsf{Expr} \times \mathsf{LEnv} \times \mathsf{Stack} \rightarrow \mathsf{Val}$, defined as:
+	\begin{align*}
+		\llbracket v \rrbracket^\textsc{e}_{e, s} &\triangleq v \\
+		\llbracket \pvar{x} \rrbracket^\textsc{e}_{e, s} &\triangleq
+		\begin{cases}
+		s(\pvar{x}), &\text{if } \pvar{x} \in \textsf{dom}(s)\\
+		0,&\text{otherwise}
+		\end{cases} \\
+		\llbracket x \rrbracket^\textsc{e}_{e, s} &\triangleq \begin{cases}
+			e(x), & \text{if } x \in \pred{dom}{e} \\
+			0, & \text{otherwise}
+		\end{cases} \\
+		\llbracket \mathds{E}_1 + \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} &\triangleq \llbracket \mathds{E}_1 \rrbracket^\textsc{e}_{e, s} + \llbracket \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} \\
+		\llbracket \mathds{E}_1 - \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} &\triangleq \llbracket \mathds{E}_1 \rrbracket^\textsc{e}_{e, s} - \llbracket \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} \\
+		\llbracket \mathds{E}_1 \times \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} &\triangleq \llbracket \mathds{E}_1 \rrbracket^\textsc{e}_{e, s} \times \llbracket \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} \\
+		\llbracket \mathds{E}_1 \div \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} &\triangleq 
+		\begin{cases}
+		1, &\text{ if } \llbracket \mathds{E}_2 \rrbracket^\textsc{e}_{e, s} = 0 \\
+		\llbracket \mathds{E}_1 \rrbracket^\textsc{e}_{e, s} \div \llbracket \mathds{E}_2 \rrbracket^\textsc{e}_{e, s}, &\text{ otherwise} \\
+		\end{cases}
+	\end{align*}
+\end{defn}
+Whenever we encounter a use of the semantics expression that only provides a $\mathsf{Stack}$ component without the logical environment one, i.e. $\tsem{\mathds{E}}_s^\textsc{e}$, we implicitly refer to $\tsem{\mathds{E}}_{\emptyset, s}^\textsc{e}$.
+
+Boolean expressions that appear in programs are also evaluated in a classical way, by recursively evaluating the sub-expressions until we reach terminal ones, i.e. \texttt{true} or \texttt{false}, and then logically combining all of the steps.
+\begin{defn}
+	(Boolean expression semantics).
+	The semantics of boolean expressions are expressed through a function, $\tsem{-}_-^\textsc{b} : \mathsf{BExpr} \rightarrow (\mathsf{Storage} \times \mathsf{Stack}) \rightarrow \mathsf{Bool}$, defined as:
+	\begin{align*}
+		\llbracket \true \rrbracket_{(h, s)}^\textsc{b} &\triangleq \top \\
+		\llbracket \false \rrbracket_{(h, s)}^\textsc{b} &\triangleq \bot \\
+		\llbracket \mathds{B}_1 \land \mathds{B}_2 \rrbracket_{(h, s)}^\textsc{b} &\triangleq \llbracket \mathds{B}_1 \rrbracket_{(h, s)}^\textsc{b} \land \llbracket \mathds{B}_2 \rrbracket_{(h, s)}^\textsc{b} \\
+		\llbracket \mathds{B}_1 \lor \mathds{B}_2 \rrbracket_{(h, s)}^\textsc{b} &\triangleq \llbracket \mathds{B}_1 \rrbracket_{(h, s)}^\textsc{b} \lor \llbracket \mathds{B}_2 \rrbracket_{(h, s)}^\textsc{b} \\
+		\llbracket \lnot \mathds{B} \rrbracket_{(h, s)}^\textsc{b} &\triangleq \lnot \llbracket \mathds{B} \rrbracket_{(h, s)}^\textsc{b} \\
+		\llbracket \mathds{E}_1 = \mathds{E}_2 \rrbracket_{(h, s)}^\textsc{b} &\triangleq \llbracket \mathds{E}_1 \rrbracket_{s}^\textsc{e} = \llbracket \mathds{E}_2 \rrbracket_{s}^\textsc{e} \\
+		\llbracket \mathds{E}_1 > \mathds{E}_2 \rrbracket_{(h, s)}^\textsc{b} &\triangleq \llbracket \mathds{E}_1 \rrbracket_{s}^\textsc{e} > \llbracket \mathds{E}_2 \rrbracket_{s}^\textsc{e} \\
+		\llbracket \mathds{E}_1 < \mathds{E}_2 \rrbracket_{(h, s)}^\textsc{b} &\triangleq \llbracket \mathds{E}_1 \rrbracket_{s}^\textsc{e} < \llbracket \mathds{E}_2 \rrbracket_{s}^\textsc{e}
+	\end{align*}
+\end{defn}
+Note that we only provide one function to cover the semantics of boolean expressions appearing inside machine states (Parameter \ref{param:boolMachine}) and concrete states (Parameter \ref{param:boolConcrete}) because we instantiate the two to the same set, with the only difference of the $\lightning$ state.
+
+\section{Assertions}
+
+The instantiated machine states are described through assertions equivalent to the standard separation logic ones \cite{seplogic}. We leave a grammar for capability assertions as a parameter, following our choice of not instantiating a capability pcm in Section \ref{sec:transLogicMod}.
+\begin{defn}
+	(Machine state assertions).
+	Machine state assertions are instantiated to be able to describe a logical or program variable in the local stack and a cell in the storage.
+		\[
+			\mathcal{M} \in \mathsf{MAssn} ::= x = \mathds{E}\ |\ \pvar{x} = \mathds{E}\ |\ \mathds{E}_1 \mapsto \mathds{E}_2
+		\]
+		The associated semantics function, which maps such assertions to elements of the machine state pcm, $\tsem{-}_-^\textsc{m} : \mathsf{MAssn} \rightarrow \mathsf{LEnv} \rightarrow \mathcal{P}(\mathbb{M})$, is defined as:
+		\begin{align*}
+			\tsem{x = \mathds{E}}^\textsc{m}_e &\triangleq \big\{ (h, s)\ |\ h \in \mathsf{Storage} \land s \in \mathsf{Stack} \land  e(x) = \tsem{\mathds{E}}^\textsc{e}_{e, s} \big\}
+			\\
+			\tsem{\pvar{x} = \mathds{E}}^\textsc{m}_e &\triangleq \big\{ (h, s)\ |\ h \in \mathsf{Storage} \land s(\pvar{x}) = \tsem{\mathds{E}}^\textsc{e}_{e, s} \big\}
+			\\
+			\tsem{\mathds{E}_1 \mapsto \mathds{E}_2}_e^\textsc{m} &\triangleq \big\{ (h, s)\ |\ \pred{dom}{h} = \{\tsem{\mathds{E}_1}_{e,s}^\textsc{e}\} \land h(\tsem{\mathds{E}_1}_{e,s}^\textsc{e}) = \tsem{\mathds{E}_2}_{e,s}^\textsc{e} \big\}
+		\end{align*}
+\end{defn}
+
+Next, we formalise the elementary commands to be used as part of system transactions' bodies. These are \textit{truly} atomic commands in the system. The commands allow a transaction to make a variable assignment in order to associate a numerical value to a local program variable, read a value from the global storage into a local variable, write a numerical expression to a storage cell and allocate an arbitrary amount of cells to extend the domain of the storage. The syntactic grammar used is the standard one from the \textsc{While} language.
+\begin{defn}
+	\label{defn:ecmd}
+	(Elementary commands).
+	The set of \emph{elementary commands}, \textsf{ECmd}, is instantiated through the following grammar where $\pvar{x} \in \mathsf{Var}$.
+	\[
+		\hat{\mathds{C}} ::=
+			\passign{\pvar{x}}{\mathds{E}}\
+			|\ \pderef{\pvar{x}}{\mathds{E}}\
+			|\ \palloc{\pvar{x}}{\mathds{E}}\
+			|\ \pmutate{\mathds{E}_1}{\mathds{E}_2}
+	\]
+\end{defn}
+
+\begin{defn}
+	(Elementary command axioms).
+	The set of \emph{elementary command axioms} $\textsc{Ax}_{\hat{\mathsf{C}}} : \mathcal{P}(\mathsf{Storage} \times \mathsf{Stack}) \times \mathsf{Cmd} \times \mathcal{P}(\mathsf{Storage} \times \mathsf{Stack})$ are defined to be the standard separation logic ones, describing the heap (our storage) and the variable store, i.e. a transaction's stack.
+
+	\iffalse	
+	For every rule's triple $\Delta \vdash \triple{P}{\hat{\mathds{C}}}{Q}$, logical environment $e \in \mathsf{LEnv}$ and predicate environment $\delta \in \mathsf{PEnv}$, we define the corresponding axiom as $\lfloor \tsem{P}_{e, \delta} \rfloor_W \times \hat{\mathds{C}} \times \lfloor \tsem{Q}_{e, \delta} \rfloor_W$.
+	\begin{gather*}
+		\infer[\textsc{Write}]
+		{
+			\vdash
+			\triple
+				{\mathds{E}_1 \mapsto -}
+				{\pmutate{\mathds{E}_1}{\mathds{E}_2}}
+				{\mathds{E}_1 \mapsto \mathds{E}_2}
+		}
+		{}
+		\\
+		\infer[\textsc{Read}]
+		{
+			\vdash
+			\triple
+				{\pvar{x} \doteq \mathds{E}_1 \sep \cell{\mathds{E}}{\mathds{E}_2}}
+				{\pderef{\pvar{x}}{\mathds{E}}}
+				{\pvar{x} \doteq \mathds{E}_2[\mathds{E}_1/\pvar{x}] \sep \cell{\mathds{E}[\mathds{E}_1/\pvar{x}]}{\mathds{E}_2[\mathds{E}_1/\pvar{x}]}}
+		}
+		{}
+		\\
+		\infer[\textsc{Assign}]
+		{
+			\vdash
+			\triple
+				{P}
+				{\passign{\pvar{x}}{\mathds{E}}}
+				{\exists x \ldotp \pvar{x} \doteq \mathds{E}[x/\pvar{x}] \sep P[x/\pvar{x}]}	
+		}
+		{}
+		\\
+		\infer[\textsc{Alloc}]
+		{
+			\vdash
+			\triple
+				{\mathtt{emp}}
+				{\palloc{\pvar{x}}{\mathds{E}}}
+				{\exists y \ldotp \pvar{x} \doteq y \sep \circledast_{0 \leq i < \mathds{E}} \left(\cell{y + i}{0}\right)}
+		}
+		{}
+	\end{gather*}
+	The listed axioms come directly from the ones in standard separation logic.
+	\fi
+\end{defn}
+
+\section{Semantics}
+
+\label{sec:transLogicSem}
+
+The operational semantics component of our mCAP instantiation are defined in terms of effects to a \textit{concrete} state of the system. This represents the true contents of the machine state, without any artificial construct introduced to aid reasoning. Given that we did not make use of any extra information as part of the machine states defined in Section \ref{sec:transLogicMod}, we will instantiate concrete states to be equivalent to the machine ones. On top of this, we add a special state element, the faulting state. This is a wildcard with the precise purpose of representing all states where something went \textit{wrong}. We write $\lightning$ to refer to it.
+\begin{defn}
+	(Concrete states).
+	The set of \emph{concrete states} $\mathcal{S}$ is instantiated to $(\mathsf{Storage} \times \mathsf{Stack}) \uplus \{\lightning\}$, where $\lightning$ represents a faulting state..
+\end{defn}
+
+At this point we can provide a semantics interpretation function that formally describes how elements of $\mathsf{ECmd}$ affect the concrete state both in terms of its storage and variable stack component.
+\begin{defn}
+	(Elementary commands interpretation).
+	\label{ecmdint} The \emph{interpretation function} for elementary commands, $\tsem{-}_{\hat{\mathsf{C}}} : \mathsf{ECmd} \rightarrow \mathcal{S} \rightarrow \mathcal{P}(\mathcal{S})$, is defined in the following way:
+	\begin{align*}
+		\tsem{\passign{\pvar{x}}{\mathds{E}}}_{\hat{\mathsf{C}}}(h, s) &\triangleq \{ (h, s[\pvar{x} \mapsto \tsem{\mathds{E}}_s^\textsc{e}]) \}
+		\\
+		\tsem{\palloc{\pvar{x}}{\mathds{E}}}_{\hat{\mathsf{C}}}(h, s) &\triangleq
+			\begin{cases}
+				\{ (h[\vec{a} \mapsto 0], s[\pvar{x} \mapsto l]) \}
+				&
+				\text{if } n = \tsem{\mathds{E}}_s^\textsc{e} \text{ and } n > 0 \text{ and } l \in \mathsf{Key}\\ & \text{and } \vec{a} = (l, \ldots, l + n - 1) \text{ and } \\
+				& \{ l, \ldots, l + n - 1 \} \cap \pred{dom}{h} \equiv \emptyset \\
+				\{ \lightning \}, & \text{otherwise}
+			\end{cases}
+		\\
+		\tsem{\pderef{\pvar{x}}{\mathds{E}}}_{\hat{\mathsf{C}}}(h, s) &\triangleq
+			\begin{cases}
+				\{ (h, s[\pvar{x} \mapsto v]) \}, & \text{if } k = \tsem{\mathds{E}}_s^\textsc{e} \text{ and } k \in \pred{dom}{h} \\ & \text{and } h(k) = v \\
+				\{ \lightning \}, & \text{otherwise}
+			\end{cases}
+		\\
+		\tsem{\pmutate{\mathds{E}_1}{\mathds{E}_2}}_{\hat{\mathsf{C}}}(h, s) &\triangleq
+		\begin{cases}
+			\{ (h[k \mapsto v], s) \}, & \text{if } k = \tsem{\mathds{E}_1}_s^\textsc{e} \text{ and } v = \tsem{\mathds{E}_2}_s^\textsc{e} \\ & \text{and } k \in \pred{dom}{h} \\
+			\{ \lightning \}, & \text{otherwise}
+		\end{cases}
+	\end{align*}
+\end{defn}
+A variable assignment to $\pvar{x}$ only updates the local variable stack to map variable $\pvar{x}$ to the evaluated expression $\mathds{E}$ under $s$, leaving the heap component unmodified. A memory allocation succeeds when it is possible to expand the current heap $h$ to hold a sequence of $n$ cells that are currently not in its domain. All fresh storage cells will be mapped to the default value of $0$, and the address of the first cell allocated is assigned to variable $\pvar{x}$ as part of the variable stack. In all other cases, the command fails. A memory dereference succeeds in reading a value $v$ associated to key $k$ only when $k$ is in the heap's domain and the value mapped to it is effectively $v$. Last, we can mutate memory at location $k$ only when it is part of the domain of the heap $h$. For both commands, in the event of a storage access whose corresponding key does not exist, we end up in $\lightning$, the faulting state.
+
+We move to the final parameter required by mCAP for its instantiations, namely the reification function that transforms machine states into concrete ones.
+\begin{defn}
+	(Machine state reification).
+	The machine state \emph{reification function} $\lfloor - \rfloor_\mathbb{M} : \mathbb{M} \rightarrow \mathcal{P}(\mathcal{S})$ is defined as:
+	\[
+		\lfloor m \rfloor_\mathbb{M} \triangleq \{ m \}
+	\]
+\end{defn}
+
+Given that the concrete states set, $\mathcal{S}$, is defined to be $(\mathsf{Storage} \times \mathsf{Stack}) \uplus \{\lightning\}$, and $\mathbb{M}$ is instantiated to $\mathsf{Storage} \times \mathsf{Stack}$ we conclude that $\mathbb{M} \subset \mathcal{S}$. It follows that establishing a relationship between the two sets resolves to just using the identity function.
