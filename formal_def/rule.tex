@@ -75,10 +75,10 @@ Additional, the differential of capabilities must agree, so that when merging th
 
 \begin{defn}[Merge of actions]
 \label{def:merge-action}
-The \emph{merge of actions}, specifically merges the right-hand side to the left-hand side, is defined as follows:
+The \emph{merge of actions}, \( \funcn{merge\_action} : \Actions \times \Actions \parfun \Actions  \), which specifically merges the right-hand side to the left-hand side, is defined as follows:
 \[
     \begin{rclarray}
-        \funcn{merge\_action} & : & \Actions \times \Actions \parfun \Actions \\
+        
         \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \defeq &
         \begin{cases}
         ( \func{merge\_state}{\ls_{l}^{p}, \ls_{r}^{p}}, \func{merge\_state}{\ls_{l}^{q}, \ls_{r}^{q}} )  &  \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} \\
@@ -104,10 +104,9 @@ where,
 
 \begin{defn}[Merge of interference]
 \label{def:merge-intf}
-Given the merge of action (\defin\ref{def:merge-action}), the \emph{merge of interference} is defined as follows:
+Given the merge of action (\defin\ref{def:merge-action}), the \emph{merge of interference}, \( \funcn{merge\_interference} : \Actions \times \Interference \parfun \powerset{\Actions} \) , is defined as follows:
 \[
     \begin{rclarray}
-        \funcn{merge\_interference} & : & \Actions \times \Interference \parfun \powerset{\Actions} \\
         \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),\intf} & \defeq & \Set{(\ls_{l}^{p}, \ls_{l}^{q}) } \cup \Setcon{\func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q}), (\ls_{r}^{p}, \ls_{r}^{q})} }{(\ls_{r}^{p}, \ls_{r}^{q}) \in \intf}
     \end{rclarray}
 \]
@@ -134,8 +133,9 @@ where,
 \end{defn}
 
 \subsection{Rules for Global}
+
 The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to global level by repartition \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \).
-The repartition stripes off the fingerprints but uses the fingerprints to merge the local effect to the environment.
+The repartition stripes off the fingerprints but uses the fingerprints to merge the local effect and the interference.
 This is, the environment is allowed to write to locations that are different from the ones by transaction \( \trans \).
 %
 \[
@@ -147,18 +147,32 @@ This is, the environment is allowed to write to locations that are different fro
     }
 \]
 
-\[
+\begin{defn}[Collapse of fingerprint heaps]
+    \label{def:clps-fingerprint-hp}
+    The \emph{Collapse of fingerprint heaps}, \( \clpsFP{.} : \FPHeaps \to \PHeap \), is defined as follows:
+    \[
     \begin{rclarray}
-        \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \iffdef & 
-        \for{ \lenv, \stk_{p}, \world_{p} \in \evalW[\lenv, \stk_{p}]{\gpre} } \exsts{ \stk_{q} } \for{ \fph_{q} \in \evalLC[\lenv, \stk_{q}]{\lpost} } \\
-        & & \implies \exsts{\php_{p}, \ca_{p}, \fph_{p}, \ca_{q}} ((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q})) \in \guar \land {} \\
-        & & \qqquad (\php_{p}, \ca_{p} ) = \flattenW{\world_{p}} \land  \fph_{p} \in \evalLC[\lenv, \stk_{p}]{\lpre} \land \php_{p} = \ripoff{\fph_{p}} \\
-        & & \implies \for{\fph'_{q}, \ca'_{q}}  (\stub, (\fph'_{q}, \ca'_{q})) \in \mergeI{((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q}))}{ \rely} \\
-        & & \qqquad \exsts{\world_{q}, \php_{q} } \world_{q} \in \evalW[\lenv, \stk_{q}]{\gpost} \land (\php_{q}, \ca'_{q} ) = \flattenW{\world_{q}} \land \php_{q} = \ripoff{\fph'_{q}}  \\
-        \ripoff{\fph} & \defeq & \lambda \loc \ldotp 
+        \clpsFP{\fph} & \defeq & \lambda \loc \ldotp 
         \begin{cases}
             \val & \fph(\loc) = (\val, \stub, \stub) \\
             \text{undefined} & \text{otherwise}
         \end{cases} \\
     \end{rclarray}
+    \]
+\end{defn}
+
+
+\begin{defn}[Repartition]
+\[
+    \begin{rclarray}
+        \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \iffdef & 
+        \for{ \lenv, \stk_{p}, \world_{p} \in \evalW[\lenv, \stk_{p}]{\gpre} }  \\
+        & & \implies \exsts{ \ca_{p}, \fph_{p} } ( \fph_{p}, \unitC) \in \evalLS[\lenv, \stk_{p}]{\lpre} \land (\clpsFP{\fph_{p}}, \ca_{p} ) = \flattenW{\world_{p}} \\
+        & & \implies \for{ \stk_{q}, \ca_{q}, \fph_{q} } ( \fph_{q}, \unitC ) \in \evalLS[\lenv, \stk_{q}]{\lpost} \land ((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q})) \in \guar  \\
+        & & \implies \for{\fph'_{q}, \ca'_{q}}  (\stub, (\fph'_{q}, \ca'_{q})) \in \mergeI{((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q}))}{ \rely} \\
+        & & \implies \exsts{ \world_{q} \in \evalW[\lenv, \stk_{q}]{\gpost} } (\clpsFP{\fph'_{q}}, \ca'_{q} ) = \flattenW{\world_{q}} \\
+    \end{rclarray}
 \]
+\end{defn}
+\sx{ I think there might be a problem of quantification of stack \( \stk_{q} \), because the stack of post-condition is not necessary  to be the same as the pre-condition. }
+
