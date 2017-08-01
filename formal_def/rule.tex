@@ -19,6 +19,120 @@ This is because once a location has been re-written, the rest read are considere
     }{}
 \]
 
+\subsection{Merge}
+
+\begin{defn}[Fingerprint heap agreement]
+Given two fingerprint heaps, the \emph{fingerprint heap agreement} is defined as follows:
+\[
+    \begin{rclarray}
+        \pred{agree\_heap}{\fph_{l},\fph_{r}} & \defeq  & \exsts{ \fph_{l}' = \func{get\_no\_write}{\fph_{l}}, \fph_{l}'', \fph_{r}' = \func{get\_no\_write}{\fph_{r}}, \fph_{r}'', \fph_{m} } \\
+        & & \pred{ws}{\fph_{l}} \cap \pred{ws}{\fph_{r}} = \emptyset  \land \fph_{l}' = \fph_{l}'' \composeFP \fph_{m} \land \fph_{r}' = \fph_{r}'' \composeFP \fph_{m} \land ( \fph_{l} \composeFP \fph_{r} \composeFP \fph_{m}  )\isdef \\
+    \end{rclarray}
+\]
+where,
+\[
+    \begin{rclarray}
+        %\funcn{ws} & : & \FPHeaps \to \powerset{\Addr} \\
+        \func{ws}{\fph} & \defeq & \Setcon{\loc}{ \exsts{ \fp } \fph(\loc) = (\stub, \addFPW{\fp}, \stub)} \\
+        %\funcn{get\_no\_write} & :  & \FPHeaps \to \FPHeaps \\
+        \func{get\_no\_write}{\fph } & \defeq & \fph \setminus \Setcon{\loc \mapsto \stub }{ \loc \in \pred{ws}{\fph}} \\
+    \end{rclarray}
+\]
+The agreement between two fingerprint heaps means that they write different locations, and for the rest parts, if there is overlap, the overlapped part must be at the same state.
+\end{defn}
+
+\begin{defn}[Action agreement]
+The \emph{action agreement} is defined as follows:
+\[
+    \begin{rclarray}
+        \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \eqdef & \pred{agree\_local}{\ls_{l}^{p}, \ls_{r}^{p}} \land \pred{agree\_local}{\ls_{l}^{q}, \ls_{r}^{q}} \land {}\\
+        & & \pred{agree\_cap\_diff}{\ls_{l}^{p}, \ls_{r}^{q}, \ls_{l}^{q}, \ls_{r}^{p}} \\
+        \pred{agree\_local}{(\fph_{l}, \ca_{l} ),(\fph_{r}, \ca_{r})} & \eqdef & \pred{agree\_heap}{\fph_{l}, \fph_{r}} \land ( \ca_{l} \composeC \ca_{r} )\isdef  \\
+        \pred{agree\_cap\_diff}{(\stub, \ca_{l}^{p}), (\stub, \ca_{l}^{q}), (\stub, \ca_{r}^{p}), (\stub, \ca_{r}^{q})} & \defeq  & ((\ca_{l}^{p} \setminus \ca_{l}^{q}) \composeC (\ca_{r}^{p} \setminus \ca_{r}^{q} ))\isdef \land ((\ca_{l}^{p} \setminus \ca_{l}^{q}) \composeC (\ca_{r}^{q} \setminus \ca_{r}^{p} ))\isdef \land {} \\
+        & & ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{p} \setminus \ca_{r}^{q} ))\isdef \land ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{q} \setminus \ca_{r}^{p} ))\isdef \\
+    \end{rclarray}
+\]
+\sx{
+The first line of agreement on actions is to stop merging of the following two actions:
+\[
+\begin{array}{@{}l@{}}
+\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \\
+\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0
+\end{array}
+\]
+The second line of agreement on actions is to stop merging of the following two actions:
+\[
+\begin{array}{@{}l@{}}
+\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \sep \cass{C}{}\\
+\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0
+\end{array}
+\]
+Instead of cross-check pre against another's post, we should check the differential.
+}
+For two actions to agree, their pre- and post-conditions must agree on the heaps and the capabilities.
+Additional, the differential of capabilities must agree, so that when merging these two actions, the merged result does not have invalid capabilities transfer.
+\end{defn}
+
+\begin{defn}[Merge of actions]
+\label{def:merge-action}
+The \emph{merge of actions}, specifically merges the right-hand side to the left-hand side, is defined as follows:
+\[
+    \begin{rclarray}
+        \funcn{merge\_action} & : & \Actions \times \Actions \parfun \Actions \\
+        \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \defeq &
+        \begin{cases}
+        ( \func{merge\_state}{\ls_{l}^{p}, \ls_{r}^{p}}, \func{merge\_state}{\ls_{l}^{q}, \ls_{r}^{q}} )  &  \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} \\
+        \text{undefined} & \text{otherwise} \\
+        \end{cases} \\
+    \end{rclarray}
+\]
+where,
+\[
+    \begin{rclarray}
+        \func{merge\_state}{(\fph_{l}, \ca_{l} ),(\fph_{r}, \ca_{r})} & \defeq & (\func{eager\_merge\_heap}{\fph_{l},\fph_{r}}, \ca_{l} \composeC \ca_{r} ) \\
+        \func{eager\_merge\_heap}{\fph_{l}, \fph_{r}} & \defeq & \lambda \loc \ldotp 
+        \begin{cases}
+            \fph_{r}(\loc) & \loc \in \dom(\fph_{l}) \cap \pred{ws}{\fph_{r}} \\
+            \fph_{l}(\loc) & \loc \in \dom(\fph_{l}) \setminus \pred{ws}{\fph_{r}} \\
+            \text{undefined} & \loc \notin \dom(\fph_{l})
+        \end{cases}
+        \\
+    \end{rclarray}
+\]
+\end{defn}
+
+
+\begin{defn}[Merge of interference]
+\label{def:merge-intf}
+Given the merge of action (\defin\ref{def:merge-action}), the \emph{merge of interference} is defined as follows:
+\[
+    \begin{rclarray}
+        \funcn{merge\_interference} & : & \Actions \times \Interference \parfun \powerset{\Actions} \\
+        \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),\intf} & \defeq & \Set{(\ls_{l}^{p}, \ls_{l}^{q}) } \cup \Setcon{\func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q}), (\ls_{r}^{p}, \ls_{r}^{q})} }{(\ls_{r}^{p}, \ls_{r}^{q}) \in \intf}
+    \end{rclarray}
+\]
+It merges all possible actions from interference (right-hand side) to an  action (left-hand side), including self-merge which yields the same action.
+\end{defn}
+
+We will use notation \(  \mergeA{(\ls_{l}^{p}, \ls_{l}^{q} )}{(\ls_{r}^{p}, \ls_{r}^{q} )} \) or \( (\ls_{l}^{p}, \ls_{l}^{q} ) \mopA ( \ls_{r}^{p}, \ls_{r}^{q} ) \) to refer to the \( \predn{merge\_action} \) function.
+Similarly, we will use  \(  \mergeI{(\ls_{l}^{p}, \ls_{l}^{q} )}{\intf} \) or \( (\ls_{l}^{p}, \ls_{l}^{q} ) \mopI \intf \) to refer to the \( \predn{merge\_interference} \) function.
+
+\begin{defn}[Merge closure]
+Given the merge of interference (\defin\ref{def:merge-intf}), the \emph{merge closure} of a interference is defined as follows:
+\[
+    \begin{rclarray}
+        \intf\mclose & \defeq & \bigcup\limits_{\nat \in \Nat} \intf^{\nat} \\
+    \end{rclarray}
+\]
+where,
+\[
+    \begin{rclarray}
+        \intf^{0} & \defeq & \intf \\
+        \intf^{i+1} & \defeq & \bigcup\limits_{(\ls_{l}^{p}, \ls_{l}^{q}) \in \intf^{i}} (\ls_{l}^{p}, \ls_{l}^{q}) \mopI \intf^{i} \\
+    \end{rclarray}
+\]
+\end{defn}
+
 \subsection{Rules for Global}
 The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to global level by repartition \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \).
 The repartition stripes off the fingerprints but uses the fingerprints to merge the local effect to the environment.
@@ -39,14 +153,12 @@ This is, the environment is allowed to write to locations that are different fro
         \for{ \lenv, \stk_{p}, \world_{p} \in \evalW[\lenv, \stk_{p}]{\gpre} } \exsts{ \stk_{q} } \for{ \fph_{q} \in \evalLC[\lenv, \stk_{q}]{\lpost} } \\
         & & \implies \exsts{\php_{p}, \ca_{p}, \fph_{p}, \ca_{q}} ((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q})) \in \guar \land {} \\
         & & \qqquad (\php_{p}, \ca_{p} ) = \flattenW{\world_{p}} \land  \fph_{p} \in \evalLC[\lenv, \stk_{p}]{\lpre} \land \php_{p} = \ripoff{\fph_{p}} \\
-        & & \implies \for{\fph'_{q}, \ca'_{q}} \\
-        & & \qqquad (\stub, (\fph'_{q}, \ca'_{q})) \in \pred{merge\_set\_of\_actions}{((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q})), \rely} \\
+        & & \implies \for{\fph'_{q}, \ca'_{q}}  (\stub, (\fph'_{q}, \ca'_{q})) \in \mergeI{((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q}))}{ \rely} \\
         & & \qqquad \exsts{\world_{q}, \php_{q} } \world_{q} \in \evalW[\lenv, \stk_{q}]{\gpost} \land (\php_{q}, \ca'_{q} ) = \flattenW{\world_{q}} \land \php_{q} = \ripoff{\fph'_{q}}  \\
         \ripoff{\fph} & \defeq & \lambda \loc \ldotp 
         \begin{cases}
             \val & \fph(\loc) = (\val, \stub, \stub) \\
             \text{undefined} & \text{otherwise}
         \end{cases} \\
-        \pred{merge\_set\_of\_actions}{(\ls_{p}, \ls_{q}), \intf} & \defeq & \Setcon{\pred{merge\_action}{(\ls_{p}, \ls_{q}), (\ls'_{p}, \ls'_{q})} }{(\ls'_{p}, \ls'_{q}) \in \intf } \cup \Set{(\ls_{p}, \ls_{q})}
     \end{rclarray}
 \]
