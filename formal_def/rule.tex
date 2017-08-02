@@ -12,21 +12,20 @@ This is because once a location has been re-written, the rest read are considere
         \var \notin \func{fv}{\lexpr}  
     }
 \]
-%
+ 
 \[
     \infer[\rl{TRMutate}]{%
         \judgeL{\expr_1 \fpt{\fp} \stub }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \fpt{\addFPW{\fp}} \expr_2} 
     }{}
 \]
 
-\subsection{Merge}
+\subsection{Chain of Actions and Merge}
 
 \begin{defn}[Fingerprint heap agreement]
 Given two fingerprint heaps, the \emph{fingerprint heap agreement} is defined as follows:
 \[
     \begin{rclarray}
-        \pred{agree\_heap}{\fph_{l},\fph_{r}} & \defeq  & \exsts{ \fph_{l}' = \func{get\_no\_write}{\fph_{l}}, \fph_{l}'', \fph_{r}' = \func{get\_no\_write}{\fph_{r}}, \fph_{r}'', \fph_{m} } \\
-        & & \pred{ws}{\fph_{l}} \cap \pred{ws}{\fph_{r}} = \emptyset  \land \fph_{l}' = \fph_{l}'' \composeFP \fph_{m} \land \fph_{r}' = \fph_{r}'' \composeFP \fph_{m} \land ( \fph_{l} \composeFP \fph_{r} \composeFP \fph_{m}  )\isdef \\
+        \pred{agree\_heap}{\fph_{l},\fph_{r}} & \defeq  & \exsts{ \fph_{l}', \fph_{r}', \fph_{m} } \fph_{l} = \fph_{l}' \composeFP \fph_{m} \land \fph_{r} = \fph_{r}' \composeFP \fph_{m} \land ( \fph'_{l} \composeFP \fph'_{r} \composeFP \fph_{m}  )\isdef \\
     \end{rclarray}
 \]
 where,
@@ -38,7 +37,7 @@ where,
         \func{get\_no\_write}{\fph } & \defeq & \fph \setminus \Setcon{\loc \mapsto \stub }{ \loc \in \pred{ws}{\fph}} \\
     \end{rclarray}
 \]
-The agreement between two fingerprint heaps means that they write different locations, and for the rest parts, if there is overlap, the overlapped part must be at the same state.
+The agreement between two fingerprint heaps means that, if there is overlap, the overlapped part must be at the same state.
 \azalea{This is a bit strong! For instance, according to this definition the heaps $\pv x \pt_{\emptyset} 1$ and $\pv x \pt_{\{\fpR\}} 1$ do not agree! Is that what you want?
 
 Perhaps you can define this as:
@@ -72,6 +71,26 @@ where
 }
 \end{defn}
 
+\begin{defn}[Chain of actions]
+    First, the \emph{chain of two actions}, \( \predn{chain\_two}  : \Actions \times \Actions \parfun \Actions \) is defined as follows:
+    \[
+        \begin{rclarray}
+            \pred{chain\_two}{} & \defeq & \\
+        \end{rclarray}
+    \]
+\end{defn}
+
+\sx{
+    Should carefully consider the following cases:
+    \[
+        \begin{array}{r c l l}
+        \vx \fptEMP 0 \transfersto \vx \fptR 0 & \text{then} & \vx \fptR 0 \transfersto \vx \fptRW 1 & yes \\
+        \vx \fptEMP 0 \transfersto \vx \fptW 1 & \text{then} & \vx \fptW 1 \transfersto \vx \fptRW 1 & maybe \ yes \\
+        \vx \fptEMP 0 \transfersto \vx \fptW 1 & \text{then} & \vx \fptW 1 \transfersto \vx \fptW 2 &  no ? (give \ yes \ for \ now) \\
+        \end{array}
+    \]
+}
+
 \begin{defn}[Action agreement]
 The \emph{action agreement} is defined as follows:
 \[
@@ -83,7 +102,17 @@ The \emph{action agreement} is defined as follows:
         & & ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{p} \setminus \ca_{r}^{q} ))\isdef \land ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{q} \setminus \ca_{r}^{p} ))\isdef \\
     \end{rclarray}
 \]
+where,
+\[
+    \begin{rclarray}
+        %\funcn{ws} & : & \FPHeaps \to \powerset{\Addr} \\
+        \func{ws}{\fph} & \defeq & \Setcon{\loc}{ \exsts{ \fp } \fph(\loc) = (\stub, \addFPW{\fp}, \stub)} \\
+        %\funcn{get\_no\_write} & :  & \FPHeaps \to \FPHeaps \\
+        \func{get\_no\_write}{\fph } & \defeq & \fph \setminus \Setcon{\loc \mapsto \stub }{ \loc \in \pred{ws}{\fph}} \\
+    \end{rclarray}
+\]
 \sx{
+The ``\( \setminus \)'' needs to be defined in a more robust way to include splitting capabilities.
 The first line of agreement on actions is to stop merging of the following two actions:
 \[
 \begin{array}{@{}l@{}}
@@ -152,6 +181,7 @@ where,
 \]
 \end{defn}
 
+\sx{ Remember to include the constraint that the pre should be empty fingerprints to cope with potentially general form of actions  }
 
 \begin{defn}[Merge of interference]
 \label{def:merge-intf}
@@ -161,7 +191,8 @@ Given the merge of action (\defin\ref{def:merge-action}), the \emph{merge of int
         \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),\intf} & \defeq & \Set{(\ls_{l}^{p}, \ls_{l}^{q}) } \cup \Setcon{\func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q}), (\ls_{r}^{p}, \ls_{r}^{q})} }{(\ls_{r}^{p}, \ls_{r}^{q}) \in \intf}
     \end{rclarray}
 \]
-It merges all possible actions from interference (right-hand side) to an  action (left-hand side), including self-merge which yields the same action.
+It merges all possible actions from interference (right-hand side) to an  action (left-hand side).
+Note that the final result also include the action itself.
 \end{defn}
 
 We will use notation \(  \mergeA{(\ls_{l}^{p}, \ls_{l}^{q} )}{(\ls_{r}^{p}, \ls_{r}^{q} )} \) or \( (\ls_{l}^{p}, \ls_{l}^{q} ) \mopA ( \ls_{r}^{p}, \ls_{r}^{q} ) \) to refer to the \( \predn{merge\_action} \) function.
@@ -212,7 +243,6 @@ This is, the environment is allowed to write to locations that are different fro
     \]
 \end{defn}
 
-
 \begin{defn}[Repartition]
 \[
     \begin{rclarray}
@@ -227,3 +257,4 @@ This is, the environment is allowed to write to locations that are different fro
 \end{defn}
 \sx{ I think there might be a problem of quantification of stack \( \stk_{q} \), because the stack of post-condition is not necessary  to be the same as the pre-condition. }
 
+\sx{ Remember to include the constraint that the pre should be empty fingerprints to cope with potentially general form of actions  }
