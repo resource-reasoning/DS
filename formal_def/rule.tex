@@ -28,7 +28,47 @@ Given two fingerprint heaps, the \emph{fingerprint heap agreement} is defined as
         \pred{agree\_heap}{\fph_{l},\fph_{r}} & \defeq  & \exsts{ \fph_{l}', \fph_{r}', \fph_{m} } \fph_{l} = \fph_{l}' \composeFP \fph_{m} \land \fph_{r} = \fph_{r}' \composeFP \fph_{m} \land ( \fph'_{l} \composeFP \fph'_{r} \composeFP \fph_{m}  )\isdef \\
     \end{rclarray}
 \]
+where,
+\[
+    \begin{rclarray}
+        %\funcn{ws} & : & \FPHeaps \to \powerset{\Addr} \\
+        \func{ws}{\fph} & \defeq & \myset{\loc}{ \exsts{\fp} \fph(\loc) = (\stub, \fp) \land \fpW \in \fp} \\
+        %\funcn{get\_no\_write} & :  & \FPHeaps \to \FPHeaps \\
+        \func{get\_no\_write}{\fph } & \defeq & \fph \setminus \Setcon{\loc \mapsto \stub }{ \loc \in \pred{ws}{\fph}} \\
+    \end{rclarray}
+\]
 The agreement between two fingerprint heaps means that, if there is overlap, the overlapped part must be at the same state.
+\azalea{This is a bit strong! For instance, according to this definition the heaps $\pv x \pt_{\emptyset} 1$ and $\pv x \pt_{\{\fpR\}} 1$ do not agree! Is that what you want?
+
+Perhaps you can define this as:
+\[
+\begin{rclarray}
+	\agree{\fph_l}{\fph_r} & \defeq  & \ws{\fph_l} \cap \ws{\fph_r} = \emptyset \\
+        && \land\ \exsts{\h_1, \h_2, \h} \heapOnly{\readOnly{\fph_l}} = \h_1 \composeH \h \land \heapOnly{\readOnly{\fph_r}} = \h \composeFP \h_2 
+        \land \h_1 \composeH \h \composeH \h_2 \isdef
+\end{rclarray}        
+\]
+where
+\[
+\begin{rclarray}
+	\func{ws}{\fph} & \defeq & \myset{\loc}{ \exsts{\fp} \fph(\loc) = (\stub, \fp) \land \fpW \in \fp} \\\\
+%
+	\readOnly{.} & : & \FPHeaps \rightarrow \FPHeaps\\	
+	\readOnly{\fph}(\loc) & \defeq & 
+	\begin{cases}
+		\fph(\loc) & \text{if } \loc \not\in \ws{\fph} \\
+		\text{undefined} & \text{otherwise}
+	\end{cases}\\\\
+%	
+	\heapOnly{.} & : & \FPHeaps \rightarrow \Heaps\\	
+	\heapOnly{\fph}(\loc) & \defeq & 
+	\begin{cases}
+		\val  & \text{if } \exsts{\val} \fph(\loc) = (\val, -) \\
+		\text{undefined} & \text{otherwise}
+	\end{cases}
+\end{rclarray}
+\]
+}
 \end{defn}
 
 \begin{defn}[Chain of actions]
@@ -91,6 +131,26 @@ Instead of cross-check pre against another's post, we should check the different
 }
 For two actions to agree, their pre- and post-conditions must agree on the heaps and the capabilities.
 Additional, the differential of capabilities must agree, so that when merging these two actions, the merged result does not have invalid capabilities transfer.
+
+\azalea{Again, the definition of \texttt{agree\_action} is too strong with respect to capabilities. I have pointed this out before. For instance, assuming that $\cass{C}{} * \cass{C}{}$ is not defined, according to your definition these two actions do not agree (because of the second conjunct in \texttt{agree\_local)}:
+\[
+	\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0 \sep \cass{C}{}
+\]
+and
+\[
+	\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \sep \cass{C}{}
+\]
+Both actions require $\cass{C}{}$ in the shared state for them to trigger. However, their write set is totally disjoint.\\
+
+There is however a way to correct this. Provided that your PCM satisfies certain conditions, you can monitor resource transfer (on capabilities) and generalise the definition. \\
+
+So you have two choices:\\
+1) Keep your capability PCM parametric (user-instantiated) but disallow resource transfer (including on capabilities) completely. Your current definition is too restrictive anyway - as with the example above. We will introduce the generalisation I have in mind at some point to allow resource transfer.\\
+
+2) Define your capability PCM as token sets: $(\powerset{\textsf{Token}}, \uplus, \emptyset)$ and then it is easy to define resource transfer in a more flexible way as follows: for each action, you identify the tokens removed from the state, the tokens added and tokens left unchanged. Then for two actions to agree, their respective removed tokens and added tokens must be disjoint and they should agree on the unchanged tokens. 
+Again, when  we generalise the restrictions in our formalism, we will show that this particular capability PCM satisfies the necessary conditions. 
+In fact, regardless of generalisation, it'll be easier to write the paper with this simpler construction and hide the generalised form in the tech report. 
+}
 \end{defn}
 
 \begin{defn}[Merge of actions]
