@@ -1,6 +1,23 @@
 \section{AR Merge and Repartitioning}
 \newcommand{\effect}[1]{\Delta #1}
+\newcommand{\mergeLS}[3]{\func{merge_L}{#1, #2, #3}}
 \newcommand{\orth}[1]{\ensuremath{{#1}^{\bot}}}
+\newcommand{\conflict}[3]{\pred{conflict}{#1, #2, #3}}
+\newcommand{\FPWorlds}{\sort{FPWorld}}
+\newcommand{\fpw}{\ensuremath{\mathbf{w}}}
+\newcommand{\fpgs}{\ensuremath{\mathbf{s}}}
+\newcommand{\relyU}{\ensuremath{\mathit{R^{u}}}}
+\newcommand{\relyE}{\ensuremath{\mathit{R^{e}}}}
+\newcommand{\guarU}{\ensuremath{\mathit{G^{u}}}}
+\newcommand{\guarE}{\ensuremath{\mathit{G^{e}}}}
+\newcommand{\myrely}{\ensuremath{\mathcal R}}
+\newcommand{\myguar}{\ensuremath{\mathcal G}}
+\newcommand{\mergeW}[2]{\func{merge}{#1, #2}}
+\newcommand{\mergeWAux}[3]{\func{merge_W}{#1, #2, #3}}
+
+\newcommand{\erase}[1]{\ensuremath{\llfloor #1 \rrfloor}}
+\newcommand{\lift}[1]{\ensuremath{\llceil #1 \rrceil}}
+
 The effect of an action $\action {=} (\ls, \ls')$, written $\effect{\action}$, computes the changes applied to the action precondition $\ls$ when updated to the postcondition $\ls'$. In particular, $\effect{(\ls, \ls')}$ yields a 5-tuple $(\ls_r, \ls_f, \ls_c, \ls'_c, \ls_a)$, where $\ls_r$ denotes the maximal substate removed by $\action$ (i.e.~those parts present in $\ls$ and absent from $\ls'$), the $\ls_f$ denotes the maximal substate unchanged by $\action$ (i.e.~those parts present in both $\ls$ and $\ls'$), the $\ls_a$ denotes the maximal substate added by $\action$ (i.e.~those parts absent from $\ls$ and present in $\ls'$), and $\ls_c$ denotes the substate updated by $\action$ to $\ls'_c$.
 %
 \begin{definition}[Action effect]
@@ -31,7 +48,6 @@ where
 \end{definition}
 %
 %
-\newcommand{\mergeLS}[3]{\func{merge}{#1, #2, #3}}
 \begin{definition}[Local state merge]
 \[
 	\mergeLS{\ls}{\ls_1}{\ls_2}
@@ -54,5 +70,219 @@ where
 		\quad \land\; \ls_1^f {=} \ls_2^r \composeLS (\unitFP, \ca_2) \composeLS \ls_5
 		\land \ls_2^f {=} \ls_1^r \composeLS (\unitFP, \ca_1) \composeLS \ls_6 \\
 	}
+\]
+%
+Two local states $\ls_1$ and $\ls_2$ are \emph{conflicted} with respect to a snapshot $\ls$, written $\conflict{\ls}{\ls_1}{\ls_2}$, if and only if their merging yields no result:
+%
+\[
+	\conflict{\ls}{\ls_1}{\ls_2} \iffdef \mergeLS{\ls}{\ls_1}{\ls_2} = \emptyset
+\]
+\end{definition}
+%
+%
+\begin{definition}[Fingerprint worlds]\label{def:fingerprint_worlds}
+Given the set of local states $\LStates$ (\defin\ref{def:local_state}) and the set of region identifiers $\RegionID$ (\defin\ref{def:capabilities}), the set of \emph{fingerprint worlds}, $\fpw \in \FPWorlds$, is defined as follows:
+%
+\[
+\begin{rclarray}
+	\FPWorlds  & \eqdef  
+	& \myset{
+		(\ls, \fpgs)
+	}{
+		(\ls, \fpgs) \in \LStates \times (\RegionID \parfinfun \LStates) \land \wf{\ls, \fpgs}
+	}
+\end{rclarray}
+\]
+%
+with the definitions of the flattening function and the well-formedness predicate lifted as follows:
+%
+%
+\[
+\begin{rclarray}
+	\flattenS{(\ls, \fpgs)}  & \eqdef & \ls \composeLS \prod\limits_{\rid \in \dom(\fpgs)}^{\composeLS} \fpgs(\rid)
+\end{rclarray}
+\]
+%
+\[
+\begin{rclarray}
+	\wf{\ls, \fpgs} & \defeq & \exsts{\fph, \ca}\flattenS{(\ls, \fpgs)} {=} (\fph, \ca) \land\ \dom(\ca) \subseteq \dom(\fpgs) \\
+\end{rclarray}
+\]
+%
+The \emph{lift function}, $\lift{.}: \World \rightarrow \FPWorlds$, is defined as follows:
+%
+\[
+	\lift{(\lgs, \gs)} \eqdef (\lift{\lgs}, \lift{\gs})
+\]
+%
+where
+%
+\[
+\begin{rclarray}
+	\lift{\lgs} = \ls 
+	& \iffdef 
+	& \exsts{\h, \fph, \ca}
+	\lgs = (\h, \ca) 
+	\land \ls = (\fph, \ca) 
+	\land \dom(\fph) = \dom(\h) 
+	\land \for{\loc, \val} \h(\loc) = \val \Rightarrow \fph(\loc) = (\val, \emptyset) \\
+%
+	\lift{\gs} = \fpgs 
+	& \iffdef
+	& \dom(\fpgs) = \dom(\gs) \land \for{\rid, \lgs', \inter} \gs(\rid) = (\lgs', \inter) \Rightarrow \fpgs(\rid) = (\lift{\lgs'}, \inter) 
+\end{rclarray}
+\]
+%
+The \emph{erase function}, $\erase{.}: \FPWorlds \rightarrow \World$, is defined as follows:
+%
+\[
+	\erase{(\ls, \fpgs)} \eqdef (\erase{\ls}, \erase{\fpgs})
+\]
+%
+where
+\[
+\begin{rclarray}
+	\erase{\ls} = \lgs 
+	& \iffdef 
+	& \exsts{\h, \fph, \ca}
+	\ls = (\fph, \ca) 
+	\land \lgs = (\h, \ca) 
+	\land \dom(\fph) = \dom(\h) 
+	\land \for{\loc, \val, \fp} \fph(\loc) = (\val, \fp) \Rightarrow \h(\loc) = \val \\
+%
+	\erase{\fpgs} = \gs 
+	& \iffdef
+	& \dom(\fpgs) = \dom(\gs) \land \for{\rid, \ls', \inter} \fpgs(\rid) = (\ls', \inter) \Rightarrow \gs(\rid) = (\erase{\ls'}, \inter) 
+\end{rclarray}
+\]
+\end{definition}
+%
+%
+\begin{definition}[Rely and guarantee]
+Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{update rely} relation, $\relyU: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+	\relyU \eqdef
+	\myset{
+		\big((\ls, \fpgs), (\ls, \fpgs')\big)	
+	}{
+		\exsts{\rid, \ca, \kap, \kap', \ls_1, \ls_2, \ls_f}\\
+		\quad \for{\rid'} \rid \ne \rid' \Rightarrow \fpgs(\rid') = \fpgs'(\rid') \\
+		\quad \land\ \fpgs(\rid) = (\ls_1 \composeLS \ls_f, \inter) \land \fpgs'(\rid) = (\ls_2 \composeLS \ls_f, \inter)		 \\
+		\quad \land\ (\unitFP, \ca) \composeLS \flattenS{(\ls, \fpgs)} \isdef 
+		\land \ca(\rid) = \kap'
+		\land \kap \leq \kap'
+		\land (\ls_1, \ls_2) \in \inter(\kap)
+	}
+\]
+% 
+The \emph{extension rely} relation, $\relyE: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+	\relyE \eqdef
+	\myset{
+		\big((\ls, \fpgs), (\ls, \fpgs')\big)	
+	}{
+		\exsts{\rid}
+		\dom(\fpgs') \setminus \dom(\fpgs) = \{\rid\} \\
+		\qquad \land\ \for{\rid'} \rid \ne \rid' \Rightarrow \fpgs(\rid') = \fpgs'(\rid') \\
+	}
+\]
+% 
+The \emph{rely} relation, $\myrely: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[
+	\myrely \eqdef (\relyU \cup \relyE)^{*} %{\scalebox{1.1}{*}}
+\]
+%
+where $*$ denotes the reflexive transitive closure of the relation.
+
+The \emph{update guarantee} relation, $\guarU: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+	\guarU \eqdef
+	\myset{
+		\big((\ls, \fpgs), (\ls', \fpgs')\big)	
+	}{
+		\orth{(\lsCAP{\flattenS{(\ls, \fpgs)}})} = \orth{(\lsCAP{\flattenS{(\ls', \fpgs')}})}  \\
+		\land \Big(\for{\rid} \fpgs(\rid) = \fpgs'(\rid) \\
+		\;\quad \lor \big(
+			\orth{(\lsFPH{\flattenS{(\ls, \fpgs)}})} = \orth{(\lsFPH{\flattenS{(\ls', \fpgs')}})}
+			\land \exsts{\rid, \ca, \kap, \kap', \ls_1, \ls_2, \ls_f}\\
+				\qqquad \for{\rid'} \rid \ne \rid' \Rightarrow \fpgs(\rid') = \fpgs'(\rid') \\
+				\qqquad \land\ \fpgs(\rid) = (\ls_1 \composeLS \ls_f, \inter) \land \fpgs'(\rid) = (\ls_2 \composeLS \ls_f, \inter)		 \\
+				\qqquad \land\ (\unitFP, \ca) \leq \ls 
+				\land \ca(\rid) = \kap'
+				\land \kap \leq \kap'
+				\land (\ls_1, \ls_2) \in \inter(\kap)
+			\big)	
+		\Big)	
+	}
+\]
+% 
+The \emph{extension guarantee} relation, $\guarE: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+	\guarE \eqdef
+	\myset{
+		\big((\ls_1 \composeLS \ls_2, \fpgs), (\ls_1 \composeLS (\unitFP, \ca_1), \fpgs')\big)	
+	}{
+		\exsts{\rid}
+		\dom(\fpgs') \setminus \dom(\fpgs) = \{\rid\} \\
+		\qquad \land\ \for{\rid'} \rid \ne \rid' \Rightarrow \fpgs(\rid') = \fpgs'(\rid') \\
+		\qquad \land\ \fpgs'(\rid) = \ls_2 \composeLS (\unitFP, \ca_2)
+		\land \dom(\ca_1) = \dom(\ca_2) = \{\rid\}
+	}
+\]
+% 
+The \emph{guarantee} relation, $\myguar: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[
+	\myguar \eqdef (\guarU \cup \guarE)^{\scalebox{1.1}{*}}
+\]
+%
+\end{definition}
+%
+%
+\begin{definition}[Fingerprint worlds merge]
+Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{merge} function, $\mergeW{.}{.}: \FPWorlds \times \FPWorlds \rightarrow \powerset{\FPWorlds}$, is defined as follows, for all $\fpw, \fpw' \in \FPWorlds$:
+%
+\[
+	\mergeW{\fpw}{\fpw'} \eqdef \bigcup\limits_{\fpw'' \in \myrely(\fpw)} \mergeWAux{\fpw}{\fpw'}{\fpw''}
+\]
+%
+where
+%
+\[
+	\mergeWAux{(-, \fpgs)}{(\ls_1, \fpgs_1)}{(-, \fpgs_2)} \eqdef 
+	\begin{cases}
+		\emptyset & \text{if } \exsts{\rid} \conflict{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
+		& \qqquad \lor\ \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \land \rid \not\in \dom(\fpgs) \\\\
+		\{(\ls_1, \fpgs_3)\} & \text{otherwise}
+	\end{cases}
+\]
+%
+such that:
+\[
+\begin{array}{l}
+	\dom(\fpgs_3) = \dom(\fpgs_1) \cup \dom(\fpgs_2) \land \for{\rid}\\
+	\quad \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow \fpgs_3(\rid) = \mergeLS{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
+	\quad \land\ \rid \in \dom(\fpgs_1) \land \rid \not\in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_1(\rid) \\
+	\quad \land\ \rid \not\in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_2(\rid)
+\end{array}
+\]
+\end{definition}
+%
+%
+\begin{definition}[Repartitioning]
+\[
+	\mrepartition{W_1 }{W_2}{\mathbf{H_1}}{\mathbf{H_2}} \; \iffdef \;
+	\begin{array}[t]{@{} l @{}}
+		\for{\world_1 \in W_1} \exsts{\fpw_1, \fph_1, \fph}\\
+		\quad \fpw_1 = \lift{\world_1} \land \flattenS{\fpw_1} = (\fph_1 \composeFP \fph, \unitC) \land \fph_1 \in \mathbf{H_1} \\
+		\quad \land\ \for{\fph_2 \in \mathbf{H_2}} \exsts{\world_2, \fpw_2} \\
+		\qquad (\fpw_1, \fpw_2) \in \myguar \land \erase{\fpw_2} = \world_2 \land \world_2 \in W_2 \\
+		\qquad \land\ \for{\fpw_3 \in \mergeW{\fpw_1}{\fpw_2}} \erase{\fpw_3} \in W_2
+	\end{array}
 \]
 \end{definition}
