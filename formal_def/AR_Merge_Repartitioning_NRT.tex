@@ -14,6 +14,8 @@
 \renewcommand{\myguar}{\ensuremath{\mathcal G}}
 \renewcommand{\mergeW}[2]{\func{merge}{#1, #2}}
 \renewcommand{\mergeWAux}[3]{\func{merge_W}{#1, #2, #3}}
+\newcommand{\mergeR}[1]{\func{merge}{#1}}
+\newcommand{\stable}[1]{\pred{stable}{#1}}
 
 \renewcommand{\erase}[1]{\ensuremath{\llfloor #1 \rrfloor}}
 \renewcommand{\lift}[1]{\ensuremath{\llceil #1 \rrceil}}
@@ -111,7 +113,7 @@ Two local states $\ls_1$ and $\ls_2$ are \emph{conflicted} with respect to a sna
 \end{definition}
 %
 %
-\azalea{The remaining definitions in this section are identical to those of previous section.}
+\azalea{The following definition has not changed from the previous section.}
 \begin{definition}[Fingerprint worlds]\label{def:fingerprint_worlds}
 Given the set of local states $\LStates$ (\defin\ref{def:local_state}) and the set of region identifiers $\RegionID$ (\defin\ref{def:capabilities}), the set of \emph{fingerprint worlds}, $\fpw \in \FPWorlds$, is defined as follows:
 %
@@ -190,6 +192,31 @@ where
 \end{definition}
 %
 %
+\begin{definition}[Fingerprint worlds merge]
+Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{merge} function, $\mergeWAux{.}{.}{.}: \FPWorlds \times \FPWorlds \times \FPWorlds \rightarrow \powerset{\FPWorlds}$, is defined as follows, for all $\fpw, \fpw_1, \fpw_2 \in \FPWorlds$:
+
+%
+\[
+	\mergeWAux{(-, \fpgs)}{(\ls_1, \fpgs_1)}{(-, \fpgs_2)} \eqdef 
+	\begin{cases}
+		\emptyset & \text{if } \exsts{\rid} \conflict{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
+		& \qqquad \lor\ \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \land \rid \not\in \dom(\fpgs) \\\\
+		S & \text{otherwise}
+	\end{cases}
+\]
+%
+with
+\[
+	S = \myset{(\ls_1, \fpgs_3)}{
+		\dom(\fpgs_3)= \dom(\fpgs_1) \cup \dom(\fpgs_2) \land \for{\rid}\\
+		\quad \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow \fpgs_3(\rid) \in \mergeLS{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
+		\quad \land\ \rid \in \dom(\fpgs_1) \land \rid \not\in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_1(\rid) \\
+		\quad \land\ \rid \not\in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_2(\rid)
+	}
+\]
+\end{definition}
+%
+%
 \begin{definition}[Rely and guarantee]
 Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{update rely} relation, $\relyU: \FPWorlds \times \FPWorlds$, is defined as follows:
 %
@@ -221,10 +248,25 @@ The \emph{extension rely} relation, $\relyE: \FPWorlds \times \FPWorlds$, is def
 	}
 \]
 % 
+%The \emph{rely} relation, $\myrely: \FPWorlds \times \FPWorlds$, is defined as follows:
+%%
+%\[
+%	\myrely \eqdef (\relyU \cup \relyE)^{*} %{\scalebox{1.1}{*}}
+%\]
+%%
+%where $*$ denotes the reflexive transitive closure of the relation.
 The \emph{rely} relation, $\myrely: \FPWorlds \times \FPWorlds$, is defined as follows:
 %
 \[
-	\myrely \eqdef (\relyU \cup \relyE)^{*} %{\scalebox{1.1}{*}}
+\begin{array}{l @{\hspace{10pt}} r @{\hspace{2pt}} l}
+	& \myrely \eqdef & \bigcup\limits_{n \in \Nat} R_n \\
+	\text{with } & R_0 \eqdef & (\relyU \cup \relyE)^{*} %{\scalebox{1.1}{*}}
+	\qqquad 
+	R_{n {+} 1} \eqdef (R_n \cup \mergeR{R_n})^{*} \\
+	\text{and} & \mergeR{S} \eqdef 
+	& \myset{(\fpw, \fpw')}{
+		\exsts{\fpw_1, \fpw_2} (\fpw, \fpw_1) \in S \land (\fpw, \fpw_2) \in S \land \fpw' \in \mergeWAux{\fpw}{\fpw_1}{\fpw_2}}
+\end{array}
 \]
 %
 where $*$ denotes the reflexive transitive closure of the relation.
@@ -238,7 +280,13 @@ where $*$ denotes the reflexive transitive closure of the relation.
     The tricky trace is: [s(t1), s(t2), e(t1), s(t3), e(t2), e(t3)], which gives the final result x=3 and y=2.
     In this case, t2 merges with t1 and t3 respectively, but t3 is strictly after t1, yet t1 and t2 take the same snapshot but t3 takes a snapshot only have the effect from t1 but not t2.
 }
-
+%
+A set of fingerprint worlds $W \in \World$ is \emph{stable}, written $\stable{W}$, if and only if it is closed under the rely relation: 
+%
+\[
+	\stable{W} \eqdef \for{\world \in W} \for{\fpw'} (\lift{\world}, \fpw') \in \myrely \Rightarrow \erase{\fpw'} \in W
+\]
+%
 The \emph{update guarantee} relation, $\guarU: \FPWorlds \times \FPWorlds$, is defined as follows:
 %
 \[	
@@ -286,35 +334,35 @@ The \emph{guarantee} relation, $\myguar: \FPWorlds \times \FPWorlds$, is defined
 \end{definition}
 %
 %
-\begin{definition}[Fingerprint worlds merge]
-Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{merge} function, $\mergeW{.}{.}: \FPWorlds \times \FPWorlds \rightarrow \powerset{\FPWorlds}$, is defined as follows, for all $\fpw, \fpw' \in \FPWorlds$:
-%
-\[
-	\mergeW{\fpw}{\fpw'} \eqdef \bigcup\limits_{\fpw'' \in \myrely(\fpw)} \mergeWAux{\fpw}{\fpw'}{\fpw''}
-\]
-%
-where
-%
-\[
-	\mergeWAux{(-, \fpgs)}{(\ls_1, \fpgs_1)}{(-, \fpgs_2)} \eqdef 
-	\begin{cases}
-		\emptyset & \text{if } \exsts{\rid} \conflict{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
-		& \qqquad \lor\ \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \land \rid \not\in \dom(\fpgs) \\\\
-		S & \text{otherwise}
-	\end{cases}
-\]
-%
-with
-\[
-	S = \myset{(\ls_1, \fpgs_3)}{
-		\dom(\fpgs_3)= \dom(\fpgs_1) \cup \dom(\fpgs_2) \land \for{\rid}\\
-		\quad \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow \fpgs_3(\rid) \in \mergeLS{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
-		\quad \land\ \rid \in \dom(\fpgs_1) \land \rid \not\in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_1(\rid) \\
-		\quad \land\ \rid \not\in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_2(\rid)
-	}
-\]
-\end{definition}
-%
+%\begin{definition}[Fingerprint worlds merge]
+%Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{merge} function, $\mergeW{.}{.}: \FPWorlds \times \FPWorlds \rightarrow \powerset{\FPWorlds}$, is defined as follows, for all $\fpw, \fpw' \in \FPWorlds$:
+%%
+%\[
+%	\mergeW{\fpw}{\fpw'} \eqdef \bigcup\limits_{\fpw'' \in \myrely(\fpw)} \mergeWAux{\fpw}{\fpw'}{\fpw''}
+%\]
+%%
+%where
+%%
+%\[
+%	\mergeWAux{(-, \fpgs)}{(\ls_1, \fpgs_1)}{(-, \fpgs_2)} \eqdef 
+%	\begin{cases}
+%		\emptyset & \text{if } \exsts{\rid} \conflict{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
+%		& \qqquad \lor\ \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \land \rid \not\in \dom(\fpgs) \\\\
+%		S & \text{otherwise}
+%	\end{cases}
+%\]
+%%
+%with
+%\[
+%	S = \myset{(\ls_1, \fpgs_3)}{
+%		\dom(\fpgs_3)= \dom(\fpgs_1) \cup \dom(\fpgs_2) \land \for{\rid}\\
+%		\quad \rid \in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow \fpgs_3(\rid) \in \mergeLS{\fpgs(\rid)}{\fpgs_1(\rid)}{\fpgs_2(\rid)} \\
+%		\quad \land\ \rid \in \dom(\fpgs_1) \land \rid \not\in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_1(\rid) \\
+%		\quad \land\ \rid \not\in \dom(\fpgs_1) \land \rid \in \dom(\fpgs_2) \Rightarrow 	\fpgs_3(\rid) = \fpgs_2(\rid)
+%	}
+%\]
+%\end{definition}
+%%
 %
 \begin{definition}[Repartitioning]
 \[
@@ -327,4 +375,10 @@ with
 		\qquad \land\ \for{\fpw_3 \in \mergeW{\fpw_1}{\fpw_2}} \erase{\fpw_3} \in W_2
 	\end{array}
 \]
+with, $\mergeW{.}{.}: \FPWorlds \times \FPWorlds \rightarrow \powerset{\FPWorlds}$, defined as follows, for all $\fpw, \fpw' \in \FPWorlds$:
+%
+\[
+	\mergeW{\fpw}{\fpw'} \eqdef \bigcup\limits_{\fpw'' \in \myrely(\fpw)} \mergeWAux{\fpw}{\fpw'}{\fpw''}
+\]
+%
 \end{definition}
