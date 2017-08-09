@@ -1,4 +1,4 @@
-\section{Rules}
+\section{Logic}
 
 \subsection{Rules for Local}
 
@@ -28,7 +28,7 @@ This is because once a location has been re-written, the rest read are considere
 The \emph{merge of fingerprint heaps}, \( \mergeFP{.}{.} \), is defined as follows:
 \[
     \begin{rclarray}
-        \mergeFP{\fph_{l}}{\fph_{l}}  & \defeq & \lambda \addr \ldotp 
+        \mergeFP{\fph_{l}}{\fph_{r}}  & \defeq & \lambda \addr \ldotp 
             \begin{cases}
                 \fph_{l}(\addr) & a \in \dom(\fph_{l}) \setminus \dom(\fph_{r})  \\
                 \fph_{r}(\addr) & a \in \dom(\fph_{r}) \setminus \dom(\fph_{l}) \\
@@ -36,20 +36,14 @@ The \emph{merge of fingerprint heaps}, \( \mergeFP{.}{.} \), is defined as follo
             \end{cases}
     \end{rclarray}
 \]
-where the \emph{merge of fingerprint heap values} is defined: \[ \begin{rclarray}
+where the \emph{merge of fingerprint heap values} is defined:
+\[ \begin{rclarray}
         \mergeVAL{(\val_{l}, \fp_{l})}{(\val_{r}, \fp_{r})} & \defeq &
             \begin{cases}
                 (\val_{l}, \fp_{l} \cup \fp_{r} ) & \val_{l} = \val_{r} \land \fpW \notin \fp_{l} \cup \fp_{r} \\
                 (\val_{l}, \fp_{l} \cup \fp_{r} ) & \fpW \in \fp_{l} \land \fpW \notin \fp_{r} \\
                 (\val_{r}, \fp_{l} \cup \fp_{r} ) & \fpW \notin \fp_{l} \land \fpW \in \fp_{r} \\
             \end{cases}
-    \end{rclarray}
-\]
-Given the definition, the \emph{agreement} between two fingerprint heaps is defined as follows.
-It means if there is overlap, the overlapped part must be at the same state.
-\[
-    \begin{rclarray}
-        \agreeFP{\fph_{l}}{\fph_{r}} & \defeq  & \mergeFP{\fph_{l}}{\fph_{l}} \isdef
     \end{rclarray}
 \]
 \end{defn}
@@ -91,163 +85,249 @@ It means if there is overlap, the overlapped part must be at the same state.
 %}
 
 \begin{defn}[Local state merge]
-The \emph{merge of local states} is defined as follows:
+The \emph{merge of local states} is defined as follows, which merges two local states \( \ls_{l} \) and \( \ls_{r} \) with respect to a common initial local state \( \ls \).
 \[
-	\mergeLS{\ls}{\ls_1}{\ls_2}
-	\eqdef
+    \begin{rclarray}
+	\mergeLS{\ls}{\ls_{l}}{\ls_{r}} & \eqdef &
 	\myset{
-		(\mergeFP{\fph_1 }{ \fph_2}, \ca'_0) \\ 
-        \qquad \composeLS (\unitFP, \ca') \\
+		\left(\fph, \ca_{l}' \composeC \ca_{f} \composeC \ca_{r}' \right) 
 	}{
-		\exsts{\fph, \fph_1, \fph_2, \ca^0, \ca^0_1, \ca^0_2, \ca, \ca_1, \ca_2, \ca_3, \ca_4, \ca_5, \ca_6, \ca_f}\\
-		\quad \land\; \ca^0, \ca^0_1, \ca^0_2, \ca'_0 \in \unitC 
-		\land \ls = (\fph, \ca^0) \composeLS (\unitFP, \ca)\\
-%		
-		\quad\land\ \ls_1 = (\fph_1, \ca^0_1) \composeLS (\unitFP, \ca_1)
-		\land \ls_2 = (\fph_2, \ca^0_2) \composeLS (\unitFP, \ca_2) \\
-%		
-		\quad \land\ \ca =  \ca_3 \composeC \ca_f \composeC \ca_4
-		\land \ca_1 =  \ca_5 \composeC \ca_f \composeC \ca_4
-		\land \ca_2 =  \ca_3 \composeC \ca_f \composeC \ca_6 \\
-%		
-		\color{darkred} \quad \land\; \ws{\fph_1} \cap \ws{\fph_2} {=} \emptyset 
-		\land \fph' = \func{eager\_merge\_heap}{\fph_1, \fph_2} \\
-%		
-        \color{blue} \quad \land\; \fph' = \mergeFP{\fph_1 }{ \fph_2} \\
-%
-		\quad \land\ \ca' = \ca_5 \composeC \ca_f \composeC \ca_6
+        \fph = \mergeFP{\lsFPH{(\ls_{l})} }{ \lsFPH{(\ls_{r})} } \land \exsts{\ca_{l}, \ca_{r}}\\
+		\quad \land\; \lsCAP{\ls} = \ca_{l} \composeC \ca_{f} \composeC \ca_{r}
+        \land \lsCAP{(\ls_{l})} = \ca_{l}' \composeC \ca_{f} \composeC \ca_{r}
+        \land \lsCAP{(\ls_{r})} = \ca_{l} \composeC \ca_{f} \composeC \ca_{r}'
 	}
+    \end{rclarray}
+\]
+where, to recall, the notation \( \lsFPH{(.)} \), and \( \lsCAP{(.)} \) refer to the fingerprint heap and capabilities respectively in a local state.
+Then, the \emph{conflict} between two local states is defined as follows:
+\[
+    \begin{rclarray}
+        \conflict{\ls}{\ls_{l}}{\ls_{r}} & \defeq & \mergeLS{\ls}{\ls_{l}}{\ls_{r}} = \emptyset
+    \end{rclarray}
 \]
 \end{defn}
 
-\begin{defn}[Action agreement]
-The \emph{action agreement} is defined as follows:
+\begin{definition}[Fingerprint worlds]\label{def:fingerprint_worlds}
+Given the set of local states $\LStates$ (\defin\ref{def:local_state}) and the set of region identifiers $\RegionID$ (\defin\ref{def:capabilities}), the set of \emph{fingerprint worlds}, $\fpw \in \FPWorlds$, is defined as follows:
+%
+\[
+\begin{rclarray}
+	\FPWorlds  & \eqdef  
+	& \myset{
+		(\ls, \fpgs)
+	}{
+		(\ls, \fpgs) \in \LStates \times (\RegionID \parfinfun \LStates) \land \wfFW{\ls, \fpgs}
+	}
+\end{rclarray}
+\]
+%
+with the definitions of the flattening function and the well-formedness predicate lifted as follows:
+%
+\[
+\begin{rclarray}
+	\flattenFW{(\ls, \fpgs)}  & \eqdef & \ls \composeLS \prod\limits_{\rid \in \dom(\fpgs)}^{\composeLS} \fpgs(\rid)
+\end{rclarray}
+\]
+%
+\[
+\begin{rclarray}
+	\wfFW{\ls, \fpgs} & \defeq & \exsts{\fph, \ca}\flattenFW{(\ls, \fpgs)} {=} (\fph, \ca) \land\ \dom(\ca) \subseteq \dom(\fpgs) \\
+\end{rclarray}
+\]
+%
+The \emph{lift function}, $\liftW{.}: \World \rightarrow \FPWorlds$, is defined as follows:
+%
+\[
+	\liftW{(\lgs, \gs)} \eqdef (\liftLGS{\lgs}, \liftGS{\gs})
+\]
+%
+where
+%
+\[
+\begin{rclarray}
+	\liftLGS{(\h, \ca)} = (\fph, \ca)
+	& \iffdef 
+	& \for{\loc, \val} \h(\loc) = \val \iff \fph(\loc) = (\val, \emptyset) \\
+%
+	\liftGS{\gs} = \fpgs 
+	& \iffdef
+	& \for{\rid, \lgs, \inter} \gs(\rid) = (\lgs, \inter) \iff \fpgs(\rid) = (\liftLGS{\lgs'}, \inter) 
+\end{rclarray}
+\]
+%
+The \emph{erase function}, $\eraseFW{.}: \FPWorlds \rightarrow \World$, is defined as follows:
+%
+\[
+	\eraseFW{(\ls, \fpgs)} \eqdef (\eraseLS{\ls}, \eraseFGS{\fpgs})
+\]
+%
+where
+\[
+\begin{rclarray}
+	\eraseLS{(\fph, \ca)} = (\h, \ca)
+	& \iffdef 
+	& \for{\loc, \val} \h(\loc) = \val \iff \fph(\loc) = (\val, \emptyset) \\
+%
+	\eraseFGS{\fpgs} = \gs 
+	& \iffdef
+	& \for{\rid, \ls, \inter} \fpgs(\rid) = (\ls, \inter) \Rightarrow \gs(\rid) = (\eraseLS{\ls}, \inter) 
+\end{rclarray}
+\]
+\end{definition}
+
+\begin{definition}[Fingerprint worlds merge]
+Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{merge} function, $\mergeName[\fpw]: \FPWorlds \times \FPWorlds \times \FPWorlds \rightarrow \powerset{\FPWorlds}$, is defined as follows, for all $\fpw,\fpw_{l},\fpw_{r} \in \FPWorlds$:
+
+%
 \[
     \begin{rclarray}
-        \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \eqdef & \pred{agree\_local}{\ls_{l}^{p}, \ls_{r}^{p}} \land \pred{agree\_local}{\ls_{l}^{q}, \ls_{r}^{q}} \land {}\\
-        & & \pred{agree\_cap\_diff}{\ls_{l}^{p}, \ls_{r}^{q}, \ls_{l}^{q}, \ls_{r}^{p}} \\
-        \pred{agree\_local}{(\fph_{l}, \ca_{l} ),(\fph_{r}, \ca_{r})} & \eqdef & \pred{agree\_heap}{\fph_{l}, \fph_{r}} \land ( \ca_{l} \composeC \ca_{r} )\isdef  \\
-        \pred{agree\_cap\_diff}{(\stub, \ca_{l}^{p}), (\stub, \ca_{l}^{q}), (\stub, \ca_{r}^{p}), (\stub, \ca_{r}^{q})} & \defeq  & ((\ca_{l}^{p} \setminus \ca_{l}^{q}) \composeC (\ca_{r}^{p} \setminus \ca_{r}^{q} ))\isdef \land ((\ca_{l}^{p} \setminus \ca_{l}^{q}) \composeC (\ca_{r}^{q} \setminus \ca_{r}^{p} ))\isdef \land {} \\
-        & & ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{p} \setminus \ca_{r}^{q} ))\isdef \land ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{q} \setminus \ca_{r}^{p} ))\isdef \\
+	\mergeFW{(\stub, \fpgs)}{(\ls_{l}, \fpgs_{l})}{(\stub, \fpgs_{r})} & \eqdef &
+		\Setcon{%
+            (\ls_{l}, \fpgs_{p}) 
+        }{%
+            \fpgs_{p} \in \mergeFGS{\fpgs}{\fpgs_{l}}{\fpgs_{r}}
+        } 
     \end{rclarray}
 \]
-where,
+%
+where the \( \mergeName[\fpgs] \) is defined as follows:
 \[
     \begin{rclarray}
-        %\funcn{ws} & : & \FPHeaps \to \powerset{\Addr} \\
-        \func{ws}{\fph} & \defeq & \Setcon{\loc}{ \exsts{ \fp } \fph(\loc) = (\stub, \addFPW{\fp}, \stub)} \\
-        %\funcn{get\_no\_write} & :  & \FPHeaps \to \FPHeaps \\
-        \func{get\_no\_write}{\fph } & \defeq & \fph \setminus \Setcon{\loc \mapsto \stub }{ \loc \in \pred{ws}{\fph}} \\
-    \end{rclarray}
-\]
-\sx{
-The ``\( \setminus \)'' needs to be defined in a more robust way to include splitting capabilities.
-The first line of agreement on actions is to stop merging of the following two actions:
-\[
-\begin{array}{@{}l@{}}
-\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \\
-\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0
-\end{array}
-\]
-The second line of agreement on actions is to stop merging of the following two actions:
-\[
-\begin{array}{@{}l@{}}
-\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \sep \cass{C}{}\\
-\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0
-\end{array}
-\]
-Instead of cross-check pre against another's post, we should check the differential.
-}
-For two actions to agree, their pre- and post-conditions must agree on the heaps and the capabilities.
-Additional, the differential of capabilities must agree, so that when merging these two actions, the merged result does not have invalid capabilities transfer.
-
-\azalea{Again, the definition of \texttt{agree\_action} is too strong with respect to capabilities. I have pointed this out before. For instance, assuming that $\cass{C}{} * \cass{C}{}$ is not defined, according to your definition these two actions do not agree (because of the second conjunct in \texttt{agree\_local)}:
-\[
-	\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0 \sep \cass{C}{}
-\]
-and
-\[
-	\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \sep \cass{C}{}
-\]
-Both actions require $\cass{C}{}$ in the shared state for them to trigger. However, their write set is totally disjoint.\\
-
-There is however a way to correct this. Provided that your PCM satisfies certain conditions, you can monitor resource transfer (on capabilities) and generalise the definition. \\
-
-So you have two choices:\\
-1) Keep your capability PCM parametric (user-instantiated) but disallow resource transfer (including on capabilities) completely. Your current definition is too restrictive anyway - as with the example above. We will introduce the generalisation I have in mind at some point to allow resource transfer.\\
-
-2) Define your capability PCM as token sets: $(\powerset{\textsf{Token}}, \uplus, \emptyset)$ and then it is easy to define resource transfer in a more flexible way as follows: for each action, you identify the tokens removed from the state, the tokens added and tokens left unchanged. Then for two actions to agree, their respective removed tokens and added tokens must be disjoint and they should agree on the unchanged tokens. 
-Again, when  we generalise the restrictions in our formalism, we will show that this particular capability PCM satisfies the necessary conditions. 
-In fact, regardless of generalisation, it'll be easier to write the paper with this simpler construction and hide the generalised form in the tech report. 
-}
-
-\sx{
-    Yes, I agree with you, I think maybe there there is a way to keep general PCM but allow resource transfer? 
-    Gonna have more thought about this entire section.
-}
-
-\end{defn}
-
-\begin{defn}[Merge of actions]
-\label{def:merge-action}
-The \emph{merge of actions}, \( \funcn{merge\_action} : \Actions \times \Actions \parfun \Actions  \), which specifically merges the right-hand side to the left-hand side, is defined as follows:
-\[
-    \begin{rclarray}
-        
-        \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \defeq &
+        \mergeFGS{\fpgs}{\fpgs_{l}}{\fpgs_{r}} & \eqdef &
         \begin{cases}
-        ( \func{merge\_state}{\ls_{l}^{p}, \ls_{r}^{p}}, \func{merge\_state}{\ls_{l}^{q}, \ls_{r}^{q}} )  &  \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} \\
-        \text{undefined} & \text{otherwise} \\
-        \end{cases} \\
-    \end{rclarray}
-\]
-where,
-\[
-    \begin{rclarray}
-        \func{merge\_state}{(\fph_{l}, \ca_{l} ),(\fph_{r}, \ca_{r})} & \defeq & (\func{eager\_merge\_heap}{\fph_{l},\fph_{r}}, \ca_{l} \composeC \ca_{r} ) \\
-        \func{eager\_merge\_heap}{\fph_{l}, \fph_{r}} & \defeq & \lambda \loc \ldotp 
-        \begin{cases}
-            \fph_{r}(\loc) & \loc \in \dom(\fph_{l}) \cap \pred{ws}{\fph_{r}} \\
-            \fph_{l}(\loc) & \loc \in \dom(\fph_{l}) \setminus \pred{ws}{\fph_{r}} \\
-            \text{undefined} & \loc \notin \dom(\fph_{l})
+            \emptyset & \text{if} \ \exsts{\rid} \conflict{\fpgs(\rid)}{\fpgs_{l}(\rid)}{\fpgs_{r}(\rid)} \lor \rid \in  \dom(\fpgs_{l}) \cap \dom(\fpgs_{r}) \setminus \dom(\fpgs)  \\
+            S & \text{otherwise}
         \end{cases}
-        \\
     \end{rclarray}
 \]
-\end{defn}
-
-\sx{ Remember to include the constraint that the pre should be empty fingerprints to cope with potentially general form of actions  }
-
-\begin{defn}[Merge of interference]
-\label{def:merge-intf}
-Given the merge of action (\defin\ref{def:merge-action}), the \emph{merge of interference}, \( \funcn{merge\_interference} : \Actions \times \Interference \parfun \powerset{\Actions} \) , is defined as follows:
+with,
 \[
     \begin{rclarray}
-        \func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),\intf} & \defeq & \Set{(\ls_{l}^{p}, \ls_{l}^{q}) } \cup \Setcon{\func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q}), (\ls_{r}^{p}, \ls_{r}^{q})} }{(\ls_{r}^{p}, \ls_{r}^{q}) \in \intf}
+	S & = & \myset{\fpgs_{p}}{
+		\dom(\fpgs_{p})= \dom(\fpgs_{l}) \cup \dom(\fpgs_{r}) \land \for{\rid}\\
+		\quad \rid \in \dom(\fpgs_{l}) \cap \dom(\fpgs_{r}) \implies \fpgs_{p}(\rid) \in \mergeLS{\fpgs(\rid)}{\fpgs_{l}(\rid)}{\fpgs_{r}(\rid)} \\
+		\quad \land\ \rid \in \dom(\fpgs_{l}) \setminus \dom(\fpgs_{r}) \implies 	\fpgs_{p}(\rid) = \fpgs_{l}(\rid) \\
+		\quad \land\ \rid \in \dom(\fpgs_{r}) \setminus \dom(\fpgs_{l}) \implies 	\fpgs_{p}(\rid) = \fpgs_{r}(\rid)
+	}
     \end{rclarray}
 \]
-It merges all possible actions from interference (right-hand side) to an  action (left-hand side).
-Note that the final result also include the action itself.
-\end{defn}
+\end{definition}
 
-We will use notation \(  \mergeA{(\ls_{l}^{p}, \ls_{l}^{q} )}{(\ls_{r}^{p}, \ls_{r}^{q} )} \) or \( (\ls_{l}^{p}, \ls_{l}^{q} ) \mopA ( \ls_{r}^{p}, \ls_{r}^{q} ) \) to refer to the \( \predn{merge\_action} \) function.
-Similarly, we will use  \(  \mergeI{(\ls_{l}^{p}, \ls_{l}^{q} )}{\intf} \) or \( (\ls_{l}^{p}, \ls_{l}^{q} ) \mopI \intf \) to refer to the \( \predn{merge\_interference} \) function.
+Note that the \( \mergeName[\fpw] \) is not commutative, i.e.\ swapping \( \fpw_{l}\) and \( \fpw_{r}\) might yield different result.
 
-\begin{defn}[Merge closure]
-Given the merge of interference (\defin\ref{def:merge-intf}), the \emph{merge closure} of a interference is defined as follows:
+\subsection{Rely and Guarantee}
+
+\begin{definition}[Rely and guarantee]
+Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{update rely} relation, $\relyU: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+    \begin{rclarray}
+	\relyU & \eqdef &
+	\myset{
+		((\ls, \fpgs_{p}), (\ls, \fpgs_{q}))	
+	}{
+		\exsts{\rid, \ca, \intf, \kap, \ls_{p}, \ls_{q}, \ls_{f}}\\
+		\quad \for{\rid'} \rid \ne \rid' \implies \fpgs_{p}(\rid') = \fpgs_{q}(\rid') \\
+		\quad \land\ \fpgs_{p}(\rid) = (\ls_{p} \composeLS \ls_{f}, \inter) \land \fpgs_{q}(\rid) = (\ls_{q} \composeLS \ls_{f}, \inter)		 \\
+		\quad \land\ ( (\unitFP, \ca) \composeLS \flattenFW{(\ls, \fpgs_{p})} ) \isdef 
+		\land \kap \leq \ca(\rid)
+		\land (\ls_{p}, \ls_{q}) \in \inter(\kap)
+	}
+    \end{rclarray}
+\]
+The \emph{extension rely} relation, $\relyE: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+    \begin{rclarray}
+        \relyE \eqdef
+        \myset{
+            \big((\ls, \fpgs_{p}), (\ls, \fpgs_{q})\big)	
+        }{
+            \exsts{\rid}
+            \dom(\fpgs_{q}) \setminus \dom(\fpgs_{p}) = \{\rid\} \\
+            \qquad \land\ \for{\rid'} \rid \ne \rid' \implies \fpgs_{p}(\rid') = \fpgs_{q}(\rid') \\
+        }
+    \end{rclarray}
+\]
+The \emph{rely} relation, $\myrely: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
 \[
     \begin{rclarray}
-        \intf\mclose & \defeq & \bigcup\limits_{\nat \in \Nat} \intf^{\nat} \\
+         \myrely  &\eqdef & \bigcup\limits_{n \in \Nat} R_n \\
     \end{rclarray}
 \]
 where,
 \[
     \begin{rclarray}
-        \intf^{0} & \defeq & \intf \\
-        \intf^{i+1} & \defeq & \bigcup\limits_{(\ls_{l}^{p}, \ls_{l}^{q}) \in \intf^{i}} (\ls_{l}^{p}, \ls_{l}^{q}) \mopI \intf^{i} \\
+        \rely_0 & \eqdef & \closure{(\relyU \cup \relyE)} \\
+        R_{n {+} 1} & \eqdef & (R_n \cup \pred{merge\_close}{R_n})^{*} \\
+        \pred{merge\_close}{\rely} & \eqdef 
+        & \myset{(\fpw, \fpw_{q})}{
+            \exsts{\fpw_{l}, \fpw_{r}} (\fpw, \fpw_{l}), (\fpw, \fpw_{r}) \in \rely \land \fpw_{q} \in \mergeFW{\fpw}{\fpw_{l}}{\fpw_{r}}}
     \end{rclarray}
 \]
-\end{defn}
+%
+The $\closure{(.)}$ denotes the reflexive transitive closure of the relation.
+A set of fingerprint worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
+%
+\[
+    \begin{rclarray}
+        \stable{W} & \eqdef & \for{\world \in \setworld, \fpw'} (\liftW{\world}, \fpw') \in \myrely \implies \eraseFW{\fpw'} \in \setworld
+    \end{rclarray}
+\]
+%
+The \emph{update guarantee} relation, $\guarU: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+    \begin{rclarray}
+        \guarU & \eqdef &
+        \myset{
+            ((\ls_{p}, \fpgs_{p}), (\ls_{q}, \fpgs_{q}))	
+        }{
+            \exsts{\ls_{p}' = \flattenFW{(\ls_{p}, \fpgs_{p})}, \ls_{p}' = \flattenFW{(\ls_{q}, \fpgs_{q})} } \orth{(\lsCAP{(\ls_{p}')})} = \orth{(\lsCAP{(\ls_{q}')})}  \\
+            \land 
+            \begin{formulea}
+                \for{\rid} \fpgs_{p}(\rid) = \fpgs_{q}(\rid) \\
+                \lor 
+                \begin{formulea}
+                    \orth{(\lsFPH{(\ls_{p}')})} = \orth{(\lsFPH{(\ls_{q}')})} 
+                    \land \exsts{\rid, \ca, \kap, \intf, \ls_{p}'', \ls_{q}'', \ls_f}\\
+                        \quad \for{\rid'} \rid \ne \rid' \implies \fpgs_{p}(\rid') = \fpgs_{q}(\rid') \\
+                        \quad \land \fpgs_{p}(\rid) = (\ls_{p}'' \composeLS \ls_f, \inter) \land \fpgs_{q}(\rid) = (\ls_{q}'' \composeLS \ls_f, \inter)		 \\
+                        \quad \land (\unitFP, \ca) \leq \ls_{p}
+                        \land \kap \leq \ca(\rid)
+                        \land (\ls_{p}'', \ls_{q}'') \in \inter(\kap)
+                \end{formulea}
+            \end{formulea}
+        }
+    \end{rclarray}
+\]
+% 
+The \emph{extension guarantee} relation, $\guarE: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[	
+    \begin{rclarray}
+	\guarE & \eqdef &
+	\myset{
+		((\ls_{f} \composeLS \ls, \fpgs_{p}), (\ls_{f} \composeLS (\unitFP, \ca), \fpgs_{q}))	
+	}{
+		\exsts{\rid, \ca'}
+		\dom(\fpgs_{q}) = \dom(\fpgs_{p}) \uplus \Set{\rid} \\
+		\qquad \land\ \for{\rid'} \rid \ne \rid' \implies \fpgs_{p}(\rid') = \fpgs_{q}(\rid') \\
+		\qquad \land\ \fpgs_{q}(\rid) = \ls \composeLS (\unitFP, \ca')
+		\land \dom(\ca) = \dom(\ca') = \Set{\rid}
+	}
+    \end{rclarray}
+\]
+% 
+The \emph{guarantee} relation, $\myguar: \FPWorlds \times \FPWorlds$, is defined as follows:
+%
+\[
+	\myguar \eqdef (\guarU \cup \guarE)^{\scalebox{1.1}{*}}
+\]
+%
+\end{definition}
 
 \subsection{Rules for Global}
 
@@ -264,32 +344,209 @@ This is, the environment is allowed to write to locations that are different fro
     }
 \]
 
-\begin{defn}[Collapse of fingerprint heaps]
-    \label{def:clps-fingerprint-hp}
-    The \emph{Collapse of fingerprint heaps}, \( \clpsFP{.} : \FPHeaps \to \PHeap \), is defined as follows:
-    \[
-    \begin{rclarray}
-        \clpsFP{\fph} & \defeq & \lambda \loc \ldotp 
-        \begin{cases}
-            \val & \fph(\loc) = (\val, \stub, \stub) \\
-            \text{undefined} & \text{otherwise}
-        \end{cases} \\
-    \end{rclarray}
-    \]
-\end{defn}
-
-\begin{defn}[Repartition]
+\begin{definition}[Repartitioning]
+The \emph{repartitioning} is defined as follows:
 \[
     \begin{rclarray}
-        \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \iffdef & 
-        \for{ \lenv, \stk_{p}, \world_{p} \in \evalW[\lenv, \stk_{p}]{\gpre} }  \\
-        & & \implies \exsts{ \ca_{p}, \fph_{p} } ( \fph_{p}, \unitC) \in \evalLS[\lenv, \stk_{p}]{\lpre} \land (\clpsFP{\fph_{p}}, \ca_{p} ) = \flattenW{\world_{p}} \\
-        & & \implies \for{ \stk_{q}, \ca_{q}, \fph_{q} } ( \fph_{q}, \unitC ) \in \evalLS[\lenv, \stk_{q}]{\lpost} \land ((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q})) \in \guar  \\
-        & & \implies \for{\fph'_{q}, \ca'_{q}}  (\stub, (\fph'_{q}, \ca'_{q})) \in \mergeI{((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q}))}{ \rely} \\
-        & & \implies \exsts{ \world_{q} \in \evalW[\lenv, \stk_{q}]{\gpost} } (\clpsFP{\fph'_{q}}, \ca'_{q} ) = \flattenW{\world_{q}} \\
+        \mrepartition{\setworld_{p}}{\setworld_{q}}{\setfph_{p}}{\setfph_{q}} & \iffdef &
+        \begin{array}[t]{@{} l @{}}
+            \for{\world_{p} \in \setworld_{p}} \exsts{\fpw_{p}, \fph_{p}, \fph_{f}}\\
+            \quad \fpw_{p} = \liftW{\world_{p}} \land \flattenFW{\fpw_{p}} = (\fph_{p} \composeFP \fph_{f}, \unitC) \land \fph_{p} \in \setfph_{p} \\
+            \quad \land\ \for{\fph_{q} \in \setfph_{q}} \exsts{\world_{q}, \fpw_{q}} \\
+            \qquad \flattenFW{\fpw_{q}} = (\fph_{q} \composeFP \fph_{f}, \unitC) \land (\fpw_{p}, \fpw_{q}) \in \myguar \land \eraseFW{\fpw_{q}} = \world_{q} \land \world_{q} \in \setworld_{q} \\
+            \qquad \land\ \for{\fpw \in \mergeR{\fpw_{p}}{\fpw_{q}}{\myrely}} \erase{\fpw} \in \setworld_{q}
+        \end{array}
     \end{rclarray}
 \]
-\end{defn}
-\sx{ I think there might be a problem of quantification of stack \( \stk_{q} \), because the stack of post-condition is not necessary  to be the same as the pre-condition. }
+with, $\mergeName[\scalebox{.5}{\(\myrely\)}]: \FPWorlds \times \FPWorlds \times \powerset{\FPWorlds \times \FPWorlds} \to \powerset{\FPWorlds}$, defined as follows, for all $\fpw_{p}, \fpw_{q} \in \FPWorlds$:
+%
+\[
+	\mergeR{\fpw_{p}}{\fpw_{q}}{\myrely} \eqdef \bigcup\limits_{\fpw \in \myrely(\fpw_{p})} \mergeFW{\fpw_{p}}{\fpw_{q}}{\fpw}
+\]
+%
+\end{definition}
 
-\sx{ Remember to include the constraint that the pre should be empty fingerprints to cope with potentially general form of actions  }
+
+
+
+
+
+
+
+
+
+
+
+%\begin{defn}[Action agreement]
+%The \emph{action agreement} is defined as follows:
+%\[
+    %\begin{rclarray}
+        %\pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \eqdef & \pred{agree\_local}{\ls_{l}^{p}, \ls_{r}^{p}} \land \pred{agree\_local}{\ls_{l}^{q}, \ls_{r}^{q}} \land {}\\
+        %& & \pred{agree\_cap\_diff}{\ls_{l}^{p}, \ls_{r}^{q}, \ls_{l}^{q}, \ls_{r}^{p}} \\
+        %\pred{agree\_local}{(\fph_{l}, \ca_{l} ),(\fph_{r}, \ca_{r})} & \eqdef & \pred{agree\_heap}{\fph_{l}, \fph_{r}} \land ( \ca_{l} \composeC \ca_{r} )\isdef  \\
+        %\pred{agree\_cap\_diff}{(\stub, \ca_{l}^{p}), (\stub, \ca_{l}^{q}), (\stub, \ca_{r}^{p}), (\stub, \ca_{r}^{q})} & \defeq  & ((\ca_{l}^{p} \setminus \ca_{l}^{q}) \composeC (\ca_{r}^{p} \setminus \ca_{r}^{q} ))\isdef \land ((\ca_{l}^{p} \setminus \ca_{l}^{q}) \composeC (\ca_{r}^{q} \setminus \ca_{r}^{p} ))\isdef \land {} \\
+        %& & ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{p} \setminus \ca_{r}^{q} ))\isdef \land ((\ca_{l}^{q} \setminus \ca_{l}^{p}) \composeC (\ca_{r}^{q} \setminus \ca_{r}^{p} ))\isdef \\
+    %\end{rclarray}
+%\]
+%where,
+%\[
+    %\begin{rclarray}
+        %%\funcn{ws} & : & \FPHeaps \to \powerset{\Addr} \\
+        %\func{ws}{\fph} & \defeq & \Setcon{\loc}{ \exsts{ \fp } \fph(\loc) = (\stub, \addFPW{\fp}, \stub)} \\
+        %%\funcn{get\_no\_write} & :  & \FPHeaps \to \FPHeaps \\
+        %\func{get\_no\_write}{\fph } & \defeq & \fph \setminus \Setcon{\loc \mapsto \stub }{ \loc \in \pred{ws}{\fph}} \\
+    %\end{rclarray}
+%\]
+%\sx{
+%The ``\( \setminus \)'' needs to be defined in a more robust way to include splitting capabilities.
+%The first line of agreement on actions is to stop merging of the following two actions:
+%\[
+%\begin{array}{@{}l@{}}
+%\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \\
+%\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0
+%\end{array}
+%\]
+%The second line of agreement on actions is to stop merging of the following two actions:
+%\[
+%\begin{array}{@{}l@{}}
+%\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \sep \cass{C}{}\\
+%\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0
+%\end{array}
+%\]
+%Instead of cross-check pre against another's post, we should check the differential.
+%}
+%For two actions to agree, their pre- and post-conditions must agree on the heaps and the capabilities.
+%Additional, the differential of capabilities must agree, so that when merging these two actions, the merged result does not have invalid capabilities transfer.
+
+%\azalea{Again, the definition of \texttt{agree\_action} is too strong with respect to capabilities. I have pointed this out before. For instance, assuming that $\cass{C}{} * \cass{C}{}$ is not defined, according to your definition these two actions do not agree (because of the second conjunct in \texttt{agree\_local)}:
+%\[
+	%\cass{A}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpW}} 1 \sep \vy \pt_{\Set{\fpR}} 0 \sep \cass{C}{}
+%\]
+%and
+%\[
+	%\cass{B}{}: \vx \pt_{\emptyset} 0 \sep \vy \pt_{\emptyset} 0 \sep \cass{C}{} \transfersto  \vx \pt_{\Set{\fpR}} 0 \sep \vy \pt_{\Set{\fpW}} 1 \sep \cass{C}{}
+%\]
+%Both actions require $\cass{C}{}$ in the shared state for them to trigger. However, their write set is totally disjoint.\\
+
+%There is however a way to correct this. Provided that your PCM satisfies certain conditions, you can monitor resource transfer (on capabilities) and generalise the definition. \\
+
+%So you have two choices:\\
+%1) Keep your capability PCM parametric (user-instantiated) but disallow resource transfer (including on capabilities) completely. Your current definition is too restrictive anyway - as with the example above. We will introduce the generalisation I have in mind at some point to allow resource transfer.\\
+
+%2) Define your capability PCM as token sets: $(\powerset{\textsf{Token}}, \uplus, \emptyset)$ and then it is easy to define resource transfer in a more flexible way as follows: for each action, you identify the tokens removed from the state, the tokens added and tokens left unchanged. Then for two actions to agree, their respective removed tokens and added tokens must be disjoint and they should agree on the unchanged tokens. 
+%Again, when  we generalise the restrictions in our formalism, we will show that this particular capability PCM satisfies the necessary conditions. 
+%In fact, regardless of generalisation, it'll be easier to write the paper with this simpler construction and hide the generalised form in the tech report. 
+%}
+
+%\sx{
+    %Yes, I agree with you, I think maybe there there is a way to keep general PCM but allow resource transfer? 
+    %Gonna have more thought about this entire section.
+%}
+
+%\end{defn}
+
+%\begin{defn}[Merge of actions]
+%\label{def:merge-action}
+%The \emph{merge of actions}, \( \funcn{merge\_action} : \Actions \times \Actions \parfun \Actions  \), which specifically merges the right-hand side to the left-hand side, is defined as follows:
+%\[
+    %\begin{rclarray}
+        
+        %\func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} & \defeq &
+        %\begin{cases}
+        %( \func{merge\_state}{\ls_{l}^{p}, \ls_{r}^{p}}, \func{merge\_state}{\ls_{l}^{q}, \ls_{r}^{q}} )  &  \pred{agree\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),(\ls_{r}^{p}, \ls_{r}^{q} )} \\
+        %\text{undefined} & \text{otherwise} \\
+        %\end{cases} \\
+    %\end{rclarray}
+%\]
+%where,
+%\[
+    %\begin{rclarray}
+        %\func{merge\_state}{(\fph_{l}, \ca_{l} ),(\fph_{r}, \ca_{r})} & \defeq & (\func{eager\_merge\_heap}{\fph_{l},\fph_{r}}, \ca_{l} \composeC \ca_{r} ) \\
+        %\func{eager\_merge\_heap}{\fph_{l}, \fph_{r}} & \defeq & \lambda \loc \ldotp 
+        %\begin{cases}
+            %\fph_{r}(\loc) & \loc \in \dom(\fph_{l}) \cap \pred{ws}{\fph_{r}} \\
+            %\fph_{l}(\loc) & \loc \in \dom(\fph_{l}) \setminus \pred{ws}{\fph_{r}} \\
+            %\text{undefined} & \loc \notin \dom(\fph_{l})
+        %\end{cases}
+        %\\
+    %\end{rclarray}
+%\]
+%\end{defn}
+
+%\sx{ Remember to include the constraint that the pre should be empty fingerprints to cope with potentially general form of actions  }
+
+%\begin{defn}[Merge of interference]
+%\label{def:merge-intf}
+%Given the merge of action (\defin\ref{def:merge-action}), the \emph{merge of interference}, \( \funcn{merge\_interference} : \Actions \times \Interference \parfun \powerset{\Actions} \) , is defined as follows:
+%\[
+    %\begin{rclarray}
+        %\func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q} ),\intf} & \defeq & \Set{(\ls_{l}^{p}, \ls_{l}^{q}) } \cup \Setcon{\func{merge\_action}{(\ls_{l}^{p}, \ls_{l}^{q}), (\ls_{r}^{p}, \ls_{r}^{q})} }{(\ls_{r}^{p}, \ls_{r}^{q}) \in \intf}
+    %\end{rclarray}
+%\]
+%It merges all possible actions from interference (right-hand side) to an  action (left-hand side).
+%Note that the final result also include the action itself.
+%\end{defn}
+
+%We will use notation \(  \mergeA{(\ls_{l}^{p}, \ls_{l}^{q} )}{(\ls_{r}^{p}, \ls_{r}^{q} )} \) or \( (\ls_{l}^{p}, \ls_{l}^{q} ) \mopA ( \ls_{r}^{p}, \ls_{r}^{q} ) \) to refer to the \( \predn{merge\_action} \) function.
+%Similarly, we will use  \(  \mergeI{(\ls_{l}^{p}, \ls_{l}^{q} )}{\intf} \) or \( (\ls_{l}^{p}, \ls_{l}^{q} ) \mopI \intf \) to refer to the \( \predn{merge\_interference} \) function.
+
+%\begin{defn}[Merge closure]
+%Given the merge of interference (\defin\ref{def:merge-intf}), the \emph{merge closure} of a interference is defined as follows:
+%\[
+    %\begin{rclarray}
+        %\intf\mclose & \defeq & \bigcup\limits_{\nat \in \Nat} \intf^{\nat} \\
+    %\end{rclarray}
+%\]
+%where,
+%\[
+    %\begin{rclarray}
+        %\intf^{0} & \defeq & \intf \\
+        %\intf^{i+1} & \defeq & \bigcup\limits_{(\ls_{l}^{p}, \ls_{l}^{q}) \in \intf^{i}} (\ls_{l}^{p}, \ls_{l}^{q}) \mopI \intf^{i} \\
+    %\end{rclarray}
+%\]
+%\end{defn}
+
+%\subsection{Rules for Global}
+
+%The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to global level by repartition \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \).
+%The repartition stripes off the fingerprints but uses the fingerprints to merge the local effect and the interference.
+%This is, the environment is allowed to write to locations that are different from the ones by transaction \( \trans \).
+%%
+%\[
+    %\infer[\rl{PRCommit}]{%
+        %\judgeG{\gpre}{ \ptrans{\trans} }{\gpost}
+    %}{%
+        %\judgeL{\lpre}{\trans}{\lpost} &&
+        %\repartition{\gpre}{\gpost}{\lpre}{\lpost}
+    %}
+%\]
+
+%\begin{defn}[Collapse of fingerprint heaps]
+    %\label{def:clps-fingerprint-hp}
+    %The \emph{Collapse of fingerprint heaps}, \( \clpsFP{.} : \FPHeaps \to \PHeap \), is defined as follows:
+    %\[
+    %\begin{rclarray}
+        %\clpsFP{\fph} & \defeq & \lambda \loc \ldotp 
+        %\begin{cases}
+            %\val & \fph(\loc) = (\val, \stub, \stub) \\
+            %\text{undefined} & \text{otherwise}
+        %\end{cases} \\
+    %\end{rclarray}
+    %\]
+%\end{defn}
+
+%\begin{defn}[Repartition]
+%\[
+    %\begin{rclarray}
+        %\repartition{\gpre}{\gpost}{\lpre}{\lpost} & \iffdef & 
+        %\for{ \lenv, \stk_{p}, \world_{p} \in \evalW[\lenv, \stk_{p}]{\gpre} }  \\
+        %& & \implies \exsts{ \ca_{p}, \fph_{p} } ( \fph_{p}, \unitC) \in \evalLS[\lenv, \stk_{p}]{\lpre} \land (\clpsFP{\fph_{p}}, \ca_{p} ) = \flattenW{\world_{p}} \\
+        %& & \implies \for{ \stk_{q}, \ca_{q}, \fph_{q} } ( \fph_{q}, \unitC ) \in \evalLS[\lenv, \stk_{q}]{\lpost} \land ((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q})) \in \guar  \\
+        %& & \implies \for{\fph'_{q}, \ca'_{q}}  (\stub, (\fph'_{q}, \ca'_{q})) \in \mergeI{((\fph_{p},\ca_{p}), (\fph_{q}, \ca_{q}))}{ \rely} \\
+        %& & \implies \exsts{ \world_{q} \in \evalW[\lenv, \stk_{q}]{\gpost} } (\clpsFP{\fph'_{q}}, \ca'_{q} ) = \flattenW{\world_{q}} \\
+    %\end{rclarray}
+%\]
+%\end{defn}
+%\sx{ I think there might be a problem of quantification of stack \( \stk_{q} \), because the stack of post-condition is not necessary  to be the same as the pre-condition. }
+
+%\sx{ Remember to include the constraint that the pre should be empty fingerprints to cope with potentially general form of actions  }
