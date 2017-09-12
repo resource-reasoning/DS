@@ -1,5 +1,197 @@
 \section{Soundness}
 
+
+\begin{thm}[Transaction soundness]
+\label{thm:transaction-soundness}
+Assume the standard lift for transaction interpretation and for fingerprint heaps composite \( \composeFP \), the transaction soundness is as follows:
+\[
+    \begin{array}{@{}l@{}}
+        \for{ \trans, \lpre, \lpost } 
+        \judgeL{\lpre}{\trans}{\lpost} \\
+        \quad {} \land \for{\lenv, \stk_{p}, \stk_{q}, \fph_{p}, \fph_{q} } 
+        \fph_{p} \in \evalLS[\lenv, \stk_{p}]{\lpre}
+        \land (\stk_{p}, \fph_{p} ), \trans \toL^{*}  (\stk_{q}, \fph_{q} ), \pskip \\
+        \quad \implies \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost}
+    \end{array}
+\]
+\end{thm}
+\begin{proof}
+    Induction on the structure of transaction \( \trans \in \Transactions \).
+\end{proof}
+
+
+\begin{defn}[World to time-stamp heaps]
+\label{def:w2tsh}
+Given the set of world \( \world \in \World \) and the set of \( \tsh \in \TSHeaps \), the function \( \funcn{w2tsh} : \World \to \powerset{\TSHeaps} \) is defined as follows:
+\[
+    \begin{rclarray}
+        \func{w2tsh}{\world} & \defeq & 
+        \Setcon{%
+            (\tsh,\ts) 
+        }{%
+            \exsts{ \h }
+            \flattenW{\world} = (\h, \stub) 
+            \land \snapshot{\tsh}{\ts}(\addr) = (\val, \stub) 
+            \land \for{ \addr } \h(\addr) = \val 
+         }
+    \end{rclarray}
+\]
+where the \( \snapshotName \) function (\fig \ref{fig:thread_semantics}) returns a fingerprint heap corresponding the state at time \( \ts \), and here we match first projection, i.e. the values, with the flattened world.
+\end{defn}
+
+\begin{thm}[Soundness]
+Given the set of program \( \prog \in \Programs \) (\defin \ref{def:language}) and the operational semantics (\fig \ref{fig:thread_semantics}), the soundness is defined as follows:
+\[
+    \begin{array}{@{}l@{}}
+        \for{\gpre, \gpost, \prog }
+        \judgeG{\gpre}{\prog}{\gpost} \\
+        \quad {} \land \for{\world_{p}, \tsh_{p}, \tsh_{q}, \lenv, \stk_{p}, \stk_{q}, \ts_{p}, \ts_{q} } 
+        \world_{p} \in \evalW[\lenv, \stk_{p}]{\gpre}
+        \land (\tsh_{p}, \ts_{p}) \in \func{w2tsh}{\world_{p}}
+        \land (\stk_{p}, \tsh_{p}, \ts_{p}), \prog \toT{}^{*} (\stk_{q}, \tsh_{q}, \ts_{q}), \pskip \\
+        \quad \implies \exsts{ \world_{q} \in \evalW[\lenv, \stk_{q}]{\gpost} }
+        (\tsh_{q}, \ts_{q}) \in \func{w2tsh}{\world_{q}} 
+    \end{array}
+\]
+\sx{ Here I also want to say, there night have other thread interleaving, I feel it is actually included into the judgement?}
+\end{thm}
+\begin{proof}
+Induction on the structure of the program \( \prog \).
+
+Base case \( \ptrans{\trans} \).
+We introduce some new variables \( \fpw_{p}, \fph_{p}, \fpw_{i}, \fph_{f} \) that satisfy the follows and whose names are consistent with those in \defin \ref{def:repartitioning}.
+\[
+\begin{array}{@{}l@{}}
+    \eraseFW{\fpw_{p}} = \world_{p} 
+    \land \flattenFW{\fpw_{p}} = (\fph_{p} \composeFP \fph_{f}, \unitC)
+    \land \for{\addr} \fph_{p}(\addr) = (\stub, \emptyset) 
+    %\eraseFW{\fpw_{i}} = \world_{q} 
+    %\land \flattenFW{\fpw_{q}} = (\fph_{q} \composeFP \fph_{f}, \unitC)
+\end{array}
+\]
+Given the operational semantics in \fig \ref{fig:thread_semantics}, we also have the follows, where \( \tsid \) denotes the committed transaction.
+\begin{equation}
+    \label{equ:commit-current-trans}
+    (\stk_{p}, \tsh_{p}, \ts_{p}), \ptrans{\trans} \toT{\lbC{\tsid}} (\stk_{q}, \tsh_{q}, \ts_{q}), \pskip 
+\end{equation}
+By the repartitioning (\defin \ref{def:repartitioning}) and the soundness of transaction (Theorem \ref{thm:transaction-soundness}), there must exist \( \fph_{q} \) that satisfies the follows:
+\begin{equation}
+    \label{equ:transaction-soundness}
+    (\stk_{p}, \fph_{p} ), \trans \toL^{*}  (\stk_{q}, \fph_{q} ), \pskip 
+\end{equation}
+Now we consider addresses being written and read separably.
+First, for any address \( \addr_{w} \) being written in \( \fph_{q} \), assume the value is \( \val_{w} \).
+Note that here we also include addresses has been read and written.
+This is:
+\begin{equation}
+    \label{equ:fph-write-value}
+    \for{\addr_{w}} \exsts{\val_{w}, \fp} 
+    \fph_{q}(\addr_{w}) = (\val_{w}, \fp)
+    \land \fpW \in \fp
+\end{equation}
+By the operational semantics, especially the \( \commitName \) function, in \defin \ref{fig:thread_semantics}, Eq. \eqref{equ:transaction-soundness} and Eq. \eqref{equ:fph-write-value}, we have:
+\begin{equation}
+    \label{equ:tsh-write-value}
+    \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etW, \stub)
+\end{equation}
+Meanwhile, by the repartitioning (\defin \ref{def:repartitioning}), we also have:
+\begin{equation}
+    \flattenFW{\fpw_{i}} = (\fph_{q} \composeFP \fph_{f}, \unitC) \land  \for{\fpw_{q} \in \mergeR{\fpw_{p}}{\fpw_{i}}{\myrely}} \eraseFW{\fpw_{q}} \in \evalW[\lenv, \stk_{q}]{\gpost}
+\end{equation}
+Given the \( \funcn{merge}_{\myrely} \) function (\defin \ref{def:repartitioning}) that uses several levels of merges until \( \mergeName[\val] \) function (\defin \ref{def:merge-finger-heap}) and all the address \( \addr \) being written, we have:
+\begin{equation}
+    \exsts{\fph} \flattenFW{\fpw_{q}} = (\fph, \unitC) \land \for{\addr_{w}} \fph(\addr_{w}) = \fph_{q}(\addr_{w}) = (\stub, \etW)
+\end{equation}
+Given the \( \funcn{w2tsh} \) function (\defin \ref{def:w2tsh}) and the \( \fph_{q} \) that is defined before, we have:
+\begin{equation}
+\label{equ:write-match}
+    \for{\world_{q}, \addr_{w}, \tsh_{q}, \ts_{q}} \world_{q} \in \evalW[\lenv, \stk_{q}]{\gpost}
+    \land (\tsh_{q}, \ts_{q}) \in \func{w2tsh}{\world_{q}}
+    \land \fph_{q}(\addr_{w})  = (\val, \stub) 
+    \implies \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etW, \stub)
+\end{equation}
+which matches with Eq. \eqref{equ:tsh-write-value}.
+
+Second, we consider addresses \( \addr_{r} \) that are only being read:
+\begin{equation}
+    \label{equ:fph-read-value}
+    \for{\addr_{r}} \exsts{\val_{r}} 
+    \fph_{q}(\addr_{r}) = (\val_{r}, \Set{\fpR})
+\end{equation}
+Therefore we have:
+\begin{equation}
+    \label{equ:tsh-read-value}
+    \tsh_{q}(\addr_{r})(\ts_{p}) = (\val_{r}, \etR )
+    \land \tsh_{q}(\addr_{r})(\ts_{q}) = (\val_{r}, \etE )
+\end{equation}
+However, note that:
+\[
+\neg\left(
+    \begin{array}{@{}l@{}}
+        \for{\addr_{r}} \exsts{\val_{r}} 
+        \tsh_{q}(\addr_{r})(\ts_{p}) = (\val_{r}, \etR, \tsid )
+        \land \tsh_{q}(\addr_{r})(\ts_{q}) = (\val_{r}, \etE , \tsid) \\
+        \quad \implies \snapshot{\tsh_{q}}{\ts_{q}}(\addr_{r}) = (\val_{r}, \stub)
+    \end{array}
+\right)
+\]
+Because there might be other transactions that commits between times \( \ts_{p} \) and \( \ts_{q} \) and writes to some addresses \( \addr_{r} \), which is allowed by the \( \consistentName \) predicate shown in \fig \ref{fig:thread_semantics}.
+Let \( \tsid_{1} \) to \( \tsid_{\nat} \) be the transactions that commits between times \( \ts_{p} \) and \( \ts_{q} \) and writes to some addresses \( \addr_{r} \).
+This is:
+\[
+    \begin{array}{@{}l@{}}
+        \exsts{\nat} 
+        \bigwedge\limits_{1 \leq i \leq \nat} \exsts{\ts, \tsid} \ts_{p} < \ts \leq \ts_{q} 
+        \land \tsh_{q}(\addr_{r})(\ts) = (\stub, \etW, \tsid) \\
+    \end{array}
+\]
+Given the operational semantics in \fig \ref{fig:thread_semantics}, if two transactions write to the same addresses, it must be strictly one after another.
+We also know the first transaction \( \tsid_{1} \) must take the same snap shot as the transaction \( \tsid \) (Eq. \eqref{equ:commit-current-trans}), therefore they must read the same value.
+Note that the variable \( \tsid \) is from Eq. \eqref{equ:commit-current-trans}.
+\begin{equation}
+\label{equ:other-writes}
+    \begin{array}{@{}l@{}}
+        \for{\addr_{r}} \exsts{\val_{r}} 
+        \tsh_{q}(\addr_{r})(\ts_{p}) = (\val_{r}, \etR, \tsid )
+        \land \tsh_{q}(\addr_{r})(\ts_{q}) = (\val_{r}, \etE , \tsid) \\
+        \quad \implies \exsts{\nat, \ts_{1}, \ts_{1}', \dots \ts_{\nat}, \ts_{\nat}', \tsid_{1}, \dots, \tsid_{\nat}, \val_{0}, \val_{1}, \dots, \val_{\nat} }  \\
+        \qquad \val_{0}  = \val_{r} 
+        \land \ts_{p} < \ts_{0}' < \ts_{0} < \dots < \ts_{\nat}' < \ts_{\nat} < \ts_{q} \land {} \\
+        \qquad \bigwedge\limits_{1 \leq i \leq \nat} 
+        \exsts{ \etag } 
+        \land ( \etag = \etR \lor \fp = \etS ) 
+        \land \tsh_{q}(\addr_{r})(\ts_{i}') = (\val_{i-1}, \etag, \tsid_{i}) 
+        \land \tsh_{q}(\addr_{r})(\ts_{i}) = (\val_{i}, \etW, \tsid_{i}) \\
+        \quad \implies \snapshot{\tsh_{q}}{\ts_{q}}(\addr_{r}) = (\val_{n}, \stub)
+    \end{array}
+\end{equation}
+Now let consider the logic.
+Given Eq. \eqref{equ:other-writes}, we can use a vector to represent all the transactions that concurrently write to an address \( \addr \) read by \( \tsid \), where the transactions are order by the commit time.
+\begin{equation}
+\label{equ:con-trans-vector}
+A = \left[
+\begin{array}{@{} c c c @{}}
+\tsid_{1} & \dots & \tsid_{\nat} \\
+\end{array}
+\right]
+\end{equation}
+We are about to show that, given the initial value \( \val_{r} \) from Eq. \eqref{equ:tsh-read-value}, if we keep applying the transactions in \( A \) from left to right, all the transfers are included in rely \( \myrely \).
+
+\sx{how to connect to rely? Not sure how to do that properly?}
+
+\end{proof}
+
+
+
+
+
+
+
+
+
+
+\sx{No use for below}
+
 \begin{defn}[Transaction interpretation]
 \label{def:transactions-interpretation}
 Given the set of transaction \( \trans \in \Transactions \) (\defin \ref{def:language}) and the operational semantics (\fig \ref{fig:transaction_semantics}), the \emph{transaction interpretation} function \( \intpSQ{.} : \Transactions \to \FPHeaps \to \powerset{\FPHeaps} \) is defined as follows:
@@ -14,9 +206,35 @@ Given the set of transaction \( \trans \in \Transactions \) (\defin \ref{def:lan
     \end{rclarray}
 \]
 \end{defn}
+\sx{probably use the above to prove%
+\[
+    \judgeL{\lpre}{\trans}{\lpost}
+\]%
+Simply for less words, maybe?
+}
+Note that the stack is local and has no side effect to the fingerprint heap, therefore from now we will fix the stack and treat the stack as the same as logical environment.
+
+\begin{defn}[Reification function]
+\label{def:reification}
+Given the set of assertions \( \gpre \in \Ast \) and time-stamp heap \( \TSHeaps \), the \emph{reification} function \( \reif{.} : \Ast \to \powerset{\TSHeaps} \) is defined as follows:
+\[
+\begin{rclarray}
+    \reif{\gpre} & \defeq & 
+    \Setcon{%
+        \tsh
+    }{%
+        \exsts{\lenv, \stk, \h} \world \in \evalW{\gpre} 
+        \land (\h, \stub ) = \flattenW{\world}
+        \land \tsh \in\func{h2tsh}{\h} 
+    }
+\end{rclarray}
+\]
+where the interpretation of assertion \( \evalW{.} \) is defined in \defin \ref{def:assertion}, the world flattening \( \flattenW{.} \) in \defin \ref{def:world} and \( \funcn{h2tsh} \) function in \defin \ref{def:h2tsh}.
+\end{defn}
 
 \begin{defn}[Atomic interpretation]
-Given the set of transactions \( \trans \in \Transactions \) (\defin \ref{def:language}), the set of programs \( \Programs \) and the operational semantics (\fig \ref{fig:thread_semantics}), the \emph{atomic interpretation} function \( \intfATOM{.} : \Atom \to \TSHeaps \to \powerset{\TSHeaps} \) is defined as follows, where \( \Atom \defeq \Setcon{\ptrans{\trans}}{\trans \in \Transactions \land \ptrans{\trans} \in \Programs} \).
+\label{def:atomic-intp}
+%Given the set of transactions \( \trans \in \Transactions \) (\defin \ref{def:language}), the set of programs \( \Programs \) and the operational semantics (\fig \ref{fig:thread_semantics}), the \emph{atomic interpretation} function \( \intfATOM{.} : \Atom \to \TSHeaps \to \powerset{\TSHeaps} \) is defined as follows, where \( \Atom \defeq \Setcon{\ptrans{\trans}}{\trans \in \Transactions \land \ptrans{\trans} \in \Programs} \).
 \[
     \begin{rclarray}
         \intpSQ{\ptrans{\trans}}(\tsh) & \defeq & 
@@ -29,37 +247,53 @@ Given the set of transactions \( \trans \in \Transactions \) (\defin \ref{def:la
 \]
 \end{defn}
 
-\begin{defn}[Heap to time-stamp heaps]
-\label{def:h2tsh}
-Given the set of (plain) heap \( \h \in \PHeap \) and the set of \( \tsh \TSHeaps \), the function \( \funcn{h2tsh} : \PHeap \to \powerset{\TSHeaps} \) is defined as follows:
+\begin{thm}[Axiom soundness]
+Given the set of transactions \( \trans \in \Transactions \) (\defin \ref{def:language}) and the rely relation \( \myrely \) (\defin \ref{def:rely-guarantee}), and assume stardard lift for reification function (\defin \ref{def:reification}) and for atomic interpretation (\defin \ref{def:atomic-intp}), the axiom soundness is defined as follows:
 \[
-    \begin{rclarray}
-        \func{h2tsh}{\h} & \defeq & 
-        \Setcon{%
-            \lambda \addr \ldotp \val 
-        }{%
-            \exsts{ \ts } \snapshot{\tsh}{\ts}(\addr) = (\val, \stub)
-        }
-    \end{rclarray}
+    \begin{array}{@{}l@{}}
+        \for{ \trans, \gpre, \gpost } 
+        \judgeG{\gpre}{\ptrans{\trans}}{\gpost} \\
+        \quad {} \land \for{\world } \intpSQ{\ptrans{\trans}}\left( \reif{\gpre \sep \Set{\world}} \right) \subseteq \left( \reif{\gpost \sep \myrely(\Set{\world})} \right) 
+     \end{array}
 \]
-where the \( \snapshotName \) function (\fig \ref{fig:thread_semantics}) returns a fingerprint heap corresponding the state at time \( \ts \), and here we extract the first projection.
-\end{defn}
-
-\begin{defn}[Reification function]
-\label{def:reification}
-Given the set of assertions \( \gpre \in \Ast \) and time-stamp heap \( \TSHeaps \), the \emph{reification} function \( \reif{.} : \Ast \to \powerset{\TSHeaps} \) is defined as follows:
+where \( \Set{\world} \) denotes assertion satisfying \( \world \) under any logical environment and stack, i.e.\ \( \for{\lenv, \stk} \evalW{\Set{\world}} = \Set{\world} \).
+\end{thm}
+\begin{proof}
+Given the reification function, it is sufficient to prove:
 \[
-\begin{rclarray}
-    \reif{\gpre} & \defeq & 
-    \Setcon{%
-        \tsh
-    }{%
-        \exsts{\lenv, \stk, \h} \world \in \evalW{\gpre} 
-        \land (\h, \stub ) \in \flattenW{\world}
-        \land \tsh \in\func{h2tsh}{\h} 
-    }
-\end{rclarray}
+    \begin{array}{@{}l@{}}
+        \for{ \trans, \gpre, \gpost } 
+        \judgeG{\gpre}{\ptrans{\trans}}{\gpost} \\
+        \quad {} \land \for{ \stk ,\lenv, \world_{f}, \world_{p} } 
+        \exsts{ \world_{q}, \world_{f}' } 
+        \world_{p} \in \evalW{\gpre}
+        \land \world_{q} \in \evalW{\gpost}
+        \land \world_{f}' \in \myrely(\world_{f})  \\
+        \quad {} \land \for{ \h_{p}, \tsh_{p} } 
+        \exsts{ \h_{q}, \tsh_{q} }
+        (\h_{p}, \stub) = \flattenW{\world_{p} \composeW \world_{f}} 
+        \land \tsh_{p} \in \func{h2tsh}{\h_{p}}
+        \land (\h_{q}, \stub) = \flattenW{\world_{q} \composeW \world_{f}'} 
+        \land \tsh_{q} \in \func{h2tsh}{\h_{q}} \\
+        \quad \implies \tsh_{q} \in \intpSQ{\ptrans{\trans}} \left( \tsh_{p} \right)
+     \end{array}
 \]
-where the interpretation of assertion \( \evalW{.} \) is defined in \defin \ref{def:assertion}, the world flattening \( \flattenW{.} \) in \defin \ref{def:world} and \( \funcn{\h2tsh} \) function in \defin \ref{def:h2tsh}.
-\end{defn}
-
+First we introduce some new variables \( \fpw_{p}, \fph_{p}, \fpw_{q}, \fph_{q} \) that satisfy the follows and whose names are consistent with those in \defin \ref{def:repartitioning}.
+\[
+\begin{array}{@{}l@{}}
+    \exsts{\fph} \\
+    \eraseFW{\fpw_{p}} = \world_{p} 
+    \land \flattenFW{\fpw_{p}} = (\fph_{p} \composeFP \fph, \unitC)
+    \land \for{\addr} \fph_{p}(\addr) = (\stub, \emptyset) \land {} \\
+    \eraseFW{\fpw_{q}} = \world_{q} 
+    \land \flattenFW{\fpw_{q}} = (\fph_{q} \composeFP \fph, \unitC)
+\end{array}
+\]
+By the definition of repartition (\defin \ref{def:repartitioning})  and transaction soundness (Theorem \ref{thm:transaction-soundness}):
+\[
+\begin{array}{@{}l@{}}
+    \for{\fph} 
+    \fph_{q} \composeFP \fph \in \intpSQ{\trans}( \fph_{p} \composeFP \fph) 
+\end{array}
+\]
+\end{proof}
