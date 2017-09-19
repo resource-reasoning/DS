@@ -21,3 +21,6 @@ Individual project as part of an MEng in Computing.
 * Relaxed Seperation Logic: A Program Logic for C11 Concurrency
 * A Program Logic for C11 Memory Fences
 * Reasoning about Consistency Choices in Distributed System 
+
+### Database
+* An Empirical Evaluation of In-Memory Multi-Version Concurrency Control
