@@ -1,0 +1,98 @@
+\subsection{Transaction Soundness}
+
+
+\begin{thm}[Transaction soundness]
+\label{thm:transaction-soundness}
+Assume the standard lift for transaction interpretation and for fingerprint heaps composite \( \composeFP \), the transaction soundness is as follows:
+\[
+    \begin{array}{@{}l@{}}
+        \for{ \lpre, \trans, \lpost } \tripleL{\lpre}{\trans}{\lpost} \implies \ \tripleSemL{\lpre}{\trans}{\lpost} \\
+    \end{array}
+\]
+where,
+\[
+    \begin{rclarray}
+    \tripleSemL{\lpre}{\trans}{\lpost} & \eqdef &
+    \begin{array}[t]{@{}l@{}}
+        \for{\lenv, \stk_{p}, \stk_{q}, \fph_{p}, \fph_{q} } 
+        \fph_{p} \in \evalLS[\lenv, \stk_{p}]{\lpre}
+        \land (\stk_{p}, \fph_{p} ), \trans \toL^{*}  (\stk_{q}, \fph_{q} ), \pskip 
+        \implies \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost}
+    \end{array}
+    \end{rclarray}
+\]
+\end{thm}
+\begin{proof}
+Induction on the rules for transactions.
+
+\caseB{\rl{TRSkip}}
+
+We have  \(\trans \equiv \pskip\), \( \lpre \equiv \lpost \equiv \assemp \).
+Given the semantics in \fig \ref{fig:thread_semantics}, we have \( \fph_{p} = \fph_{q} = \unitFP \) and \( \stk_{p} = \stk_{q} \), so \( \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost} \).
+
+\caseB{\rl{TRAss}}
+
+We have \(\trans \equiv ( \pass{\var}{\expr} ) \), \( \lpre \equiv ( \var \doteq \lexpr ) \) and \( \lpost \equiv ( \var \doteq \expr\sub{\var}{\lexpr} ) \) for some \( \var, \lexpr, \expr \).
+Given the semantics in \fig \ref{fig:thread_semantics}, there exists \( \stk \) such that \( \stk = \stk_{p} \setminus \Set{\var \mapsto \stub} = \stk_{q} \setminus \Set{\var \mapsto \stub} \).
+Given the premiss of \rl{TRAss}  in \fig \ref{fig:rule-trans} that \( \var \notin \func{fv}{\lexpr} \), it has \( \evalLE{\lexpr} = \evalLE[\lenv, \stk_{p}]{\lexpr} = \evalLE[\lenv, \stk_{q}]{\lexpr} \), and then must exist \( \val \) so that \( \val = \evalLE{\expr\sub{\var}{\lexpr}} = \evalLE[\lenv, \stk_{q}]{\expr\sub{\var}{\lexpr}} \) and \( \stk_{q} = \stk_{p}\remapsto{\var}{\val} \).
+Also because \( \fph_{p} = \fph_{q} = \unitFP \), we have \( \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost} \).
+
+\caseB{\rl{TRDeref}}
+
+We have  \(\trans \equiv ( \pderef{\var}{\expr} ) \), \( \lpre \equiv ( \expr \fpt{\fp} \lexpr ) \) and \( \lpost \equiv ( \var \doteq \lexpr \sep \expr \fpt{\addFPR{\fp}} \lexpr ) \) for some \( \var, \fp, \lexpr, \expr \).
+Given the semantics in \fig \ref{fig:thread_semantics}, there exists \( \stk \) such that \( \stk = \stk_{p} \setminus \Set{\var \mapsto \stub} = \stk_{q} \setminus \Set{\var \mapsto \stub} \).
+Given the premiss of \rl{TRDeref} in \fig \ref{fig:rule-trans} that \( \var \notin \func{fv}{\lexpr} \), it must exist \( \val \) and \( \addr \) such that \( \val = \evalLE{\lexpr} = \evalLE[\lenv, \stk_{p}]{\lexpr} = \evalLE[\lenv, \stk_{q}]{\lexpr} \), \( \addr = \evalLE{\expr} = \evalLE[\lenv, \stk_{p}]{\expr} = \evalLE[\lenv, \stk_{q}]{\expr} \) and \(  \stk_{q} = \stk_{p}\remapsto{\var}{\val} \).
+Also, because \( \lpre \equiv ( \expr \fpt{\fp} \lexpr ) \), we have \( \fph_{p} = \Set{\addr \mapsto (\val, \fp) }\).
+Given above and \( \fph_{q} = \fph_{p}\remapsto{\addr}{ ( \val, \addFPR{\fp} ) } \), we have \( \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost} \).
+
+\caseB{ \rl{TRMutate} }
+
+We have \( \trans \equiv (\pmutate{\expr_{1}}{\expr_{2}}) \), \( \lpre \equiv ( \expr_{1} \fpt{\fp} \stub ) \) and \( \lpost \equiv ( \expr_{1} \fpt{\addFPW{\fp}} \expr_{2} ) \), for some \( \expr_{1}, \expr_{2}, \fp \).
+Therefore, \( \fph_{p} \in \Setcon{ \addr \mapsto (\val_{p} , \fp) }{ \val_{p} \in \Val } \), where \( \addr = \evalLE[\lenv, \stk_{p}]{\expr_{1}} \).
+Given the semantics in \fig \ref{fig:thread_semantics}, we have \( \stk_{p} = \stk_{q} \) and \( \fph_{q} \in \Set{\addr \mapsto ( \evalLE[\lenv, \stk_{q}]{\expr_{2}},  \addFPW{\fp} ) } \), so \( \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost} \).
+
+\caseI{\rl{TRChoice}}
+
+We have  \(\trans \equiv \trans_{1} + \trans_{2} \), where \( \tripleL{\lpre}{\trans_{1}}{\lpost} \) and \( \tripleL{\lpre}{\trans_{2}}{\lpost} \) hold, for some \( \lpre, \lpost, \trans_{1}, \trans_{2} \).
+Given the semantics in \fig \ref{fig:thread_semantics}, for any \( \lenv, \stk_{p}, \fph_{p} \) that \( \fph_{p} \in \evalLS[\lenv, \stk_{p}]{\lpre} \), it has either \( ( \stk_{p}, \fph_{p} ), \trans_{1} \pchoice \trans_{2} \toL ( \stk_{p}, \fph_{p} ), \trans_{1} \) or  \( ( \stk_{p}, \fph_{p} ), \trans_{1} \pchoice \trans_{2} \toL ( \stk_{p}, \fph_{p} ), \trans_{2} \).
+Since it is symmetric, assume picking \( \trans_{1} \).
+Therefore we have \( ( \stk_{p}, \fph_{p} ), \trans_{1} \pchoice \trans_{2} \toL ( \stk_{p}, \fph_{p} ), \trans_{1} \toL^{*} ( \stk_{q}, \fph_{q} ), \pskip \) for some \( \stk_{q} \) and \( \fph_{q} \).
+By the \ih and the premiss of \rl{TRChoice} we have \( \tripleSemL{\lpre}{\trans_{1}}{\lpost} \), then we have \( \fph_{q} \in \evalLE[\lenv, \stk_{q}]{\lpost} \).
+Symmetrically, if it picks \( \trans_{2} \), it yields the same result.
+
+\caseI{\rl{TRSeq}}
+
+We have \( \trans \equiv \trans_{1} \pseq \trans_{2} \) where \( \tripleL{\lpre}{\trans_{1}}{\lframe} \) and \( \tripleL{\lframe}{\trans_{2}}{\lpost} \) hold, for some \( \lpre, \lframe, \lpost, \trans_{1}, \trans_{2} \).
+Given the semantics in \fig \ref{fig:thread_semantics}, for any \( \lenv, \stk_{p}, \fph_{p} \) that \( \fph_{p} \in \evalLS[\lenv, \stk_{p}]{\lpre} \), it has \( ( \stk_{p}, \fph_{p} ), \trans_{1} \pseq \trans_{2} \toL^{*} ( \stk_{r}, \fph_{r} ), \pskip \pseq \trans_{1} \toL ( \stk_{r}, \fph_{r} ), \trans_{1} \toL^{*} ( \stk_{q}, \fph_{q} ), \pskip \) for some \( \stk_{r}, \stk_{q}, \fph_{r}, \fph_{q} \).
+By the \ih, we have \( \fph_{r} \in \evalLS[\lenv, \stk_{r}]{\lframe} \), then by the \ih, we have \( \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost} \).
+
+\caseI{\rl{TRLoop}}
+
+Since the triple is only partial correct, meaning that if the transaction \( \trans \) terminates it will reach a state satisfying the post-condition \( \lpost \), it is sufficient to prove the follows,
+\[
+    \for{\lpre, \trans, \nat > 0} \tripleL{\lpre}{\trans^{\nat}}{\lpre} \implies \ \tripleSemL{\lpre}{\trans^{\nat}}{\lpre} \\
+\]
+where,
+\[
+\begin{rclarray}
+    \trans^{1} & \defeq  & \trans \\
+    \trans^{\nat} & \defeq  & \trans \pseq \trans^{\nat - 1} \\
+\end{rclarray}
+\]
+given the \ih that \(\tripleL{\lpre}{\trans}{\lpre} \implies \ \tripleSemL{\lpre}{\trans}{\lpre} \) holds.
+
+We prove that by induction on the number \( \nat \).
+For \( \nat = 1 \), it is proven by the \ih.
+For \( \nat > 1 \), assume \( \stk, \fph, \lenv \) that satisfy \( \fph \in \evalLS{\lpre} \). 
+Given the semantics in \fig \ref{fig:thread_semantics}, we have \( (\stk, \fph), \trans \pseq \trans^{\nat - 1} \toL^{*} (\stk' \fph'), \trans^{\nat - 1} \) for some \( \stk', \fph' \).
+By the \ih that \(\tripleSemL{\lpre}{\trans}{\lpre} \), we have \( \fph' \in \evalLS[\lenv, \stk']{\lpre} \).
+Then for any \( \stk'', \fph'' \) that \( (\stk', \fph'), \trans^{\nat - 1} \toL^{*} (\stk'' \fph''), \pskip \), by \ih that \( \tripleSemL{\lpre}{\trans}{\lpre} \), we have \( \fph'' \in \evalLS[\lenv, \stk'']{\lpre} \).
+\caseI{\rl{TRFrame}}
+
+We have \( \tripleL{\lpre \sep \lframe }{\trans}{\lpost \sep \lframe} \) and \( \tripleL{\lpre}{\trans}{\lpost} \) for some \( \lpre, \lpost, \lframe, \trans\).
+For the precondition, we know \( \fph_{p} \composeFP \fph_{r} \in \evalLS[\lenv, \stk_{p}]{\lpre \sep \lframe} \) where \(  \fph_{p} \in \evalLS[\lenv, \stk_{p}]{\lpre} \) and \( \fph_{r} \in \evalLS[\lenv, \stk_{p}]{\lframe} \) for some \( \fph_{p}, \fph_{r}, \stk_{p}, \lenv \).
+By the \( \pred{tsound}{\lpre, \trans, \lpost } \) from \ih, we have \( ( \stk_{p}, \fph_{p} ), \trans \toL^{*} (\stk_{q}, \fph_{q}), \pskip \) and \( \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost}\), for some \( \fph_{q}, \stk_{q} \).
+Therefore, it is also true that \( ( \stk_{p}, \fph_{p} \composeLS \fph_{r} ), \trans \toL^{*} (\stk_{q}, \fph_{q} \composeLS \fph_{r}), \pskip \), so that \( \fph_{q} \composeFP \fph_{r} \in \evalLS[\lenv, \stk_{q}]{\lpost \sep \lframe} \).
+
+\end{proof}
+
