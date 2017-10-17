@@ -1,5 +1,108 @@
 \subsection{Program Soundness}
-\begin{defn}[Conversion to time-stamp heaps]
+
+
+\begin{defn}[Rely-Guarantee Operational Semantics]
+\label{def:rg-semantics}
+Assume rely and guarantee under the time-stamp heap level, \ie \( \Rely, \Guar \in (\TSHeaps \times \Timestamp) \times (\TSHeaps \times \Timestamp)\).
+The rely-guarantee operational semantics are show in \figref{fig:rg_semantics}, which are extended from the semantics in \figref{fig:thread_semantics}.
+
+\begin{figure}[!t]
+\hrule\vspace{5pt}
+\[
+    \infer[\rl{RGIncTime}]{%
+        \Rely, \Guar, (\stk, \tsh, \ts), \iprog \ \toRG{\lbRELY} \ \Rely, \Guar, (\stk, \tsh, \ts'), \iprog
+    }{%
+        \ts' > \ts
+    }
+\]
+
+\[
+    \infer[\rl{RGEnv}]{%
+        \Rely, \Guar, (\stk, \tsh, \ts), \iprog \ \toRG{\lbRELY} \ \Rely, \Guar, (\stk, \tsh', \ts), \iprog
+    }{%
+        (\tsh, \tsh') \in \Rely
+    }
+\]
+
+\[
+    \infer[\rl{RGCommit}]{%
+        \Rely, \Guar, (\stk, \tsh, \ts), \ptrans{\trans} \ \toRG{\lbC{\tsid}} \ \Rely, \Guar, (\stk', \tsh', \ts'), \pskip
+    }{%
+        (\tsh, \tsh') \in \Guar
+        && (\stk, \tsh, \ts), \ptrans{\trans} \ \toT{\lbC{\tsid}} \ (\stk', \tsh', \ts'), \pskip
+    }
+\]
+
+\[
+    \infer[\rl{RGLift}]{%
+        \Rely, \Guar, (\stk, \tsh, \ts), \iprog \ \toRG{\lb} \ \Rely, \Guar, (\stk', \tsh', \ts'), {\iprog}'
+    }{%
+        \iprog \not\equiv \pwait{\stub}
+        && \iprog \not\equiv \prog \ppar \prog
+        && (\stk, \tsh, \ts), \iprog \ \toT{\lb} \ (\stk', \tsh', \ts'), {\iprog}'
+    }
+\]
+
+\[
+    \infer[\rl{RGFork}]{%
+        \Rely, \Guar \cup \Guar', (\stk, \tsh, \ts), \prog_{1} \ppar \prog_{2}  \ \toRG{\lbF{\thid,\prog_{2}, \Rely \cup \Guar, \Guar'}} \ \Rely \cup \Guar', \Guar, (\stk', \tsh', \ts'), \prog_{1} \pseq \pwait{\thid}
+    }{%
+        (\stk, \tsh, \ts), \prog_{1} \ppar \prog_{2}  \ \toT{\lbF{\thid,\prog_{2}}} \ (\stk', \tsh', \ts'), \prog_{1} \pseq \pwait{\thid}
+    }
+\]
+
+\[
+    \infer[\rl{RGJoin}]{%
+        \Rely \cup \Guar', \Guar, (\stk, \tsh, \ts), \pwait{\thid}  \ \toRG{\lbJ{\thid,\ts, \Rely \cup \Guar, \Guar'}} \ \Rely, \Guar \cup \Guar', (\stk', \tsh', \ts'), \pskip
+    }{%
+        (\stk, \tsh, \ts), \pwait{\thid}  \ \toT{\lbJ{\thid,\ts}} \  (\stk', \tsh', \ts'), \pskip
+    }
+\]
+
+\hrule\vspace{5pt}
+
+\[
+    \infer[\rl{RGPSingle}]{%
+        ( \tshp, \thpl \uplus \Set{ \thid \mapsto (\Rely, \Guar, \stk, \ts, \iprog) } ) \ \toGG{\lb} \  ( \tshp', \thpl \uplus \Set{ \thid \mapsto (\Rely', \Guar', \stk', \ts', {\iprog}') } ) 
+    }{%
+        \begin{array}{c}
+        \Rely, \Guar, ( \stk, \tshp, \ts ) , \iprog \ \toRG{\lb} \  \Rely', \Guar', ( \stk', \tshp', \ts' ) , {\iprog}' 
+        \quad \lb \in \Set{ \lbID, \lbC{\stub} } \\
+        \begin{array}{l}
+        \mathtt{for} \ \thid'' \in \dom(\thpl) \\
+        \quad \begin{formulea}
+            \thpl(\thid'') = (\Rely'', \Guar'', \stk'', \ts'', {\iprog}'')  \\
+            \Rely'', \Guar'', ( \stk'', \tshp, \ts'' ) , \iprog \ \toRG{\lbRELY} \  \Rely'', \Guar'', ( \stk'', \tshp', \ts'' ) , {\iprog}'' \\
+        \end{formulea}
+        \end{array}
+        \end{array}
+    }
+\]
+
+
+\[
+    \infer[\rl{RGPFork}]{%
+        ( \tshp, \thpl \uplus \Set{ \thid \mapsto (\Rely, \Guar, \stk, \ts, \iprog) } ) \ \toGG{\lbF{\thid', \prog'', \Rely'', \Guar''}} \  ( \tshp', \thpl \uplus \Set{ \thid \mapsto (\Rely', \Guar', \stk', \ts', {\iprog}'), \thid' \mapsto (\Rely'', \Guar'', \lambda \var \ldotp 0, \ts', \prog'') } )
+    }{%
+        \Rely, \Guar, ( \stk, \tshp, \ts ) , \iprog \ \toRG{\lbF{\thid', \prog'', \Rely'', \Guar''}} \  \Rely', \Guar', ( \stk', \tshp', \ts' ) , {\iprog}' 
+    }
+\]
+
+\[
+    \infer[\rl{RGPJoin}]{%
+        ( \tshp, \thpl \uplus \Set{ \thid \mapsto (\Rely, \Guar, \stk, \ts, \iprog), \thid' \mapsto (\Rely'', \Guar'', \stk', \ts'', \pskip) } )  \ \toGG{\lbJ{\thid',\ts'', \Rely'', \Guar''}} \ ( \tshp', \thpl \uplus \Set{ \thid \mapsto (\Rely', \Guar', \stk', \ts', {\iprog}')} )
+    }{%
+        \Rely, \Guar, ( \stk, \tshp, \ts ) , \iprog \ \toRG{\lbJ{\thid',\ts'', \Rely'', \Guar''}} \  \Rely', \Guar', ( \stk', \tshp', \ts' ) , {\iprog}' 
+    }
+\]
+
+\hrule\vspace{5pt}
+\caption{Extended Semantics}
+\label{fig:rg_semantics}
+\end{figure}
+\end{defn}
+
+\begin{defn}[Flatten to time-stamp heaps]
 \label{def:x2tsh}
 Given the set of  \( \h \in \Heaps\), \( \tsh \in \TSHeaps \), world \( \world \in \World \) and fingerprint world \( \fpw \in \FPWorlds \), the overloaded function \( \funcn{x2tsh} : \Set{ \Heaps, \FPHeaps, \World, \FPWorlds,} \to \powerset{\TSHeaps} \) is defined as follows,
 \[
@@ -18,7 +121,64 @@ Given the set of  \( \h \in \Heaps\), \( \tsh \in \TSHeaps \), world \( \world \
     \end{rclarray}
 \]
 where the \( \snapshotName \) function (\fig \ref{fig:thread_semantics}) returns a fingerprint heap corresponding the state at time \( \ts \), and here we match first projection.
+Similarly the \( \funcn{xx2tsh} : \FPWorlds \times \FPWorlds \to \pset{(\TSHeaps \times \Timestamp) \times (\TSHeaps \times \Timestamp )} \) function converts rely and guarantee into time-stamp heaps and time-stamps.
+\[
+\begin{rclarray}
+    \func{xx2tsh}{\fpw_{p}, \fpw_{q}} & \defeq & 
+    \Setcon{%
+        (\tsh_{p}, \tsh_{q})
+    }{%
+        \exsts{\ts_{q}, \ts_{p}}
+        \ts_{q} \geq \ts_{p} 
+        \land \for{\addr, \ts, \val, \etag, \tsid} \\
+        \quad \tsh_{p}(\addr)(\ts) = (\val, \etag, \tsid) \implies \tsh_{q}(\addr)(\ts) = (\val, \etag, \tsid) \\
+        \quad {} \land \fpw_{p}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{p}) = (\val, \stub, \stub) \\
+        \quad {} \land \fpw_{q}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{q}) = (\val, \stub, \stub) 
+    }
+\end{rclarray}
+\]
+
+Assume the standard lift to a set of pairs of fingerprint worlds.
+The flatten of assertion \( \Ast \) (\defref{def:assertion}), \( \flattenevalW[.,.,.]{.} : \Ast \times \LEnv \times \Stack \times \Interference \parfun \pset{(\TSHeaps \times \Timestamp) \times (\TSHeaps \times \Timestamp) \times \TSHeaps \times \Timestamp}\)
+\[
+\begin{rclarray}
+    \flattenevalW{\gpre} & \defeq & \Setcon{%
+        (\Rely, \Guar, \tsh, \ts)
+    }{%
+        \exsts{\fpw} 
+        \eraseFW{\fpw} \in \evalW{\gpre}
+        \land (\tsh, \ts) \in \func{x2tsh}{\fpw}  \\
+        \quad {} \land \Rely = \func{xx2tsh}{\RelyI}
+        \land \Guar = \func{xx2tsh}{\GuarI}
+    }
+\end{rclarray}
+\]
+
 \end{defn}
+
+\begin{lem}[Stabilisation soundness]
+\label{lem:stable-sound}
+
+The stabilisation intuitively covers the transactions that happen sequentially in the future.
+\[
+\begin{array}{@{}l@{}}
+    \for{\lenv, \stk, \gpre, \iprog, \intf, \Rely, \tsh_{p}, \tsh_{q}, \Guar, \ts_{q}, \ts_{p}}  \\
+    \quad (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW{\gpre}
+    \land \stable{\gpre}{\intf} 
+    \land \Rely, \Guar, (\tsh_{p}, \stk, \ts_{p}), \iprog \toRG{\lbRELY} \Rely, \Guar, (\tsh_{q}, \stk, \ts_{q}), \iprog \\
+    \qquad \implies \for{\addr, \ts}
+    \ts \leq \ts_{p} \land \tsh_{p}(\addr)(\ts) = \tsh_{q}(\addr)(\ts) \\
+    \qquad \implies  (\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW{\gpre} 
+\end{array}
+\]
+Note that before the time \( \ts_{p} \), all the records inside the \( \tsh_{q} \) must remains the same as those in \( \tsh_{p} \).
+\end{lem}
+\begin{proof}
+Assume a fingerprint word \( \fpw_{p} \) that \( \eraseFW{\fpw_{p}} \in \evalW{\gpre} \) and \( \func{no\_fingerprint}{\fpw_{p}}\).
+Because \( (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in  \flattenevalW{\gpre} \), we have \( \Rely = \func{xx2tsh}{\RelyI\projection{\fpw_{p}}} \) and \( (\tsh_{p}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}}\).
+Given the semantics (\figref{fig:rg_semantics}) we have \( ((\tsh_{p}, \ts_{p}),(\tsh_{q}, \ts_{q})) \in \Rely \) and then by the \( \funcn{xx2tsh} \) function (\defref{def:x2tsh}) there must exists \( \fpw_{q}\) such that \( ( \fpw_{p}, \fpw_{q} ) \in \RelyI \).
+Then because of \( \stable{\gpre}{\intf} \) (\defref{def:rely-guarantee}), we know \( \eraseFW{\fpw_{q}} \in \evalW{\gpre}\), so \( (\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW{\gpre} \).
+\end{proof}
 
 \begin{defn}[Semantic triple]
 \label{def:semantic-triple}
@@ -27,21 +187,37 @@ where the \( \snapshotName \) function (\fig \ref{fig:thread_semantics}) returns
         \begin{rclarray}
             \tripleSemG{\gpre}{\prog}{\gpost} & \defeq &
             \begin{array}[t]{@{}l@{}}
-                \for{\fpw_{p}, \tsh_{p}, \tsh_{q}, \lenv, \stk_{p}, \stk_{q}, \ts_{p}, \ts_{q} }   \\
-                \quad \land \eraseFW{\fpw_{p}} \in \evalW[\lenv, \stk_{p}]{\gpre}
-                \land (\tsh_{p}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}}
-                \land (\stk_{p}, \tsh_{p}, \ts_{p}), \prog \toT{}^{*} (\stk_{q}, \tsh_{q}, \ts_{q}), \pskip \\
-                \quad \implies \exsts{ \fpw_{q} } \eraseFW{\fpw_{q}} \in \evalW[\lenv, \stk_{q}]{\gpost}
-                \land (\tsh_{q}, \ts_{q}) \in \func{x2tsh}{\fpw_{q}}
+                \for{\tsh_{p}, \tsh_{q}, \lenv, \stk_{p}, \stk_{q}, \ts_{p}, \ts_{q}, \Rely_{p}, \Rely_{q}, \Guar_{p}, \Guar_{q} }   \\
+                \quad {} \land (\Rely_{p}, \Guar_{p}, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\gpre}
+                \land \Rely_{p}, \Guar_{p}, (\stk_{p}, \tsh_{p}, \ts_{p}), \prog \toRG{}^{*} \Rely_{q}, \Guar_{q}, (\stk_{q}, \tsh_{q}, \ts_{q}), \pskip \\
+                \quad \implies (\Rely_{q}, \Guar_{q}, \tsh_{q}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{q}, \intf]{\gpost}
             \end{array}
         \end{rclarray}
     \]
 \end{defn}
 
-\begin{defn}[Rely-Guarantee Operational Semantics]
-\label{def:rg-semantics}
 
-\end{defn}
+\begin{lem}[Merge soundness]
+There are two parts, one is that the new transaction can merge with those transactions already in the history, and another one is that the behaviour of potentially future transactions has been covered by merge.
+\label{lem:merge-sound}
+\[
+\begin{array}{@{}l@{}}
+    \for{\tsh_{init}, \ts, \addr}
+    \ts_{p} \leq \ts \leq \ts_{q} 
+    \land \tsh_{init}(\addr)(\ts)\undef \\
+    \for{\tsh_{p}, \tsh_{i}, \fpw_{p}, \fpw_{q}, \ts_{p}, \ts_{q}, \stk, \lenv, \intf}  \\
+    (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW{\fpw_{p}}
+    \land (\Rely, \Guar, \tsh_{i}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
+    \quad \implies \exsts{\tsh_{init}} \\
+    \qquad \for{\ts, \addr}
+    \ts_{p} \leq \ts \leq \ts_{q} 
+    \land \tsh_{init}(\addr)(\ts)\undef 
+    \land ((\tsh_{init}, \ts_{q}), (\tsh_{i}, \ts_{q})) \in \Rely 
+    \land (\Rely, \Guar, \tsh_{init}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
+    \quad \land \for{\fpw_{p} } ((\tsh_{i}, \ts_{q}), (\tsh_{q}, \ts_{q})) \in \Rely  \exsts{\fpw_{q} \in \mergeR{\fpw_{p}, \fpw_{i}, \intf }} \eraseFPW{\fpw'} \in
+\end{array}
+\]
+\end{lem}
 
 \begin{thm}[Soundness]
 The soundness is defined as follows:
@@ -56,10 +232,22 @@ Induction on the rules for program \( \prog \).
 
 \caseB{\rl{PRCommit}}
 We have \( \tripleG{\gpre}{\ptrans{\trans}}{\gpost} \) given that \( \tripleL{\lpre}{\trans}{\lpost} \), \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \), \( \stable{\gpre}{\intf} \) and \( \stable{\gpost}{\intf} \) for any \( \trans, \gpre, \gpost, \lpre, \lpost, \inter \). 
-For any \( \stk_{p}, \lenv \), let variables \( \world_{p}, \fpw_{p}, \fph_{p}, \fph_{f} \) to satisfy the follows,
+Given \( \tripleSemG{\gpre}{\ptrans{\trans}}{\gpost} \) (\defref{def:semantic-triple}) and the corresponding semantics (\defref{def:rg-semantics}),  for any \( \tsh_{p}, \tsh_{p}', \tsh_{q} ,\tsh_{q}', \ts_{p}, \ts_{p}', \ts_{q}, \ts_{q}', \Rely, \Guar, \lenv, \stk_{p}, \stk_{q}\) we have the follows,
+\begin{equation}
+    \label{equ:commit-current-trans}
+    \begin{array}{@{}l@{}}
+        (\Rely, \Guar, \tsh_{p}', \ts_{p}') \in \flattenevalW[\lenv, \stk_{p}, \intf]{\gpre} \\ 
+        \quad {} \land (\Rely, \Guar, \tsh_{p}', \ts_{p}'), \ptrans{\trans} \toRG{\lbRELY}^{*} (\Rely, \Guar, \tsh_{p}, \ts_{p}), \ptrans{\trans} \toRG{\lbC{\tsid}} (\Rely, \Guar, \tsh_{q}, \ts_{q}),\pskip \toRG{\lbRELY}^{*} (\Rely, \Guar, \tsh_{q}', \ts_{q}'), \pskip
+    \end{array}
+\end{equation}
+By \lemref{lem:stable-sound} and induction on the length of the reduction steps, we have \( (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\gpre} \).
+
+Now we are going to prove \( (\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\gpost} \).
+Let variables \( \fpw_{p}, \fph_{p}, \fph_{f} \) to satisfy the follows, 
 \begin{equation}
     \label{equ:def-wwhh}
-    \eraseFW{\fpw_{p}} \in \evalW[\lenv, \stk_{p}]{\gpre} 
+    (\tsh_{p}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}} 
+    \land \eraseFW{\fpw_{p}} \in \evalW[\lenv, \stk_{p}]{\gpre} 
     \land \flattenFW{\fpw_{p}} = (\fph_{p} \composeFPH \fph_{f}, \stub)
     \land \fph_{p} \in \evalLS[\lenv, \stk_{p}]{\lpre}
 \end{equation}
@@ -70,12 +258,7 @@ By the soundness of \( \tripleL{\lpre}{\trans}{\lpost} \) (\thmref{thm:transacti
     (\stk_{p}, \fph_{p} ), \trans \toL^{*}  (\stk_{q}, \fph_{q} ), \pskip 
     \implies \fph_{q} \in \evalLS[\lenv, \stk_{q}]{\lpost}
 \end{equation}
-Also, given the semantic triple (\defref{def:semantic-triple}) and the operational semantics (\figref{fig:thread_semantics}), let variables \( \tsh_{p}, \tsh_{q}, \ts_{p}, \ts_{q}, \tsid \) satisfy the follows,
-\begin{equation}
-    \label{equ:commit-current-trans}
-    (\stk_{p}, \tsh_{p}, \ts_{p}), \ptrans{\trans} \toT{\lbC{\tsid}} (\stk_{q}, \tsh_{q}, \ts_{q}), \pskip 
-\end{equation}
-Now we consider addresses being written and read separably.
+Now we consider addresses in the domain of \( \fph_{q} \) being written and read separably.
 First, for any address \( \addr_{w} \) being tagged as write or read/write in \( \fph_{q} \), assume the value is \( \val_{w} \).
 \begin{equation}
     \label{equ:local-write}
@@ -83,7 +266,7 @@ First, for any address \( \addr_{w} \) being tagged as write or read/write in \(
     \fph_{q}(\addr_{w}) = (\val_{w}, \fp)
     \land \fpW \in \fp
 \end{equation}
-By the \( \commitName \) function in operational semantics (\defref{fig:thread_semantics}), \equref{equ:commit-current-trans}, \equref{equ:transaction-soundness} and \equref{equ:local-write}, we have,
+By the \( \commitName \) function in the semantics (\defref{fig:thread_semantics}), \equref{equ:commit-current-trans}, \equref{equ:transaction-soundness} and \equref{equ:local-write}, we have,
 \begin{equation}
     \label{equ:global-write}
     \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etW, \tsid)
@@ -92,7 +275,7 @@ By the repartitioning (\defin \ref{def:repartitioning}), \equref{equ:def-wwhh} a
 \begin{equation*}
     \fpw_{q} \in \mergeR{\fpw_{p}}{\fpw_{i}}{\inter} \land \eraseFW{\fpw_{q}} \in \evalW[\lenv, \stk_{q}]{\gpost}
 \end{equation*}
-Given the \( \mergeName[R] \) function (\defin \ref{def:repartitioning}) that uses several levels of merges until \( \mergeName[\val] \) function (\defin \ref{def:merge-finger-heap}), \equref{equ:transaction-soundness} and \equref{equ:local-write}, we have,
+Given the \( \mergeName[\rely] \) function (\defin \ref{def:repartitioning}) that uses several levels of merges until \( \mergeName[\val] \) function (\defin \ref{def:merge-finger-heap}), \equref{equ:transaction-soundness} and \equref{equ:local-write}, we have,
 \begin{equation}
     \label{equ:write-remain-the-same}
     \begin{array}{@{}l@{}}
@@ -285,7 +468,7 @@ Since \( \stable{\gpost}{\intf} \) can be directly proven by the premiss, we hav
             %\Setcon{%
                 %\tsh'
             %}{%
-                %\exsts{ \stk, \stk', \ts, \ts' } (\stk, \tsh, \ts ), \ptrans{\trans} \toG{\stub}  (\stk', \tsh', \ts' ), \pskip
+                %\exsts{ \stk, \stk', \ts, \ts' } (\stk, \tsh, \ts ), \ptrans{\trans} \toT{\stub}  (\stk', \tsh', \ts' ), \pskip
             %}\\
     %\end{rclarray}
 %\]
