@@ -104,6 +104,7 @@ The rely-guarantee operational semantics are show in \figref{fig:rg_semantics}, 
 
 \begin{defn}[Flatten to time-stamp heaps]
 \label{def:x2tsh}
+\label{def:flatten-to-tsh}
 Given the set of  \( \h \in \Heaps\), \( \tsh \in \TSHeaps \), world \( \world \in \World \) and fingerprint world \( \fpw \in \FPWorlds \), the overloaded function \( \funcn{x2tsh} : \Set{ \Heaps, \FPHeaps, \World, \FPWorlds,} \to \powerset{\TSHeaps} \) is defined as follows,
 \[
     \begin{rclarray}
@@ -121,10 +122,10 @@ Given the set of  \( \h \in \Heaps\), \( \tsh \in \TSHeaps \), world \( \world \
     \end{rclarray}
 \]
 where the \( \snapshotName \) function (\fig \ref{fig:thread_semantics}) returns a fingerprint heap corresponding the state at time \( \ts \), and here we match first projection.
-Similarly the \( \funcn{xx2tsh} : \FPWorlds \times \FPWorlds \to \pset{(\TSHeaps \times \Timestamp) \times (\TSHeaps \times \Timestamp )} \) function converts rely and guarantee into time-stamp heaps and time-stamps.
+Similarly the \( \funcn{xx2tsh} : \FPWorlds \times \FPWorlds \parfun \pset{(\TSHeaps \times \Timestamp) \times (\TSHeaps \times \Timestamp )} \) function converts rely and guarantee into time-stamp heaps and time-stamps.
 \[
 \begin{rclarray}
-    \func{xx2tsh}{\fpw_{p}, \fpw_{q}} & \defeq & 
+    \func{xx2tsh}{(\ca_{p}, \fph_{p}), (\ca_{q},\fph_{q})} & \defeq & 
     \Setcon{%
         (\tsh_{p}, \tsh_{q})
     }{%
@@ -132,21 +133,19 @@ Similarly the \( \funcn{xx2tsh} : \FPWorlds \times \FPWorlds \to \pset{(\TSHeaps
         \ts_{q} \geq \ts_{p} 
         \land \for{\addr, \ts, \val, \etag, \tsid} \\
         \quad \tsh_{p}(\addr)(\ts) = (\val, \etag, \tsid) \implies \tsh_{q}(\addr)(\ts) = (\val, \etag, \tsid) \\
-        \quad {} \land \fpw_{p}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{p}) = (\val, \stub, \stub) \\
-        \quad {} \land \fpw_{q}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{q}) = (\val, \stub, \stub) 
+        \quad {} \land \fph_{q}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{p}) = (\val, \stub, \stub) \\
+        \quad {} \land \fph_{q}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{q}) = (\val, \stub, \stub) 
     }
 \end{rclarray}
 \]
 
 Assume the standard lift to a set of pairs of fingerprint worlds.
-The flatten of assertion \( \Ast \) (\defref{def:assertion}), \( \flattenevalW[.,.,.]{.} : \Ast \times \LEnv \times \Stack \times \Interference \parfun \pset{(\TSHeaps \times \Timestamp) \times (\TSHeaps \times \Timestamp) \times \TSHeaps \times \Timestamp}\)
+The flatten of assertion \( \Ast \) (\defref{def:assertion}), \( \flattenevalW[.,.,.]{.} : \FPWorlds \times \LEnv \times \Stack \times \Interference \parfun \pset{(\TSHeaps \times \Timestamp) \times (\TSHeaps \times \Timestamp) \times \TSHeaps \times \Timestamp}\)
 \[
 \begin{rclarray}
-    \flattenevalW{\gpre} & \defeq & \Setcon{%
+    \flattenevalW{\fpw} & \defeq & \Setcon{%
         (\Rely, \Guar, \tsh, \ts)
     }{%
-        \exsts{\fpw} 
-        \eraseFW{\fpw} \in \evalW{\gpre}
         \land (\tsh, \ts) \in \func{x2tsh}{\fpw}  \\
         \quad {} \land \Rely = \func{xx2tsh}{\RelyI}
         \land \Guar = \func{xx2tsh}{\GuarI}
@@ -155,6 +154,154 @@ The flatten of assertion \( \Ast \) (\defref{def:assertion}), \( \flattenevalW[.
 \]
 
 \end{defn}
+
+\begin{lem}[Write win]
+\label{lem:write-win-merge}
+During the merging, the write always wins.
+This means,
+\[
+\begin{array}{@{}l@{}}
+    \for{\fph_{p}, \fph_{l}, \fph_{q}, \intf, \addr, \fp, \val} \\
+    \quad (\stub, \fph_{q}) \in \mergeR{(\stub, \fph_{p})}{(\stub, \fph_{l})}{\intf}
+    \land \fph_{l}(\addr) = (\val, \fp) 
+    \land \fpW \in \fp
+    \implies \fph_{q}(\addr) = (\val, \fp)
+\end{array}
+\]
+\end{lem}
+\begin{proof}
+Given the definition of \( \mergeName[\rely] \) function (\defref{def:repartitioning}), there exists \(  \fph_{r} \) such that,
+\[
+    (\stub, \fph_{r}) \in \RelyI((\stub, \fph_{p})) \land (\stub, \fph_{q}) = \mergeFPW{(\stub,\fph_{l})}{(\stub,\fph_{r})}
+\]
+therefore, 
+\[
+    \fph_{q} = \mergeFPH{\fph_{l}}{\fph_{r}}
+\]
+Given the definition \( \mergeName[\halfMath{\fph}] \) (\defref{def:merge-finger-heap}), for \( \addr_{l} \in \dom(\fph_{l}) \setminus \dom(\fph_{r})  \), we have 
+\[
+\fph_{q}(\addr_{l}) = \fph_{l}(\addr_{l})
+\]
+For addresses \( \addr_{lr} \in \dom(\fph_{l}) \cap \dom(\fph_{r})\), we have 
+\[
+\fph_{q}(\addr_{lr}) = \mergeVAL{\fph_{l}(\addr_{lr})}{\fph_{l}(\addr_{lr})}
+\]
+By the definition \( \mergeName[\halfMath{\mathtt{V}}] \) (\defref{def:merge-finger-heap}), we have,
+\[
+    \for{\fp, \val} \fph_{l}(\addr_{lr}) = (\val, \fp) 
+    \land \fpW \in \fp
+    \implies \fph_{q}(\addr_{lr}) = (\val, \fp)
+\]
+Combine two cases, we have the proof, \ie
+\[
+    \for{ \addr,\fp, \val}
+     \fph_{l}(\addr) = (\val, \fp) 
+    \land \fpW \in \fp
+    \implies \fph_{q}(\addr) = (\val, \fp)
+\]
+\end{proof}
+
+
+\begin{lem}[Merge to the current]
+\label{lem:merge-current-sound}
+Given the flatten functions (\defref{def:flatten-to-tsh}), the \emph{merge to the current} is as the follows,
+\[
+\begin{array}{@{}l@{}}
+    \for{\trans, \tsid, \tsh_{p}, \tsh_{q}, \fpw_{p}, \fpw_{q}, \ts_{p}, \ts_{q}, \stk_{p}, \stk_{q}, \lenv, \intf}  \\
+    (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\fpw_{p}}
+    \land (\fpw_{p}, \fpw_{i} ) \in \GuarI
+    \land (\tsh_{p}, \tsh_{q}) \in \func{xx2tsh}{\fpw_{p}, \fpw_{i}} \\
+    {} \land \Rely, \Guar, (\stk_{p}, \tsh_{p}, \ts_{p}), \ptrans{\trans} \toRG{\lbC{\tsid}} \Rely, \Guar, (\stk_{q}, \tsh_{q}, \ts_{q}), \pskip  \\
+    \quad \implies \exsts{\fpw_{q} \in \mergeR{\fpw_{p}}{\fpw_{i}}{\intf}}
+    (\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{q}, \intf]{\fpw_{q}}
+\end{array}
+\]
+Given a fingerprint world  and one of its corresponding machine state \( (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\fpw_{p}} \) and for any transition that is allowed by the guarantee \( (\tsh_{p}, \tsh_{q}) \in \Guar \), it must exist a merged fingerprint world \( \fpw_{q} \) such that the machine state after the transition match with the fingerprint world, \ie \((\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{q}, \intf]{\fpw_{q}}\).
+\end{lem}
+\begin{proof}
+Given the Guarantee \( \GuarI \) (\defref{def:rely-guarantee}), assume \( \fph_{p}, \fph_{i} \) such that, 
+\begin{equation}
+\label{def:definition-ph-p-and-i}
+\begin{array}{@{}l@{}}
+    \exsts{ \ca_{p}, \ca_{i}, \kap, \fpw_{f} }  \\
+    \quad \fpw_{p} = (\kap \composeC \ca_{p},\fph_{p} \composeFPH \fph_{f}) 
+    \land \fpw_{i} = (\ca_{i},\fph_{i} \composeFPH \fph_{f}) 
+    \land \pred{no\_fingerprint}{\fph_{p}} 
+    \land ( \fph_{p}, \fph_{i} ) \in \intf(\kap)
+\end{array}
+\end{equation}
+Given that \( (\tsh_{p}, \tsh_{q}) \in \func{xx2tsh}{\fpw_{p}, \fpw_{i}} \), and the fact that it can transfer semantically, we have, 
+\begin{equation}
+\label{equ:property-of-fph-i-tsh-pq}
+\begin{array}{@{}l@{}}
+\exsts{\tsid} \for{ \addr, \fp, \val } \fph_{i}(\addr) = (\val, \fp) \\
+\quad {} \land (\fpW \in \fp \implies \tsh_{q}(\addr)(\ts_{q}) = (\val, \etW, \tsid))  \\
+\quad {} \land (\Set{\fpR} = \fp \implies \tsh_{q}(\addr)(\ts_{p}) = (\val, \etR, \tsid) \land \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etE, \tsid))
+
+\end{array}
+\end{equation}
+Given the flatten (\defref{def:flatten-to-tsh}), we need to prove there exists a \( \fph_{q} \) such that,
+\[
+    ( \stub, \fph_{q}) \in \mergeR{\fpw_{p}}{\fpw_{i}}{\intf}
+    \land \for{\addr, \val} \snapshot{\tsh_{q}}{\ts_{q}}(\addr) = (\val, \stub) 
+    \land \eraseFPH{\fph_{q} }(\addr)  = \val
+\]
+Let discuss the addresses being written \( \addr_{w} \) and those only being read \( \addr_{r} \) separately.
+For addresses \( \addr_{w} \) being written, assume the value is \( \val_{w} \).
+By \equref{equ:property-of-fph-i-tsh-pq}, this means,
+\begin{equation}
+\label{equ:global-write}
+\for{ \fp }
+\fpW \in \fp
+\land \fph_{i}(\addr_{w}) = (\val_{w}, \fp)
+\land \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etW, \tsid)
+\end{equation}
+Given  the \( \snapshotName \) function, we have, 
+\begin{equation}
+\label{equ:snap-write}
+\snapshot{\tsh_{q}}{\ts_{q}}(\addr_{w}) = (\val_{w}, \stub)
+\end{equation}
+Meanwhile, by the \equref{equ:property-of-fph-i-tsh-pq} and the \lemref{lem:write-win-merge}, we have,
+\begin{equation}
+\label{equ:local-write}
+    \for{ \fp }
+    \fpW \in \fp
+    \land \fph_{i}(\addr_{w}) = \fph_{q}(\addr_{w}) = (\fp, \val_{w})
+    \land \eraseFPH{\fph_{q}}(\addr_{w}) = \val_{w}
+\end{equation}
+The \equref{equ:snap-write} and \equref{equ:local-write} shows that for all the addresses been written, the values match.
+
+Now let consider addresses \( \addr_{r} \) only being read with the value \( \val_{r} \).
+By \equref{equ:property-of-fph-i-tsh-pq}, this means,
+\begin{equation}
+\label{equ:global-read}
+\fph_{i}(\addr_{w}) = ( \val_{r}, \Set{\fpR})
+\land \tsh_{q}(\addr_{w})(\ts_{p}) = (\val_{w}, \etR, \tsid)
+\land \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etE, \tsid)
+\end{equation}
+\end{proof}
+
+\begin{lem}[Merge with the future]
+\label{lem:merge-sound}
+\[
+\begin{array}{@{}l@{}}
+    \for{\tsh_{init}, \ts, \addr}
+    \ts_{p} \leq \ts \leq \ts_{q} 
+    \land \tsh_{init}(\addr)(\ts)\undef \\
+    \for{\tsh_{p}, \tsh_{i}, \fpw_{p}, \fpw_{q}, \ts_{p}, \ts_{q}, \stk, \lenv, \intf}  \\
+    (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW{\fpw_{p}}
+    \land (\Rely, \Guar, \tsh_{i}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
+    \quad \implies \exsts{\tsh_{init}} \\
+    \qquad \for{\ts, \addr}
+    \ts_{p} \leq \ts \leq \ts_{q} 
+    \land \tsh_{init}(\addr)(\ts)\undef 
+    \land ((\tsh_{init}, \ts_{q}), (\tsh_{i}, \ts_{q})) \in \Rely 
+    \land (\Rely, \Guar, \tsh_{init}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
+    \quad \land \for{\fpw_{p} } ((\tsh_{i}, \ts_{q}), (\tsh_{q}, \ts_{q})) \in \Rely  \exsts{\fpw_{q} \in \mergeR{\fpw_{p}, \fpw_{i}, \intf }} \eraseFPW{\fpw'} \in
+\end{array}
+\]
+\end{lem}
+
 
 \begin{lem}[Stabilisation soundness]
 \label{lem:stable-sound}
@@ -196,28 +343,6 @@ Then because of \( \stable{\gpre}{\intf} \) (\defref{def:rely-guarantee}), we kn
     \]
 \end{defn}
 
-
-\begin{lem}[Merge soundness]
-There are two parts, one is that the new transaction can merge with those transactions already in the history, and another one is that the behaviour of potentially future transactions has been covered by merge.
-\label{lem:merge-sound}
-\[
-\begin{array}{@{}l@{}}
-    \for{\tsh_{init}, \ts, \addr}
-    \ts_{p} \leq \ts \leq \ts_{q} 
-    \land \tsh_{init}(\addr)(\ts)\undef \\
-    \for{\tsh_{p}, \tsh_{i}, \fpw_{p}, \fpw_{q}, \ts_{p}, \ts_{q}, \stk, \lenv, \intf}  \\
-    (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW{\fpw_{p}}
-    \land (\Rely, \Guar, \tsh_{i}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
-    \quad \implies \exsts{\tsh_{init}} \\
-    \qquad \for{\ts, \addr}
-    \ts_{p} \leq \ts \leq \ts_{q} 
-    \land \tsh_{init}(\addr)(\ts)\undef 
-    \land ((\tsh_{init}, \ts_{q}), (\tsh_{i}, \ts_{q})) \in \Rely 
-    \land (\Rely, \Guar, \tsh_{init}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
-    \quad \land \for{\fpw_{p} } ((\tsh_{i}, \ts_{q}), (\tsh_{q}, \ts_{q})) \in \Rely  \exsts{\fpw_{q} \in \mergeR{\fpw_{p}, \fpw_{i}, \intf }} \eraseFPW{\fpw'} \in
-\end{array}
-\]
-\end{lem}
 
 \begin{thm}[Soundness]
 The soundness is defined as follows:
