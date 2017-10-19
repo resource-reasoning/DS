@@ -129,12 +129,10 @@ Similarly the \( \funcn{xx2tsh} : \FPWorlds \times \FPWorlds \parfun \pset{(\TSH
     \Setcon{%
         (\tsh_{p}, \tsh_{q})
     }{%
-        \exsts{\ts_{q}, \ts_{p}}
-        \ts_{q} \geq \ts_{p} 
-        \land \for{\addr, \ts, \val, \etag, \tsid} \\
-        \quad \tsh_{p}(\addr)(\ts) = (\val, \etag, \tsid) \implies \tsh_{q}(\addr)(\ts) = (\val, \etag, \tsid) \\
-        \quad {} \land \fph_{q}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{p}) = (\val, \stub, \stub) \\
-        \quad {} \land \fph_{q}(\addr) = (\val, \stub) \implies \tsh_{q}(\addr)(\ts_{q}) = (\val, \stub, \stub) 
+        \exsts{\ts_{p}, \ts_{q}}
+        \cancommit{\tsh_{p}}{\tsh_{q}}{\ts_{p}}{\ts_{q}} \\
+        \quad {} \land \pred{fresh}{\tsh_{p}, \tsid} 
+        \land \tsh_{q} = \commit{\tsh_{p}}{\fph_{p}}{\fph_{q}}{\tsid}{\ts_{p}}{\ts_{q}}
     }
 \end{rclarray}
 \]
@@ -147,8 +145,8 @@ The flatten of assertion \( \Ast \) (\defref{def:assertion}), \( \flattenevalW[.
         (\Rely, \Guar, \tsh, \ts)
     }{%
         \land (\tsh, \ts) \in \func{x2tsh}{\fpw}  \\
-        \quad {} \land \Rely = \func{xx2tsh}{\RelyI}
-        \land \Guar = \func{xx2tsh}{\GuarI}
+        \quad {} \land \Rely = \func{xx2tsh}{\rely(\intf)}
+        \land \Guar = \func{xx2tsh}{\guar(\intf)}
     }
 \end{rclarray}
 \]
@@ -275,29 +273,54 @@ Now let consider addresses \( \addr_{r} \) only being read with the value \( \va
 By \equref{equ:property-of-fph-i-tsh-pq}, this means,
 \begin{equation}
 \label{equ:global-read}
-\fph_{i}(\addr_{w}) = ( \val_{r}, \Set{\fpR})
-\land \tsh_{q}(\addr_{w})(\ts_{p}) = (\val_{w}, \etR, \tsid)
-\land \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etE, \tsid)
+\fph_{i}(\addr_{r}) = ( \val_{r}, \Set{\fpR})
+\land \tsh_{q}(\addr_{r})(\ts_{p}) = (\val_{r}, \etR, \tsid)
+\land \tsh_{q}(\addr_{r})(\ts_{q}) = (\val_{r}, \etE, \tsid)
 \end{equation}
+However, note that,
+\[
+\neg\left(
+    \begin{array}{@{}l@{}}
+        \tsh_{q}(\addr_{r})(\ts_{p}) = (\val_{r}, \etR, \tsid )
+        \land \tsh_{q}(\addr_{r})(\ts_{q}) = (\val_{r}, \etE , \tsid) \\
+        \quad \implies \snapshot{\tsh_{q}}{\ts_{q}}(\addr_{r}) = (\val_{r}, \stub)
+    \end{array}
+\right)
+\]
+Because there might be other transactions that commit between times \( \ts_{p} \) and \( \ts_{q} \) and write to some addresses \( \addr_{r} \), while the current transaction \( \tsid \) is still allowed to commit, meaning not violating \( \consistentName \) predicate from the semantics (\figref{fig:rg_semantics}).
+Yet in the semantics, each time a thread committing a transaction, it also check with other treads' rely using the \( \rl{RGEnv} \) rule.
+Let assume an initial time-stamp heap \( \tsh_{0} \), such that,
+\[
+    \for{ \ts, \addr } \ts_{p} < \ts < \ts_{q} \land \tsh_{0} (\addr)(\ts)\undef
+\]
+\sx{Fork-Join? fork will adding more rely and join will push up the time to rule out those deleted rely}
+and assume a series of time-stamp heap \( \tsh_{0} \dots \tsh_{\nat}\), such that,
+\[
+    \tsh_{n} = \tsh_{p} \land \Rely, \Guar, (\stub, \tsh_{0}, \stub), \ptrans{\trans} \toRG{\lbRELY} \Rely, \Guar, (\stub, \tsh_{1}, \stub), \ptrans{\trans} \toRG{\lbRELY} \dots \toRG{\lbRELY} \Rely, \Guar, (\stub, \tsh_{\nat}, \stub), \ptrans{\trans}
+\]
+We also assume each of the steps modifies the address \( \addr_{r} \) at a time between \( \ts_{p} \) and \( \ts_{q} \).
+Because if it modifies at a time before \( \ts_{p} \) it covers by our hypothesis.
+If it modifies at a time after \( \ts_{q} \), it does not affect the snapshot taken at time \( \ts_{q} \).
+We first prove there exist \( \fpw_{p}', \fpw_{q}'\) such that,
+\[
+    (\tsh_{0}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}'} 
+    \implies (\fpw_{p}', \fpw_{q}') \in \RelyI 
+    \land (\tsh_{\nat}, \ts_{q}) \in \func{x2tsh}{\fpw_{q}'}
+\]
+
+
+
+
+Given the \rl{RGEnv} rule, we have,
+\[
+    \bigwedge\limits_{ 1 \leq i \leq \nat}( \tsh_{ i - 1}, \tsh_{i}) \in \Rely
+\]
 \end{proof}
 
 \begin{lem}[Merge with the future]
 \label{lem:merge-sound}
 \[
 \begin{array}{@{}l@{}}
-    \for{\tsh_{init}, \ts, \addr}
-    \ts_{p} \leq \ts \leq \ts_{q} 
-    \land \tsh_{init}(\addr)(\ts)\undef \\
-    \for{\tsh_{p}, \tsh_{i}, \fpw_{p}, \fpw_{q}, \ts_{p}, \ts_{q}, \stk, \lenv, \intf}  \\
-    (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW{\fpw_{p}}
-    \land (\Rely, \Guar, \tsh_{i}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
-    \quad \implies \exsts{\tsh_{init}} \\
-    \qquad \for{\ts, \addr}
-    \ts_{p} \leq \ts \leq \ts_{q} 
-    \land \tsh_{init}(\addr)(\ts)\undef 
-    \land ((\tsh_{init}, \ts_{q}), (\tsh_{i}, \ts_{q})) \in \Rely 
-    \land (\Rely, \Guar, \tsh_{init}, \ts_{q}) \in \flattenevalW{\fpw_{i}} \\
-    \quad \land \for{\fpw_{p} } ((\tsh_{i}, \ts_{q}), (\tsh_{q}, \ts_{q})) \in \Rely  \exsts{\fpw_{q} \in \mergeR{\fpw_{p}, \fpw_{i}, \intf }} \eraseFPW{\fpw'} \in
 \end{array}
 \]
 \end{lem}
