@@ -130,7 +130,7 @@ Similarly the \( \funcn{xx2tsh} : \FPWorlds \times \FPWorlds \parfun \pset{(\TSH
         (\tsh_{p}, \tsh_{q})
     }{%
         \exsts{\ts_{p}, \ts_{q}}
-        \cancommit{\tsh_{p}}{\tsh_{q}}{\ts_{p}}{\ts_{q}} \\
+        \cancommit{\tsh_{p}}{\fph_{q}}{\ts_{p}}{\ts_{q}} \\
         \quad {} \land \pred{fresh}{\tsh_{p}, \tsid} 
         \land \tsh_{q} = \commit{\tsh_{p}}{\fph_{p}}{\fph_{q}}{\tsid}{\ts_{p}}{\ts_{q}}
     }
@@ -199,24 +199,131 @@ Combine two cases, we have the proof, \ie
 \]
 \end{proof}
 
+\sx{Fork-Join? fork will adding more rely and join will push up the time to rule out those deleted rely}
 
-\begin{lem}[Merge to the current]
-\label{lem:merge-current-sound}
-Given the flatten functions (\defref{def:flatten-to-tsh}), the \emph{merge to the current} is as the follows,
+\begin{lem}[Merge soundness]
+\label{lem:merge-sound}
+Given time \( \ts_{p} \) and \( \ts_{q} \), assume a series of time-stamp heaps \( \tsh_{0}, \dots \tsh_{k}, \tsh_{p}, \tsh_{q}, \tsh_{k+1}, \dots, \tsh_{\nat} \) that satisfy the follows
+\[
+    \for{\addr, \ts} 
+    \ts_{p} \leq \ts \leq \ts_{q}
+    \land \tsh_{p}(\addr) \neq \tsh_{q}(\addr)
+    \land \tsh_{0}(\addr)(\ts) \undef
+\]
+which Intuitively means for the addresses \( \addr \) that are changed from \( \tsh_{p} \) to \( \tsh_{q} \), they are undefined in the first time-stamp heap \( \tsh_{0} \).
+Then, assume there are reduction steps associated with the series also as the follows,
 \[
 \begin{array}{@{}l@{}}
-    \for{\trans, \tsid, \tsh_{p}, \tsh_{q}, \fpw_{p}, \fpw_{q}, \ts_{p}, \ts_{q}, \stk_{p}, \stk_{q}, \lenv, \intf}  \\
+    \Rely, \Guar, (\stk_{p}, \tsh_{0}, \ts_{0}), \ptrans{\trans} \toRG{\lbRELY} \Rely, \Guar, (\stk_{p}, \tsh_{1}, \ts_{1}), \ptrans{\trans}  \toRG{\lbRELY} \dots  \toRG{\lbRELY} \\
+    \qquad \Rely, \Guar, (\stk_{p}, \tsh_{p}, \ts_{p}),  \ptrans{\trans} \toRG{\lbC{\tsid}} \Rely, \Guar, (\stk_{q}, \tsh_{q}, \ts_{q}),  \pskip \\
+    \qqqquad \toRG{\lbRELY} \Rely, \Guar, (\stk_{q}, \tsh_{k+1}, \ts_{k+1}), \pskip \toRG{\lbRELY} \dots \toRG{\lbRELY} \Rely, \Guar, (\stk_{q}, \tsh_{\nat}, \ts_{\nat}), \pskip
+\end{array}
+\]
+This is a series of possible reduction steps that might affect the commit of \( \tsid \).
+Now, given the flatten functions (\defref{def:flatten-to-tsh}), the \emph{merge soundness} is as the follows,
+\[
+\begin{array}{@{}l@{}}
+    \for{ \lenv, \intf}  \\
     (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\fpw_{p}}
     \land (\fpw_{p}, \fpw_{i} ) \in \GuarI
     \land (\tsh_{p}, \tsh_{q}) \in \func{xx2tsh}{\fpw_{p}, \fpw_{i}} \\
-    {} \land \Rely, \Guar, (\stk_{p}, \tsh_{p}, \ts_{p}), \ptrans{\trans} \toRG{\lbC{\tsid}} \Rely, \Guar, (\stk_{q}, \tsh_{q}, \ts_{q}), \pskip  \\
     \quad \implies \exsts{\fpw_{q} \in \mergeR{\fpw_{p}}{\fpw_{i}}{\intf}}
-    (\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{q}, \intf]{\fpw_{q}}
+    (\Rely, \Guar, \tsh_{n}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{q}, \intf]{\fpw_{q}}
 \end{array}
 \]
-Given a fingerprint world  and one of its corresponding machine state \( (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\fpw_{p}} \) and for any transition that is allowed by the guarantee \( (\tsh_{p}, \tsh_{q}) \in \Guar \), it must exist a merged fingerprint world \( \fpw_{q} \) such that the machine state after the transition match with the fingerprint world, \ie \((\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{q}, \intf]{\fpw_{q}}\).
+Given a fingerprint world  and one of its corresponding machine state \( (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\fpw_{p}} \) and for any transition that is allowed by the guarantee \( (\tsh_{p}, \tsh_{q}) \in \Guar \), it must exist a merged fingerprint world \( \fpw_{q} \) such that the machine state after the transition and possible interpretation matches with the fingerprint world, \ie \((\Rely, \Guar, \tsh_{\nat}, \ts_{q}) \in \flattenevalW[\lenv, \stk_{q}, \intf]{\fpw_{q}}\).
+Note that here we still take the time \( \ts_{q} \) instead of \( \ts_{\nat} \).
 \end{lem}
 \begin{proof}
+
+Assume all the reduction steps append some records between time \( \ts_{p} \) and \( \ts_{q} \).
+If we take out the effect of transaction \( \tsid \) after \( \tsh_{k+1} \), and rename them to \( \tsh_{k+1}' \) respectively.
+We will prove the following first,
+\[
+    (\tsh_{0}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}'} 
+    \implies (\fpw_{p}', \fpw_{q}') \in \RelyI 
+    \land (\tsh_{\nat}', \ts_{q}) \in \func{x1tsh}{\fpw_{q}'}
+\]
+Given the \rl{RGEnv} rule, we have,
+\[
+    \bigwedge\limits_{ 0 \leq i < \nat }( \tsh_{ i }, \tsh_{i + 1}) \in \Rely
+\]
+note that it is still true even if we take out of the effect of transaction \( \tsid \) because transactions run concurrently can always swap the reduction order, (Need a lemma).
+By the flatten (\defref{def:flatten-to-tsh}), for each \( (\tsh_{i}, \tsh_{i + 1}) \), there exists \( \tsid_{i}, \fpw_{i}^{p}, \fpw_{i}^{q}, \ts_{i}^{p}, \ts_{i}^{q} \)  such that,
+\begin{equation}
+    \label{equ:allowed-by-rely}
+    \begin{array}{@{}l@{}}
+    (\tsh_{i}, \ts_{i}^{p}) \in \func{x2tsh}{\fpw_{i}^{p}} 
+    \land (\tsh_{i + 1}, \ts_{i}^{q}) \in \func{x2tsh}{\fpw_{i}^{q}}  \\
+    \qquad {} \land \tsh_{i+1}(\addr_{r}) = \tsh_{i}\rmto{\ts_{i}^{p}}{(\stub, \stub, \tsid)}\rmto{\ts_{i}^{q}}{(\stub, \stub, \tsid)}
+    \land (\fpw_{i}^{p}, \fpw_{i}^{q}) \in \rely(\intf)
+    \end{array}
+\end{equation}
+We use a two-column, pre and post- states, matrix to present all the variables,
+\[
+\left[
+\begin{array}{c c}
+(\ts_{0}^{p}, \fpw_{0}^{p}) &
+(\ts_{0}^{q}, \fpw_{0}^{q}) \\
+(\ts_{1}^{p}, \fpw_{1}^{p}) &
+(\ts_{1}^{q}, \fpw_{1}^{q}) \\
+ \vdots &
+ \vdots \\
+(\ts_{\nat}^{p}, \fpw_{\nat}^{p}) &
+(\ts_{\nat}^{q}, \fpw_{\nat}^{q}) \\
+\end{array}
+\right]
+\]
+Given the fact about rely (\defref{def:rely-guarantee}),
+\[
+    \for{ \addr,\val,\fp }
+    ((\ca_{p},\fph_{p}), (\ca_{q},\fph_{q})) \in \rely(\intf) 
+    \implies ((\ca_{p},\fph_{p} \composeFPH \Set{\addr \mapsto (\val,\fp)}), (\ca_{q},\fph_{q} \composeFPH \Set{\addr \mapsto (\val,\fp)})) \in \rely(\intf)
+\]
+We can assume the following by  extending the fingerprint worlds.
+\[
+    \for{i,j} \exsts{\fph, \fph'} 
+    \eraseFW{\fpw_{i}^{\stub}} = (\stub, \fph) 
+    \land \eraseFW{\fpw_{j}^{\stub}} = (\stub, \fph')
+    \land \dom(\fph) = \dom(\fph')
+\]
+We inductively choose two rows in the matrix until only one left.
+\begin{enumerate}
+\item For two \( i,j \) where one happen exactly after another and there is no third transaction run concurrently.
+\[
+\ts_{i}^{q} < \ts_{j}^{p}
+\land \for{\addr,\val, \ts}                             
+\ts \in (\ts_{i}^{p}, \ts_{j}^{q} ) \setminus \Set{\ts_{i}^{q}, \ts_{j}^{p}}
+\land \tsh_{\nat}(\addr)(\ts)\undef
+\]
+By the semantics, we  have,
+\[
+\for{\addr} \exsts{\val} 
+\land \tsh_{\nat}(\addr)(\ts_{i}^{q}) = (\val, \stub, \stub)
+\land \tsh_{\nat}(\addr)(\ts_{j}^{p}) = (\val, \stub, \stub)
+\]
+This means,
+\[
+    \fpw_{i}^{q} = \fpw_{j}^{p}
+\]
+Because \( \RelyI \)(\defref{def:rely-guarantee}) is transitive, and because of the \ih and \equref{equ:allowed-by-rely}, we know,
+\[
+    (\fpw_{i}^{p}, \fpw_{j}^{q}) \in \RelyI
+\]
+Now we delete the rows \( i,j \) and add a new row \( [ (\ts_{i}^{p}, \fpw_{i}^{p}) \  (\ts_{j}^{q}, \fpw_{j}^{q}) ] \)
+
+\item For two \( i,j \) that one happen within another and these two transactions are the shortest one in time of time span.
+\[
+    \ts_{i}^{p} < \ts_{j}^{p} < \ts_{j}^{q} < \ts_{j}^{q}
+    \land \for{ \addr, \ts \in (\ts_{j}^{p}, \ts_{j}^{q})}
+    \tsh_{\nat}(\addr)(\ts) \undef
+\]
+
+
+\end{enumerate}
+
+\sx{reassemble the following }
+
 Given the Guarantee \( \GuarI \) (\defref{def:rely-guarantee}), assume \( \fph_{p}, \fph_{i} \) such that, 
 \begin{equation}
 \label{def:definition-ph-p-and-i}
@@ -235,7 +342,6 @@ Given that \( (\tsh_{p}, \tsh_{q}) \in \func{xx2tsh}{\fpw_{p}, \fpw_{i}} \), and
 \exsts{\tsid} \for{ \addr, \fp, \val } \fph_{i}(\addr) = (\val, \fp) \\
 \quad {} \land (\fpW \in \fp \implies \tsh_{q}(\addr)(\ts_{q}) = (\val, \etW, \tsid))  \\
 \quad {} \land (\Set{\fpR} = \fp \implies \tsh_{q}(\addr)(\ts_{p}) = (\val, \etR, \tsid) \land \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etE, \tsid))
-
 \end{array}
 \end{equation}
 Given the flatten (\defref{def:flatten-to-tsh}), we need to prove there exists a \( \fph_{q} \) such that,
@@ -288,43 +394,11 @@ However, note that,
 \right)
 \]
 Because there might be other transactions that commit between times \( \ts_{p} \) and \( \ts_{q} \) and write to some addresses \( \addr_{r} \), while the current transaction \( \tsid \) is still allowed to commit, meaning not violating \( \consistentName \) predicate from the semantics (\figref{fig:rg_semantics}).
-Yet in the semantics, each time a thread committing a transaction, it also check with other treads' rely using the \( \rl{RGEnv} \) rule.
-Let assume an initial time-stamp heap \( \tsh_{0} \), such that,
-\[
-    \for{ \ts, \addr } \ts_{p} < \ts < \ts_{q} \land \tsh_{0} (\addr)(\ts)\undef
-\]
-\sx{Fork-Join? fork will adding more rely and join will push up the time to rule out those deleted rely}
-and assume a series of time-stamp heap \( \tsh_{0} \dots \tsh_{\nat}\), such that,
-\[
-    \tsh_{n} = \tsh_{p} \land \Rely, \Guar, (\stub, \tsh_{0}, \stub), \ptrans{\trans} \toRG{\lbRELY} \Rely, \Guar, (\stub, \tsh_{1}, \stub), \ptrans{\trans} \toRG{\lbRELY} \dots \toRG{\lbRELY} \Rely, \Guar, (\stub, \tsh_{\nat}, \stub), \ptrans{\trans}
-\]
 We also assume each of the steps modifies the address \( \addr_{r} \) at a time between \( \ts_{p} \) and \( \ts_{q} \).
-Because if it modifies at a time before \( \ts_{p} \) it covers by our hypothesis.
-If it modifies at a time after \( \ts_{q} \), it does not affect the snapshot taken at time \( \ts_{q} \).
-We first prove there exist \( \fpw_{p}', \fpw_{q}'\) such that,
-\[
-    (\tsh_{0}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}'} 
-    \implies (\fpw_{p}', \fpw_{q}') \in \RelyI 
-    \land (\tsh_{\nat}, \ts_{q}) \in \func{x2tsh}{\fpw_{q}'}
-\]
+Because if a step modifies, especially writes, at a time before \( \ts_{p} \) it covers by our hypothesis, meaning \( ( \Rely, \Guar, \tsh_{p}, \ts_{p} \in \flattenevalW[\lenv, \stk_{p}, \intf]{\fpw_{p}}\), so that we could ignore such step.
+If a step modifies at a time after \( \ts_{q} \), it does not affect the snapshot taken at time \( \ts_{q} \), so that we can also ignore the step.
 
-
-
-
-Given the \rl{RGEnv} rule, we have,
-\[
-    \bigwedge\limits_{ 1 \leq i \leq \nat}( \tsh_{ i - 1}, \tsh_{i}) \in \Rely
-\]
 \end{proof}
-
-\begin{lem}[Merge with the future]
-\label{lem:merge-sound}
-\[
-\begin{array}{@{}l@{}}
-\end{array}
-\]
-\end{lem}
-
 
 \begin{lem}[Stabilisation soundness]
 \label{lem:stable-sound}
@@ -497,7 +571,6 @@ Also, if two transactions write to the same addresses, it must be strictly one a
 \end{equation}
 Given the definition of rely (\defref{def:rely-guarantee}), by \equref{equ:global-read}, \equref{equ:concurrent-trans}, \equref{equ:read-the-same-value}, \equref{equ:write-one-after-another}, and then induction on the number \( \nat \), we have,
 \begin{equation}
-    \label{equ:allowed-by-rely}
     \begin{array}{@{}l@{}}
         \exsts{\fpw, \ts, \etag \in \Set{\etS, \etR}, \ca }
         \tsh_{q}(\addr_{r})(\ts) = (\val_{r}, \etag, \tsid_{i}) 
