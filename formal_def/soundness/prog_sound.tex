@@ -283,24 +283,33 @@ Given the fact about rely (\defref{def:rely-guarantee}),
 We can assume the following by  extending the fingerprint worlds.
 \[
     \for{i,j} \exsts{\fph, \fph'} 
-    \eraseFW{\fpw_{i}^{\stub}} = (\stub, \fph) 
-    \land \eraseFW{\fpw_{j}^{\stub}} = (\stub, \fph')
+    \flattenFW{\fpw_{i}^{\stub}} = (\stub, \fph) 
+    \land \flattenFW{\fpw_{j}^{\stub}} = (\stub, \fph')
     \land \dom(\fph) = \dom(\fph')
 \]
-We inductively choose two rows in the matrix until only one left.
+Let \( \tsh \) initial be the time-stamp heap without the effect of transaction \( \tsid \).
+we inductively choose two rows in the matrix until only one left.
 \begin{enumerate}
-\item For two \( i,j \) where one happen exactly after another and there is no third transaction run concurrently.
+\item For two \( i,j \) where one happen exactly after another and there is nothing in between.
 \[
 \ts_{i}^{q} < \ts_{j}^{p}
 \land \for{\addr,\val, \ts}                             
-\ts \in (\ts_{i}^{p}, \ts_{j}^{q} ) \setminus \Set{\ts_{i}^{q}, \ts_{j}^{p}}
-\land \tsh_{\nat}(\addr)(\ts)\undef
+\ts \in (\ts_{i}^{q}, \ts_{j}^{p} ) 
+\land \tsh(\addr)(\ts)\undef
+\]
+We also assume there is no write or end event with in each transactions,
+\[
+\land \for{\addr,\val, \ts, \etag}                             
+\ts \in (\ts_{i}^{p}, \ts_{j}^{p} )  \cup (\ts_{j}^{p}, \ts_{j}^{q})
+\land \tsh(\addr)(\ts) \neq (\stub, \etag, \stub)
+\land \etag \neq \etW
+\land \etag \neq \etE
 \]
 By the semantics, we  have,
 \[
 \for{\addr} \exsts{\val} 
-\land \tsh_{\nat}(\addr)(\ts_{i}^{q}) = (\val, \stub, \stub)
-\land \tsh_{\nat}(\addr)(\ts_{j}^{p}) = (\val, \stub, \stub)
+\land \tsh(\addr)(\ts_{i}^{q}) = (\val, \stub, \stub)
+\land \tsh(\addr)(\ts_{j}^{p}) = (\val, \stub, \stub)
 \]
 This means,
 \[
@@ -311,95 +320,70 @@ Because \( \RelyI \)(\defref{def:rely-guarantee}) is transitive, and because of 
     (\fpw_{i}^{p}, \fpw_{j}^{q}) \in \RelyI
 \]
 Now we delete the rows \( i,j \) and add a new row \( [ (\ts_{i}^{p}, \fpw_{i}^{p}) \  (\ts_{j}^{q}, \fpw_{j}^{q}) ] \)
+We also delete record associated with \( \ts_{i}^{q} \) and \( \ts_{j}^{p} \) from \( \tsh \).
 
-\item For two \( i,j \) that one happen within another and these two transactions are the shortest one in time of time span.
+\item For two \( i,j \) where one overlap with another but no record between there starting time.
+Note that if there are no exactly continuous transactions, this must be the case.
+We assume the 
 \[
-    \ts_{i}^{p} < \ts_{j}^{p} < \ts_{j}^{q} < \ts_{j}^{q}
-    \land \for{ \addr, \ts \in (\ts_{j}^{p}, \ts_{j}^{q})}
-    \tsh_{\nat}(\addr)(\ts) \undef
+    \ts_{i}^{p} \leq \ts_{j}^{p}
+    \land \for{ \addr, \ts}
+    \ts \in (\ts_{i}^{p}, \ts_{i}^{p}) 
+    \land \tsh(\addr)(\ts) \undef
 \]
-
-
+For brevity we assume \( \ts_{i}^{q} \geq \ts_{j}^{q} \), while the other case is symmetric.
+This means that they must take the snapshot,
+\[
+\for{\addr} \exsts{\val} 
+\land \tsh(\addr)(\ts_{i}^{p}) = (\val, \stub, \stub)
+\land \tsh(\addr)(\ts_{j}^{p}) = (\val, \stub, \stub)
+\]
+therefore,
+\[
+\fpw_{i}^{p} = \fpw_{j}^{p}
+\]
+Given the semantics (\defref{def:rg-semantics}), these two transactions cannot write to the same address, \ie
+\[
+    \for{\addr, \etag, \etag'}
+    \tsh(\addr)(\ts_{i}^{q}) = (\stub, \etag, \stub)
+    \land \tsh(\addr)(\ts_{j}^{q}) = (\stub, \etag', \stub)
+    \land \neg ( \etag = \etag' = \etW)
+\]
+This mean for a certain address, two fingerprint heaps \( \fpw_{i}^{q} \) and \( \fpw_{j}^{q} \) cannot have the write fingerprint at the same time,
+\[
+    \for{\addr, \fph, \fph', \fp, \fp'}
+    \flattenFW{\fpw_{i}} = (\stub, \fph)
+    \land \flattenFW{\fpw_{j}} = (\stub, \fph')
+    \land \fph(\addr) = (\stub, \fp)
+    \land \fph'(\addr) = (\stub, \fp')
+    \land \neg(\fpW \in \fp \land \fpW \in \fp')
+\]
+Therefore they are mergable, which means they must also in \( \RelyI \), because it is closed under merge.
+\[
+    \exsts{ \fpw = \mergeFW{\fpw_{i}^{q}}{\fpw_{j}^{q}} } (\fpw_{i}^{p}, \fpw) \in \RelyI
+\]
+Now we delete the rows \( i,j \) and add a new row \( [ (\ts_{i}^{p}, \fpw_{i}^{p}) \  (\ts_{i}^{q}, \fpw_{i}^{q}) ] \)
+We also delete record associated with \( \ts_{j}^{p} \) and \( \ts_{j}^{q} \) from \( \tsh \) and move all the write from \( \ts_{j}^{q} \) to \( \ts_{i}^{q} \).
 \end{enumerate}
-
-\sx{reassemble the following }
-
-Given the Guarantee \( \GuarI \) (\defref{def:rely-guarantee}), assume \( \fph_{p}, \fph_{i} \) such that, 
+By keep doing the two steps above, there exist \( \fpw_{p}' \) and \( \fpw_{q}' \),
 \begin{equation}
-\label{def:definition-ph-p-and-i}
-\begin{array}{@{}l@{}}
-    \exsts{ \ca_{p}, \ca_{i}, \kap, \fpw_{f} }  \\
-    \quad \fpw_{p} = (\kap \composeC \ca_{p},\fph_{p} \composeFPH \fph_{f}) 
-    \land \fpw_{i} = (\ca_{i},\fph_{i} \composeFPH \fph_{f}) 
-    \land \pred{no\_fingerprint}{\fph_{p}} 
-    \land ( \fph_{p}, \fph_{i} ) \in \intf(\kap)
-\end{array}
+\label{equ:all-concurrent-trans-are-in-rely}
+    (\tsh_{0}, \tsh_{\nat}) \in \func{xx2tsh}{\fpw_{p}', \fpw_{q}'} \land (\tsh_{0}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}} \land ( \fpw_{p}', \fpw_{q}' ) \in \RelyI
 \end{equation}
-Given that \( (\tsh_{p}, \tsh_{q}) \in \func{xx2tsh}{\fpw_{p}, \fpw_{i}} \), and the fact that it can transfer semantically, we have, 
-\begin{equation}
-\label{equ:property-of-fph-i-tsh-pq}
-\begin{array}{@{}l@{}}
-\exsts{\tsid} \for{ \addr, \fp, \val } \fph_{i}(\addr) = (\val, \fp) \\
-\quad {} \land (\fpW \in \fp \implies \tsh_{q}(\addr)(\ts_{q}) = (\val, \etW, \tsid))  \\
-\quad {} \land (\Set{\fpR} = \fp \implies \tsh_{q}(\addr)(\ts_{p}) = (\val, \etR, \tsid) \land \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etE, \tsid))
-\end{array}
-\end{equation}
-Given the flatten (\defref{def:flatten-to-tsh}), we need to prove there exists a \( \fph_{q} \) such that,
+Given that \( (\tsh_{p}, \tsh_{q}) \in \func{xx2tsh}{\fpw_{p}, \fpw_{i}} \), and the fact that from \( \tsh_{0} \) to \( \tsh_{\nat} \), they append events between \( \ts_{p} \) and \( \ts_{q} \),  we know the current transaction \( \tsid \) and the abstract of the concurrent transaction from the environment must take the same snapshot,
 \[
-    ( \stub, \fph_{q}) \in \mergeR{\fpw_{p}}{\fpw_{i}}{\intf}
-    \land \for{\addr, \val} \snapshot{\tsh_{q}}{\ts_{q}}(\addr) = (\val, \stub) 
-    \land \eraseFPH{\fph_{q} }(\addr)  = \val
+    \fpw_{p} = \fpw_{p}'
 \]
-Let discuss the addresses being written \( \addr_{w} \) and those only being read \( \addr_{r} \) separately.
-For addresses \( \addr_{w} \) being written, assume the value is \( \val_{w} \).
-By \equref{equ:property-of-fph-i-tsh-pq}, this means,
+By the semantics, the current transaction and the environment cannot write to the same addresses, so that they are mergable, \ie there exists \( \fpw_{q}'' \) such that 
 \begin{equation}
-\label{equ:global-write}
-\for{ \fp }
-\fpW \in \fp
-\land \fph_{i}(\addr_{w}) = (\val_{w}, \fp)
-\land \tsh_{q}(\addr_{w})(\ts_{q}) = (\val_{w}, \etW, \tsid)
+\label{equ:exists-merged-fpw}
+    \fpw_{q}'' = \mergeFW{\fpw_{q}}{\fpw_{q}'} \land (\tsh_{\nat},\ts_{q}) \in \func{x2tsh}{\fpw_{q}''}
 \end{equation}
-Given  the \( \snapshotName \) function, we have, 
-\begin{equation}
-\label{equ:snap-write}
-\snapshot{\tsh_{q}}{\ts_{q}}(\addr_{w}) = (\val_{w}, \stub)
-\end{equation}
-Meanwhile, by the \equref{equ:property-of-fph-i-tsh-pq} and the \lemref{lem:write-win-merge}, we have,
-\begin{equation}
-\label{equ:local-write}
-    \for{ \fp }
-    \fpW \in \fp
-    \land \fph_{i}(\addr_{w}) = \fph_{q}(\addr_{w}) = (\fp, \val_{w})
-    \land \eraseFPH{\fph_{q}}(\addr_{w}) = \val_{w}
-\end{equation}
-The \equref{equ:snap-write} and \equref{equ:local-write} shows that for all the addresses been written, the values match.
-
-Now let consider addresses \( \addr_{r} \) only being read with the value \( \val_{r} \).
-By \equref{equ:property-of-fph-i-tsh-pq}, this means,
-\begin{equation}
-\label{equ:global-read}
-\fph_{i}(\addr_{r}) = ( \val_{r}, \Set{\fpR})
-\land \tsh_{q}(\addr_{r})(\ts_{p}) = (\val_{r}, \etR, \tsid)
-\land \tsh_{q}(\addr_{r})(\ts_{q}) = (\val_{r}, \etE, \tsid)
-\end{equation}
-However, note that,
-\[
-\neg\left(
-    \begin{array}{@{}l@{}}
-        \tsh_{q}(\addr_{r})(\ts_{p}) = (\val_{r}, \etR, \tsid )
-        \land \tsh_{q}(\addr_{r})(\ts_{q}) = (\val_{r}, \etE , \tsid) \\
-        \quad \implies \snapshot{\tsh_{q}}{\ts_{q}}(\addr_{r}) = (\val_{r}, \stub)
-    \end{array}
-\right)
-\]
-Because there might be other transactions that commit between times \( \ts_{p} \) and \( \ts_{q} \) and write to some addresses \( \addr_{r} \), while the current transaction \( \tsid \) is still allowed to commit, meaning not violating \( \consistentName \) predicate from the semantics (\figref{fig:rg_semantics}).
-We also assume each of the steps modifies the address \( \addr_{r} \) at a time between \( \ts_{p} \) and \( \ts_{q} \).
-Because if a step modifies, especially writes, at a time before \( \ts_{p} \) it covers by our hypothesis, meaning \( ( \Rely, \Guar, \tsh_{p}, \ts_{p} \in \flattenevalW[\lenv, \stk_{p}, \intf]{\fpw_{p}}\), so that we could ignore such step.
-If a step modifies at a time after \( \ts_{q} \), it does not affect the snapshot taken at time \( \ts_{q} \), so that we can also ignore the step.
+Combining \equref{equ:all-concurrent-trans-are-in-rely} and \equref{equ:exists-merged-fpw}, we have the proof.
 
 \end{proof}
 
+\sx{ Need massive change, similar to merge, but much easy to prove}
 \begin{lem}[Stabilisation soundness]
 \label{lem:stable-sound}
 
