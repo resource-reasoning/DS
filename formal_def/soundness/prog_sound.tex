@@ -9,18 +9,11 @@ The rely-guarantee operational semantics are show in \figref{fig:rg_semantics}, 
 \begin{figure}[!t]
 \hrule\vspace{5pt}
 \[
-    \infer[\rl{RGIncTime}]{%
-        \Rely, \Guar, (\stk, \tsh, \ts), \iprog \ \toRG{\lbRELY} \ \Rely, \Guar, (\stk, \tsh, \ts'), \iprog
-    }{%
-        \ts' > \ts
-    }
-\]
-
-\[
     \infer[\rl{RGEnv}]{%
-        \Rely, \Guar, (\stk, \tsh, \ts), \iprog \ \toRG{\lbRELY} \ \Rely, \Guar, (\stk, \tsh', \ts), \iprog
+        \Rely, \Guar, (\stk, \tsh, \ts), \iprog \ \toRG{\lbRELY} \ \Rely, \Guar, (\stk, \tsh', \ts'), \iprog
     }{%
         (\tsh, \tsh') \in \Rely
+        && \ts' > \ts
     }
 \]
 
@@ -201,26 +194,108 @@ Combine two cases, we have the proof, \ie
 
 \sx{Fork-Join? fork will adding more rely and join will push up the time to rule out those deleted rely}
 
-\begin{lem}[Merge soundness]
-\label{lem:merge-sound}
-Given time \( \ts_{p} \) and \( \ts_{q} \), assume a series of time-stamp heaps \( \tsh_{0}, \dots \tsh_{k}, \tsh_{p}, \tsh_{q}, \tsh_{k+1}, \dots, \tsh_{\nat} \) that satisfy the follows
+\begin{lem}[Reorder the reduction steps for concurrent transactions]
+\label{lem:reorder-concurrency}
+Given the semantics (\defref{def:rg-semantics}), for any two reduction steps labelled by \( \lbC{\tsid}, \lbC{\tsid'} \),
 \[
-    \for{\addr, \ts} 
-    \ts_{p} \leq \ts \leq \ts_{q}
-    \land \tsh_{p}(\addr) \neq \tsh_{q}(\addr)
-    \land \tsh_{0}(\addr)(\ts) \undef
+    \tsh_{1}, \thpl_{1} \toGG{\lbC{\tsid}} \tsh_{2}, \thpl_{2} \toGG{\lbC{\tsid'}} \tsh_{3}, \thpl_{3}
 \]
-which Intuitively means for the addresses \( \addr \) that are changed from \( \tsh_{p} \) to \( \tsh_{q} \), they are undefined in the first time-stamp heap \( \tsh_{0} \).
-Then, assume there are reduction steps associated with the series also as the follows,
+if the corresponding transactions \( \tsid, \tsid' \) have time overlapping, and \( \tsid' \) commits before \( \tsid \), 
+\[
+\begin{array}{@{}l@{}}
+    \for{\addr, \ts_{s}, \ts_{e}, \ts_{e}'} \\
+    \quad \ts_{s} < \ts_{e}' < \ts_{e}
+    \land \tsh_{3}(\addr)(\ts_{s}) = (\stub, \stub, \tsid)
+    \land \tsh_{3}(\addr)(\ts_{e}') = (\stub, \stub, \tsid')
+    \land \tsh_{3}(\addr)(\ts_{e}) = (\stub, \stub, \tsid)
+\end{array}
+\]
+It can be reorder in the form as the follows,
+\[
+\begin{array}{@{}l@{}}
+    \tsh_{1}, \thpl_{1} \toGG{\lbC{\tsid'}} \tsh_{2}', \thpl_{2}' \toGG{\lbC{\tsid}} \tsh_{3}, \thpl_{3}
+\end{array}
+\]
+where,
+\[
+\begin{array}{@{}l@{}}
+    \for{\addr, \ts,\val,\etag} \\
+    \quad \tsh_{3}(\addr)(\ts) = (\stub, \stub, \tsid) \implies \tsh_{2}(\addr)(\ts) \undef \\ 
+    \quad {} \land \tsh_{3}(\addr)(\ts) = (\val, \etag, \tsid') \implies \tsh_{2}(\addr)(\ts) = (\val, \etag, \tsid')
+\end{array}
+\]
+\end{lem}
+\begin{proof}
+Because no write conflict.
+\end{proof}
+
+
+\begin{lem}[Reorder the reduction steps for transactions appended to the past]
+\label{lem:reorder-the-future-and-past}
+Given the semantics (\defref{def:rg-semantics}), for any two reduction steps labelled by \( \lbC{\tsid}, \lbC{\tsid'} \),
+\[
+    \tsh_{1}, \thpl_{1} \toGG{\lbC{\tsid}} \tsh_{2}, \thpl_{2} \toGG{\lbC{\tsid'}} \tsh_{3}, \thpl_{3}
+\]
+if \( \tsid' \) happens before \( \tsid \), 
+\[
+\begin{array}{@{}l@{}}
+    \for{\addr, \ts_{s}, \ts_{e}'} \\
+    \quad \ts_{e}' < \ts_{s}
+    \land \tsh_{3}(\addr)(\ts_{e}') = (\stub, \stub, \tsid')
+    \land \tsh_{3}(\addr)(\ts_{s}) = (\stub, \stub, \tsid)
+\end{array}
+\]
+It can be reorder in the form as the follows,
+\[
+\begin{array}{@{}l@{}}
+    \tsh_{1}, \thpl_{1} \toGG{\lbC{\tsid'}} \tsh_{2}', \thpl_{2}' \toGG{\lbC{\tsid}} \tsh_{3}, \thpl_{3}
+\end{array}
+\]
+where,
+\[
+\begin{array}{@{}l@{}}
+    \for{\addr, \ts,\val,\etag} \\
+    \quad \tsh_{3}(\addr)(\ts) = (\stub, \stub, \tsid) \implies \tsh_{2}(\addr)(\ts) \undef \\ 
+    \quad {} \land \tsh_{3}(\addr)(\ts) = (\val, \etag, \tsid') \implies \tsh_{2}(\addr)(\ts) = (\val, \etag, \tsid')
+\end{array}
+\]
+\end{lem}
+\begin{proof}
+Because if the \( \tsid \) read a value written by \( \tsid' \) the appending-to-the-past cannot happen in the first place.
+\end{proof}
+
+\begin{defn}[Transaction with Environment]
+\label{def:trans-run-within-env}
+Given local times \( \ts_{0}, \dots,  \ts_{\nat} \) and a series of time-stamp heaps \( \tsh_{0}, \dots \tsh_{k}, \tsh_{p}, \tsh_{q}, \tsh_{k+3}, \dots, \tsh_{\nat} \) that satisfy the follows,
+We also assume they are the machine states corresponding to reduction steps with respect to a transaction \( \ptrans{\trans} \) and its environment.
 \[
 \begin{array}{@{}l@{}}
     \Rely, \Guar, (\stk_{p}, \tsh_{0}, \ts_{0}), \ptrans{\trans} \toRG{\lbRELY} \Rely, \Guar, (\stk_{p}, \tsh_{1}, \ts_{1}), \ptrans{\trans}  \toRG{\lbRELY} \dots  \toRG{\lbRELY} \\
     \qquad \Rely, \Guar, (\stk_{p}, \tsh_{p}, \ts_{p}),  \ptrans{\trans} \toRG{\lbC{\tsid}} \Rely, \Guar, (\stk_{q}, \tsh_{q}, \ts_{q}),  \pskip \\
-    \qqqquad \toRG{\lbRELY} \Rely, \Guar, (\stk_{q}, \tsh_{k+1}, \ts_{k+1}), \pskip \toRG{\lbRELY} \dots \toRG{\lbRELY} \Rely, \Guar, (\stk_{q}, \tsh_{\nat}, \ts_{\nat}), \pskip
+    \qqqquad \toRG{\lbRELY} \Rely, \Guar, (\stk_{q}, \tsh_{k+3}, \ts_{k+3}), \pskip \toRG{\lbRELY} \dots \toRG{\lbRELY} \Rely, \Guar, (\stk_{q}, \tsh_{\nat}, \ts_{\nat}), \pskip
 \end{array}
 \]
-This is a series of possible reduction steps that might affect the commit of \( \tsid \).
-Now, given the flatten functions (\defref{def:flatten-to-tsh}), the \emph{merge soundness} is as the follows,
+by reordering some reduction steps by \lemref{lem:reorder-concurrency} and \lemref{lem:reorder-the-future-and-past}, we can also assume the transactions from the environment and the current transactions  are ordered by the commit times.
+\[
+\begin{array}{@{}l@{}}
+    \for{ \addr, \ts \in [\ts_{0}, +\infty), \ts' \in [\ts_{\nat}, +\infty) }
+    \tsh_{0}(\addr)(\ts) \undef
+    \land \tsh_{\nat}(\addr)(\ts') \undef \\
+    \quad \exsts{ \ts_{0}', \dots, \ts_{\nat}' } \ts_{0}' < \dots < \ts_{\nat}' \\
+    \qquad {}\land \bigwedge\limits_{0 \leq i < \nat} \for{\addr} \exsts{\etag \in \Set{\etW, \etE}}
+    \tsh_{i}(\addr)(\ts_{i}') \undef \land \tsh_{i+1}(\addr)(\ts_{i+1}') = (\stub, \etag, \stub) \\
+    \qquad {}\land \bigwedge\limits_{k+3 < i \leq \nat} \for{\addr} \exsts{\etag \in \Set{\etS, \etR}, \ts''}
+    \ts'' < \ts_{q}
+    \land \tsh_{i}(\addr)(\ts'') = (\stub, \etag, \stub)
+    \end{array}
+\]
+This is a possible environment that might affect the transaction \( \tsid \).
+The first line fixes the \( \tsh_{0} \) as the initial time-stamp heap with no events after time \( \ts_{0} \).
+\end{defn}
+\begin{lem}[Merge soundness]
+\label{lem:merge-sound}
+Given a transaction \( \trans \) and a possible environment with it corresponding states \( \tsh_{0} \dots \tsh_{\nat} \), and rely-guarantee \( \Rely, \Guar \) (\defref{def:trans-run-within-env}), the \emph{merge soundness} is as the follows.
+Note that the flatten functions is defined in \defref{def:flatten-to-tsh}.
 \[
 \begin{array}{@{}l@{}}
     \for{ \lenv, \intf}  \\
@@ -387,25 +462,19 @@ Combining \equref{equ:all-concurrent-trans-are-in-rely} and \equref{equ:exists-m
 \begin{lem}[Stabilisation soundness]
 \label{lem:stable-sound}
 
-The stabilisation intuitively covers the transactions that happen sequentially in the future.
+Given a transaction \( \trans \) and a possible environment with it corresponding states \( \tsh_{0} \dots \tsh_{\nat} \), and rely-guarantee \( \Rely, \Guar \) (\defref{def:trans-run-within-env}), the \emph{stabilisation soundness} is as the follows.
 \[
 \begin{array}{@{}l@{}}
-    \for{\lenv, \stk, \gpre, \iprog, \intf, \Rely, \tsh_{p}, \tsh_{q}, \Guar, \ts_{q}, \ts_{p}}  \\
-    \quad (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW{\gpre}
-    \land \stable{\gpre}{\intf} 
-    \land \Rely, \Guar, (\tsh_{p}, \stk, \ts_{p}), \iprog \toRG{\lbRELY} \Rely, \Guar, (\tsh_{q}, \stk, \ts_{q}), \iprog \\
-    \qquad \implies \for{\addr, \ts}
-    \ts \leq \ts_{p} \land \tsh_{p}(\addr)(\ts) = \tsh_{q}(\addr)(\ts) \\
-    \qquad \implies  (\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW{\gpre} 
+    \for{ \lenv, \intf, \gpre, \fpw_{p}, i}  \\
+    (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\gpre}
+    \land \stable{\gpre}{\intf}
+    \land i < p \\
+    \quad \implies (\Rely, \Guar, \tsh_{i}, \ts_{p}) \in \flattenevalW[\lenv, \stk_{p}, \intf]{\gpre}
 \end{array}
 \]
 Note that before the time \( \ts_{p} \), all the records inside the \( \tsh_{q} \) must remains the same as those in \( \tsh_{p} \).
 \end{lem}
 \begin{proof}
-Assume a fingerprint word \( \fpw_{p} \) that \( \eraseFW{\fpw_{p}} \in \evalW{\gpre} \) and \( \func{no\_fingerprint}{\fpw_{p}}\).
-Because \( (\Rely, \Guar, \tsh_{p}, \ts_{p}) \in  \flattenevalW{\gpre} \), we have \( \Rely = \func{xx2tsh}{\RelyI\projection{\fpw_{p}}} \) and \( (\tsh_{p}, \ts_{p}) \in \func{x2tsh}{\fpw_{p}}\).
-Given the semantics (\figref{fig:rg_semantics}) we have \( ((\tsh_{p}, \ts_{p}),(\tsh_{q}, \ts_{q})) \in \Rely \) and then by the \( \funcn{xx2tsh} \) function (\defref{def:x2tsh}) there must exists \( \fpw_{q}\) such that \( ( \fpw_{p}, \fpw_{q} ) \in \RelyI \).
-Then because of \( \stable{\gpre}{\intf} \) (\defref{def:rely-guarantee}), we know \( \eraseFW{\fpw_{q}} \in \evalW{\gpre}\), so \( (\Rely, \Guar, \tsh_{q}, \ts_{q}) \in \flattenevalW{\gpre} \).
 \end{proof}
 
 \begin{defn}[Semantic triple]
