@@ -315,18 +315,18 @@ between the configurations $\mathcal{C}, \mathcal{C'}$. These contain the inform
 transactional memory, and the concurrent program to be executed. The former will be represented using 
 abstract executions \cite{framework-concur}.
 
-\paragraph{\textbf{Computational Model.}}
+\section{Computational Model}
 We focus on a computational model where multi-threaded programs can access and update 
-locations in a centralised heap using atomic transactions. A heap $\heap$ consists of a mapping 
-from a set of locations $\locs = \{ [n] \mid n \in \mathbb{N}\}$ to values in $\mathbb{N}$. 
-The set of all heaps is denoted by $\heapset$. 
+locations in a centralised heap using atomic transactions. A heap $\h \in \Heaps$ consists of a partial function 
+from a set of addresses $\addr \in \Addr \defeq \Setcon{ [\nat] }{\nat \in \Nat }$ to values in $ \val \in \Val \defeq \Nat \cup \Addr$. 
+The set of all heaps is denoted by $\Heaps$. 
 Each thread has its own stack, 
 where data for performing local computations is stored. Transactions also 
 have a transaction-local stack. 
-The set of thread-local stack variables is denoted by $\threadvars = \{\mathtt{x}, \mathtt{y}, \cdots\}$, 
-while the set of transaction local locations is denoted by $\txvars = \{\mathtt{a}, \mathtt{b}, \cdots\}$. 
-We use $\thdstack$ to range over thread-local stacks in the set $\thdstackset \triangleq \threadvars \rightarrow \mathbb{N}$, 
-and $\txstack$ to range over transaction-local stacks in the set $\txstackset \triangleq \txvars \rightarrow \mathbb{N}$.
+The set of thread-local stack variables is denoted by $\ThreadVars \defeq \{\pvar{x}, \pvar{y}, \cdots\}$, 
+while the set of transaction local locations is denoted by $\TxVars \defeq \{\pvar{a}, \pvar{b}, \cdots\}$. 
+We use $\ThdStacks$ to range over thread-local stacks in the set $\ThdStacks \defeq \ThreadVars \to \Val$, 
+and $\TxStacks$ to range over transaction-local stacks in the set $\TxStacks \defeq \TxVars \to \Val$.
 
 The transaction-local stack is created at the moment a transaction start, 
 and is destroyed at the moment it commits. 
@@ -339,6 +339,11 @@ upon commit. Each thread-local stack also comes equipped with a special return v
 where the contents of the value returned by transactions are stored. We use the symbol 
 $\retvar$ to denote the special return variable, both in transaction-local and thread-local 
 stacks.
+\sx{
+    Not sure about the ret var, 
+    how to transfer the ret var from tx stack to thread stack as 
+    we cannot modify the thread stack.
+}
 
 We leave the consistency model of the transactional memory unspecified. The rules 
 of our operational semantics will be parametric in the specification of a consistency 
@@ -347,206 +352,219 @@ model, using the style of specification proposed in \cite{laws}.
 \paragraph{\textbf{Syntax of Programs}}
 We assume a set of (primitive) transactional commands $\primt,\primt',\cdots$, which 
 we leave unspecified. Each transactional command $t$ is associated to a \emph{state transformer} 
-$\mathcal{S}_t \subseteq (\thdstackset \times \txstackset \times \heapset) \times (\txstackset \times \heapset)$. 
-We use the notation $(\thdstack, \txstack, \heap) \rightsquigarrow_t (\txstack' \times \heap')$ 
-in lieu of $(\thdstack, \txstack, \heap, \txstack', \heap') \in \mathcal{S}_t$. Note that this definition ensures 
+$\mathcal{S}_t \subseteq (\ThdStacks \times \TxStacks \times \Heaps) \times (\TxStacks \times \Heaps)$. 
+We use the notation $(\thdstack, \txstack, \heap) \toT{} (\txstack' , \heap')$ 
+in lieu of $((\thdstack, \txstack, \h), (\txstack', \h' )) \in \mathcal{S}_t$. Note that this definition ensures 
 that primitive transactional commands cannot update the thread-local stack.
 We also assume a set of primitive (non-transactional) commands $\primc, \primc',\cdots$ 
 that can be executed by a command outside transactions. Each primitive non-transactional 
-command $\primc$ is associated with a state transformer $\mathcal{S}_t \subseteq 
-(\thdstackset \times \thdstackset)$, and again we adopt the notation $\thdstack \rightsquigarrow_c 
+command $\primc$ is associated with a state transformer $\mathcal{S}_c \subseteq 
+(\ThdStacks \times \ThdStacks)$, and again we adopt the notation $\thdstack \toC 
 \thdstack'$ in lieu of $(\thdstack, \thdstack') \in \mathcal{S}_c$. This definition ensures that 
 thread-local stack do not access neither the transaction-local stack, nor the heap.
 
 Often, we will assume a language of expressions at the base of primitive (transactional and non-transactional) 
 commands. This language is defined by the grammar below: 
 \[
-E ::= n \bor \mathtt{x} \bor \mathtt{a} \bor E + E \bor E \cdot E \bor \cdots
+\begin{rclarray}
+\expr & ::= & \val \bor \pvar{x} \bor \pvar{a} \bor \expr + \expr \bor \expr \cdot \expr \bor \cdots
+\end{rclarray}
 \]
 The set of all expressions is denoted by $\Expr$.
 Because non-transactional commands cannot access the thread-local stack, we will 
 need the following, inductively defined, predicate: 
 \[
-\begin{array}{lcl}
-\isthdexp(n) &=& \ttrue\\
-\isthdexp(\mathtt{x}) &=& \ttrue\\
-\isthdexp(\mathtt{a}) &=& \ffalse\\
-\isthdexp(E_1 + E_2) &=& \isthdexp(E_1) \wedge \isthdexp(E_2)\\
+\begin{rclarray}
+\isthdexp(\val) &=& \ttrue\\
+\isthdexp(\pvar{x}) &=& \ttrue\\
+\isthdexp(\pvar{a}) &=& \ffalse\\
+\isthdexp(\expr_1 + \expr_2) &=& \isthdexp(\expr_1) \wedge \isthdexp(\expr_2)\\
 \vdots & \vdots & \vdots
-\end{array}
+\end{rclarray}
 \]
-In general, if the language of expressions contains an operator $\mathsf{f}(E_1, \cdots, E_n)$, 
-we define $\isthdexp(\mathsf{f}(E_1, \cdots, E_n)) = \bigwedge_{i=1,\cdots,n} \isthdexp(E_i)$.
+In general, if the language of expressions contains an operator $\func{f}{\expr_1, \cdots, \expr_n}$, 
+we define $\isthdexp(\func{f}{\expr_1, \cdots, \expr_n}) = \bigwedge_{i=1,\cdots,n} \isthdexp(\expr_i)$.
+
 The set of primitive commands we will use is given by 
 \[
-\begin{array}{lcl}
-\primc &::=& \mathtt{x} := E \bor \assume(E)\\[4pt]
-\primt &::=& \mathtt{a} := E \bor \mathtt{a} := [E] \bor [E] := E \bor \assume(E)
-\end{array}
+\begin{rclarray}
+\primc &::=& \passign{\pvar{x}}{\expr} \mid \assume(\expr) \\
+\primt &::=& \passign{\pvar{a}}{\expr} \mid \pmutate{\expr}{\expr} \mid  \pderef{\pvar{a}}{\expr} \mid \assume(\expr)
+\end{rclarray}
 \]
-where in the right-hand sides of the $\primc$ clause we always require that $\isthdexp(E) = \ttrue$.
+where in the right-hand sides of the $\primc$ clause we always require that $\isthdexp(\expr) = \ttrue$.
 
 Below we define the syntax of programs allowed by our language. 
 
 \[
 \begin{rclarray}
-\Prg & ::= & \nil \mid \tid : \Cmd \Par \Prg \\
-\Cmd & ::= & \nil \mid X \mid \pi.\Cmd \mid \Cmd + \Cmd \mid \mu X.\Cmd \\
-\pi  & ::= & \primc \mid \TxOp{\Tx} \\
-\Tx  & ::= & \nil \mid X \mid \primt.\Tx \mid \Tx + \Tx \mid  \mu X. \Tx \\
+\prog & ::= & \nil \mid \tid : \cmd \Par \prog \\
+\cmd & ::= & \nil \mid X \mid \pi.\cmd \mid \cmd + \cmd \mid \mu X.\cmd \\
+\pi  & ::= & \primc \mid \ptrans{\trans} \\
+\trans  & ::= & \nil \mid X \mid \primt.\trans \mid \trans + \trans \mid  \mu X. \trans \\
 \end{rclarray}
 \]
-Note that each thread has a thread identifier $\tid$ associated. We require that 
-the same thread identifier never appear twice in the same program. The set 
+\sx{what is the different between . and \(\pseq\) , \ie \( t \mid \trans \pseq \trans \mid \dots \).  }
+
+Note that each thread has a unique thread identifier $\tid$ associated. The set 
 of all thread identifiers is $\tidset$.
 
-\paragraph{\textbf{Interpretation of Expressions and Primitive Commands.}}
+\section{Interpretation of Expressions and Primitive Commands}
 Expressions are going to be evaluated in values from $\mathbb{N}$ in the usual way. 
 Note that we need to account for the fact that we have two different notions of 
 stacks, one transaction-local, and the other thread-local. 
 \[
-\begin{array}{lcl}
-\interpr{\cdot} &\rightarrow& \Expr \rightarrow \thdstackset \rightarrow \txstackset \rightarrow \mathbb{N}\\
-\interpr{n}(\thdstack)(\txstack) & = & n\\
-\interpr{\mathtt{x}}(\thdstack)(\txstack) &=& \thdstack(\mathtt{x})\\
-\interpr{\mathtt{a}}(\thdstack)(\txstack) &=& \txstack(\mathtt{a})\\
-\interpr{E_1 + E_2}(\thdstack)(\txstack) &=& \interpr{E_1}(\thdstack)(\txstack) + \interpr{E_2}(\thdstack)(\txstack)\\
-\vdots &\vdots&\vdots
-\end{array}
+\begin{rclarray}
+\interpr{\cdot}(.)(.) &:& \Expr \times \ThdStacks \times \TxStacks \to \mathbb{N}\\
+\interpr{\val}(\thdstack)(\txstack) & \defeq & \val \\
+\interpr{\mathtt{x}}(\thdstack)(\txstack) & \defeq & \thdstack(\mathtt{x})\\
+\interpr{\mathtt{a}}(\thdstack)(\txstack) & \defeq & \txstack(\mathtt{a})\\
+\interpr{E_1 + E_2}(\thdstack)(\txstack) & \defeq & \interpr{E_1}(\thdstack)(\txstack) + \interpr{E_2}(\thdstack)(\txstack)\\
+\vdots & \defeq  & \vdots
+\end{rclarray}
 \]
 
-Note that, for any expression $E$ such that $\isthdexp(E) = \ttrue$, we have 
-that $\interpr{E}(\thdstack)(\txstack) = \interpr{E}(\thdstack)(\txstack')$ for 
-any $\txstack, \txstack' \in \txstackset$ and $\thdstack \in \thdstackset$. 
-In this case, we commit an abuse of notation and write $\interpr{E}(\thdstack)$ 
-as a shortcut for $\interpr{E}(\thdstack)(\txstack_0)$, where $\txstack_0 = 
+Note that, for any expression $\expr$ such that $\isthdexp(\expr) = \ttrue$, we have 
+that $\interpr{\expr}(\thdstack)(\txstack) = \interpr{\expr}(\thdstack)(\txstack')$ for 
+any $\txstack, \txstack' \in \TxStacks$ and $\thdstack \in \ThdStacks$. 
+In this case, we commit an abuse of notation and write $\interpr{\expr}(\thdstack)$ 
+as a shorthand for $\interpr{\expr}(\thdstack)(\txstack_0)$, where $\txstack_0 = 
 \lambda \mathtt{a} .0$.
+
+\sx{ why \( \txstack_0 = \lambda \mathtt{a} .0\) instead of any? I guess any is also ok. }
 
 We now proceed to define the state transformers associated to transactional and non-transactional primitive commands. 
 For transactional primitive commands we have  
 \[
-\begin{array}{lll}
-(\thdstack, \txstack, \heap) &\rightsquigarrow_{\mathtt{a} := E}& (\txstack[\mathtt{a} \mapsto \interpr{E}(\thdstack)(\txstack)], \heap)\\
-(\thdstack, \txstack, \heap) &\rightsquigarrow_{\mathtt{a} := [E]}& (\txstack[\mathtt{a} \mapsto \heap(\interpr{E}(\thdstack)(\txstack))], \heap)\\
-(\thdstack, \txstack, \heap) &\rightsquigarrow_{[E_1] := E_2}& (\txstack, \heap\big[\; [(\interpr{E_1}(\thdstack)(\txstack)] \mapsto 
-\interpr{E_2}(\thdstack)(\txstack) \;\big])\\
-(\thdstack, \txstack, \heap) &\rightsquigarrow_{\assume(E)} & (\thdstack,\heap) \hfill \impliedby \interpr{E}(\thdstack)(\txstack) \neq 0
-\end{array}
+\begin{rclarray}
+(\thdstack, \txstack, \h) &\toT{\passign{\pvar{a}}{\expr}}& (\txstack\rmto{\pvar{a}}{\interpr{\expr}(\thdstack)(\txstack)}, \h)\\
+(\thdstack, \txstack, \h) &\toT{\pderef{\pvar{a}}{\expr}}& (\txstack\rmto{\pvar{a}}{\h(\interpr{\expr}(\thdstack)(\txstack))}, \h)\\
+(\thdstack, \txstack, \h) &\toT{\pmutate{\expr_{1}}{\expr_{2}}}& (\txstack, \h\rmto{\interpr{\expr_{1}}(\thdstack)(\txstack)}{\interpr{\expr}(\thdstack)(\txstack)})\\
+(\thdstack, \txstack, \heap) &\toT{\assume(\expr)} & (\thdstack,\heap) \  \text{where} \  \interpr{E}(\thdstack)(\txstack) \neq 0 \\
+\end{rclarray}
 \]
 For non-transactional primitive commands we have 
 \[
-\begin{array}{llll}
-\thdstack &\rightsquigarrow_{\mathtt{x} := E} \thdstack[\mathtt{x} \mapsto \interpr{E}(\thdstack)] &\impliedby \isthdexp(E) = \ttrue\\
-\thdstack &\rightsquigarrow_{\assume(E)} \thdstack &\impliedby \isthdexp(E) = \ttrue \wedge \interpr{E}(\thdstack) \neq 0
-\end{array}
+\begin{rclarray}
+\thdstack & \toC{\passign{\pvar{x}}{\expr}} & \thdstack\rmto{\pvar{x}}{\interpr{\expr}(\thdstack)} \  \text{where} \  \isthdexp(\expr) = \ttrue\\
+\thdstack & \toC{\assume(E)} & \thdstack \ \text{where} \ \isthdexp(\expr) = \ttrue \land \interpr{\expr}(\thdstack) \neq 0
+\end{rclarray}
 \]
 
-For some transactional primitive command $t$, we also defined its fingerprint $\fingerprint(t) \in 
-\thdstackset \rightarrow \txstackset \rightarrow \heapset \rightarrow (\{\RD, \WR\} \times \locs \times \mathbb{N})$. 
+For some transactional primitive command $t$, we also defined its fingerprint 
+$\fingerprint : \cmd \times \ThdStacks \times \TxStacks \times \Heaps \to (\Set{\RD, \WR} \times \Addr \times \Val)$. 
 This denotes the kind of operation that  performed by  $t$. 
 \[
-\begin{array}{lcl}
-\fingerprint(\mathtt{a} := E) &=& \text{undefined for all } \thdstack,\txstack\\
-\fingerprint(\mathtt{a} := [E])(\thdstack)(\txstack)(\heap) &=& (\RD, \big[ \interpr{E}(\thdstack)(\txstack) \big], \heap(\interpr{E}(\thdstack)(\txstack))\\
-\fingerprint([E_1] := E_2)(\thdstack)(\txstack)(\heap) &=& (\WR, \big[ \interpr{E_1}(\thdstack)(\txstack) \big], \heap(\interpr{E_2}(\thdstack)(\txstack))
-\end{array}
+\begin{rclarray}
+\fingerprint(\passign{\pvar{a}}{\expr}, \stub, \stub, \stub) & \defeq & \text{undefined} \\
+\fingerprint(\pderef{\pvar{a}}{\expr},\thdstack,\txstack,\h) & \defeq  & (\RD, \interpr{\expr}(\thdstack)(\txstack), \h(\interpr{E}(\thdstack)(\txstack))\\
+\fingerprint(\pmutate{\expr_{1}}{\expr_{2}},\thdstack,\txstack,\heap) & \defeq & (\WR, \interpr{\expr_{1}}(\thdstack)(\txstack), \h(\interpr{E_2}(\thdstack)(\txstack))
+\end{rclarray}
 \]
+\sx{
+Previously we are setting up the \(t\) as in a very generous form, now we are saying some of then can be extracted to a read/write form. 
+Here it is a bit inconsistent.
+Minor point but might change later.
 
-\paragraph{\textbf{Semantics of Transactions.}}
+Possibly finger print heap with  \( \ws{\h} \) and \( \rs{\h} \) functions is a good way to go.
+}
+\section{Semantics of Transactions}
 The semantics of transactions is given in an operational way, 
-Judgements take the form $\thdstack \vdash \langle \txstack, \heap \RS, \WS, \Tx \rangle 
-\rightarrow \langle \txstack', \heap', \RS', \WS', \Tx' \rangle$. Note that in this semantics 
+judgements take the form $\thdstack \vdash \langle \txstack, \heap, \RS, \WS, \trans \rangle 
+\to \langle \txstack', \heap', \RS', \WS', \trans' \rangle$. Note that in this semantics 
 the $\thdstack$ component cannot be manipulated by performing a transition, as to reflect 
 the fact that transactions can only read from, and never write to, the thread local heap.
-The components $\RS, \WS \subseteq \locs \times \mathbb{N}$ record the read-set and write-set associated to the transaction code, 
+The components $\RS, \WS \in \Addr \parfun \Val$ record the read-set and write-set associated to the transaction code, 
 respectively.
 
 In order to give the semantics of transactions, it will be useful to define the following operators over sets of key-value pairs. 
 \[
-\begin{array}{lll}
-\RS \RScup ([n], m) = \begin{cases}
-\RS \cup \{([n], m)\} &\impliedby \RS \cap \{([n], m') \mid m' \in \mathbb{N}\} = \emptyset\\
-\RS &\text{Otherwise}
-\end{cases}\\[20pt]
-\WS \WScup ([n], m) = (\WS \setminus \{([n], m') \mid m' \in \mathbb{N}\}) \cup \{([n], m)\}
-\end{array}
+\begin{rclarray}
+\RS \RScup (\addr, \val) & \defeq  & \RS \uplus \Set{\addr \mapsto \val} \\
+\WS \WScup (\addr, \val) & \defeq & \WS\rmto{\addr}{\val} 
+\end{rclarray}
 \]
 
 The rules of the operational semantics for transactions are the following: 
 \[
 \infer[{\scriptstyle{(prim-t-local)}}]
-{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, t.\Tx  \rangle \rightarrow \langle \txstack', \heap', \RS, \WS, \Tx \rangle}
-{(\thdstack, \txstack, \heap) \rightsquigarrow_t (\txstack', \heap') \qquad \fingerprint(t)(\thdstack)(\txstack)(\heap) = \text{undefined}}
+{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, t.\trans  \rangle \rightarrow \langle \txstack', \heap', \RS, \WS, \trans \rangle}
+{(\thdstack, \txstack, \heap) \toT{t} (\txstack', \heap') \qquad \fingerprint(t,\thdstack,\txstack,\heap) = \text{undefined}}
 \]
 
 \[
 \infer[{\scriptstyle{(prim-t-read)}}]
-{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, t.\Tx  \rangle \rightarrow \langle \txstack', \heap', \RS \RScup ([n],m), \WS, \Tx \rangle}
-{(\thdstack, \txstack, \heap) \rightsquigarrow_t (\txstack', \heap') \qquad \fingerprint(t)(\thdstack)(\txstack)(\heap) = (\RD, [n], m)}
+{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, t.\trans  \rangle \rightarrow \langle \txstack', \heap', \RS \RScup (\addr,\val), \WS, \trans \rangle}
+{(\thdstack, \txstack, \heap) \toT{t} (\txstack', \heap') \qquad \fingerprint(t,\thdstack,\txstack,\h) = (\RD, \addr, \val)}
 \]
 
 \[
 \infer[{\scriptstyle{(prim-t-write)}}]
-{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, t.\Tx \rangle \rightarrow \langle \txstack', \heap', \RS, \WS \WScup ([n],m), \Tx \rangle}
-{(\thdstack, \txstack, \heap) \rightsquigarrow_t (\txstack', \heap') \qquad \fingerprint(t)(\thdstack)(\txstack)(\heap) = (\WR, [n], m)}
+{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, t.\trans \rangle \rightarrow \langle \txstack', \heap', \RS, \WS \WScup (\addr,\val), \trans \rangle}
+{(\thdstack, \txstack, \heap) \rightsquigarrow_t (\txstack', \heap') \qquad \fingerprint(t,\thdstack,\txstack,\h) = (\WR, \addr, \val)}
 \]
 
 \[
-\infer[{\scriptstyle{(\Tx-choice-L)}}]{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, \Tx_1 + \Tx_2 \rangle 
-\rightarrow \langle  \txstack, \heap, \RS, \WS, \Tx_1 \rangle}{}
+\infer[{\scriptstyle{(\Tx-choice-L)}}]{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, \trans_1 + \trans_2 \rangle 
+\rightarrow \langle  \txstack, \heap, \RS, \WS, \trans_1 \rangle}{}
 \]
 
 \[
-\infer[{\scriptstyle{(\Tx-choice-R)}}]{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, \Tx_1 + \Tx_2 \rangle 
-\rightarrow \langle  \txstack, \heap, \RS, \WS, \Tx_2 \rangle}{}
+\infer[{\scriptstyle{(\trans-choice-R)}}]{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, \trans_1 + \trans_2 \rangle 
+\rightarrow \langle  \txstack, \heap, \RS, \WS, \trans_2 \rangle}{}
 \]
 
 \[
-\infer[{\scriptstyle{(\Tx-fix)}}]{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, \mu X.\Tx \rangle 
-\rightarrow \langle  \txstack, \heap, \RS, \WS, \{\nicefrac{\mu X.\Tx}{X}\}\Tx \rangle}{}
+\infer[{\scriptstyle{(\Tx-fix)}}]{\thdstack \vdash \langle \txstack, \heap, \RS, \WS, \mu X.\trans \rangle 
+\rightarrow \langle  \txstack, \heap, \RS, \WS, \{\nicefrac{\mu X.\trans}{X}\}\trans \rangle}{}
 \]
 
-\paragraph{\textbf{Abstract Executions.}}
+\sx{NEED TO REVISIT LATER}
+\section{Abstract Executions}
 Here we present abstract executions, which we will use to record the 
 run-time behaviour of programs. 
 
+\sx{Might change the operation \(o\) to event \( \etag \)}
 We start by defining the behaviour of transactions at run-time. 
-We assume a set of (run-time) transactions $\TrSet = \{T, S , \cdots \}$ 
+We assume a set of (run-time) transactions identifiers $\TransID = \{\tsid, S , \cdots \}$ 
 and a set of operations which we leave unspecified, though 
-we require that $\Op \supseteq \{ \RD\;[m]:n,\WR\;[m]:n \mid [m] \in \locs \wedge n \in \mathbb{N} \}$.
-We also assume a mapping $\behav : \TrSet \rightarrow 2^{\Op}$, which maps 
+we require that $\Op \supseteq \Setcon{ \RD\;\addr :\val, \WR\;\addr :\val }{\addr \in \Addr \land \val \in \Val }$.
+\sx{ why \( \supseteq \) not \( \defeq \) }
+We also assume a function $\behav : \TransID \to \powerset{\Op}$, which maps 
 transactions into the operations that they perform on locations. With an abuse of 
-notation, for any transaction $T$ and operation $o$, we write $o \in T$ (or $T \ni o$) as 
-a shortcut for $o \in \behav(T)$. 
+notation, for any transaction $\tsid$ and operation $o$, we write $o \in \tsid$ (or $\tsid \ni o$) as 
+a shorthand for $o \in \behav(\tsid)$. 
 We only model transaction that enjoy \emph{atomic visibility}. This 
 means that \textbf{(i)} transactions never observe two different values when reading from 
-the same location: $\forall T \in \TrSet.\, \forall [n] \in \locs, \forall m,m' \in \mathbb{N}.\, 
-T \ni \RD\;[n]:m \wedge T \ni \RD\;[n]:m' \implies m = m'$; and \textbf{(ii)} 
+the same location: $\for{ \tsid \in \TransID,  \addr \in \Addr,\val, \val' \in \Val }
+\tsid\ni \RD\;\addr :\val \land \tsid \ni \RD\;\addr:\val' \implies \val = \val'$; and \textbf{(ii)} 
 the effects of a transactions become visible at once, which means that we never observe
-two different values written for the same location by a transaction: $\forall T \in \TrSet.\, 
-\forall [n] \in \locs, \forall m,m' \in \mathbb{N}.\, T \ni \WR\;[n]: m \wedge T \ni \WR\;[n]:m' 
-\implies m = m'$.
+two different values written for the same location by a transaction: $\for{ \tsid \in \TransID, \addr \in \Addr, \val,\val' \in \Val } 
+\tsid \ni \WR\;\addr: \val \land \tsid \ni \WR\;\addr:\val' \implies \val = \val'$.
 
-\begin{definition}
-A \emph{transaction instance} is a mapping
-An abstract execution is a tuple $\aexec = (\T, \PO, \VIS, \AR)$, where 
+\begin{definition}[abstraction executions]
+An abstract execution is a tuple $\aexec = (\settrans, \PO, \VIS, \AR)$, where 
 
 \begin{enumerate}
 \item $\T$ is a finite, empty set of transactions, 
+
 \item $\PO \subseteq \T \times \T$, the \emph{program order}, is the union 
 of disjoint, strict total orders over $\T$. That is, there exists a partition $\{\T_i\}_{i \in I}$ 
 of $\T$ such that $\PO = \bigcup_{i \in I} \PO_i$, where for any $i \in I$, $\PO_i$ is a strict, 
 total order over $\T_i$\footnote{Recall that a relation $R \subseteq \T \times \T$ is a strict partial order 
 if it is irreflexive and transitive. It is a strict total order if it enjoys the additional property that 
 for any $T_1, T_2 \in \T$, either $T_1 = T_2$, $(T_1, T_2) \in R$ or $(T_2, T_1) \in R$.},
+
 \item $\VIS \subseteq \T \times \T$ is a strict, partial order such that $\PO \subseteq \VIS$, and $\VIS \rcomp \VIS \subseteq 
 \VIS$,
+
 \item $\AR \subseteq \T \times \T$ is a strict, total order such that $\VIS \subseteq \AR$,
-\item for any location $[n] \in \locs$ let $\WTr_{[n]} = \{S \in \T \mid S \ni \WR\;[n]:\_\}$. 
-Given $T \in \T$, let also $\pw_{\aexec}([n], T) = \{S \mid S \in \VIS^{-1}(T)\} \cap \WTr_{[n]})$. 
-Whenever $T \ni \RD\;[n]: m$ for some transaction $T \in \T$, location $[n] \in \locs$ and 
-value $m \in \mathbb{N}$, then either $\pw_{\aexec}([n], T) = \emptyset$ and $m = 0$, 
-or $\max_{\AR}(\pw_{\aexec}([n], T)) \ni \WR\;[n]: m$.
+
+\item for any location $\addr \in \Addr$ let $\WTr(\addr) = \Setcon{S \in \T }{S \ni \WR\;\addr:\anyval }$. 
+Given $T \in \T$, let also $\pw_{\aexec}(\addr, \tsid) = \Setcon{\tsid' }{ \tsid' \in \VIS^{-1}(\tsid)} \cap \WTr(\addr)$. 
+Whenever $T \ni \RD\;\addr: \val$ for some transaction $\tsid \in \T$, location $\addr \in \Addr$ and 
+value $\val \in \Val$, then either $\pw_{\aexec}(\addr, \tsid) = \emptyset$ and $\val = 0$, 
+or $\max_{\AR}(\pw_{\aexec}(\addr, \tsid)) \ni \WR\;\addr: \val$.
 \end{enumerate}
 
 \end{definition}
@@ -587,6 +605,7 @@ An abstract execution $\aexec$ is allowed by $\xspec_{\SI}$ if and only if
 $\AR_{\aexec} \rcomp \VIS_{\aexec} \subseteq \VIS_{\aexec}$, 
 and for any $[n] \in \locs$, $[\WTr_{[n]}] \rcomp \AR_{\aexec} \rcomp [\WTr_{[n]}] \subseteq \VIS$.
 \end{example}
+\sx{NEED TO REVISIT ABOVE LATER}
 
 In the following, we will use an incremental approach to build abstract executions from transactions. 
 Suppose that an abstract execution $\aexec$ has been obtained as the (partial) result of a program $P$ running 
@@ -600,6 +619,20 @@ $T \in \T_{\aexec}$. Note that the result of this procedure may result in an abs
 is not allowed by $\xspec$, hence it is not always defined.
 Formally, we define an operator $\aeplus_{\xspec} : (\aeset \times \TrSet) \rightharpoonup 
 \aeset$ as follows:
+
+\begin{defn}[Runtime abstract executions]
+Assuming set of thread identifiers \( \ThreadID \defeq \Set{\thid, \dots}\), the set of \emph{runtime abstract executions} is defined as the follows,
+\[
+    \begin{rclarray}
+    \aexecrun \in \Setcon{(\settrans, \PO, \VIS, \AR) 
+    }{ 
+        \settrans \in  (\TransID \uplus \ThreadID ) \parfun \powerset{\Events}  \\
+        {} \land  \PO, \VIS \subseteq ( \dom(\settrans) \cap \TransID ) \times \dom(\settrans) \\
+        {} \land  \AR \subseteq ( \dom(\settrans) \cap \TransID  ) \times ( \dom(\settrans) \cap \TransID )
+    }
+    \end{rclarray}
+\]
+\end{defn}
 
 \begin{definition}
 Let $\xspec$ be a x-specification. 
@@ -755,16 +788,16 @@ does only require to manipulate the thread-local stack associated  with the comm
 {\thdstack \rightsquigarrow_c \thdstack'} 
 \]
 
-Next, we give the rule for evaluating a transaction in a command of the form $\TxOp{\Tx}.\Cmd$. 
+Next, we give the rule for evaluating a transaction in a command of the form $\TxOp{\trans}.\Cmd$. 
 First, given a read-set $\RS$ and a write-set $\WS$, we define the set of transaction $\makeTx(\RS,\WS)$ 
 to be the largest set of transactions such that, whenever $T \in \makeTx(\RS, \WS)$, then $T \ni \RD\;[n]:m$, if and only if $([n], m) \in \RS$, and $T \ni 
 \WR\;[n]:m$ if and only if $([n], m) \in \WS$. 
 \[
-\infer[{\scriptstyle{(Tx-exec)}}]{\langle \aexec, T, \thdstack, \TxOp{\Tx}.\Cmd \rangle \rightarrow 
+\infer[{\scriptstyle{(Tx-exec)}}]{\langle \aexec, T, \thdstack, \TxOp{\trans}.\Cmd \rangle \rightarrow 
 \langle \aexec', T', \thdstack[\retvar \mapsto \txstack'(\retvar)], \Cmd \rangle}
 {
 \begin{array}{lll}T \xrightarrow{\AR_{\aexec}} S &  T' \in (\makeTx(\RS,\WS) \setminus \T_{\aexec}) & \aexec' = (\aexec, S) \aeplus_{\xspec} T'\\[4pt]
-\multicolumn{3}{c}{\thdstack \vdash \langle \txstack_0, \heap_{\aexec}^{\xspec}(S), \emptyset, \emptyset, \Tx \rangle \rightarrow^\ast \langle \txstack', \heap', \RS, \WS, \nil \rangle}
+\multicolumn{3}{c}{\thdstack \vdash \langle \txstack_0, \heap_{\aexec}^{\xspec}(S), \emptyset, \emptyset, \trans \rangle \rightarrow^\ast \langle \txstack', \heap', \RS, \WS, \nil \rangle}
 \end{array}}
 \]
 The three remaining rules are standard.

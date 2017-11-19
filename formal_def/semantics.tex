@@ -6,157 +6,96 @@ Assume a countably infinite set of \emph{addresses}, $\addr \in \Addr$, and a co
 %
 \begin{defn}[Stacks]
 \label{def:stacks}
-Given the set of program variables $\Var$ and the set of program values $\Val$ (\defin\ref{def:prgram_values}), the set of variable stacks is $\stk \in \Stack \eqdef \Var \parfinfun \Val$.
+Given the set of program variables $\Var$ and the set of program values $\Val$ (\defin\ref{def:prgram_values}), the set of variable stacks is \( \thstk, \txstk \in \Stacks \eqdef \Var \parfinfun \Val$.
 \end{defn}
 %
+\sx{\( \thstk \) is for thread stack and \( \txstk \) is for transactions}
 Our programs (ranged over by $\prog$) are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\prog; \prog$), non-deterministic choice ($\prog+\prog$), loops ($\prog^*$) and parallel composition ($\prog \ppar \prog$). Additionally, our programming language contains the \emph{transaction} construct $\ptrans{\trans}$ denoting the \emph{atomic} execution of the transaction $\trans$. The atomicity guarantees of this execution are dictated by the underlying consistency model (snapshot isolation in this case).
 Transactions (ranged over by $\trans$) are defined by a similar inductive grammar comprising $\pskip$, non-deterministic choice, loops and sequential composition, as well as constructs for assignment, lookup and update. Transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are to be executed atomically.
 
 \begin{defn}[Programming language]
 \label{def:language}
-The set of \emph{programs}, $\prog \in \Programs$, is defined by the following grammar:
+Assume a set of thread variables \( \ThreadVars \defeq \Set{\thvar, \dots }\) which is a subset of \( \Var \), the set of \emph{programs}, $\prog \in \Programs$, is defined by the following grammar:
 \[
     \begin{rclarray}
     \prog & ::= &
         \pskip \mid 
+        \passign{\thvar}{\expr} \mid
+        \passume{\expr} \mid
         \ptrans{\trans} \mid 
         \prog \pseq \prog \mid 
         \prog \pchoice \prog \mid 
         \prog\prepeat \mid
-        \prog \ppar \prog
+        \prog \ppar \prog 
     \end{rclarray}
 \]
+\sx{add assume and assign here}
 %
-The $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar:
+Assume a set of transaction variables \( \TxVars \defeq \Set{\txvar, \dots }\) which is a subset of \( \Var \), the $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar:
 %
 \[
     \begin{rclarray}
         \trans & ::= &
         \pskip \mid
-        \pass{\vx}{\expr} \mid
+        \pass{\txvar}{\expr} \mid
         \pmutate{\expr}{\expr} \mid
-        \pderef{\vx}{\expr} \mid
+        \pderef{\txvar}{\expr} \mid
+        \passume{\expr} \mid
+        \preturn{\expr} \mid
         \trans \pseq \trans \mid
         \trans \pchoice \trans \mid
         \trans\prepeat
     \end{rclarray}
 \]
+\sx{add assume and return}
 %
-where $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar below with $\val \in \Val$ and $\vx \in \Var$ (\defin\ref{def:prgram_values}).
+where $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar below with $\val \in \Val$, $\thvar \in \ThdVars$ and \( \txvar \in \TxVars \) (\defin\ref{def:prgram_values}).
 %
 \[
     \begin{rclarray}
         \expr & ::= &
         \val \mid
-        \var \mid
+        \thvar \mid
+        \txvar \mid
         \expr + \expr \mid
         \expr * \expr \mid
         \dots 
     \end{rclarray}
 \]
 %
-Given a stack $\stk \in \Stack$ (\defin\ref{def:stacks}), the \emph{expression evaluation} function, $\evalE[.]{.}:\Expressions \times \Stack \parfun \Val$, is defined inductively over the structure of expressions as follows: 
+Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{expression evaluation} function, $\evalE[.]{.}:\Expressions \times \Stacks \parfun \Val$, is defined inductively over the structure of expressions as follows: 
 %
 \[
     \begin{rclarray}
         \evalE{\val} & \defeq & \val \\
-        \evalE{\var} & \defeq & \stk(\var) \\
+        \evalE{\thvar} & \defeq & \stk(\thvar) \\
+        \evalE{\txvar} & \defeq & \stk(\txvar) \\
         \evalE{\expr_{1} + \expr_{2}} & \defeq & \evalE{\expr_{1}} + \evalE{\expr_{2}} \\
         \evalE{\expr_{1} * \expr_{2}} & \defeq & \evalE{\expr_{1}} * \evalE{\expr_{2}} \\
 \\
     \end{rclarray}
 \]
-%
 \end{defn}
-%
 
-We model the global database state as a \emph{timestamp heap}. A timestamp heap is a partial function from addresses to \emph{histories}.
-A history is a partial function from timestamps to a set of \emph{events}.
-An event is a triple comprising the value read or written, the identifier of the transaction carrying out the event, and an \emph{event tag} denoting a \emph{start event} ($\etS$), an \emph{end} event ($\etE$), a \emph{read} event ($\etR$) or a \emph{write} event ($\etW$).
-We model our timestamps, $\ts \in \Timestamp$, as elements of an (uncountably) infinite set with a total order relation $<$. To ensure the availability of an appropriate timestamp, we assume that the timestamp set $\Timestamp$ is \emph{dense}. That is, given any two timestamps $\ts_1$ and $\ts_2$ such that $\ts_1 < \ts_2$, an intermediate timestamp $\ts$ can be found such that $\ts_1 < \ts < \ts_2$.
 
-\begin{defn}[Event tags]
-\label{ref:event-tag}
-The set of \emph{event tags} is $\etag \in \ETags \eqdef \{\etS, \etE, \etR, \etW \}$.
-\end{defn}
-%
-\begin{defn}[Timestamps]
-\label{def:timestamp}
-The set of \emph{timestamps}, $\Timestamp$, is a infinitely countable set, and there is a \emph{total order} relation on it, $<\ : \Timestamp \times \Timestamp$, such that:
-%
-\[
-	\for{\ts_1, \ts_2 \in \Timestamp} \ts_1 < \ts_2 \lor \ts_2 < \ts_1
-\]
-%
-This timestamp set $\Timestamp$ is \emph{dense} with respect to the ordering relation $<$. 
-That is,
-\[
-	\for{\ts_1, \ts_2} \ts_1 < \ts_2 
-	\implies 
-	\exsts{\ts} \ts_1 < \ts < \ts_2	
-\]
-\end{defn}
-%
-We write $\ts_1 \leq \ts_2$ as a shorthand for $\ts_1 < \ts_2 \lor \ts_1 = \ts_2$.
-We write $\ts_1 \oplus \ts \odot \ts_2 $ for $\ts_1 \oplus \ts \land \ts \odot \ts_2 $, where $\oplus, \odot \in \{<, \leq\}$.
-We often use the mirrored symbols and write $\ts_1 > \ts_2$ (resp.~$\ts_1 \geq \ts_2$) for $\ts_2 < \ts_1$ (resp.~$\ts_2 \leq \ts_1$).
-Lastly, we use the standard interval notation and write:
-%
-\[
-\begin{rclarray}
-	(\ts_1, \ts_2) & \text{for} & \Set{\ts \mid \ts_1 < \ts < \ts_2 } \\
-	(\ts_1, \ts_2] & \text{for} & \Set{\ts \mid \ts_1 < \ts \leq \ts_2 } \\
-	{[\ts_1, \ts_2)} & \text{for} & \Set{\ts \mid \ts_1 \leq \ts < \ts_2 } \\	
-	{[\ts_1, \ts_2]} & \text{for} & \Set{\ts \mid \ts_1 \leq \ts \leq \ts_2 } 
-\end{rclarray}
-\]
-\begin{defn}[Timestamp heaps]
-\label{def:timestamp_heaps}
-Assume a countably infinite set of \emph{transaction identifiers} $\tsid, \beta \in \TransID$.
-Given the set of event tags $\ETags$ (\defin\ref{ref:event-tag}), program values $\Val$ (\defin\ref{def:prgram_values}), program addresses $\Addr$ (\defin\ref{def:prgram_values}) and timestamps \(\Timestamp\) (\defin\ref{def:timestamp}), the set of \emph{timestamp heaps} is defined as $\tshp \in \TSHeaps \eqdef \Addr \parfinfun (\Val \times \TransID \times \ETags)$.
-The \emph{timestamp heap composition function}, $\composeTSH: \TSHeaps \times \TSHeaps \parfun \TSHeaps$, is defined as follows, for all $\addr \in \Addr$, where $\uplus$ denotes the standard disjoint function union:
-%
-\[
-	(\tshp_1 \composeTSH \tshp_2)(\addr) \defeq 
-	\begin{cases}
-		\tshp_1(\addr) \uplus \tshp_2(\addr) & \text{if } \addr \in \dom(\tshp_1) \text{ and } \addr \in \dom(\tshp_2) \\
-		\tshp_1(\addr) & \text{if } \addr \in \dom(\tshp_1) \text{ and } \addr \not\in \dom(\tshp_2) \\
-		\tshp_2(\addr) & \text{if } \addr \not\in \dom(\tshp_1) \text{ and } \addr \in \dom(\tshp_2) \\
-		\text{undefined} & \text{otherwise}
-	\end{cases}
-\]
-%
-The \emph{timestamp heap unit element} is $\unitTSH \eqdef \emptyset$, denoting a function with an empty domain.
-The \emph{partial commutative monoid of timestamp heaps} is $(\TSHeaps, \composeTSH, \{\unitTSH\})$. 
-\end{defn}
- 
-Whilst the state of the database is given by globally-accessed (by all threads) timestamp heaps, we use \emph{fingerprint heaps} to model a \emph{local snapshot} of the global timestamp heaps made available to transactions during their execution. 
-In order to successfully commit a transaction and avoid conflicts, we must track the \emph{fingerprint} of a transaction, namely those addresses read from or written to by the transaction.
-As such, we model fingerprint heaps as finite partial maps from addresses to pairs comprising a value and a fingerprint.
-The fingerprint of an address may be 1) $\emptyset$ denoting that the address has not been touched;
-2) $\Set{\fpR}$ denoting that the address has been read;
-3) $\Set{\fpW}$ denoting that the address has been mutated (written to);
-and 4) $\Set{\fpR, \fpW}$ denoting that the address has been initially read and subsequently mutated.   
-%
-%
 \begin{definition}[Heaps]\label{def:heaps}
 Given the sets of program values $\Val$ (\defin\ref{def:prgram_values}) and  addresses $\Addr$ (\defin\ref{def:timestamp_heaps}), the set of \emph{ heaps} is: $\h \in \Heaps \eqdef \Addr \parfinfun \Val$.
 The \emph{heap composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ heap unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
 The \emph{partial commutative monoid of  heaps} is $(\Heaps, \composeH, \{\unitH\})$.
 \end{definition}
-%
+ 
 \begin{defn}[Fingerprints]
 \label{def:fingerprint}
 The set of \emph{fingerprints} is $\fp \in \Fingerprint \eqdef \powerset{\Set{\fpR,\fpW}}$.
 \end{defn}
-%
+ 
 \begin{defn}[Fingerprint heaps]
 \label{def:fingerprint_heaps}
 Given the sets of program values $\Val$ (\defin\ref{def:prgram_values}), addresses $\Addr$ (\defin\ref{def:timestamp_heaps}) and fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the set of \emph{fingerprint heaps} is: $\fph \in \FPHeaps \eqdef \Addr \parfinfun (\Val \times \Fingerprint)$.
 The \emph{fingerprint heap composition function}, $\composeFPH: \FPHeaps \times \FPHeaps \parfun \FPHeaps$, is defined as $\composeFPH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{fingerprint heap unit element} is $\unitFPH \eqdef \emptyset$, denoting a function with an empty domain.
 The \emph{partial commutative monoid of fingerprint heaps} is $(\FPHeaps, \composeFPH, \{\unitFPH\})$.  
 \end{defn}
-%
+ 
 Given a fingerprint heap $\fph$ and an address $\addr$, we write $\fphVAL(\addr)$ and $\fphFP(\addr)$ for the first and second projections of $\fph(\addr)$, respectively. We write $\unitFPH$ for a fingerprint heap with an empty domain. We write $\fph_1 \uplus \fph_2$ for the standard disjoint function union of $\fph_1$ and $\fph_2$. 
 
 We introduce two update functions on fingerprints, $\addFPR{\fp}$ and $\addFPW{\fp}$, for updating a fingerprint $\fp$. Intuitively, the $\addFPW{\fp}$ always \emph{extends} $\fp$ with the $\fpW$ fingerprint. On the other hand, the $\addFPR{\fp}$ extends $\fp$ with $\fpR$ \emph{only if} $\fp$ does not already contain the $\fpW$ fingerprint (i.e.~$\fpW \not\in \fp$). This is to capture the fact that once an address is written to and thus the fingerprint contains $\fpW$, the following reads from the same address are considered local and need not be recorded in the fingerprint.
@@ -178,7 +117,7 @@ Given the set of fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the 
 
 \begin{defn}[Read and write sets]
 \label{def:rs-ws}
-Given the set of fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the \emph{read set} and \emph{write set} function, $\rsName, \wsName: \Fingerprint \to \powerset{\Addr}$ is defined as follows:
+Given the set of fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the \emph{read set} and \emph{write set} function, $\rsName, \wsName: \FPHeaps \to \powerset{\Addr}$ is defined as follows:
 \[
 \begin{rclarray}
     \ws{\fph} & \defeq & \myset{\loc}{ \exsts{\fp} \fph(\loc) = (\stub, \fp) \land \fpW \in \fp} \\
@@ -189,59 +128,71 @@ Given the set of fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the 
 
 \subsection{Local/Transaction Semantics}
 
-We define the operational semantics of transactions $\trans$ with respect to a pair of the form $(\stk, \fph)$ comprising a (local) stack and a (local) fingerprint heap corresponding to a snapshot of the global timestamp heap. The operational semantics of transactions is given in \fig\ref{fig:transaction_semantics}.
-The operational semantics of transactions is standard with the exception of the \rl{TRead} and \rl{TWrite} rules where the fingerprint of the address read from (resp.~written to) is extended with $\fpR$ (resp.~$\fpW$).
+We define the operational semantics of transactions $\trans$ with respect to a configuration of the form $(\thstk, \txstk, \fph)$ comprising a thread stack, a transaction stack and a (local) fingerprint heap.
+The operational semantics of transactions is given in \fig\ref{fig:transaction_semantics}.
+It is standard except the \rl{TRead} and \rl{TWrite} rules where the fingerprint of the address read from (resp.~written to) is extended with $\fpR$ (resp.~$\fpW$).
+Also, transactions are not allowed to modify the thread stack.
 
 
 \begin{defn}[Transaction semantics]
-Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref{def:fingerprint_heaps}) and transactions (\defin\ref{def:language}), the \emph{operational semantics of transactions}, $\toL : ((\Stack \times \FPHeaps) \times \Transactions) \times ((\Stack \times \FPHeaps) \times \Transactions)$, is given in \fig\ref{fig:transaction_semantics}.
+Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref{def:fingerprint_heaps}) and transactions (\defin\ref{def:language}), the \emph{operational semantics of transactions}, $\toL : ((\Stacks \times \FPHeaps) \times \Transactions) \times ((\Stacks \times \FPHeaps) \times \Transactions)$, is given in \fig\ref{fig:transaction_semantics}.
 \end{defn}
 
 \begin{figure}
 \hrule\vspace{5pt}
 \[	
     \infer[\rl{TAss}]{%
-        ( \stk, \fph) , \pass{\var}{\expr} \ \toL \  (\stk \remapsto{\var}{\val}, \fph) , \pskip
+        (\thstk, \txstk, \fph) , \pass{\txvar}{\expr} \ \toL \  (\thstk, \txstk \remapsto{\txvar}{\val}, \fph) , \pskip
     }{%
-    \evalE{\expr} = \val
+    \evalE[\thstk \uplus \txstk]{\expr} = \val
+    && \txvar \in \dom(\txstk)
     }
 \]
 
 \[
     \infer[\rl{TWrite}]{%
-        ( \stk, \fph), \pmutate{\expr_{1}}{\expr_{2}} \ \toL \  ( \stk, \fph \remapsto{\addr}{(\val, \addFPW{\fp})}) , \pskip
+        ( \thstk, \txstk, \fph), \pmutate{\expr_{1}}{\expr_{2}} \ \toL \  ( \thstk, \txstk, \fph \remapsto{\addr}{(\val, \addFPW{\fp})}) , \pskip
     }{%
-        \evalE{\expr_{1}} = \addr && 
-        \evalE{\expr_{2}} = \val && 
+        \evalE[\thstk \uplus \txstk]{\expr_{1}} = \addr && 
+        \evalE[\thstk \uplus \txstk]{\expr_{2}} = \val && 
         \fph(l) {=} (\stub, \fp)
     }
 \]
 
 \[
     \infer[\rl{TRead}]{
-        ( \stk, \fph) , \pderef{\var}{\expr} \ \toL \  (\stk \remapsto{\var}{\val}, \fph \remapsto{\addr}{(\val, \addFPR{\fp})}), \pskip
+        ( \txstk, \fph) , \pderef{\txvar}{\expr} \ \toL \  (\txstk \remapsto{\var}{\val}, \fph \remapsto{\addr}{(\val, \addFPR{\fp})}), \pskip
     }{
-        \evalE{\expr} = \addr && 
-        \fph(\addr) {=} (\val, \fp) 
+        \evalE[\thstk \uplus \txstk]{\expr} = \addr
+        && \txvar \in \dom(\txstk)
+        && \fph(\addr) {=} (\val, \fp) 
+    }
+\]
+
+\[
+    \infer[\rl{TAssume}]{%
+        (\thstk, \txstk, \fph), \passume{\expr} \ \toL \  (\thstk, \txstk, \fph), \pskip
+    }{%
+        \evalE[\thstk \uplus \txstk]{\expr} = 0
     }
 \]
 
 \[
     \infer[\rl{TChoiseL}]{%
-        (\stk, \fph) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\stk, \fph) , \trans_{1}
+        (\thstk, \txstk, \fph) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\thstk, \txstk, \fph) , \trans_{1}
     }{}
 \]
 
 \[
     \infer[\rl{TChoiseR}]{%
-        (\stk, \fph) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\stk, \fph), \trans_{2}
+        (\thstk, \txstk, \fph) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\thstk, \txstk, \fph), \trans_{2}
     }{%
     }
 \]
 
 \[
     \infer[\rl{TLoop}]{%
-        (\stk, \fph),  \trans\prepeat \ \toL \  (\stk, \fph), \pskip \pchoice (\trans \pseq \trans\prepeat)
+        (\thstk, \txstk, \fph),  \trans\prepeat \ \toL \  (\thstk, \txstk, \fph), \pskip \pchoice (\trans \pseq \trans\prepeat)
     }{%
     }
 \]
@@ -249,16 +200,16 @@ Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref
 
 \[
     \infer[\rl{TSeqSkip}]{%
-        (\stk, \fph), \pskip \pseq \trans_{2} \ \toL \  (\stk, \fph), \trans_{2}
+        (\thstk, \txstk, \fph), \pskip \pseq \trans_{2} \ \toL \  (\thstk, \txstk, \fph), \trans_{2}
     }{%
     }
 \]
 
 \[
     \infer[\rl{TSeq}]{%
-        (\stk, \fph), \trans_{1} \pseq \trans_{2} \ \toL \  (\stk', \fph'), \trans_{1}' ; \trans_{2}
+        (\thstk, \txstk, \fph), \trans_{1} \pseq \trans_{2} \ \toL \  (\thstk, \txstk', \fph'), \trans_{1}' ; \trans_{2}
     }{%
-        (\stk, \fph), \trans_{1} \ \toL \  (\stk', \fph'), \trans_{1}'
+        (\thstk, \txstk, \fph), \trans_{1} \ \toL \  (\thstk, \txstk', \fph'), \trans_{1}'
     }
 \]
 
@@ -277,6 +228,50 @@ Each step of the per-thread operational semantics is decorated with a \emph{labe
 The per-thread operational semantics of programs is given in \fig\ref{fig:thread_semantics}.
 With the exception of the \rl{PCommit}, \rl{PPar} and \rl{PWait}, the remaining rules are straightforward.
 
+
+\begin{defn}[transactions]
+Assume a set of transactions identifiers \( \TxID \defeq \Set{\txid, \dots}\).
+The set of transactions events \( \Events \) is as the follows,
+\[
+\begin{rclarray}
+\ETags & \defeq & \Set{\etR, \etW} \\
+\ev \in \Events & \defeq  & \ETags \times \Addr \times \Val
+\end{rclarray}
+\]
+The transactions are defined as a finite partial function from transactions identifiers \( \TxID \) to a set of events \( \powerset{\Events} \),
+\[
+\begin{rclarray}
+\tx \in \Tx & \defeq & \TxID \parfinfun \powerset{\Events}
+\end{rclarray}
+\]
+\end{defn}
+
+
+\begin{defn}[Abstract executions]
+An abstract execution is a tuple $\aexec = (\tx, \po, \vis, \ar) \in \Aexecs$, where the follows hold,
+
+\begin{itemize}
+\item
+the \emph{program order} $\po \subseteq \tx \times \tx$ is the union of disjoint, strict total orders \( \po_{i} \).
+That is, there exists a partition $\Set{ \tx_{i} }_{i \in I}$ of $\tx$ such that $\po = \bigcup_{i \in I} \po_{i}$, where $\po_{i}$ is a strict, total order over $\tx_i$%
+\footnote{Recall that a relation $R \subseteq A \times A$ is a strict partial order if it is irreflexive and transitive.
+It is a strict total order if for any $a_1, a_2 \in A$, either $a_1 = a_2$, $(a_1, a_2) \in R$ or $(a_2, a_1) \in R$.}
+
+\item 
+$\vis \subseteq \tx \times \tx$ is a strict, partial and transitive%
+\footnote{Recall that a relation $R \subseteq A \times A$ is transitive if for any \( a_{1}, a_{2}, a_{3}\) such that \( (a_{1}, a_{2} ) \in R\) and \( (a_{2}, a_{3} ) \in R \) then \( (a_{1}, a_{3} ) \in R \)}
+order such that $\po \subseteq \vis$. 
+
+\item 
+$\ar \subseteq \tx \times \tx$ is a strict, total order such that $\vis \subseteq \ar$.
+
+\item 
+For any address $\addr \in \Addr$, given $\tsid \in \dom(\tx)$, let $\func{before\_writes}{\aexec, \addr, \txid} = \Setcon{\txid' }{ \txid' \in \vis^{-1}(\txid) \land (\etW, \stub, \stub) \in \tx(\txid')}$. 
+Whenever $( \etR, \addr, \val) \in \tx(\txid)$ for some address $\addr \in \Addr$ and value $\val \in \Val$, then either $\func{before\_writes}{\aexec, \addr, \txid} = \emptyset$ and $\val = 0$, or \( ( \etW, \addr, \val) \in \max_{\ar}(\func{before\_writes}{\aexec, \addr, \txid}) \).
+\end{itemize}
+\end{defn}
+
+
 \begin{defn}[Thread transition labels]
 \label{def:label}
 Assume a countably infinite set of thread identifiers $\thid,j \in \ThreadID$.
@@ -285,6 +280,12 @@ The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by
 	\iota \in \Translabel ::= \lbID \mid \lbC{\tsid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\ts}
 \]
 \end{defn}
+
+
+
+
+
+
 
 
 \begin{defn}[Thread semantics]
@@ -296,13 +297,13 @@ The set of \emph{intermediate programs}, $\iprog \in \IntermediatePrograms$, is 
     \iprog ::= \prog \mid \iprog \pseq \pwait{\thid}
 \]
 %
-Given the set of stacks $\Stack$ (\defin\ref{def:stacks}), timestamp heaps $\TSHeaps$ and timestamps $\Timestamp$ (\defin\ref{def:timestamp}), the \emph{per-thread operational semantics} of programs:
+Given the set of stacks $\Stacks$ (\defin\ref{def:stacks}), timestamp heaps $\TSHeaps$ and timestamps $\Timestamp$ (\defin\ref{def:timestamp}), the \emph{per-thread operational semantics} of programs:
 %
 \[
 	\toT{} : 
-	\left((\Stack \times \TSHeaps \times \Timestamp) \times \IntermediatePrograms \right) 
+	\left((\Stacks \times \TSHeaps \times \Timestamp) \times \IntermediatePrograms \right) 
 	\times \Translabel \times  
-	\left((\Stack \times \TSHeaps \times \Timestamp) \times \IntermediatePrograms \right) 
+	\left((\Stacks \times \TSHeaps \times \Timestamp) \times \IntermediatePrograms \right) 
 \]
 %
 is defined in \fig\ref{fig:thread_semantics}.
@@ -457,7 +458,7 @@ A thread pool is modelled as a finite partial map from thread identifiers to tri
 
 \begin{defn}[Thread pools]
 \label{def:thread_pools}
-Given the sets of stacks $\Stack$ (\defin\ref{def:stacks}), timestamps $\Timestamp$ (\defin\ref{def:timestamp_heaps}) and programs $\Programs$ (\defin\ref{def:language}), the set of \emph{thread pools} is: $\thpl \in \TPool \eqdef \ThreadID \parfinfun \Stack \times \Timestamp \times \Programs$.
+Given the sets of stacks $\Stacks$ (\defin\ref{def:stacks}), timestamps $\Timestamp$ (\defin\ref{def:timestamp_heaps}) and programs $\Programs$ (\defin\ref{def:language}), the set of \emph{thread pools} is: $\thpl \in \TPool \eqdef \ThreadID \parfinfun \Stacks \times \Timestamp \times \Programs$.
 \end{defn}
  
 \begin{defn}[Thread pool semantics] 
