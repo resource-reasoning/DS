@@ -135,23 +135,23 @@ Also, transactions are not allowed to modify the thread stack.
 
 
 \begin{defn}[Transaction semantics]
-Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref{def:fingerprint_heaps}) and transactions (\defin\ref{def:language}), the \emph{operational semantics of transactions}, $\toL : ((\Stacks \times \FPHeaps) \times \Transactions) \times ((\Stacks \times \FPHeaps) \times \Transactions)$, is given in \fig\ref{fig:transaction_semantics}.
+Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref{def:fingerprint_heaps}) and transactions (\defin\ref{def:language}), the \emph{operational semantics of transactions}, $\toL : \Stacks \times ((\Stacks \times \FPHeaps) \times \Transactions) \times ((\Stacks \times \FPHeaps) \times \Transactions)$, is given in \fig\ref{fig:transaction_semantics}.
 \end{defn}
 
-\begin{figure}
+\begin{figure}[!t]
 \hrule\vspace{5pt}
 \[	
     \infer[\rl{TAss}]{%
-        (\thstk, \txstk, \fph) , \pass{\txvar}{\expr} \ \toL \  (\thstk, \txstk \remapsto{\txvar}{\val}, \fph) , \pskip
+        \thstk \vdash (\txstk, \fph) , \pass{\txvar}{\expr} \ \toL \  (\txstk \remapsto{\txvar}{\val}, \fph) , \pskip
     }{%
-    \evalE[\thstk \uplus \txstk]{\expr} = \val
-    && \txvar \in \dom(\txstk)
+        \evalE[\thstk \uplus \txstk]{\expr} = \val
+        && \txvar \in \dom(\txstk)
     }
 \]
 
 \[
     \infer[\rl{TWrite}]{%
-        ( \thstk, \txstk, \fph), \pmutate{\expr_{1}}{\expr_{2}} \ \toL \  ( \thstk, \txstk, \fph \remapsto{\addr}{(\val, \addFPW{\fp})}) , \pskip
+        \thstk \vdash (\txstk, \fph), \pmutate{\expr_{1}}{\expr_{2}} \ \toL \  (\txstk, \fph \remapsto{\addr}{(\val, \addFPW{\fp})}) , \pskip
     }{%
         \evalE[\thstk \uplus \txstk]{\expr_{1}} = \addr && 
         \evalE[\thstk \uplus \txstk]{\expr_{2}} = \val && 
@@ -161,7 +161,7 @@ Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref
 
 \[
     \infer[\rl{TRead}]{
-        ( \txstk, \fph) , \pderef{\txvar}{\expr} \ \toL \  (\txstk \remapsto{\var}{\val}, \fph \remapsto{\addr}{(\val, \addFPR{\fp})}), \pskip
+        \thstk \vdash (\txstk, \fph) , \pderef{\txvar}{\expr} \ \toL \  (\txstk\remapsto{\var}{\val}, \fph \remapsto{\addr}{(\val, \addFPR{\fp})}), \pskip
     }{
         \evalE[\thstk \uplus \txstk]{\expr} = \addr
         && \txvar \in \dom(\txstk)
@@ -171,45 +171,45 @@ Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref
 
 \[
     \infer[\rl{TAssume}]{%
-        (\thstk, \txstk, \fph), \passume{\expr} \ \toL \  (\thstk, \txstk, \fph), \pskip
+        \thstk \vdash (\txstk, \fph), \passume{\expr} \ \toL \  (\txstk, \fph), \pskip
     }{%
         \evalE[\thstk \uplus \txstk]{\expr} = 0
     }
 \]
 
 \[
-    \infer[\rl{TChoiseL}]{%
-        (\thstk, \txstk, \fph) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\thstk, \txstk, \fph) , \trans_{1}
+    \infer[\rl{TReturn}]{%
+        \thstk \vdash (\txstk, \fph), \preturn{\expr} \ \toL \  (\txstk\rmto{\lret}{\evalE[\thstk \uplus \txstk]{\expr}}, \fph), \pskip
     }{}
 \]
 
 \[
-    \infer[\rl{TChoiseR}]{%
-        (\thstk, \txstk, \fph) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\thstk, \txstk, \fph), \trans_{2}
-    }{%
+    \infer[\rl{TChoise}]{%
+        \thstk \vdash (\txstk, \fph) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\txstk, \fph) , \trans'
+    }{
+        \trans' \in \Set{\trans_{1}, \trans_{2}}
     }
 \]
 
 \[
     \infer[\rl{TLoop}]{%
-        (\thstk, \txstk, \fph),  \trans\prepeat \ \toL \  (\thstk, \txstk, \fph), \pskip \pchoice (\trans \pseq \trans\prepeat)
-    }{%
-    }
+        \thstk \vdash (\txstk, \fph),  \trans\prepeat \ \toL \  (\txstk, \fph), \pskip \pchoice (\trans \pseq \trans\prepeat)
+    }{}
 \]
 
 
 \[
     \infer[\rl{TSeqSkip}]{%
-        (\thstk, \txstk, \fph), \pskip \pseq \trans_{2} \ \toL \  (\thstk, \txstk, \fph), \trans_{2}
+        \thstk \vdash (\txstk, \fph), \pskip \pseq \trans_{2} \ \toL \  (\txstk, \fph), \trans_{2}
     }{%
     }
 \]
 
 \[
     \infer[\rl{TSeq}]{%
-        (\thstk, \txstk, \fph), \trans_{1} \pseq \trans_{2} \ \toL \  (\thstk, \txstk', \fph'), \trans_{1}' ; \trans_{2}
+        \thstk \vdash (\txstk, \fph), \trans_{1} \pseq \trans_{2} \ \toL \  (\txstk', \fph'), \trans_{1}' ; \trans_{2}
     }{%
-        (\thstk, \txstk, \fph), \trans_{1} \ \toL \  (\thstk, \txstk', \fph'), \trans_{1}'
+        \thstk \vdash (\txstk, \fph), \trans_{1} \ \toL \  (\txstk', \fph'), \trans_{1}'
     }
 \]
 
@@ -248,27 +248,26 @@ The transactions are defined as a finite partial function from transactions iden
 
 
 \begin{defn}[Abstract executions]
+\label{def:abs-exec}
 An abstract execution is a tuple $\aexec = (\tx, \po, \vis, \ar) \in \Aexecs$, where the follows hold,
 
 \begin{itemize}
 \item
-the \emph{program order} $\po \subseteq \tx \times \tx$ is the union of disjoint, strict total orders \( \po_{i} \).
-That is, there exists a partition $\Set{ \tx_{i} }_{i \in I}$ of $\tx$ such that $\po = \bigcup_{i \in I} \po_{i}$, where $\po_{i}$ is a strict, total order over $\tx_i$%
+the \emph{program order} $\po \subseteq \dom(\tx) \times \dom(\tx)$ is the union of disjoint, strict total orders \( \po_{i} \).
+That is, there exists a partition $\Set{ \dom(\tx)_{i} }_{i \in I}$ of $\dom(\tx)$ such that $\po = \bigcup_{i \in I} \po_{i}$, where $\po_{i}$ is a strict, total order over $\tx_i$%
 \footnote{Recall that a relation $R \subseteq A \times A$ is a strict partial order if it is irreflexive and transitive.
 It is a strict total order if for any $a_1, a_2 \in A$, either $a_1 = a_2$, $(a_1, a_2) \in R$ or $(a_2, a_1) \in R$.}
 
 \item 
-$\vis \subseteq \tx \times \tx$ is a strict, partial and transitive%
+$\vis \subseteq \dom(\tx) \times \dom(\tx)$ is a strict, partial and transitive%
 \footnote{Recall that a relation $R \subseteq A \times A$ is transitive if for any \( a_{1}, a_{2}, a_{3}\) such that \( (a_{1}, a_{2} ) \in R\) and \( (a_{2}, a_{3} ) \in R \) then \( (a_{1}, a_{3} ) \in R \)}
 order such that $\po \subseteq \vis$. 
 
 \item 
-$\ar \subseteq \tx \times \tx$ is a strict, total order such that $\vis \subseteq \ar$.
+$\ar \subseteq \dom(\tx) \times \dom(\tx)$ is a strict, total order such that $\vis \subseteq \ar$.
 
-\item 
-For any address $\addr \in \Addr$, given $\tsid \in \dom(\tx)$, let $\func{before\_writes}{\aexec, \addr, \txid} = \Setcon{\txid' }{ \txid' \in \vis^{-1}(\txid) \land (\etW, \stub, \stub) \in \tx(\txid')}$. 
-Whenever $( \etR, \addr, \val) \in \tx(\txid)$ for some address $\addr \in \Addr$ and value $\val \in \Val$, then either $\func{before\_writes}{\aexec, \addr, \txid} = \emptyset$ and $\val = 0$, or \( ( \etW, \addr, \val) \in \max_{\ar}(\func{before\_writes}{\aexec, \addr, \txid}) \).
 \end{itemize}
+
 \end{defn}
 
 
@@ -283,27 +282,33 @@ The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by
 
 
 
+\begin{defn}[Runtime abstract executions]
+\label{def:run-abs-exec}
+An runtime abstract execution \( \aexecrun = (\tx, \setthid, \hat{\po}, \vis, \ar) \in \Aexecrun \) extends the abstract execution \( \aexec = (\tx, \po, \vis, \ar) \) (\defref{def:abs-exec}) with a set of (runtime) threads \( \setthid \).
+The \emph{runtime program order} \( \hat{\po}\)  extends the \( \po \) by allowing any transaction \( \tsid \) relating to any thread \( \thid \in \setthid \).
+This is, \( \hat{\po} \subseteq \dom(\tx) \times \setthid \land \po \subseteq \hat{\po} \).
 
 
-
-
+\end{defn}
 
 \begin{defn}[Thread semantics]
 \label{def:thread_semantics}
-Assume a countably infinite set of thread identifiers $\thid,j \in \ThreadID$.
+Given the thread identifiers $\thid,j \in \ThreadID$.
 The set of \emph{intermediate programs}, $\iprog \in \IntermediatePrograms$, is defined by the following grammar:
 %
 \[
     \iprog ::= \prog \mid \iprog \pseq \pwait{\thid}
 \]
 %
-Given the set of stacks $\Stacks$ (\defin\ref{def:stacks}), timestamp heaps $\TSHeaps$ and timestamps $\Timestamp$ (\defin\ref{def:timestamp}), the \emph{per-thread operational semantics} of programs:
+Given the set of thread stacks \( \thstk \in \Stacks (\defref{def:stacks}) \) and runtime abstract executions (\defref{def:run-abs-exec}), the \emph{per-thread operational semantics} of programs:
 %
 \[
 	\toT{} : 
-	\left((\Stacks \times \TSHeaps \times \Timestamp) \times \IntermediatePrograms \right) 
-	\times \Translabel \times  
-	\left((\Stacks \times \TSHeaps \times \Timestamp) \times \IntermediatePrograms \right) 
+    \ThreadID 
+    \times
+	\left( ( \Stacks \times \Aexecrun ) \times \IntermediatePrograms \right) 
+	\times  \Translabel \times
+	\left( ( \Stacks \times \Aexecrun ) \times \IntermediatePrograms \right) 
 \]
 %
 is defined in \fig\ref{fig:thread_semantics}.
@@ -321,7 +326,7 @@ Note that these two rules are labelled with the $\lbF{\thid, \prog}$ and $\lbJ{\
 %
 \[
     \infer[\rl{Commit}]{%
-        ( \stk, \tshp, \ts_{s} ) , \ptrans{\trans} \ \toT{\lbC{\tsid}} \ ( \stk', \tshp', \ts_{e} ) , \pskip
+        ( \stk, \aexecrun ), \ptrans{\trans} \ \toT{\lbC{\tsid}} \ ( \stk\rmto{\ret}{\txstk(\lret)}, \aexecrun' ) , \pskip
     }{%
         \begin{array}{c}
             \ts_s < \ts_e 
@@ -335,60 +340,59 @@ Note that these two rules are labelled with the $\lbF{\thid, \prog}$ and $\lbJ{\
 \]
 
 \[
-    \infer[\rl{PChoiseL}]{%
-        ( \stk, \tshp, \ts ) , \prog_{1} \pchoice \prog_{2} \ \toT{\lbID} \  ( \stk, \tshp, \ts ) , \prog_{1}
+    \infer[\rl{PAssign}]{%
+        ( \thstk, \aexecrun ) , \passign{\thvar}{\expr} \ \toT{\lbID} \  ( \stk\rmto{\thvar}{\evalE{\expr}}, \aexecrun  ) , \pskip
+    }{}
+\]
+
+\[
+    \infer[\rl{PIncTime}]{%
+        ( \thstk, \aexecrun ) , \passume{\expr} \ \toT{\lbID} \  ( \thstk, \aexecrun ) , \pskip
     }{%
+        \evalE{\expr} = 0
     }
 \]
 
 \[
-    \infer[\rl{PChoiseR}]{%
-        ( \stk, \tshp, \ts ) , \prog_{1} \pchoice \prog_{2} \ \toT{\lbID} \  ( \stk, \tshp, \ts ) , \prog_{2}
-    }{%
+    \infer[\rl{PChoise}]{%
+        ( \thstk, \aexecrun ) , \prog_{1} \pchoice \prog_{2} \ \toT{\lbID} \  ( \thstk, \aexecrun ) , \prog'
+    }{
+        \prog' \in \Set{\prog_{1}, \prog_{2}}
     }
 \]
 
 \[
     \infer[\rl{PLoop}]{%
-        ( \stk, \tshp, \ts ) , \prog\prepeat \ \toT{\lbID} \  ( \stk, \tshp, \ts ) , \pskip \pchoice (\prog \pseq \prog\prepeat)
-    }{%
-    }
+        ( \thstk, \aexecrun ) , \prog\prepeat \ \toT{\lbID} \  ( \thstk, \aexecrun ) , \pskip \pchoice (\prog \pseq \prog\prepeat)
+    }{}
 \]
 
 \[
     \infer[\rl{PSeqSkip}]{%
-        ( \stk, \tshp, \ts ) , \pskip \pseq \iprog \ \toT{\lbID} \  ( \stk, \tshp, \ts ) , \iprog
-    }{%
-    }
+        ( \thstk, \aexecrun ) , \pskip \pseq \iprog \ \toT{\lbID} \  ( \thstk, \aexecrun ) , \iprog
+    }{}
 \]
 
 \[
     \infer[\rl{PSeq}]{%
-        ( \stk, \tshp, \ts ) , \iprog_{1} \pseq \iprog_{2} \ \toT{\lb} \ ( \stk', \tshp', \ts' ) , {\iprog_{1}}' \pseq \iprog_{2}
+        ( \thstk, \aexecrun ) , \iprog_{1} \pseq \iprog_{2} \ \toT{\lb} \ ( \thstk', \aexecrun' ) , {\iprog_{1}}' \pseq \iprog_{2}
     }{%
-        ( \stk, \tshp, \ts ) , \iprog_{1} \ \toT{\lb} \  ( \stk', \tshp', \ts' ) , {\iprog_{1}}' 
+        ( \thstk, \aexecrun ) , \iprog_{1} \ \toT{\lb} \  ( \thstk', \aexecrun' ) , {\iprog_{1}}' 
     }
 \]
 
 \[
     \infer[\rl{PPar}]{%
-        ( \stk, \tshp, \ts ) , \prog_{1} \ppar \prog_{2} \ \toT{\lbF{\thid, \prog_{2}}} \  ( \stk, \tshp, \ts ) , \prog_{1} \pseq \pwait{\thid}
-    }{%
-    }
+        ( \thstk, \aexecrun ) , \prog_{1} \ppar \prog_{2} \ \toT{\lbF{\thid, \prog_{2}}} \  ( \thstk, \aexecrun ) , \prog_{1} \pseq \pwait{\thid}
+    }{}
 \]
 
 \[
     \infer[\rl{PWait}]{%
-        ( \stk, \tshp, \ts ) , \pwait{\thid} \ \toT{\lbJ{\thid,\ts'}} \  ( \stk, \tshp , \max\Set{\ts,\ts'} ) , \pskip 
-    }{%
-    }
-\]
-
-\[
-    \infer[\rl{PIncTime}]{%
-        ( \stk, \tshp, \ts ) , \iprog \ \toT{\lbID} \  ( \stk, \tshp , \ts' ) , \iprog 
-    }{%
-       \ts' > \ts
+        ( \thstk, \aexecrun ) , \pwait{\thid} \ \toT{\lbJ{\thid, \thstk'}} \  (  \thstk_{1} \uplus \thstk_{2} \uplus \thstk_{f}, \aexecrun ) , \pskip 
+    }{
+        \thstk = \thstk_{1} \uplus \thstk_{f}
+        && \thstk' = \thstk_{2} \uplus \thstk_{f}
     }
 \]
  
@@ -458,7 +462,7 @@ A thread pool is modelled as a finite partial map from thread identifiers to tri
 
 \begin{defn}[Thread pools]
 \label{def:thread_pools}
-Given the sets of stacks $\Stacks$ (\defin\ref{def:stacks}), timestamps $\Timestamp$ (\defin\ref{def:timestamp_heaps}) and programs $\Programs$ (\defin\ref{def:language}), the set of \emph{thread pools} is: $\thpl \in \TPool \eqdef \ThreadID \parfinfun \Stacks \times \Timestamp \times \Programs$.
+Given the sets of stacks $\Stacks$ (\defref{def:stacks}), timestamps $\Timestamp$ (\defref{def:timestamp_heaps}) and programs $\Programs$ (\defref{def:language}), the set of \emph{thread pools} is: $\thpl \in \TPool \eqdef \ThreadID \parfinfun \Stacks \times \Timestamp \times \Programs$.
 \end{defn}
  
 \begin{defn}[Thread pool semantics] 
