@@ -277,32 +277,58 @@ The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by
 An runtime abstract execution \( \aexecrun = (\tx, \setthid, \hat{\po}, \vis, \ar) \in \Aexecrun \) extends the abstract execution \( \aexec = (\tx, \po, \vis, \ar) \) (\defref{def:abs-exec}) with a set of (runtime) threads \( \setthid \).
 The \emph{runtime program order} \( \hat{\po}\)  extends the \( \po \) by allowing any transaction \( \tsid \) relating to any thread \( \thid \in \setthid \).
 This is, \( \hat{\po} \subseteq \dom(\tx) \times \setthid \land \po \subseteq \hat{\po} \).
+
+The function that convert runtime abstract executions to abstract executions, \( \eraseAEX{.}: \Aexecrun \to \Aexecs \), is defined as the follows, 
+\[
+    \begin{rclarray}
+        \eraseAEX{(\tx, \setthid, \hat{\po}, \vis, \ar)} & \defeq & (\tx, \hat{\po} \setminus \Setcon{(\txid, \thid)}{ \txid \in \dom(\tx) \land \thid \in \setthid}, \vis, \ar)
+    \end{rclarray}
+\]
 \end{defn}
+
 
 \begin{defn}[Consistency Models]
 \emph{Consistency models} are define a set of of tuple, \( \como = (\respo, \conguar) \in \Como\), including \emph{resolution policies} and \emph{consistency guarantees}.
-\emph{Resolution policy} \( \respo \) is a function \( \respo \in \ResPos : \Aexecrun \times \powerset{\TxID} \times \Addr \to \powerset{\Val}\) that decides the observable values given the set of visible transactions.
-\emph{Consistency guarantee} is a function \( \conguar \in \ConGuar : \po \times \vis \times \ar \to \powerset{\dom(\tx) \times \dom(\tx)}\) where \( \tx \in \Tx\) and  \( \po, \vis, \ar \subseteq \dom(\tx) \times \dom(\tx) \).
+\emph{Resolution policy} \( \respo \) is a function \( \respo \in \ResPos : \Aexecs \times \powerset{\TxID} \times \Addr \to \powerset{\Val}\) that decides the observable values given the set of visible transactions.
+\emph{Consistency guarantee} is a function \( \conguar \in \ConGuar : \aexec \to \powerset{\dom(\aexec\projection{\tx}) \times \dom(\aexec\projection{\tx})}\).
 
 The order \( \ordCOM \)  between two consistency model \( \como_{1}, \como_{2} \) is defined as the follows,
 \[
 \begin{rclarray}
     (\respo_{1}, \conguar_{1}) \ordCOM (\respo_{2}, \conguar_{2}) & \iffdef & 
     \begin{array}[t]{@{}l@{}}
-    \for{\aexecrun, \txidset, \addr, \po, \vis, \ar} \\
-    \quad \respo_{2}(\aexecrun, \txidset, \addr) \subseteq \respo_{1}(\aexecrun, \txidset, \addr) \land \conguar_{1}(\po, \vis, \ar) \subseteq  \conguar_{2}(\po, \vis, \ar)
+    \for{\aexec, \txidset, \addr} \\
+    \quad \respo_{2}(\aexec, \txidset, \addr) \subseteq \respo_{1}(\aexecrun, \txidset, \addr) \land \conguar_{1}(\aexec) \subseteq  \conguar_{2}(\aexec)
     \end{array} \\
 \end{rclarray}
 \]
 Then, the bottom element is \( \btmCOM \defeq (\lambda (\aexecrun, \txidset, \addr ) \ldotp \Val, \lambda (\po, \vis, \ar ) \ldotp \emptyset) \).
 \end{defn}
 
+\begin{example}[Serialisibility(SER)]
+\[
+    \begin{rclarray}                                   
+        \como_{SER}(\aexec, \txidset, \addr) & \defeq & \Setcon{\val}{\exsts{\ar = \aexec\projection{\ar}} (\etW, \addr, \val) \in \max_{\ar}\Setcon{\txid}{\txid \in \txidset \land (\etW, \addr, \stub) \in \tx(\txid) }}\\
+        \conguar_{SER}(\aexec) & \defeq & \aexec\projection{\ar} \\
+    \end{rclarray}                                                      
+\]
+\end{example}
+
 \begin{example}[Snapshot isolation(SI)]
 \[
     \begin{rclarray}                                   
-        \como_{SI}(\aexecrun, \txidset, \addr) & \defeq & \Setcon{\val}{\exsts{\ar = \aexecrun\projection{\ar}} (\etW, \addr, \val) \in \max_{\ar}\Setcon{\txid}{\txid \in \txidset \land (\etW, \addr, \stub) \in \tx(\txid) }}\\
-        \conguar_{SI}(\po, \vis, \ar) & \defeq & \Setcon{(\txid, \txid')}{ \exsts{\txid''} (\txid, \txid'') \in \vis \land (\txid'', \txid') \in \ar} \\
-    \end{rclarray}                                                      
+        \como_{SI}(\aexec, \txidset, \addr) & \defeq & \Setcon{\val}{\exsts{\ar = \aexec\projection{\ar}} (\etW, \addr, \val) \in \max_{\ar}\Setcon{\txid}{\txid \in \txidset \land (\etW, \addr, \stub) \in \tx(\txid) }}\\
+        \conguar_{SI}(\aexec) & \defeq & \Setcon{(\txid, \txid')}{ \exsts{\txid''} (\txid, \txid'') \in \aexec\projection{\vis} \land (\txid'', \txid') \in \aexec\projection{\ar}} \\
+    \end{rclarray}
+\]
+\end{example}
+
+\begin{example}[Parallel snapshot isolation(PSI)]
+\[
+    \begin{rclarray}                                   
+        \como_{PSI}(\aexec, \txidset, \addr) & \defeq & \Setcon{\val}{\exsts{\ar = \aexec\projection{\ar}} (\etW, \addr, \val) \in \max_{\ar}\Setcon{\txid}{\txid \in \txidset \land (\etW, \addr, \stub) \in \tx(\txid) }}\\
+        \conguar_{PSI}(\aexec) & \defeq & \Setcon{(\txid, \txid')}{ \exsts{ \addr } (\etW, \addr, \stub) \in \aexec\projection{\tx}(\txid) \land (\etW, \addr, \stub) \in \aexec\projection{\tx}(\txid') \land (\txid, \txid') \in \aexec\projection{\ar} } \\
+    \end{rclarray}
 \]
 \end{example}
 
@@ -428,7 +454,7 @@ where,
     \consis{\aexecrun, \txid, \thid} & \defeq & 
     \begin{array}[t]{@{}l@{}}
         \thid \in \aexecrun\projection{\setthid} \land \exsts{\po = \aexecrun\projection{\hat{\po}} \setminus \Setcon{ (\stub, \thid') }{ \thid' \in \ThreadID} } \for{ \txid' } \\
-        \quad  ( (\txid', \txid) \in \conguar(\po, \aexecrun\projection{\vis}, \aexecrun\projection{\ar}) \implies (\txid, \txid) \in \aexecrun\projection{\vis} ) \\
+        \quad  ( (\txid', \txid) \in \conguar(\eraseAEX{\aexecrun}) \implies (\txid, \txid) \in \aexecrun\projection{\vis} ) \\
     \end{array} \\
     \newaexecName & : & 
     \left(\begin{array}{l}
@@ -457,8 +483,8 @@ where,
     \Setcon{%
         \fph
     }{%            
-        \for{\addr, \val}  \val \in \respo(\aexecrun, \txidset, \addr) \implies \fph(\addr) = (\val, \emptyset) \\
-        \quad {} \land \respo(\aexecrun, \txidset, \addr) = \emptyset \implies \fph(\addr) = (0, \emptyset)
+        \for{\addr, \val}  \val \in \respo(\eraseAEX{\aexecrun}, \txidset, \addr) \implies \fph(\addr) = (\val, \emptyset) \\
+        \quad {} \land \respo(\eraseAEX{\aexecrun}, \txidset, \addr) = \emptyset \implies \fph(\addr) = (0, \emptyset)
     } \\
 %
 %              
@@ -540,13 +566,33 @@ Conversely, when the next execution step is the joining of thread $\thid'$, then
 \end{figure}
 
 \subsection{Soundness and Completeness}
+
+\begin{defn}[Valid abstract executions]
+Given a consistency model \( (\respo, \conguar) = \como \in \Como \), the set of all the valid abstract executions under the model is defined as the follows,
+\[
+    \begin{rclarray}
+        \evalCOM{(\respo, \conguar)} & \defeq & 
+        \Setcon{%
+            \aexec = (\tx, \po, \vis, \ar)
+        }{%
+            \conguar(\aexec) \subseteq \vis 
+            \land \for{\txid, \addr, \val}  \\
+            \qquad (\etW, \addr, \val) \in \tx(\txid) 
+            \implies \val \in \respo(\aexec, \vis\projection{\txid}, \addr)
+        }
+    \end{rclarray}
+\]
+\end{defn}    
+
+
+
 \begin{thm}[Soundness of the semantics]
 For any runtime abstract abstract execution \( \aexecrun \) that satisfies a certain consistency model \( \como \), and if it takes one step under consistency model \( \como \) to another state \( \aexecrun' \), the new state should also satisfy the consistency model.
  \[
  \begin{array}{@{}l@{}}
     \for{\como, \thid, \aexecrun, \aexecrun', \thstk, \thstk', \iprog, {\iprog}', \lb} \\
-    \qquad \aexecrun \in \evalCOM{\como}
-    \land \como, \thid \vdash (\aexecrun, \thstk), \iprog \toT{\lb} (\aexecrun', \thstk'), {\iprog}' \implies \aexecrun' \in \evalCOM{\como}
+    \qquad \eraseAEX{\aexecrun} \in \evalCOM{\como}
+    \land \como, \thid \vdash (\aexecrun, \thstk), \iprog \toT{\lb} (\aexecrun', \thstk'), {\iprog}' \implies \eraseAEX{\aexecrun'} \in \evalCOM{\como}
  \end{array}
  \]
 \end{thm}
@@ -556,8 +602,8 @@ For any runtime abstract abstract execution \( \aexecrun \) that satisfies a cer
  \[
  \begin{array}{@{}l@{}}
     \for{\como, \thid, \aexecrun, \aexecrun', \thstk, \thstk', \iprog, {\iprog}', \lb} \\
-    \qquad \aexecrun \in \evalCOM{\como}
-    \land \btmCOM, \thid \vdash (\aexecrun, \thstk), \iprog \toT{\lb} (\aexecrun', \thstk'), {\iprog}' \land \aexecrun' \in \evalCOM{\como} \\
+    \qquad \eraseAEX{\aexecrun} \in \evalCOM{\como}
+    \land \btmCOM, \thid \vdash (\aexecrun, \thstk), \iprog \toT{\lb} (\aexecrun', \thstk'), {\iprog}' \land \eraseAEX{\aexecrun'} \in \evalCOM{\como} \\
     \qqquad \implies \como, \thid \vdash (\aexecrun, \thstk), \iprog \toT{\lb} (\aexecrun', \thstk'), {\iprog}' 
  \end{array}
  \]
