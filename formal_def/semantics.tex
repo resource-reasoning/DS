@@ -11,7 +11,6 @@ Assume a set of \emph{thread variables} \( \ThdVars \defeq \Set{\thvar, \dots}\)
 We also define the set of stacks as \( \stk \in \Stacks \eqdef \TxStacks \uplus \ThdStacks \).
 \end{defn}
 %
-\sx{\( \stk \) is for thread stack and \( \txstk \) is for transactions}
 Our programs (ranged over by $\prog$) are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\prog; \prog$), non-deterministic choice ($\prog+\prog$), loops ($\prog^*$) and parallel composition ($\prog \ppar \prog$). Additionally, our programming language contains the \emph{transaction} construct $\ptrans{\trans}$ denoting the \emph{atomic} execution of the transaction $\trans$. The atomicity guarantees of this execution are dictated by the underlying consistency model (snapshot isolation in this case).
 Transactions (ranged over by $\trans$) are defined by a similar inductive grammar comprising $\pskip$, non-deterministic choice, loops and sequential composition, as well as constructs for assignment, lookup and update. Transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are to be executed atomically.
 
@@ -146,6 +145,7 @@ We define the operational semantics of transactions $\trans$ with respect to a c
 
 
 \begin{defn}[Transaction events]
+\label{def:transaction-event}
 Assume a set of transactions identifiers \( \TxID \defeq \Set{\txid, \dots}\).
 The set of transactions events \( \Events \) is as the follows,
 \[
@@ -154,13 +154,13 @@ The set of transactions events \( \Events \) is as the follows,
 \ev \in \evset \subseteq \Events & \defeq  & \ETags \times \Addr \times \Val
 \end{rclarray}
 \]
-Given a set of events and a read or write event, the \emph{flush read} \( \flushR\) and \emph{flush write} \(\flushW \) are defined as the follows, 
+Given a set of events and a read or write event, the \emph{flush read} \( \flushR \) and \emph{flush write} \(\flushW \) are defined as the follows, 
 \[
 \begin{rclarray}
     \evset \flushR (\etR, \addr, \val) & \defeq & 
     \begin{cases}
-        \evset &  (\etR, \addr, \stub) \in \evset \\
-        \evset \uplus \Set{(\etR, \addr, \val)} & (\etR, \addr, \stub) \notin \evset \\
+        \evset \uplus \Set{(\etR, \addr, \val)} & (\etR, \addr, \stub) \notin \evset \land (\etW, \addr, \stub) \notin \evset  \\
+        \evset &  \text{otherwise} \\
     \end{cases} \\
     \evset \flushW (\etW, \addr, \val) & \defeq & ( \evset \setminus \Set{(\etW, \addr, \stub)} ) \uplus \Set{(\etW, \addr, \val)} \\
 \end{rclarray}
@@ -276,9 +276,9 @@ is given in \fig\ref{fig:transaction_semantics}.
 \begin{defn}[Thread transition labels]
 \label{def:label}
 Assume a countably infinite set of thread identifiers $\thid,j \in \ThreadID$.
-The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defin\ref{def:language}), the $\tsid$ demotes a transaction identifier and $\ts$ denotes a timestamp (\defin\ref{def:timestamp_heaps}):
+The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defin\ref{def:language}), the $\txid$ demotes a transaction identifier and $\ts$ denotes a timestamp (\defin\ref{def:timestamp_heaps}):
 \[
-	\iota \in \Translabel ::= \lbID \mid \lbC{\tsid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\stk}
+	\iota \in \Translabel ::= \lbID \mid \lbC{\txid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\stk}
 \]
 \end{defn}
 
@@ -476,7 +476,7 @@ Note that these two rules are labelled with the $\lbF{\thid, \prog}$ and $\lbJ{\
 %
 \[
     \infer[\rl{Commit}]{%
-        (\respo, \conguar), \thid \vdash ( \thstk, \aexecrun ), \ptrans{\trans} \ \toT{\lbC{\tsid}} \ ( \thstk\rmto{\ret}{\txstk(\ret)}, \aexecrun' ) , \pskip
+        (\respo, \conguar), \thid \vdash ( \thstk, \aexecrun ), \ptrans{\trans} \ \toT{\lbC{\txid}} \ ( \thstk\rmto{\ret}{\txstk(\ret)}, \aexecrun' ) , \pskip
     }{%
         \begin{array}{c}
             \pred{fresh}{\aexecrun, \txid}
@@ -599,11 +599,11 @@ where,
     \Setcon{%
         \h
     }{%            
-        \for{\addr, \val}  \val \in \respo(\eraseAEX{\aexecrun}, \txidset, \addr) \implies \h(\addr) = \val \\
+        \for{\addr, \val}  \val \in \respo(\eraseAEX{\aexecrun}, \txidset, \addr) \iff \h(\addr) = \val \\
     } \\
 %
 %              
-	\pred{fresh}{\aexecrun, \tsid}  & \defeq & \neg \tsid \in \dom(\aexecrun\projection{\tx}) \\
+	\pred{fresh}{\aexecrun, \txid}  & \defeq & \neg \txid \in \dom(\aexecrun\projection{\tx}) \\
 %
 %
     %\geteventName & : & \FPHeaps \times \FPHeaps \to \powerset{\Events} \\
@@ -693,7 +693,7 @@ Given a consistency model \( (\respo, \conguar) = \como \in \Como \), the set of
         }{%
             \conguar(\aexec) \subseteq \vis 
             \land \for{\txid, \addr, \val}  \\
-            \qquad (\etW, \addr, \val) \in \tx(\txid) 
+            \qquad (\etR, \addr, \val) \in \tx(\txid) 
             \implies \val \in \respo(\aexec, \vis(\txid), \addr)
         }
     \end{rclarray}
@@ -740,7 +740,6 @@ Therefore we have \( \consis{\aexecrun, \txid, \thid, \conguar_{2}} \implies \co
 \end{itemize}
 \end{proof}
 
-
 \begin{thm}[Soundness of the semantics]
 For any runtime abstract abstract execution \( \aexecrun \) that satisfies a certain consistency model \( \como \), and if it takes one step under consistency model \( \como \) to another state \( \aexecrun' \), the new state should also satisfy the consistency model.
  \[
@@ -755,15 +754,46 @@ For any runtime abstract abstract execution \( \aexecrun \) that satisfies a cer
 \begin{proof}
     We prove it by induction on the rules.
     The only interesting case is the \rl{Commit} rule where \( \iprog = \ptrans{\trans} \), \( \iprog' = \pskip \) and \( \lb = \lbC{\txid} \).
-    We prove \rl{Commit} by deriving contradiction.
-    Assume \( \eraseAEX{\aexecrun'} \notin \evalCOM{\como} \), so there exists transactions \( \txid' \) , \( \txid'' \) and \( \txid''' \) such that either \( (\txid', \txid'') \in \conguar(\eraseAEX{\aexecrun'}) \land (\txid', \txid'') \notin \aexecrun'\projection{\vis} \) or \( (\etW, \addr, \val) \in \aexecrun'\projection{\tx} \land \val \notin \respo(\eraseAEX{\aexecrun'}, \aexecrun'\projection{\vis}(\tsid'''), \addr) \) for some address \( \addr \) and \( \val \).
-    Note that \( \txid' \), \( \txid'' \) and \( \txid''' \) are distinct with the new transaction \( \txid \).
-
-    ......
-        
-    Therefore we have some transactions \( \txid' \) , \( \txid'' \) and \( \txid''' \) in the abstract execution \( \aexec\), such that either \( (\txid', \txid'') \in \conguar(\eraseAEX{\aexecrun}) \land (\txid', \txid'') \notin \aexecrun\projection{\vis} \) or \( (\etW, \addr, \val) \in \aexecrun\projection{\tx} \land \val \notin \respo(\eraseAEX{\aexecrun}, \aexecrun\projection{\vis}(\tsid'''), \addr) \) for some address \( \addr \) and \( \val \).
-    This means \( \eraseAEX{\aexecrun} \notin \evalCOM{\como} \), which contradicts with the hypothesis that \( \eraseAEX{\aexecrun} \in \evalCOM{\como} \).
-
+    We need to prove the follows,
+    \begin{align}
+        & \exsts{\aexec' = \eraseAEX{\aexecrun'}} \for{ \txid', \txid'', \addr, \val}  \nonumber \\
+        & \quad (\etR, \addr, \val) \in \aexec\projection{\tx}(\txid') \implies \val \in \respo(\aexec',\aexec'\projection{\vis}(\txid'), \addr) \label{equ:res_policy}\\
+        & \quad (\txid', \txid'') \in \conguar(\aexec') \implies (\txid', \txid'') \in \aexec'\projection{\vis} \label{equ:con_guarantee}
+    \end{align}
+    For brevity, assume \( \aexec = \eraseAEX{\aexecrun} \) and \( \aexec' = \eraseAEX{\aexecrun'} \) in the following discussion.
+    First, we consider \equref{equ:res_policy} and we only need to consider the new transaction, \ie \( \txid' = \txid \).
+    By the premiss of the rule, we can rewrite the equation we need to prove to the following form,
+    \[
+        (\etR, \addr, \val) \in \evset \implies \val \in \respo(\aexec',\txidset, \addr) \\
+    \]
+    where \( \evset \) is the set of all the events associated with \( \txid \) and \( \txidset \) is the set of transactions that observed by the new transaction \( \txid \).
+    By the flush read \( \flushR \) \defref{def:transaction-event} and the transaction semantics \figref{fig:transaction_semantics}, assume some initial heap \( \h \) that satisfies the follows,
+    \[
+    \begin{array}{@{}l@{}}
+        \exsts{\thstk, \txstk, \h'} \nonumber \\
+        \quad \thstk \vdash (\emptyset, \h, \emptyset), \trans \toL^{*} (\txstk, \h', \evset), \pskip 
+        \land \h \in \obsstate{\aexecrun, \txidset, \respo} \nonumber \\
+    \end{array}
+    \]
+    Given the initial heap \( \h \), we have the follows,
+    \begin{equation}
+        \label{equ:first-read-from-the-init-heap} 
+        (\etR, \addr, \val) \in \evset \implies \h(\addr) = \val
+    \end{equation}
+    because a transaction only records the first read event for each address.
+    It can be proved by induction on the rules for transaction operational semantics, where the only rule that involves read event is \rl{TRead}.
+    If the new read event in the final events set, \ie \( (\etR, \addr, \val) \in ( \evset \flushR (\etR, \addr, \val) ) \), this means their is no other read and write before, so that the value \( \val  \) associate with the address \( \addr \) remains unchanged.
+    By the definition of \( \obsstateName \) \figref{fig:thread_semantics},  we have \( \h(\addr) = \val \iff \respo(\aexec, \txidset, \addr) \).
+    Since \( \aexec \ordAEX \aexec' \), the following holds,
+    \[
+        (\etR, \addr, \val) \in \evset \implies \h(\addr) = \val \implies  \respo(\aexec, \txidset, \addr) \implies \respo(\aexec', \txidset, \addr)
+    \]
+    
+    Second, we need to prove \equref{equ:con_guarantee}, meaning the visibility relation of the new abstract execution still satisfies the consistency guarantee.
+    Similarly, we only consider those visibility relation related with the new transaction \( \tsid \).
+    Note that for any transaction \( \tsid'' \in \dom(\aexec'\projection{\tx}) \) such that \( (\tsid, \tsid'') \notin \conguar(\aexec') \), because by the function \( \newaexecName \) we have \( (\tsid'', \tsid) \in \aexec'\projection{\ar} \) and then by the definition of consistency guarantee \defref{def:consistency-models}, we have \( \conguar(\aexec') \subseteq \aexec'\projection{\ar}\).
+    So let's pick a transaction \( \tsid' \in \dom(\aexec'\projection{\tx}) \) such that \( (\tsid', \tsid) \in \conguar(\aexec') \).
+    By the \( \predn{consis}\) predicate, we have \( (\tsid', \tsid) \in \conguar(\aexec') \implies (\tsid', \tsid) \in \aexec'\projection{\vis}\).
 \end{proof}
 
 
@@ -783,8 +813,8 @@ For any runtime abstract abstract execution \( \aexecrun \) that satisfies a cer
     The only interesting case is the \rl{Commit} rule where \( \iprog = \ptrans{\trans} \), \( \iprog' = \pskip \) and \( \lb = \lbC{\txid} \).
     We prove  \rl{Commit} by deriving contradiction.
     Assume that \( \eraseAEX{\aexecrun} \in \evalCOM{\como_{2}} \) does not hold.
-    This mean there exists two transactions \( \txid' \) and \( \txid'' \) such that either \( (\txid', \txid'') \in \conguar_{2}(\eraseAEX{\aexecrun}) \land (\txid', \txid'') \notin \aexecrun\projection{\vis} \) or \( \exsts{\addr, \val} (\etW, \addr, \val) \in \aexecrun\projection{\tx} \land \val \notin \respo_{2}(\eraseAEX{\aexecrun}, \aexecrun\projection{\vis}(\tsid'), \addr) \).
-    By the rule, we have \( \aexecrun \ordAEXRUN \aexecrun'\), therefore for the such \( \txid', \txid'' \) we have \( (\txid', \txid'') \in \conguar_{2}(\eraseAEX{\aexecrun'}) \land (\txid', \txid'') \notin \aexecrun\projection{\vis} \) or \( \exsts{\addr, \val} (\etW, \addr, \val) \in \aexecrun'\projection{\tx} \land \val \notin \respo_{2}(\eraseAEX{\aexecrun'}, \aexecrun'\projection{\vis}(\tsid'), \addr) \).
+    This mean there exists two transactions \( \txid' \) and \( \txid'' \) such that either \( (\txid', \txid'') \in \conguar_{2}(\eraseAEX{\aexecrun}) \land (\txid', \txid'') \notin \aexecrun\projection{\vis} \) or \( \exsts{\addr, \val} (\etW, \addr, \val) \in \aexecrun\projection{\tx} \land \val \notin \respo_{2}(\eraseAEX{\aexecrun}, \aexecrun\projection{\vis}(\txid'), \addr) \).
+    By the rule, we have \( \aexecrun \ordAEXRUN \aexecrun'\), therefore for the such \( \txid', \txid'' \) we have \( (\txid', \txid'') \in \conguar_{2}(\eraseAEX{\aexecrun'}) \land (\txid', \txid'') \notin \aexecrun\projection{\vis} \) or \( \exsts{\addr, \val} (\etW, \addr, \val) \in \aexecrun'\projection{\tx} \land \val \notin \respo_{2}(\eraseAEX{\aexecrun'}, \aexecrun'\projection{\vis}(\txid'), \addr) \).
     This means \( \aexecrun' \notin \evalCOM{\como_{2}} \), which contradicts the assumption.
 \end{proof}
 
