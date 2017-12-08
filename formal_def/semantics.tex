@@ -3,20 +3,32 @@
 \label{def:prgram_values}
 Assume a countably infinite set of \emph{addresses}, $\addr \in \Addr$. The set of \emph{program values} is $\val \in \Val \eqdef \Nat \cup \Addr$, where $\Nat$ denotes the set of natural numbers.
 \end{defn}
-%
+ 
 \begin{defn}[Stacks]
 \label{def:stacks}
 Assume a set of \emph{transaction variables} \( \TxVars \defeq \Set{\txvar, \dots}\), the set of \emph{transaction stacks} is \( \txstk \in \TxStacks \defeq \TxVars \parfun \Val \).
 Assume a set of \emph{thread variables} \( \ThdVars \defeq \Set{\thvar, \dots}\), the set of \emph{thread stacks} is \( \thstk \in \ThdStacks \defeq \ThdVars \parfun \Val \).
 We also define the set of stacks as \( \stk \in \Stacks \eqdef \TxStacks \uplus \ThdStacks \).
 \end{defn}
-%
-Our programs (ranged over by $\prog$) are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\prog; \prog$), non-deterministic choice ($\prog+\prog$), loops ($\prog^*$) and parallel composition ($\prog \ppar \prog$). Additionally, our programming language contains the \emph{transaction} construct $\ptrans{\trans}$ denoting the \emph{atomic} execution of the transaction $\trans$. The atomicity guarantees of this execution are dictated by the underlying consistency model (snapshot isolation in this case).
-Transactions (ranged over by $\trans$) are defined by a similar inductive grammar comprising $\pskip$, non-deterministic choice, loops and sequential composition, as well as constructs for assignment, lookup and update. Transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are to be executed atomically.
+
+\begin{definition}[Heaps]
+\label{def:heaps}
+Given the sets of program values $\Val$ (\defin\ref{def:prgram_values}) and  addresses $\Addr$ (\defin\ref{def:timestamp_heaps}), the set of \emph{ heaps} is: $\h \in \Heaps \eqdef \Addr \parfinfun \Val$.
+The \emph{heap composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ heap unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
+The \emph{partial commutative monoid of  heaps} is $(\Heaps, \composeH, \{\unitH\})$.
+\end{definition}
+
+Our programs (ranged over by $\prog$) are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\prog; \prog$), non-deterministic choice ($\prog+\prog$), loops ($\prog^*$) and  parallel composition ($\prog \ppar \prog$).
+To simulate branching and conditional loop, we also have assume (\( \passume{\expr}\)) and assignment to thread variables (\( \passign{\thvar}{\expr} \)), where \( \expr \) denotes arithmetic expressions.
+Additionally, our programming language contains the \emph{transaction} construct $\ptrans{\trans}$ denoting the \emph{atomic} execution of the transaction $\trans$. 
+The atomicity guarantees the execution are dictated by the underlying consistency model.
+Transactions (ranged over by $\trans$) are defined by a similar inductive grammar comprising $\pskip$, non-deterministic choice, loops and sequential composition, as well as constructs for assignment, lookup and update. 
+Transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are to be executed atomically.
+Transactions can only assign to their own variables, namely transaction variables ranged over by \( \txvar \), but it can read from the thread and transaction stack.
 
 \begin{defn}[Programming language]
 \label{def:language}
-The set of \emph{programs}, $\prog \in \Programs$, is defined by the following grammar:
+Given the set of thread variables \( \thvar \in \ThdVars \) (\defref{def:stacks}), the set of \emph{programs}, $\prog \in \Programs$, is defined by the following grammar:
 \[
     \begin{rclarray}
     \prog & ::= &
@@ -30,12 +42,7 @@ The set of \emph{programs}, $\prog \in \Programs$, is defined by the following g
         \prog \ppar \prog 
     \end{rclarray}
 \]
-%\sx{add assume and assign here}
-%\ac{The syntax allows the expression $\passign{\thvar}{\txvar}$, which was not allowed before. Is this intentional?}
-%
-The $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar,
-%\ac{Do you assume that \TxVars and \ThdVars are disjoint?}
-%
+Given the set of thread variables \( \txvar \in \TxVars \) (\defref{def:stacks}), the $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar,
 \[
     \begin{rclarray}
         \trans & ::= &
@@ -50,7 +57,6 @@ The $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction}
         \trans\prepeat
     \end{rclarray}
 \]
-\sx{add assume and return}
 %
 where $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar below with $\val \in \Val$, $\thvar \in \ThdVars$ and \( \txvar \in \TxVars \) (\defin\ref{def:prgram_values}).
 %\ac{\defin\ref{def:program_values} only introduces the set \Val, not \TxVars nor \ThdVars.}
@@ -67,7 +73,7 @@ where $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined b
     \end{rclarray}
 \]
 %
-Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{expression evaluation} function, $\evalE[.]{.}:\Expressions \times \Stacks \parfun \Val$, is defined inductively over the structure of expressions as follows: 
+Given a thread stack \( \thstk \in \ThdStacks  \) a transaction stack \( \txstk \in \TxStacks \) and  a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{expression evaluation} function, $\evalE[(.)]{.}:\Expressions \times \Stacks \parfun \Val$, is defined inductively over the structure of expressions as follows: 
 %
 \[
     \begin{rclarray}
@@ -76,85 +82,27 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{expression 
         \evalE[\thstk \uplus \txstk]{\txvar} & \defeq & \txstk(\txvar) \\
         \evalE{\expr_{1} + \expr_{2}} & \defeq & \evalE{\expr_{1}} + \evalE{\expr_{2}} \\
         \evalE{\expr_{1} * \expr_{2}} & \defeq & \evalE{\expr_{1}} * \evalE{\expr_{2}} \\
-\\
+        \dots & \eqdef & \dots \\
     \end{rclarray}
 \]
 \end{defn}
 
-
-\begin{definition}[Heaps]\label{def:heaps}
-Given the sets of program values $\Val$ (\defin\ref{def:prgram_values}) and  addresses $\Addr$ (\defin\ref{def:timestamp_heaps}), the set of \emph{ heaps} is: $\h \in \Heaps \eqdef \Addr \parfinfun \Val$.
-The \emph{heap composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ heap unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
-The \emph{partial commutative monoid of  heaps} is $(\Heaps, \composeH, \{\unitH\})$.
-\end{definition}
-
-\sx{
- 
-\begin{defn}[Fingerprints]
-\label{def:fingerprint}
-The set of \emph{fingerprints} is $\fp \in \Fingerprint \eqdef \powerset{\Set{\fpR,\fpW}}$.
-\end{defn}
- 
-\begin{defn}[Fingerprint heaps]
-\label{def:fingerprint_heaps}
-Given the sets of program values $\Val$ (\defin\ref{def:prgram_values}), addresses $\Addr$ (\defin\ref{def:timestamp_heaps}) and fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the set of \emph{fingerprint heaps} is: $\fph \in \FPHeaps \eqdef \Addr \parfinfun (\Val \times \Fingerprint)$.
-The \emph{fingerprint heap composition function}, $\composeFPH: \FPHeaps \times \FPHeaps \parfun \FPHeaps$, is defined as $\composeFPH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{fingerprint heap unit element} is $\unitFPH \eqdef \emptyset$, denoting a function with an empty domain.
-The \emph{partial commutative monoid of fingerprint heaps} is $(\FPHeaps, \composeFPH, \{\unitFPH\})$.  
-\end{defn}
- 
-Given a fingerprint heap $\fph$ and an address $\addr$, we write $\fphVAL(\addr)$ and $\fphFP(\addr)$ for the first and second projections of $\fph(\addr)$, respectively. We write $\unitFPH$ for a fingerprint heap with an empty domain. We write $\fph_1 \uplus \fph_2$ for the standard disjoint function union of $\fph_1$ and $\fph_2$. 
-%\ac{Why not define $\fphVAL$ and $\fphFP$ directly as functions from addresses to fingerprints and values directly, respectively?}
-
-We introduce two update functions on fingerprints, $\addFPR{\fp}$ and $\addFPW{\fp}$, for updating a fingerprint $\fp$. Intuitively, the $\addFPW{\fp}$ always \emph{extends} $\fp$ with the $\fpW$ fingerprint. On the other hand, the $\addFPR{\fp}$ extends $\fp$ with $\fpR$ \emph{only if} $\fp$ does not already contain the $\fpW$ fingerprint (i.e.~$\fpW \not\in \fp$). This is to capture the fact that once an address is written to and thus the fingerprint contains $\fpW$, the following reads from the same address are considered local and need not be recorded in the fingerprint.
- 
-\begin{defn}[Fingerprint extension]
-\label{def:fingerprint-extension}
-Given the set of fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the \emph{read fingerprint extension} function, $\addFPR{(.)}{.}: \Fingerprint \rightarrow \Fingerprint$, and the \emph{write fingerprint extension} function, $\addFPW{(.)}{.}: \Fingerprint \rightarrow \Fingerprint$, are defined as follows, for all $\fp \in \Fingerprint$:
-\[
-\begin{rclarray}
-	\addFPW{\fp} & \eqdef & \fp \cup \{\fpW\} \\
-	\addFPR{\fp} & \eqdef &
-	\begin{cases}
-		\fp \cup \{\fpR\}  & \text{if } \fpW \not\in \fp \\
-		\fp & \text{otherwise}
-	\end{cases}
-\end{rclarray}	
-\]
-\end{defn}
-%\ac{Can you express heap composition, read and write extension of fingerprints under a single operator?}
-
-\begin{defn}[Read and write sets]
-\label{def:rs-ws}
-Given the set of fingerprints $\Fingerprint$ (\defin\ref{def:fingerprint}), the \emph{read set} and \emph{write set} function, $\rsName, \wsName: \FPHeaps \to \powerset{\Addr}$ is defined as follows:
-\[
-\begin{rclarray}
-    \ws{\fph} & \defeq & \myset{\loc}{ \exsts{\fp} \fph(\loc) = (\stub, \fp) \land \fpW \in \fp} \\
-    \rs{\fph} & \defeq & \myset{\loc}{ \exsts{\fp} \fph(\loc) = (\stub, \fp) \land \fpR \in \fp} \\
-\end{rclarray}	
-\]
-\end{defn}
-}
-
 \subsection{Local/Transaction Semantics}
 
-We define the operational semantics of transactions $\trans$ with respect to a configuration of the form $(\stk, \txstk, \fph)$ comprising a thread stack, a transaction stack and a (local) fingerprint heap.
-%\ac{Thread and Transaction stacks are not defined anymore, there is only one single stack which comprises thread variables and transaction variables.}
-%The operational semantics of transactions is given in \fig\ref{fig:transaction_semantics}.
-%It is standard except the \rl{TRead} and \rl{TWrite} rules where the fingerprint of the address read from (resp.~written to) is extended with $\fpR$ (resp.~$\fpW$).
-%Also, transactions are not allowed to modify the thread stack.
-
+We define the operational semantics of transactions $\trans$ with respect to a configuration of the form $(\txstk, \h, \evset)$ comprising a transaction stack, a (local) heap and a set of events that might affect other transactions.
 
 \begin{defn}[Transaction events]
 \label{def:transaction-event}
 Assume a set of transactions identifiers \( \TxID \defeq \Set{\txid, \dots}\).
-The set of transactions events \( \Events \) is as the follows,
+The set of transaction events \( \Events \) is as the follows,
 \[
 \begin{rclarray}
 \ETags & \defeq & \Set{\etR, \etW} \\
 \ev \in \evset \subseteq \Events & \defeq  & \ETags \times \Addr \times \Val
 \end{rclarray}
 \]
-Given a set of events and a read or write event, the \emph{flush read} \( \flushR \) and \emph{flush write} \(\flushW \) are defined as the follows, 
+The event tags \( \etR \) and \( \etW \) correspond to read and write respectively.
+Given a set of events and a new read or write event, the \emph{flush read} \( \flushR \) and \emph{flush write} \(\flushW \) are defined as the follows, 
 \[
 \begin{rclarray}
     \evset \flushR (\etR, \addr, \val) & \defeq & 
@@ -699,10 +647,24 @@ Given a consistency model \( (\respo, \conguar) = \como \in \Como \), the set of
     \end{rclarray}
 \]
 \end{defn}    
+ 
+\begin{lem}[Consistency models monotonicity]
+\label{lem:consistency-include}
+\label{lem:consistency-monotonicity}
+\[
+    \como_{1} \ordCOM \como_{2} \implies \evalCOM{\como_{2}} \subseteq \evalCOM{\como_{1}}
+\]
+\end{lem}
+\begin{proof}
+For any abstract execution \( \aexec \) that satisfies the stronger consistency model \( \como_{2} = (\respo_{2}, \conguar_{2}) \), we have \( \conguar_{2}(\aexec) \subseteq \aexec\projection{\vis}  \) and \( \for{\txid, \addr, \val} (\etW, \addr, \val) \in \tx(\txid) \implies \val \in \respo_{2}(\aexec, \vis(\txid), \addr) \) by the \defref{def:valid-aexec}.
+Given the hypothesis \( \como_{1} \ordAEX \como_{2} \) and the definition (\defref{def:consistency-models}), we have \( \conguar_{1}(\aexec)  \subseteq \conguar_{2}(\aexec)  \)  and \( \respo_{2}(\aexec, \aexec\projection{\vis}(\txid), \addr) \subseteq \respo_{1}(\aexec, \aexec\projection{\vis}(\txid), \addr)\), thus \( \aexec \in \evalCOM{\como_{1}}\).
+\end{proof}
+
 
 
 \begin{thm}[Soundness of the semantics]
-For any runtime abstract abstract execution \( \aexecrun \) that satisfies a certain consistency model \( \como \), and if it takes one step under consistency model \( \como \) to another state \( \aexecrun' \), the new state should also satisfy the consistency model.
+For any runtime abstract abstract execution \( \aexecrun \) that satisfies a certain consistency model \( \como \), and if it takes one step under consistency model \( \como \) to another state \( \aexecrun' \), the new state \( \aexecrun' \) should also satisfy the consistency model.
+This is,
  \[
  \begin{array}{@{}l@{}}
     \for{\como, \thid, \aexecrun, \aexecrun', \thstk, \thstk', \iprog, {\iprog}', \lb} \\
@@ -755,18 +717,6 @@ For any runtime abstract abstract execution \( \aexecrun \) that satisfies a cer
     Note that for any transaction \( \tsid'' \in \dom(\aexec'\projection{\tx}) \) such that \( (\tsid, \tsid'') \notin \conguar(\aexec') \), because by the function \( \newaexecName \) we have \( (\tsid'', \tsid) \in \aexec'\projection{\ar} \) and then by the definition of consistency guarantee \defref{def:consistency-models}, we have \( \conguar(\aexec') \subseteq \aexec'\projection{\ar}\).
     So let's pick a transaction \( \tsid' \in \dom(\aexec'\projection{\tx}) \) such that \( (\tsid', \tsid) \in \conguar(\aexec') \).
     By the \( \predn{consis}\) predicate, we have \( (\tsid', \tsid) \in \conguar(\aexec') \implies (\tsid', \tsid) \in \aexec'\projection{\vis}\).
-\end{proof}
-
-\begin{lem}[Consistency models monotonicity]
-\label{lem:consistency-include}
-\label{lem:consistency-monotonicity}
-\[
-    \como_{1} \ordCOM \como_{2} \implies \evalCOM{\como_{2}} \subseteq \evalCOM{\como_{1}}
-\]
-\end{lem}
-\begin{proof}
-For any abstract execution \( \aexec \) that satisfies the stronger consistency model \( \como_{2} \), we have \( \conguar_{2}(\aexec) \subseteq \vis  \) and \( \for{\txid, \addr, \val} (\etW, \addr, \val) \in \tx(\txid) \implies \val \in \respo_{2}(\aexec, \vis\projection{\txid}, \addr) \) by the \defref{def:valid-aexec}.
-Because \( \conguar_{1}(\aexec)  \subseteq \conguar_{2}(\aexec)  \)  and \( \respo_{2}(\aexec, \vis\projection{\txid}, \addr) \subseteq \respo_{1}(\aexec, \vis\projection{\txid}, \addr)\) by \defref{def:consistency-models}, we have \( \aexec \in \evalCOM{\como_{1}}\).
 \end{proof}
 
 \begin{lem}[Semantics monotonicity]
