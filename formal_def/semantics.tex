@@ -91,10 +91,11 @@ Given a thread stack \( \thstk \in \ThdStacks  \) a transaction stack \( \txstk 
 
 We define the operational semantics of transactions $\trans$ with respect to a configuration of the form $(\txstk, \h, \evset)$ comprising a transaction stack, a (local) heap and a set of events that might affect other transactions.
 
-\begin{defn}[Transaction events]
+\begin{defn}[Transactions and transaction events]
 \label{def:transaction-event}
+\label{def:transactions}
 Assume a set of transactions identifiers \( \TxID \defeq \Set{\txid, \dots}\).
-The set of transaction events \( \Events \) is as the follows,
+The set of transaction events \( \Events \) is defined as the follows,
 \[
 \begin{rclarray}
 \ETags & \defeq & \Set{\etR, \etW} \\
@@ -113,6 +114,8 @@ Given a set of events and a new read or write event, the \emph{flush read} \( \f
     \evset \flushW (\etW, \addr, \val) & \defeq & ( \evset \setminus \Set{(\etW, \addr, \stub)} ) \uplus \Set{(\etW, \addr, \val)} \\
 \end{rclarray}
 \]
+The flush read includes the new read event if there is no other read or write event.
+The flush write always deletes other write events from the event set and includes the new one.
 
 The transactions are defined as a finite partial function from transactions identifiers \( \TxID \) to a set of events \( \powerset{\Events} \),
 \[
@@ -123,8 +126,8 @@ The transactions are defined as a finite partial function from transactions iden
 \end{defn}
 
 
-\begin{defn}[Transaction semantics]
-Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref{def:fingerprint_heaps}) and transactions (\defin\ref{def:language}), the \emph{operational semantics of transactions}, 
+\begin{defn}[Transaction operational semantics]
+Given the sets of stacks including thread stacks \( \ThdStacks \) and transaction stacks \( \TxStacks \) (\defin\ref{def:stacks}), heaps \( \Heaps \) (\defin\ref{def:heaps}) and transactions \( \Transactions \) (\defin\ref{def:language}), the \emph{operational semantics of transactions}, 
 \[
 \begin{rclarray}
 \toL & : & \ThdStacks \times \\
@@ -132,11 +135,8 @@ Given the sets of stacks (\defin\ref{def:stacks}), fingerprint heaps (\defin\ref
 \end{rclarray}
 \], 
 is given in \fig\ref{fig:transaction_semantics}.
+Note that the evaluation of arithmetic expression \( \evalE[\thstk \uplus \txstk]{\expr} \) is defined in \defref{def:language} and the flush read \( \flushR \) and flush write \( \flushW \) operator are defined in \defref{def:transactions}.
 \end{defn}
-%\ac{What is the point of having a single stack, if you still use two different kinds of stack in the semantics?\\
-%I believe that one of two choices needs to be made: either the transaction uses two different stacks, in which case transaction and thread stacks need to be 
-%defined individually, or the semantics uses only one stack, in which case there needs to be a unique notion of stack for threads and transactions, 
-%where a distinction among thread variables and transaction variables needs to be made.}
 
 \begin{figure}[!t]
 \hrule\vspace{5pt}
@@ -223,13 +223,19 @@ is given in \fig\ref{fig:transaction_semantics}.
 
 \begin{defn}[Thread transition labels]
 \label{def:label}
-Assume a countably infinite set of thread identifiers $\thid,j \in \ThreadID$.
-The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defin\ref{def:language}), the $\txid$ demotes a transaction identifier and $\ts$ denotes a timestamp (\defin\ref{def:timestamp_heaps}):
+Assume a countably infinite set of thread identifiers $\ThreadID \defeq \Set{\thid, j, \dots} $.
+The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defref{def:language}), the $\txid$ demotes a transaction identifier and $\thstk$ denotes a thread stack (\defref{def:stacks}),
 \[
-	\iota \in \Translabel ::= \lbID \mid \lbC{\txid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\stk}
+    \begin{rclarray}
+	\iota \in \Translabel & ::= & \lbID \mid \lbC{\txid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\thstk}
+    \end{rclarray}
 \]
 \end{defn}
 
+Instead of heap, we use abstract executions to model the machine states.
+The abstract execution is a graph that each node represents a committed transaction identified by a unique transaction identifier, and the note contains the events that have global affect, \ie first reads and last writes.
+There are three types of edges in the graph, program order that is a total order for transactions from the same thread, visibility relations that decides the observable history (a set of transactions) of each transaction, and arbitration order that decides the actual global states \cite{eventually-consistent-transactions}.
+\sx{cite Andrea?}
 
 \begin{defn}[Runtime abstract executions and abstract executions]
 \label{def:run-abs-exec}
@@ -237,8 +243,9 @@ The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by
 An runtime abstract execution is a tuple \( \aexecrun = (\tx, \setthid, \porun, \vis, \ar) \in \Aexecrun \) that satisfies the follows,
 
 \begin{itemize}
+\item The transactions \( \tx \) is a partial function from a set of transaction identifiers to their corresponding events (\defref{def:transactions}).
 
-\item the \emph{runtime threads} \( \setthid \) is a set of transaction identifiers, \ie \( \setthid \subseteq \ThreadID \).
+\item The \emph{runtime threads} \( \setthid \) is a set of transaction identifiers, \ie \( \setthid \subseteq \ThreadID \).
 
 \item 
 The \emph{arbitration order} $\ar \subseteq \dom(\tx) \times \dom(\tx)$ is a strict, total order%
@@ -252,21 +259,19 @@ It also requires \( \po \subseteq \ar\).
 \item 
 The \emph{visibility relation} $\vis \subseteq \dom(\tx) \times \dom(\tx)$ is a relation such that \( \vis \subseteq \ar \).
 \end{itemize}
-
-The, the set of abstract executions $\aexec  = (\tx, \po, \vis, \ar) \in \Aexecs$ is by erasing the runtime threads from the runtime abstract executions \( \Aexecrun \),
+The set of abstract executions $\aexec  = (\tx, \po, \vis, \ar) \in \Aexecs$ is by erasing the runtime threads from the runtime abstract executions \( \Aexecrun \),
 \[
 \begin{rclarray}
     \Aexecs & \defeq & \Setcon{\eraseAEX{\aexecrun}}{\aexecrun \in \Aexecrun} \\
-\end{rclarray}
+\end{rclarray} 
 \]
-where the function that convert runtime abstract executions to abstract executions, \( \eraseAEX{.}: \Aexecrun \to \Aexecs \), is defined as the follows, 
+where the function  \( \eraseAEX{.}: \Aexecrun \to \Aexecs \) converts a runtime abstract execution to an abstract execution by erasing all the thread identifiers,
 \[
     \begin{rclarray}
         \eraseAEX{(\tx, \setthid, \hat{\po}, \vis, \ar)} & \defeq & (\tx, \hat{\po} \setminus \Setcon{(\txid, \thid)}{ \txid \in \dom(\tx) \land \thid \in \setthid}, \vis, \ar)
     \end{rclarray}
 \]
-
-Given two runtime abstract executions, the order between then is defined as the follows,
+Given two runtime abstract executions \( \aexecrun_{1} \) and \( \aexecrun_{2} \), the order between them is defined as point-wise set inclusion,
 \[
 \begin{rclarray}
 \aexecrun_{1} \ordAEXRUN \aexecrun_{2} & \iffdef & 
@@ -279,7 +284,7 @@ Given two runtime abstract executions, the order between then is defined as the 
     \end{array}
 \end{rclarray}
 \]
-Similarly, the order between abstract executions is defined as the follows,
+Then by erasing the runtime, the order between two abstract executions is defined as the follows,
 \[
 \begin{rclarray}
 \aexec_{1} \ordAEX \aexec_{2} & \iffdef & 
@@ -289,9 +294,9 @@ Similarly, the order between abstract executions is defined as the follows,
 \end{rclarray}
 \]
 \end{defn}
-%\ac{Non-sequitur: first you introduce a semantic object (abstract executions), then you switch to an argument about syntax (transition labels), then you get 
-%back at semantic definitions (run-time abstract executions).}
-%\ac{An abstract execution is a run-time abstract execution where $\setthid = \emptyset$; you can just say that and get rid of \defin\ref{def:abs-exec}.}
+
+
+
 
 \begin{defn}[Consistency Models]
 \label{def:consistency-models}
@@ -302,7 +307,7 @@ A \emph{resolution policy} \( \respo \) is a function,
     \respo \in \ResPos : \Aexecs \times \powerset{\TxID} \times \Addr \to \powerset{\Val}
 \end{rclarray}
 \]
-which decides the observable values given the set of visible transactions.
+which decides the observable values given all the history, meaning a abstract execution \( \aexecrun \), the set of visible transactions \( \txidset\) and an address \( \addr \).
 A \emph{consistency guarantee} \( \conguar \) is a function such that,
 \[ 
 \begin{rclarray}
