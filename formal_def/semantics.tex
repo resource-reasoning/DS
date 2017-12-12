@@ -218,48 +218,30 @@ Note that the evaluation of arithmetic expression \( \evalE[\thstk \uplus \txstk
 \label{fig:transaction_semantics}
 \end{figure}
 
-
-
-
-\begin{defn}[Thread transition labels]
-\label{def:label}
-Assume a countably infinite set of thread identifiers $\ThreadID \defeq \Set{\thid, j, \dots} $.
-The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defref{def:language}), the $\txid$ demotes a transaction identifier and $\thstk$ denotes a thread stack (\defref{def:stacks}),
-\[
-    \begin{rclarray}
-	\iota \in \Translabel & ::= & \lbID \mid \lbC{\txid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\thstk}
-    \end{rclarray}
-\]
-\end{defn}
-
 Instead of heap, we use abstract executions to model the machine states.
 The abstract execution is a graph that each node represents a committed transaction identified by a unique transaction identifier, and the note contains the events that have global affect, \ie first reads and last writes.
-There are three types of edges in the graph, program order that is a total order for transactions from the same thread, visibility relations that decides the observable history (a set of transactions) of each transaction, and arbitration order that decides the actual global states \cite{eventually-consistent-transactions}.
-\sx{cite Andrea?}
+There are three types of edges in the graph, program order that is a total order for transactions from the same thread, visibility relations that decides the observable history (a set of transactions) of each transaction, and arbitration order that decides the actual global states \cite{eventually-consistent-transactions,Burckhardt:2014:RDT:2535838.2535848,cerone_et_al:LIPIcs:2015:5375}.
 
 \begin{defn}[Runtime abstract executions and abstract executions]
 \label{def:run-abs-exec}
 \label{def:abs-exec}
 An runtime abstract execution is a tuple \( \aexecrun = (\tx, \setthid, \porun, \vis, \ar) \in \Aexecrun \) that satisfies the follows,
-
 \begin{itemize}
-\item The transactions \( \tx \) is a partial function from a set of transaction identifiers to their corresponding events (\defref{def:transactions}).
-
-\item The \emph{runtime threads} \( \setthid \) is a set of transaction identifiers, \ie \( \setthid \subseteq \ThreadID \).
-
+\item
+The transactions \( \tx \) is a partial function from a set of transaction identifiers to their corresponding events (\defref{def:transactions}).
+\item 
+The \emph{runtime threads} \( \setthid \) is a set of transaction identifiers, \ie \( \setthid \subseteq \ThreadID \).
 \item 
 The \emph{arbitration order} $\ar \subseteq \dom(\tx) \times \dom(\tx)$ is a strict, total order%
 \footnote{Recall that a relation $R \subseteq A \times A$ is a strict partial order if it is irreflexive and transitive.
 It is a strict total order if for any $a_1, a_2 \in A$, either $a_1 = a_2$, $(a_1, a_2) \in R$ or $(a_2, a_1) \in R$.}.
-\item
-the \emph{runtime program order} $\porun \subseteq \dom(\tx) \times ( \dom(\tx) \uplus \setthid )$ is the union of disjoint, strict total orders \( \porun_{i} \).
+\item 
+The \emph{runtime program order} $\porun \subseteq \dom(\tx) \times ( \dom(\tx) \uplus \setthid )$ is the union of disjoint, strict total orders \( \porun_{i} \).
 That is, there exists a partition $\Set{ \dom(\tx)_{i} }_{i \in I}$ of $\dom(\tx)$ such that $\porun = \bigcup_{i \in I} \porun_{i}$, where $\porun_{i}$ is a strict, total order.
 It also requires \( \po \subseteq \ar\).
-
 \item 
 The \emph{visibility relation} $\vis \subseteq \dom(\tx) \times \dom(\tx)$ is a relation such that \( \vis \subseteq \ar \).
-\end{itemize}
-The set of abstract executions $\aexec  = (\tx, \po, \vis, \ar) \in \Aexecs$ is by erasing the runtime threads from the runtime abstract executions \( \Aexecrun \),
+\end{itemize} The set of abstract executions $\aexec  = (\tx, \po, \vis, \ar) \in \Aexecs$ is by erasing the runtime threads from the runtime abstract executions \( \Aexecrun \),
 \[
 \begin{rclarray}
     \Aexecs & \defeq & \Setcon{\eraseAEX{\aexecrun}}{\aexecrun \in \Aexecrun} \\
@@ -295,7 +277,11 @@ Then by erasing the runtime, the order between two abstract executions is define
 \]
 \end{defn}
 
-
+We parametrise the consistency models in our semantics.
+A consistency model contains two parts, a resolution policy and a consistency guarantee.
+Given a abstract execution \( \aexec \), a set of observable transactions \( \txidset \) and an address \( \addr \), the resolution policy \( \respo(\aexec, \txidset, \addr) \) decides the observable values for the address \( \addr \).
+A common resolution policy is \emph{last-write-win} that if a transaction observes several writes for the same address, it always reads the last write (by the arbitration order).
+The consistency guarantee gives the minimum constraint for the visibility relation.
 
 
 \begin{defn}[Consistency Models]
@@ -304,10 +290,15 @@ Then by erasing the runtime, the order between two abstract executions is define
 A \emph{resolution policy} \( \respo \) is a function,
 \[
 \begin{rclarray}
-    \respo \in \ResPos : \Aexecs \times \powerset{\TxID} \times \Addr \to \powerset{\Val}
+    \ResPos & \defeq & 
+    \Setcon{%
+        \respo
+     }{%
+        \respo \in \Aexecs \times \powerset{\TxID} \times \Addr \to \powerset{\Val}\\
+        \quad {} \land \for{\aexec, \txidset, \addr } \respo(\aexec, \txidset, \addr)\isdef \implies \txidset \subseteq \dom(\aexec\projection{\tx})
+    }
 \end{rclarray}
 \]
-which decides the observable values given all the history, meaning a abstract execution \( \aexecrun \), the set of visible transactions \( \txidset\) and an address \( \addr \).
 A \emph{consistency guarantee} \( \conguar \) is a function such that,
 \[ 
 \begin{rclarray}
@@ -316,7 +307,7 @@ A \emph{consistency guarantee} \( \conguar \) is a function such that,
         \conguar
     }{%
         \conguar \in \Aexecs \to \powerset{\TransID \times \TransID}
-        \land \for{\aexec \in \Aexecs} \\
+        \land \for{\aexec} \\
         \quad \conguar(\aexec) \subseteq \aexec\projection{\ar}
         \land \for{\txid, \txid'} (\txid, \txid') \in \conguar(\aexec) 
         \land \txid,\txid'  \in \dom(\aexec\projection{\tx})
@@ -334,7 +325,7 @@ The order \( \ordCOM \)  between two consistency model \( \como_{1}, \como_{2} \
     \end{array} \\
 \end{rclarray}
 \]
-Then, the bottom element is \( \btmCOM \defeq (\lambda (\aexecrun, \txidset, \addr ) \ldotp \Val, \lambda (\po, \vis, \ar ) \ldotp \emptyset) \).
+The bottom element is \( \btmCOM \defeq (\lambda (\aexec, \txidset, \addr ) \ldotp \Val, \lambda (\aexec) \ldotp \emptyset) \).
 \end{defn}
 
 \begin{example}[Last write win]
@@ -390,6 +381,18 @@ Given two sets of relations \( A \) and \( B \), the notation \( A ; B \) denote
 \]
 \end{example}
 
+\begin{defn}[Thread transition labels]
+\label{def:label}
+Assume a countably infinite set of thread identifiers $\ThreadID \defeq \Set{\thid, j, \dots} $.
+The set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defref{def:language}), the $\txid$ demotes a transaction identifier and $\thstk$ denotes a thread stack (\defref{def:stacks}),
+\[
+    \begin{rclarray}
+	\iota \in \Translabel & ::= & \lbID \mid \lbC{\txid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\thstk}
+    \end{rclarray}
+\]
+\end{defn}
+
+
 \begin{defn}[Thread semantics]
 \label{def:thread_semantics}
 Given the thread identifiers $\thid,j \in \ThreadID$.
@@ -417,18 +420,24 @@ Given the set of thread stacks \( \stk \in \Stacks (\defref{def:stacks}) \) and 
 is defined in \fig\ref{fig:thread_semantics}.
 \end{defn}
 
-The \rl{PCommit} rule states that a transaction prophesies a starting timestamp $\ts_s$ (at which point it takes a snapshot $\fph_s$ and runs locally), and an ending timestamp $\ts_e$ (at which point the transaction is successfully committed as ensured by the $\cancommitName$ predicate).
+The \rl{PCommit} rule ``substitute'' the dummy node for the thread \( \thid \) in the runtime abstract execution \( \aexecrun \) with a newly concrete transaction \( \txid \) with its associated events \( \evset \).
+To obtain the set of events \( \evset \), it prophesies a set of observable transactions \( \txidset \), which will turn into visibility relations later.
+Given the observable transactions, the \( \obsstateName \) function computes a possible initial heap, by applying the resolution policy \( \respo \) for each address
+Note that if the resolution policy returns more than one value, it will non-deterministically pick a value for each address to form the initial heap.
+With the initial heap \( \h \) and the transaction code \( \trans \), by the transaction semantics (\figref{fig:transaction_semantics}), we get the events set \( \evset \).
+To extend the runtime abstract execution, it replaces the dummy node \( \thid \) with the new transaction \( \txid \), links all the observable transactions \( \txidset \) to the new transition, and puts the new transaction at the end of arbitration order.
+It also alters the program order by adding back the dummy node \( \thid \) after the transition \( \txid \) for preserving program order for the future transactions from the same thread.
 
-The \rl{Par} rule forks a new thread and inserts the appropriate joining point by appending the auxiliary \( \pwait{\thid} \) operation, where $\thid$ denotes the identifier of the newly forked thread. 
-The \rl{Wait} rule dually awaits the termination of thread $\thid$ and subsequently updates its timestamp to the maximum value between its own timestamp and that of $\thid$.
-Note that these two rules are labelled with the $\lbF{\thid, \prog}$ and $\lbJ{\thid, \ts}$ which are used by the semantics of the thread pool described shortly.
+The \rl{Par} rule forks a new thread and inserts the appropriate joining point by appending the auxiliary \( \pwait{\thid'} \) operation, where $\thid'$ denotes the identifier of the newly forked thread.
+The \rl{Wait} rule dually awaits the termination of thread $\thid'$ and subsequently updates its thread stack.
+Note that these two rules are labelled with the $\lbF{\thid, \prog}$ and $\lbJ{\thid, \thstk}$ which are used by the semantics of the thread pool described shortly.
 
 \begin{figure}
 %
 \hrule
 %
 \[
-    \infer[\rl{Commit}]{%
+    \infer[\rl{PCommit}]{%
         (\respo, \conguar), \thid \vdash ( \thstk, \aexecrun ), \ptrans{\trans} \ \toT{\lbC{\txid}} \ ( \thstk\rmto{\ret}{\txstk(\ret)}, \aexecrun' ) , \pskip
     }{%
         \begin{array}{c}
@@ -509,6 +518,8 @@ Note that these two rules are labelled with the $\lbF{\thid, \prog}$ and $\lbJ{\
         && \aexecrun = \func{erase\_thread}{\aexecrun', \thid'}
     }
 \]
+
+\sx{The stack could be polluted by the child thread. }
  
 where,
 \[
@@ -521,7 +532,7 @@ where,
     %\end{cases} \\
 %
 %
-    \consis{\aexecrun, \txid, \thid, \conguar} & \defeq & 
+    \consis{\aexecrun, \thid, \txid, \conguar} & \defeq & 
     \begin{array}[t]{@{}l@{}}
         \thid \in \aexecrun\projection{\setthid} \land  \for{ \txid' } ( (\txid', \txid) \in \conguar(\eraseAEX{\aexecrun}) \implies (\txid, \txid) \in \aexecrun\projection{\vis} ) \\
     \end{array} \\
@@ -530,7 +541,7 @@ where,
         \Aexecrun \times \ThreadID \times \TxID \times \\
         \quad  \powerset{\Events} \times \powerset{\TxID} \times \ConGuar \end{array} \right)
         \parfun \Aexecrun \\
-    \newaexec{\aexecrun, \thid, \evset, \txid, \txidset, \conguar } & \defeq & 
+    \newaexec{\aexecrun, \thid, \txid, \evset, \txidset, \conguar } & \defeq & 
     \begin{cases}
         \aexecrun' & \consis{\aexecrun', \thid, \txid, \conguar} \\
         \text{undefined} & \text{otherwise} \\
