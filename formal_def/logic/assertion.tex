@@ -26,31 +26,55 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}) and a logical environm
 \]
 \end{definition}
 
-Note the domain of the stack \( \stk \) includes transaction variables and thread variables.
+Note the stack \( \stk \) includes transaction variables and thread variables.
 
-\begin{definition}[Local assertions]
-\label{def:local_assertions}
-Given the set of logical expressions \( \LExpr \) and logical variables \( \LVar \) (\defin\ref{def:logical-expr}), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined inductively by the following grammar, 
+\begin{defn}[Fingerprint Assertions]
+\label{def:fingerprint}
+The \emph{Fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
 \[
 \begin{rclarray}
-	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \Emp \mid \lexpr \pt \lexpr \mid \lpre \sep \lpost  \\
-\end{rclarray}	 
-\]
-Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \parfun \Heaps$, is defined over the structure of local assertions as follows,
+    \fp & \subseteq & \Setcon{ (\etag,\lexpr_{1},\lexpr_{2}) }{ \etag \in \ETags \land \lexpr_{1}, \lexpr_{2} \in \LExpr } \\
+\end{rclarray}
+\] 
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint interpretation} function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \powerset{\Events}$, is defined as follows,
 \sx{there is variable clash for event tags and logical expression, leave it for now}
 \[
 \begin{rclarray}
-	\evalLS{\assfalse} & \eqdef & \emptyset   \\
-	\evalLS{\asstrue} & \defeq & \Heaps   \\
+    \evalF{\fp} & \defeq & \Setcon{ (\etag, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}}) }{ (\etag, \lexpr_{1}, \lexpr_{2}) \in \fp }  \\
+\end{rclarray}
+\]
+\end{defn}
+
+\begin{definition}[Local assertions]
+\label{def:local_assertions}
+Given the set of logical expressions \( \LExpr \), logical variables \( \LVar \) and fingerprint assertion \( \FAst \), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined inductively by the following grammar, 
+\[
+\begin{rclarray}
+	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \Emp \mid \lexpr \pt \lexpr \mid \fp \mid \lpre \sep \lpost  \\
+\end{rclarray}	 
+\]
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \parfun \Heaps \times \powerset{ \Events } $, is defined over the structure of local assertions as follows,
+\[
+\begin{rclarray}
+	\evalLS{\assfalse} & \eqdef & \emptyset \\
+	\evalLS{\asstrue} & \defeq & \Heaps \times \powerset{ \Events } \\
 	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
 	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
 	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
-	\evalLS{\assemp} & \defeq & \Set{\unitH}  \\
-	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ \evalLE{\lexpr_1} \pt \evalLE{\lexpr_2} } \\
+	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \emptyset) }  \\
+	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \emptyset) } \\
+	\evalLS{ \fp } & \defeq & \Set{ (\unitH, \evalF{\fp}) } \\
 	\evalLS{\lpre \sep \lpost} & \defeq & 
-    \Setcon{ \h_1 \composeH \h_2 }{ \h_{1} \in \evalLS{\lpre} \land \h_{2} \in \evalLS{\lpost} } 
+    \Setcon{
+        (\h_1 \composeH \h_2, \evset_{1} \uplus \evset_{2})
+    }{ 
+        (\h_{1},\evset_{1}) \in \evalLS{\lpre} 
+        \land (\h_{2}, \evset_{2} ) \in \evalLS{\lpost} 
+        \land (\evset_{1} = \emptyset \lor \evset_{2} = \emptyset) 
+    } 
 \end{rclarray}
 \]
+    \sx{fingerprint cannot be split}
 \end{definition}
 
 Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contained in logical expressions $\LExpr$ (\defin\ref{def:local_assertions} above). That is, $\Expr \subset \LExpr$. 
@@ -93,20 +117,6 @@ Given the set of transaction events \( \Events \) (\defref{def:transaction-event
 \]
 \end{defn}
 
-\begin{defn}[Fingerprint Assertions]
-The \emph{Fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
-\[
-\begin{rclarray}
-    \fp & \subseteq & \Setcon{ (\etag,\lexpr_{1},\lexpr_{2}) }{ \etag \in \ETags \land \lexpr_{1}, \lexpr_{2} \in \LExpr } \\
-\end{rclarray}
-\] 
-Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint interpretation} function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \powerset{\Events}$, is defined as follows,
-\[
-\begin{rclarray}
-    \evalF{\fp} & \defeq & \Setcon{ (\etag, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}}) }{ (\etag, \lexpr_{1}, \lexpr_{2}) \in \fp }  \\
-\end{rclarray}
-\]
-\end{defn}
 
 \begin{definition}[Actions]
 \label{def:action}
@@ -118,7 +128,9 @@ Given the set of heaps \( \Heaps \) (\defref{def:heaps}) and transaction events 
 	\Setcon{
 		((\h,\evset), (h',\evset'))
 	}{
-		(\h, \h') \in \Heaps \land \orth{\h} = \orth{\h'}
+		\h, \h' \in \Heaps 
+        \land \orth{\h} = \orth{\h'}
+        \land \evset, \evset' \subseteq \Events
 	}
     \end{rclarray}
 \] 
@@ -131,32 +143,40 @@ where, the \emph{orthogonal} \(\orth{(.)} \) is defined as follows, for all doma
 Given the set of capabilities $\Caps$ (\defin\ref{def:capabilities}), the set of \emph{interference environments} is $\inter \in \Interference \defeq \Caps \parfun \powerset{\Actions}$.
 \end{definition}
 
+\sx{here the semantics require that the pre and post conditions should have proper fingerprint assertions involved }
 \begin{defn}[Interference]
 \label{def:intf}
 The set of \emph{interference assertions}, \( \intass \in \IAst \), are defined by the following grammar:
 \[
 \begin{rclarray}
 	\intass & \eqdef  &
-	\emptyset \mid \Set{ \perm{\kap} : \exsts{\vec{\lvar}} (\lpre \mid \fp_{p}) \transfersto (\lpost | \fp_{q} ) } \cup \intass 
+	\emptyset \mid \Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass 
 \end{rclarray}
 \]
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \parfun \Interference$, is defined as follows, for all $\kap \in \Caps$:
 %
-\sx{ at some place it should have semantics check for the well-form }
 \[
 \begin{rclarray}
 	\evalI{\emptyset}(\kap) & \eqdef & \emptyset \\
-	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} (\lpre \mid \fp_{p}) \transfersto (\lpost \mid \fp_{q} ) } \cup \intass }(\kap) & \eqdef &
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass }(\kap) & \eqdef &
 	\Setcon{
 		((\h_\lpre,\evset_{\lpre}), (\h_\lpost,\evset_{\lpost}))	 
     }{
-		((\h_\lpre,\evset_{\lpre}), (\h_\lpost,\evset_{\lpost})) \in \Actions \\
-        \quad \land \exsts{\rid, \vec{v}, \lenv'} \land \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} \land {} \\
-		\quad \h_\lpre \in \evalLS[\lenv', \stk]{\lpre} \land \h_\lpost \in \evalLS[\lenv', \stk]{\lpost} \\
-		\quad \evset_\lpre \in \evalF[\lenv', \stk]{\fp_{p}} \land \evset_\lpost \in \evalF[\lenv', \stk]{\fp_{q}}
+        \dagger 
 	}
 	\cup 
-	\evalI{\intass}(\kap)
+	\evalI{\intass}(\kap) \\
+    \dagger & \equiv & 
+    \begin{array}[t]{l}
+		((\h_\lpre,\evset_{\lpre}), (\h_\lpost,\evset_{\lpost})) \in \Actions
+        \land \exsts{\rid, \vec{v}, \lenv'} \\
+        \quad \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} 
+		\land (\h_{\lpre}, \evset_{\lpre}) \in \evalLS[\lenv', \stk]{\lpre} 
+        \land (\h_{\lpost}, \evset_{\lpost}) \in \evalLS[\lenv', \stk]{\lpost}  \\
+        \quad {} \land \for{\addr,\val}  
+        (\etR, \addr, \val) \in \evset \implies \h_{p}(\addr)  = \val \\
+        \qquad {} \land (\etW, \addr, \val) \in \evset \implies \h_{q}(\addr)  = \val
+    \end{array}
 \end{rclarray}
 \] 
 \end{defn}
@@ -179,7 +199,17 @@ Combining the above with capabilities (\defref{def:capabilities}), the set of \e
 %
 \[
 \begin{rclarray}
-	\world \in \World  & \eqdef & \Caps \times \SStates
+	\world \in \World  & \eqdef & 
+    \Setcon{
+        (\ca, \gs) 
+    }{ 
+        \ca \in \Caps 
+        \land \gs \in \SStates 
+        \land \for{\rid, \rid', \h, \h'} \\
+        \quad \h = \gs(\rid)\projection{1}
+        \land \h' = \gs(\rid')\projection{1}
+        \land \dom(\h) \cap \dom(\h') = \emptyset
+    }
 \end{rclarray}
 \]
 % 
@@ -188,6 +218,7 @@ The \emph{world unit set} is $\unitW \eqdef \Setcon{(\ca, \gs)}{(\ca, \gs) \in \
 The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
 \end{definition}
  
+\sx{Take a short cut of the grammar but the interpretation disallows fingerprint inside the box}
 \begin{definition}[Assertions]
 \label{def:assertion}
 Given the local assertion \( \lpre \in \LAst \) (\defref{def:local_assertions}), The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
@@ -221,19 +252,61 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
         (\ca,\gs)
     }{
         \ca \in \unitC 
-        \land \gs(\lrid)\projection{1} \in \evalLS{\lpre}
+        \land (\gs(\lrid)\projection{1}, \emptyset) \in \evalLS{\lpre}
         \land \gs(\lrid)\projection{2}  = \evalI{\intass}
     } \\
 \end{rclarray}
 \]
 \end{definition}
 
-\begin{defn}[Heap-to-Execution]
-\label{def:heap2aexec}
-Given a consistency model \( \como \) (\defref{def:consistency-models}), a bijective function from heaps to sets of abstract executions, \( \funcn{h2e} : \ConsisModels \to \Heaps \to \powerset{\Aexecs}\) is defined as the follows,       
+\begin{defn}[Invariant of a region]
+Assuming a region \( \rid \) has initial abstract executions, provided by the function \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \),  the invariant of a region is a set of abstract executions that is closed under the interference \( \intf \).
+This is defined as the follows,
 \[
-    \begin{rclarray}
-        \func{h2e_{\como}}{\h} & \defeq & \Setcon{\aexec}{\exsts{\respo}\como = (\stub, \respo) \land \obsstate{\aexec,\aexec\prjT,\respo}}
-    \end{rclarray}
+\begin{rclarray}
+    \func{inv}{\rid, \intf, \como} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \como, \nat} 
+\end{rclarray}
+\]
+where,
+\[
+\begin{rclarray}
+    \func{iter}{\rid, \intf, \como, 0} & \defeq & \func{init}{\rid}  \\
+    \func{iter}{\rid, \intf, \como, \nat} & \defeq & 
+    \Setcon{ 
+        \aexec 
+    }{ 
+        \for{ \aexec' \in \func{iter}{\rid,\intf, \nat - 1} } 
+        \aexec \in \func{apply}{\aexec', \evset, \como}
+        \land \exsts{\kap, \h, \h',\evset}  \\
+        \quad ((\h,\emptyset)(\h',\evset)) \in \intf( \kap )
+    }  \\
+    \func{apply}{\aexec, \evset, \como} & \defeq & 
+    \Setcon{ 
+        \aexec' 
+    }{
+        \exsts{\vis, \po, \ar, \txid, \evset} 
+        \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
+        {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} 
+        \land \aexec' \in \evalCOM{\como}
+    } \\
+\end{rclarray}
 \]
 \end{defn}
+
+\begin{defn}[State-to-execution]
+\label{def:world2aexec}
+\label{def:state2aexec}
+Given a consistency model \( \como \), a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf\), the function \(\funcn{s2e} \) returns all the possible abstract executions,
+\[
+\begin{rclarray}
+    \func{s2e}{\rid, \h, \intf, \como} & \eqdef & \func{inv}{\rid, \intf, \como} \cap \func{h2e}{\h, \como} \\
+\end{rclarray}
+\]
+where the \( \funcn{h2e} \) returns all the possible abstract executions where the final state satisfies the heap \( \h \), 
+\[
+\begin{rclarray}
+    \func{h2e}{\h, \como} & \defeq & \Setcon{\aexec}{\exsts{\respo}\como = (\stub, \respo) \land \obsstate{\aexec,\aexec\prjT,\respo}}
+\end{rclarray}
+\]
+\end{defn}
+
