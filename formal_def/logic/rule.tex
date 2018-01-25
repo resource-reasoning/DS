@@ -8,13 +8,13 @@ This is because once a location has been re-written, the rest read are considere
 \hrule\vspace{5pt}
 \[
     \infer[\rl{TRSkip}]{%
-        \tripleL{\assemp}{ \pskip }{\assemp}
+        \tripleL{\assemp \mid \fp }{ \pskip }{\assemp \mid \fp }
     }{}
 \]
 
 \[
     \infer[\rl{TRAss}]{%
-        \tripleL{\txvar \dot= \lexpr}{ \pass{\txvar}{\expr} }{\txvar \dot= \expr\sub{\txvar}{\lexpr} }
+        \tripleL{\txvar \dot= \lexpr \mid \fp }{ \pass{\txvar}{\expr} }{\txvar \dot= \expr\sub{\txvar}{\lexpr} \mid \fp\sub{\txvar}{\lexpr} }
     }{%
         \txvar \notin \func{fv}{\lexpr} 
         && \txvar \in \TxVars  
@@ -23,51 +23,55 @@ This is because once a location has been re-written, the rest read are considere
 
 \[
     \infer[\rl{TRDeref}]{%
-        \tripleL{\expr \pt \lexpr}{ \pderef{\txvar}{\expr} }{\txvar \dot= \lexpr \sep \expr \pt \lexpr }
+        \tripleL{\expr \pt \lexpr \mid \fp }{ \pderef{\txvar}{\expr} }{\txvar \dot= \lexpr \sep \expr \pt \lexpr \mid \fp' }
     }{%
         \var \notin \func{fv}{\expr}
         && \var \notin \func{fv}{\lexpr}  
         && \txvar \in \TxVars  
+        && \fp' = \fp \flushR (\etR, \expr, \lexpr)
     }
 \]
 
 \[
     \infer[\rl{TRMutate}]{%
-        \tripleL{\expr_1 \pt \stub }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \pt \expr_2} 
-    }{}
+        \tripleL{\expr_1 \pt \stub \mid \fp }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \pt \expr_2 \mid \fp' } 
+    }{
+        \fp' = \fp \flushW (\etW, \expr_{1}, \expr_{2})
+    }
 \]
 
 \[
     \infer[\rl{TRChoice}]{%
-        \tripleL{ \lpre }{ \trans_{1} \pchoice \trans_{2} }{ \lpost }
+        \tripleL{ \lpre \mid \fp }{ \trans_{1} \pchoice \trans_{2} }{ \lpost \mid \fp' }
     }{%
-        \tripleL{ \lpre }{ \trans_{1} }{ \lpost } && 
-        \tripleL{ \lpre }{ \trans_{2} }{ \lpost } 
+        \tripleL{ \lpre \mid \fp }{ \trans_{1} }{ \lpost \mid \fp' } && 
+        \tripleL{ \lpre \mid \fp }{ \trans_{2} }{ \lpost \mid \fp' } 
     }
 \]
 
 \[
     \infer[\rl{TRSeq}]{%
-        \tripleL{ \lpre }{ \trans_{1} \pseq \trans_{2} }{ \lpost }
+        \tripleL{ \lpre \mid \fp }{ \trans_{1} \pseq \trans_{2} }{ \lpost \mid \fp' }
     }{%
-        \tripleL{ \lpre }{ \trans_{1} }{ \lframe }  && 
-        \tripleL{ \lframe }{ \trans_{1} }{ \lpost }
+        \tripleL{ \lpre \mid \fp }{ \trans_{1} }{ \lframe \mid \fp'' }  && 
+        \tripleL{ \lframe \mid \fp'' }{ \trans_{1} }{ \lpost \mid \fp' }
     }
 \]
 
+\sx{here we assume the fingerprint \( \fp\) can be parametrised by the assertion \( \lpre \)}
 \[
     \infer[\rl{TRLoop}]{%
-        \tripleL{ \lpre }{ \trans\prepeat }{ \lpre }
+        \tripleL{ \lpre \mid \fp }{ \trans\prepeat }{ \lpre \mid \fp }
     }{%
-        \tripleL{ \lpre }{ \trans }{ \lpre } 
+        \tripleL{ \lpre \mid \fp }{ \trans }{ \lpre \mid \fp } 
     }
 \]
  
 \[
    \infer[\rl{TRFrame}]{%
-       \tripleL{ \lpre \sep \lframe }{ \trans }{ \lpost \sep \lframe }
+       \tripleL{ \lpre \sep \lframe \mid \fp }{ \trans }{ \lpost \sep \lframe \mid \fp }
    }{%
-       \tripleL{ \lpre }{ \trans }{ \lpost } 
+       \tripleL{ \lpre \mid \fp }{ \trans }{ \lpost \mid \fp } 
    }
 \]
 \hrule\vspace{5pt}
@@ -75,163 +79,82 @@ This is because once a location has been re-written, the rest read are considere
 \label{fig:rule-trans}
  \end{figure}
 
-\subsection{Merge}
-
-\begin{defn}[Fingerprint heaps merge]
-\label{def:merge-finger-heap}
-The \emph{merge of fingerprint heaps}, \( \mergeFPH{.}{.} \), is defined as follows:
-\[
-    \begin{rclarray}
-        \mergeFPH{\fph_{l}}{\fph_{r}}  & \defeq & \lambda \addr \ldotp 
-            \begin{cases}
-                \fph_{l}(\addr) & a \in \dom(\fph_{l}) \setminus \dom(\fph_{r})  \\
-                \fph_{r}(\addr) & a \in \dom(\fph_{r}) \setminus \dom(\fph_{l}) \\
-                \mergeVAL{\fph_{l}(\addr)}{\fph_{r}(\addr)}  & a \in \dom(\fph_{l}) \cap \dom(\fph_{r}) \\
-            \end{cases}
-    \end{rclarray}
-\]
-where the \emph{merge of fingerprint heap values} is defined:
-\[ \begin{rclarray}
-        \mergeVAL{(\val_{l}, \fp_{l})}{(\val_{r}, \fp_{r})} & \defeq &
-            \begin{cases}
-                (\val_{l}, \fp_{l} \cup \fp_{r} ) & \val_{l} = \val_{r} \land \fpW \notin \fp_{l} \cup \fp_{r} \\
-                (\val_{l}, \fp_{l} \cup \fp_{r} ) & \fpW \in \fp_{l} \land \fpW \notin \fp_{r} \\
-                (\val_{r}, \fp_{l} \cup \fp_{r} ) & \fpW \notin \fp_{l} \land \fpW \in \fp_{r} \\
-            \end{cases}
-    \end{rclarray}
-\]
-\end{defn}
-
-\begin{definition}[Fingerprint worlds]
-\label{def:fingerprint_worlds}
-Given the set of fingerprint heap $\FPHeaps$ (\defref{def:fingerprint_heaps}) and the set of region identifiers $\RegionID$ (\defin\ref{def:capabilities}), the set of \emph{fingerprint worlds}, $\fpw \in \FPWorlds$, is defined as follows:
-\[
-\begin{rclarray}
-	(\ca, \fph) \in \FPWorlds  & \eqdef & \Caps \times \FPHeaps
-\end{rclarray}
-\]
-with the composition function \( \composeFPW \eqdef (\composeC, \composeEq) \) and unit \( \unitFPW  \defeq \Setcon{(\ca, \emptyset)}{\ca \in \unitC }\).
-The \emph{erase function}, $\eraseFW{.}: \FPWorlds \rightarrow \World$, is defined as follows:
-\[
-\begin{rclarray}
-	\eraseFW{(\ca, \fph)} & \eqdef & (\ca, \eraseFPH{\fph})
-\end{rclarray}
-\]
-where,
-\[
-\begin{rclarray}
-	\eraseFPH{\fph} & \defeq & \lambda \addr \ldotp \fphVAL(\addr)
-\end{rclarray}
-\]
-The \( \predn{no\_fingerprint} \) is defined as the follows:
-\[
-\begin{rclarray}
-    \pred{no\_fingerprint}{ \ca, \fph } & \defeq & \for{ \addr } \fphFP(\addr) = \emptyset
-\end{rclarray}
-\]
-\end{definition}
-
-\begin{definition}[Fingerprint worlds merge]
-Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{merge} function, $\mergeName[\fpw]: \FPWorlds \times \FPWorlds \parfun \FPWorlds$, is defined as follows, for all $\fpw_{l},\fpw_{r} \in \FPWorlds$:
-\[
-    \begin{rclarray}
-	\mergeFW{(\ca, \fph_{l})}{(\stub, \fph_{r})} & \eqdef & (\ca, \mergeFPH{\fph_{l}}{\fph_{r}}) 
-    \end{rclarray}
-\]
-\end{definition}
-
-Note that the \( \mergeName[\fpw] \) is not commutative, i.e.\ swapping \( \fpw_{l}\) and \( \fpw_{r}\) might yield different result.
 
 \subsection{Rely and Guarantee}
 
 \begin{definition}[Rely and guarantee]
 \label{def:rely-guarantee}
-Given the set of fingerprint worlds $\FPWorlds$ (\defin\ref{def:fingerprint_worlds}), the \emph{update rely} relation, $\relyU[.]: \Interference \to \FPWorlds \times \FPWorlds$, is defined as follows:
+Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} relation, $\relyU \eqdef \ConsisModels \to \World \times \World$, is defined as follows:
 %
 \[	
     \begin{rclarray}
 	\relyU & \eqdef &
 	\myset{
-		((\ca, \fph_{p} \composeFPH  \fph_{f}), (\ca, \fph_{q} \composeFPH \fph_{f}))	
+		((\ca, \ \Set{\rid \mapsto (\h, \intf)} \composeFPH  \gs_{f}), (\ca, \Set{\rid \mapsto (\h', \intf)} \composeFPH \gs_{f}))	
 	}{
-		\exsts{ \kap } ( \kap \composeC \ca ) \isdef  
-        \land \pred{no\_fingerprint}{\fph_{p}} 
-		\land ( \fph_{p}, \fph_{q} ) \in \inter(\kap)
-	}
+        \dagger
+	} \\
+    \dagger & \equiv & 
+    \begin{array}[t]{l}
+        \exsts{\aexec, \aexec',\vis, \po, \ar, \txid, \evset} 
+        \aexec \in \func{h2e_{\como}}{\h} 
+        \land \aexec' \in \func{h2e_{\como}}{\h'}  \\
+        {} \land \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
+        {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} \\
+        {} \land \exsts{\h_{p}, \h_{q}, \kap, \kap'} 
+        \kap' \leq \kap
+        \land \kap \composeK \ca(\rid)\isdef
+        \land ((\h_{p},\emptyset)(\h_{q},\evset)) \in \intf(\kap') \\
+        {} \land \for{\addr,\val} 
+        (\etR, \addr, \val) \in \evset \implies \h_{p}(\addr)  = \val \\
+        \quad {} \land (\etW, \addr, \val) \in \evset \implies \h_{q}(\addr)  = \val
+    \end{array}
     \end{rclarray}
 \]
-The \emph{rely} relation, $\RelyI[.]: \Interference \to \FPWorlds \times \FPWorlds$, is defined as follows:
+The \emph{rely} relation, $\RelyI \eqdef \ConsisModels \to \World \times \World$, is defined as follows:
 \[
     \begin{rclarray}
-         \RelyI  &\eqdef & \bigcup\limits_{n \in \Nat} \rely_{n} \\
-    \end{rclarray}
-\]
-where,
-\[
-    \begin{rclarray}
-        \rely_0 & \eqdef & \func{transitive\_close}{\relyU} \\
-        \rely_{n+1} & \eqdef & \func{transitive\_close}{ \pred{merge\_close}{\rely_{n}} } \\
-        \func{merge\_close}{\rely} & \eqdef 
-        & \Setcon{%
-            (\fpw, \mergeFW{\fpw_{l}}{\fpw_{r}})
-        }{%
-            (\fpw, \fpw_{l}), (\fpw, \fpw_{r}) \in \rely 
-        } \cup \rely \\
-        \func{transitive_close\_close}{\rely} & \eqdef 
-        & \Setcon{%
-            (\fpw_{p}, \fpw_{q})
-        }{%
-            \exsts{ \fpw_{m}, \fpw_{m}', \fpw_{q}' } 
-            (\fpw_{p}, \fpw_{m}), (\fpw_{m}', \fpw_{q}') \in \rely  \\
-            \quad {} \land \eraseFW{\fpw_{m}} =  \eraseFW{\fpw_{m}'} 
-        } \cup \rely
-    \end{rclarray}
-\]
-\sx{The fingerprint of \( \fpw_{m} \) does NOT propagate to \( \fpw_{m}'\) hope to fix unsoundness
-\[
-\begin{array}{l}
-1: (0,0,0) \leadsto (1,0,0) \\
-2: (1,0,0) \leadsto (1,1,0) \\
-3: (0,0,0) \leadsto (0,0,1) \\
-4: (0,0,0) \leadsto (2,0,2) \\
-\end{array}
-\]
-It is possible to have \( (0,0,0)  \leadsto (2,1,2) \), 
-\[
-\begin{array}{l}
-1: |---| \\
-2: \qqqquad |---| \\
-3: \qquad |---| \\
-4: \qqquad \qqqquad |---| \\
-\end{array}
-\]
-While if the transitive closure propagate the fingerprint, there is no way to get that.
-}
-%
-A set of fingerprint worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}{\inter}$, if and only if it is closed under the rely relation: 
-%
-\[
-    \begin{rclarray}
-        \stable{\setworld}{\inter} & \eqdef & \for{\fpw_{p}, \fpw_{q}}  \eraseFW{\fpw_{p}} \in \setworld \land (\fpw_{p}, \fpw_{q}) \in \RelyI \implies \eraseFW{\fpw_{q}} \in \setworld
+         \RelyI &\eqdef & \closure{\left(\relyU\right)} \\
     \end{rclarray}
 \]
 %
-The \emph{update guarantee} relation, $\guarU[.]: \Interference \to \FPWorlds \times \FPWorlds$, is defined as follows:
+A set of fingerprint worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
+%
+\[
+    \begin{rclarray}
+        \stable{\setworld} & \eqdef & \for{\w_{p}, \w_{q}}  \w_{p} \in \setworld \land (\w_{p}, \w_{q}) \in \RelyI \implies \w_{q} \in \setworld
+    \end{rclarray}
+\]
+%
+The \emph{update guarantee} relation, $\guarU: \ConsisModels \to \World \times \World$, is defined as follows:
 %
 \[	
     \begin{rclarray}
-        \guarU & \eqdef &
-        \myset{
-            ((\kap \composeC \ca_{p}, \fph_{p} \composeFPH \fph_{f}), (\ca_{q}, \fph_{q} \composeFPH \fph_{f}))	
-        }{
-            \pred{no\_fingerprint}{\fph_{p}} 
-            \land (\fph_{p}, \fph_{q}) \in \inter(\kap) 
-        }
+	\guarU & \eqdef &
+	\myset{
+		((\ca, \ \Set{\rid \mapsto (\h, \intf)} \composeFPH  \gs_{f}), (\ca, \Set{\rid \mapsto (\h', \intf)} \composeFPH \gs_{f}))	
+	}{
+        \dagger
+	} \\
+    \dagger & \equiv & 
+    \begin{array}[t]{l}
+        \exsts{\aexec, \aexec',\vis, \po, \ar, \txid, \evset} 
+        \aexec \in \func{h2e_{\como}}{\h} 
+        \land \aexec' \in \func{h2e_{\como}}{\h'}  \\
+        {} \land \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
+        {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} \\
+        {} \land \exsts{\h_{p}, \h_{q}, \kap} 
+        \kap \leq \ca(\rid)
+        \land ((\h_{p},\emptyset)(\h_{q},\evset)) \in \intf(\kap) \\
+        {} \land \for{\addr,\val} 
+        (\etR, \addr, \val) \in \evset \implies \h_{p}(\addr)  = \val \\
+        \quad {} \land (\etW, \addr, \val) \in \evset \implies \h_{q}(\addr)  = \val
+    \end{array}
     \end{rclarray}
 \]
-The \emph{guarantee} relation, $\GuarI[.]: \Interference \to \FPWorlds \times \FPWorlds$, is defined as follows:
+The \emph{guarantee} relation, $\GuarI: \ConsisModels \to \World \times \World$, is defined as follows:
 \[
-	\GuarI \eqdef \guarU 
+	\GuarI \eqdef \closure{\left(\guarU\right)}
 \]
 \end{definition}
 

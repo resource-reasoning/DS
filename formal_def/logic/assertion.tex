@@ -33,23 +33,22 @@ Note the domain of the stack \( \stk \) includes transaction variables and threa
 Given the set of logical expressions \( \LExpr \) and logical variables \( \LVar \) (\defin\ref{def:logical-expr}), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined inductively by the following grammar, 
 \[
 \begin{rclarray}
-	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \Emp \mid \lexpr \pt \lexpr \fp \mid \lpre \sep \lpost  \\
-    \fp & \subseteq & \Setcon{ (\etag,\val) }{\etag \in \ETags \land \val \in \Val}  \\
+	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \Emp \mid \lexpr \pt \lexpr \mid \lpre \sep \lpost  \\
 \end{rclarray}	 
 \]
-Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \parfun \powerset{\Heaps \times \Events}$, is defined over the structure of local assertions as follows,
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \parfun \Heaps$, is defined over the structure of local assertions as follows,
 \sx{there is variable clash for event tags and logical expression, leave it for now}
 \[
 \begin{rclarray}
-	\evalLS{\assfalse} & \eqdef & (\emptyset, \emptyset)  \\
-	\evalLS{\asstrue} & \defeq & \powerset{\Heaps \times \Events}  \\
+	\evalLS{\assfalse} & \eqdef & \emptyset   \\
+	\evalLS{\asstrue} & \defeq & \Heaps   \\
 	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
 	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
 	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
-	\evalLS{\assemp} & \defeq & \Set{(\unitH, \emptyset)}  \\
-	\evalLS{\lexpr_1 \pt \lexpr_2 \fp} & \defeq & \Set{ \left(\Set{\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}}, \Setcon{(\etag, \evalLE{\lexpr_1}, \val)}{(\etag, \val) \in \fp}\right) } \\
+	\evalLS{\assemp} & \defeq & \Set{\unitH}  \\
+	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ \evalLE{\lexpr_1} \pt \evalLE{\lexpr_2} } \\
 	\evalLS{\lpre \sep \lpost} & \defeq & 
-    \Setcon{ (\h_1 \composeH \h_2, \evset_{1} \uplus \evset_{2} ) }{ (\h_{1}, \evset_{1}) \in \evalLS{\lpre} \land (\h_{2}, \evset_{2}) \in \evalLS{\lpost} } 
+    \Setcon{ \h_1 \composeH \h_2 }{ \h_{1} \in \evalLS{\lpre} \land \h_{2} \in \evalLS{\lpost} } 
 \end{rclarray}
 \]
 \end{definition}
@@ -68,16 +67,44 @@ Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contain
 \sx{Bring back the region and capability transfer}
 \begin{definition}[Capabilities]
 \label{def:capabilities}
-Assume a partial commutative monoid for \emph{capabilities} \( (\Caps, \composeC, \unitC) \) with \( \kap, \ca \in \Caps \), where the  \( \composeC: \Caps \times \Caps \parfun \Caps \), is \emph{capability composition function}, and \( \unitC \) is the set of units.
+Assume a \emph{partial commutative monoid (PCM)} of \emph{client-specified capabilities} \( (\Kaps, \composeK, \unitK) \) with \( \kap \in \Kaps \), the composition \( \composeK \) the units set \( \unitK \).
+Then given a set of \emph{region identifiers} \( \rid \in \RegionID \), the \emph{capability composition function} \( \ca \in \Caps \defeq \RegionID \parfun \Kaps \), where the composition \( \composeC \) is defined as the follows,
+\[
+    \begin{rclarray}
+        (\ca_{l} \composeC \ca_{r})(\rid) & \defeq  &
+        \begin{cases}
+            \ca_{l}(\rid) \composeK \ca_{r}(\rid) & \rid \in \dom(\ca_{l}) \cap \dom(\ca_{l}) \\
+            \ca_{l}(\rid)  & \rid \in \dom(\ca_{l}) \setminus \dom(\ca_{l}) \\
+            \ca_{r}(\rid) & \rid \in \dom(\ca_{r}) \setminus \dom(\ca_{l}) \\
+            \text{undefined} & \text{otherwise} \\
+        \end{cases}
+    \end{rclarray}
+\]
+, and the units set \( \unitC \defeq \Setcon{\ca}{\for{\rid} \ca(\rid) \in \unitK } \) .
 \end{definition}
 
-\sx{event set + capabilities might be a way to represent actions?}
+\sx{event set be a way to represent actions? and also for interference as a set of fingerprint meaning syntactic event sets with logical values insides}
 \begin{defn}
 Given the set of transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
 \[
     \begin{rclarray}
         \action \in \Actions & \eqdef & \powerset{\Events \uplus \Caps}
     \end{rclarray}
+\]
+\end{defn}
+
+\begin{defn}[Fingerprint Assertions]
+The \emph{Fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
+\[
+\begin{rclarray}
+    \fp & \subseteq & \Setcon{ (\etag,\lexpr_{1},\lexpr_{2}) }{ \etag \in \ETags \land \lexpr_{1}, \lexpr_{2} \in \LExpr } \\
+\end{rclarray}
+\] 
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint interpretation} function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \powerset{\Events}$, is defined as follows,
+\[
+\begin{rclarray}
+    \evalF{\fp} & \defeq & \Setcon{ (\etag, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}}) }{ (\etag, \lexpr_{1}, \lexpr_{2}) \in \fp }  \\
+\end{rclarray}
 \]
 \end{defn}
 
@@ -110,21 +137,23 @@ The set of \emph{interference assertions}, \( \intass \in \IAst \), are defined 
 \[
 \begin{rclarray}
 	\intass & \eqdef  &
-	\emptyset \mid \Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass 
+	\emptyset \mid \Set{ \perm{\kap} : \exsts{\vec{\lvar}} (\lpre \mid \fp_{p}) \transfersto (\lpost | \fp_{q} ) } \cup \intass 
 \end{rclarray}
 \]
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \parfun \Interference$, is defined as follows, for all $\kap \in \Caps$:
 %
+\sx{ at some place it should have semantics check for the well-form }
 \[
 \begin{rclarray}
 	\evalI{\emptyset}(\kap) & \eqdef & \emptyset \\
-	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass }(\kap) & \eqdef &
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} (\lpre \mid \fp_{p}) \transfersto (\lpost \mid \fp_{q} ) } \cup \intass }(\kap) & \eqdef &
 	\Setcon{
 		((\h_\lpre,\evset_{\lpre}), (\h_\lpost,\evset_{\lpost}))	 
     }{
 		((\h_\lpre,\evset_{\lpre}), (\h_\lpost,\evset_{\lpost})) \in \Actions \\
         \quad \land \exsts{\rid, \vec{v}, \lenv'} \land \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} \land {} \\
-		\quad (\h_\lpre,\evset_{\lpre}) \in \evalLS[\lenv', \stk]{\lpre} \land (\h_\lpost,\evset_{\lpost}) \in \evalLS[\lenv', \stk]{\lpost}
+		\quad \h_\lpre \in \evalLS[\lenv', \stk]{\lpre} \land \h_\lpost \in \evalLS[\lenv', \stk]{\lpost} \\
+		\quad \evset_\lpre \in \evalF[\lenv', \stk]{\fp_{p}} \land \evset_\lpost \in \evalF[\lenv', \stk]{\fp_{q}}
 	}
 	\cup 
 	\evalI{\intass}(\kap)
@@ -135,7 +164,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 
 \begin{definition}[Worlds]
 \label{def:world}
-Given the set of heaps $\Heaps$ (\defref{def:heaps}) and a set of \emph{region identifiers} \( \rid \in \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \to \Heaps \) and the \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as $\composeS \eqdef \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$,
+Given the set of heaps $\Heaps$ (\defref{def:heaps}) and a set of \emph{region identifiers} \( \rid \in \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \to \Heaps \times \Interference \) and the \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as $\composeS \eqdef \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$,
 %
 \[
 \begin{rclarray}
@@ -161,10 +190,10 @@ The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$
  
 \begin{definition}[Assertions]
 \label{def:assertion}
-The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
+Given the local assertion \( \lpre \in \LAst \) (\defref{def:local_assertions}), The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
 \[
 \begin{rclarray}
-	\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost  \mid \exsts{\lvar}\gpre \mid \Emp \mid \lexpr_1 \pointsto \lexpr_2 \mid  \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \boxass{\gpre}{\lrid}{\intass}\\
+	\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \boxass{\lpre}{\lrid}{\intass}\\
 \end{rclarray}
 \]
 %
@@ -180,24 +209,31 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 	\evalW{\gpre \lor \gpost} & \defeq & \evalW{\gpre} \cup \evalW{\gpost} \\
 	\evalW{\exsts{\lvar}  \gpre} & \defeq 
 	& \bigcup\limits_{\val \in \textnormal{\Val}} \evalW[\lenv\remapsto{\lvar}{\val}, \stk]{\gpre} \\
-	\evalW{\lexpr_1 \pt \lexpr_2} & \defeq & 
-    \Setcon{
-		(\ca, \h) 
-    }{
-		\exsts{ \h' } \h = \Set{\evalLE{\lexpr_1} \mapsto \evalLE{\lexpr_2} } \composeH \h' \land \ca \in \unitC
-	} \\
-	\evalW{\perm{\kap}} & \defeq & 
-    \Setcon{
-		(\kap, \h) 
-    }{
-        \h \in \Heaps
-	} \\
+	\evalW{\cass{\kap}{\lrid}} & \defeq & \Set{ (\Set{\lrid \mapsto \kap}, \unitH) } \\
 	\evalW{ \gpre \sep \gpost } & \defeq & 
 	\Setcon{
 	   (\world_1 \composeW \world_2) 
     }{
        \world_1 \in \evalW{\gpre} \land \world_2 \in \evalW{\gpost}
-	}   
+	} \\
+	\evalW{ \boxass{\lpre}{\lrid}{\intass} } & \defeq & 
+    \Setcon{
+        (\ca,\gs)
+    }{
+        \ca \in \unitC 
+        \land \gs(\lrid)\projection{1} \in \evalLS{\lpre}
+        \land \gs(\lrid)\projection{2}  = \evalI{\intass}
+    } \\
 \end{rclarray}
 \]
 \end{definition}
+
+\begin{defn}[Heap-to-Execution]
+\label{def:heap2aexec}
+Given a consistency model \( \como \) (\defref{def:consistency-models}), a bijective function from heaps to sets of abstract executions, \( \funcn{h2e} : \ConsisModels \to \Heaps \to \powerset{\Aexecs}\) is defined as the follows,       
+\[
+    \begin{rclarray}
+        \func{h2e_{\como}}{\h} & \defeq & \Setcon{\aexec}{\exsts{\respo}\como = (\stub, \respo) \land \obsstate{\aexec,\aexec\prjT,\respo}}
+    \end{rclarray}
+\]
+\end{defn}
