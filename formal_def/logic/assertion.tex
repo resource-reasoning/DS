@@ -112,7 +112,7 @@ Then given a set of \emph{region identifiers} \( \rid \in \RegionID \), the \emp
 Given the set of transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
 \[
     \begin{rclarray}
-        \action \in \Actions & \eqdef & \powerset{\Events \uplus \Caps}
+        \action \in \Actions & \eqdef & \powerset{\Events}
     \end{rclarray}
 \]
 \end{defn}
@@ -126,11 +126,14 @@ Given the set of heaps \( \Heaps \) (\defref{def:heaps}) and transaction events 
     \begin{rclarray}
 	\action \in \Actions & \eqdef &
 	\Setcon{
-		((\h,\evset), (h',\evset'))
+		((\h_{\lpre},\emptyset), (h_{\lpost},\evset))
 	}{
-		\h, \h' \in \Heaps 
-        \land \orth{\h} = \orth{\h'}
-        \land \evset, \evset' \subseteq \Events
+		\h_{\lpre}, \h_{\lpost} \in \Heaps 
+        \land \orth{\h_{\lpre}} = \orth{\h_{\lpost}}
+        \land \evset \subseteq \Events \\
+        \quad {} \land \for{\addr,\val}  
+        (\etR, \addr, \val) \in \evset \implies \h_{\lpre}(\addr)  = \val \\
+        \qquad {} \land (\etW, \addr, \val) \in \evset \implies \h_{\lpost}(\addr)  = \val
 	}
     \end{rclarray}
 \] 
@@ -140,42 +143,69 @@ where, the \emph{orthogonal} \(\orth{(.)} \) is defined as follows, for all doma
     \orth{m} & \eqdef & \Setcon{m}{m \compose{} m \isdef} \\
     \end{rclarray}
 \]
-Given the set of capabilities $\Caps$ (\defin\ref{def:capabilities}), the set of \emph{interference environments} is $\inter \in \Interference \defeq \Caps \parfun \powerset{\Actions}$.
 \end{definition}
 
-\sx{here the semantics require that the pre and post conditions should have proper fingerprint assertions involved }
-\begin{defn}[Interference]
-\label{def:intf}
-The set of \emph{interference assertions}, \( \intass \in \IAst \), are defined by the following grammar:
+\begin{defn}[Observation]
+The set of \emph{observation} is defined as the follows,
 \[
 \begin{rclarray}
-	\intass & \eqdef  &
-	\emptyset \mid \Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass 
+    \observation \in \Observations & \eqdef & \Heaps \to \powerset{\Heaps} \\
 \end{rclarray}
 \]
-Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \parfun \Interference$, is defined as follows, for all $\kap \in \Caps$:
+\end{defn}
+
+\sx{For a given action, we attach a pair of assertions (or multiple pairs), to specify what is the observable state by a given global state}
+\begin{defn}[Observable assertions]
+The set of \emph{observable assertions}, \( \oass \in \OAst \), is defined by the following grammar, 
+\[
+\begin{rclarray}
+    \oass & ::= & \emptyset \mid \Set{ \exsts{\vec{\lvar}} \lpre \oassto \lpost} \cup \oass
+\end{rclarray}
+\]
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{observation interpretation} function, $\evalO[(., .)]{.}: \OAst \times \LEnv \times \Stacks \to (\Heaps \to \powerset{\Heaps})$, is defined as follows, 
+\[
+\begin{rclarray}
+\evalO{\emptyset}(\h) & \defeq & \emptyset \\
+\evalO{\Set{ \exsts{\vec{\lvar}} \lpre \oassto \lpost} \cup \oass}(\h) & \defeq &
+\begin{cases}
+\evalO{\oass}(\h)  \cup \evalLS[\lenv', \stk]{\lpost} & \exsts{ \vec{\val}} \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \land \h \in \evalLS[\lenv', \stk]{\lpre}\\
+\evalO{\oass}(\h) & \text{otherwise}\\
+\end{cases} \\
+\end{rclarray}
+\]
+\end{defn}
+
+\begin{defn}[Interference]
+\label{def:intf}
+Given the local assertion \( \lpre, \lpost \in \LAst \) and observable assertion \( \oass \in \OAst \), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
+\[
+\begin{rclarray}
+	\intass & ::=  &
+	\emptyset \mid \Set{ \perm{\kap} : \oass \mat \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass 
+\end{rclarray}
+\]
+The set of \emph{interference environments} is $\inter \in \Interference \defeq \Kaps \parfun  ( \Observations \to \powerset{\Actions} )$.
+Then given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
 %
 \[
 \begin{rclarray}
-	\evalI{\emptyset}(\kap) & \eqdef & \emptyset \\
-	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass }(\kap) & \eqdef &
-	\Setcon{
-		((\h_\lpre,\evset_{\lpre}), (\h_\lpost,\evset_{\lpost}))	 
-    }{
-        \dagger 
-	}
+	\evalI{\emptyset}(\kap)(\obs) & \eqdef & \emptyset \\
+	\evalI{\Set{ \perm{\kap} : \oass \mat \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass }(\kap)(\obs) & \eqdef &
+    \begin{cases}
+    \{ \setaction \mid \dagger  \}
 	\cup 
-	\evalI{\intass}(\kap) \\
+	\evalI{\intass}(\kap)(\obs) & \text{if } \evalO{\oass}  = \obs \\
+	\evalI{\intass}(\kap)(\obs) & \text{otherwise} \\
+    \end{cases}
+    \\
     \dagger & \equiv & 
     \begin{array}[t]{l}
-		((\h_\lpre,\evset_{\lpre}), (\h_\lpost,\evset_{\lpost})) \in \Actions
+        \for{ \action \in \setaction }
+        \action \in \Actions 
         \land \exsts{\rid, \vec{v}, \lenv'} \\
         \quad \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} 
-		\land (\h_{\lpre}, \evset_{\lpre}) \in \evalLS[\lenv', \stk]{\lpre} 
-        \land (\h_{\lpost}, \evset_{\lpost}) \in \evalLS[\lenv', \stk]{\lpost}  \\
-        \quad {} \land \for{\addr,\val}  
-        (\etR, \addr, \val) \in \evset \implies \h_{p}(\addr)  = \val \\
-        \qquad {} \land (\etW, \addr, \val) \in \evset \implies \h_{q}(\addr)  = \val
+		\land \action\projection{1} \in \evalLS[\lenv', \stk]{\lpre} 
+        \land \action\projection{2} \in \evalLS[\lenv', \stk]{\lpost}  \\
     \end{array}
 \end{rclarray}
 \] 
@@ -208,7 +238,8 @@ Combining the above with capabilities (\defref{def:capabilities}), the set of \e
         \land \for{\rid, \rid', \h, \h'} \\
         \quad \h = \gs(\rid)\projection{1}
         \land \h' = \gs(\rid')\projection{1}
-        \land \dom(\h) \cap \dom(\h') = \emptyset
+        \land \dom(\h) \cap \dom(\h') = \emptyset \\
+        \quad {} \land \for{\rid''} \wfW{\rid, \gs(\rid)\projection{2}}
     }
 \end{rclarray}
 \]
@@ -259,36 +290,48 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \]
 \end{definition}
 
-\begin{defn}[Invariant of a region]
-Assuming a region \( \rid \) has initial abstract executions, provided by the function \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \), the invariant of a region is a set of abstract executions that is closed under the interference \( \intf \).
-This is defined as the follows,
+\begin{defn}[Invariant and well-form of a region]
+Assuming two functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns possible initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions, the invariant of a region, namely \( \func{inv}{\rid, \intf} \), is a set of abstract executions that is closed under the interference \( \intf \),
 \[
 \begin{rclarray}
-    \func{inv}{\rid, \intf, \como} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \como, \nat} 
+    \func{inv}{\rid, \intf} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \nat} 
 \end{rclarray}
 \]
-where,
+The well-form condition of a region, namely \( \wfW{\rid, \intf}\) predicate, is defined inductively with respect to each step of the iteration.
 \[
 \begin{rclarray}
-    \func{iter}{\rid, \intf, \como, 0} & \defeq & \func{init}{\rid}  \\
-    \func{iter}{\rid, \intf, \como, \nat} & \defeq & 
-    \Setcon{ 
-        \aexec 
-    }{ 
-        \for{ \aexec' \in \func{iter}{\rid,\intf, \nat - 1} } 
-        \aexec \in \func{apply}{\aexec', \evset, \como}
-        \land \exsts{\kap, \h, \h',\evset}  \\
-        \quad ((\h,\emptyset)(\h',\evset)) \in \intf( \kap )
-    }  \\
-    \func{apply}{\aexec, \evset, \como} & \defeq & 
+    \wfW{\rid, \intf} & \defeq & \for{\aexec \in \func{inv}{\rid, \intf}} \pred{wfgf}{\rid, \intf, \aexec} 
+\end{rclarray}
+\]
+All the auxiliary functions and predicates are defined as the follows,
+\[
+\begin{rclarray}
+    \func{iter}{\rid, \intf, 0} & \defeq & \func{init}{\rid}  \\
+    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & \aexec \in \func{init}{\rid}  \\
+    \func{iter}{\rid, \intf, \nat} & \defeq & 
     \Setcon{ 
         \aexec' 
-    }{
-        \exsts{\vis, \po, \ar, \txid, \evset} 
-        \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
-        {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} 
-        \land \aexec' \in \evalCOM{\como}
-    } \\
+    }{ 
+        \for{ \txid, \kap, \obs, \aexec \in \func{iter}{\rid,\intf, \nat - 1} } 
+        \pred{reachable}{\aexec, \aexec', \txid, \rid, \intf, \kap, \obs}
+    }  \\
+    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \exsts{ \aexec', \nat, \txid, \kap, \obs } \aexec' \in \func{iter}{\rid, \intf, \nat - 1}
+        \land \pred{reachable}{\aexec', \aexec, \txid, \rid, \intf, \kap, \obs} \\
+        \quad {} \land \for{\h, \h'} 
+        \h \in \obsstate{\aexec', \aexec'\prjT,\func{como}{\rid}\projection{2}}  \\
+        \qquad {} \land \h' \in \obsstate{\aexec, \aexec\prjV^{-1}(\txid),\func{como}{\rid}\projection{2}}  \\
+        \qqquad {} \implies \h' \in \obs(\h)
+    \end{array} \\
+    \pred{reachable}{\aexec, \aexec', \txid, \rid, \intf, \kap, \obs} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \exsts{\vis, \po, \ar, \evset}
+        ((\stub,\stub), (\stub,\evset)) \in \intf( \kap )( \obs ) \\
+        \quad {} \land \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
+        \quad {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} 
+        \land \aexec' \in \evalCOM{\func{como}{\rid}}
+    \end{array}
 \end{rclarray}
 \]
 \end{defn}
@@ -296,16 +339,16 @@ where,
 \begin{defn}[State-to-execution]
 \label{def:world2aexec}
 \label{def:state2aexec}
-Given a consistency model \( \como \), a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{s2e} \) returns all the possible abstract executions,
+Given a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{s2e} \) returns all the possible abstract executions,
 \[
 \begin{rclarray}
-    \func{s2e}{\rid, \h, \intf, \como} & \eqdef & \func{inv}{\rid, \intf, \como} \cap \func{h2e}{\h, \como} \\
+    \func{s2e}{\rid, \h, \intf} & \eqdef & \func{inv}{\rid, \intf} \cap \func{h2e}{\h,\func{como}{\rid}} \\
 \end{rclarray}
 \]
 where the \( \funcn{h2e} \) returns all the possible abstract executions where the final state satisfies the heap \( \h \), 
 \[
 \begin{rclarray}
-    \func{h2e}{\h, \como} & \defeq & \Setcon{\aexec}{\exsts{\respo}\como = (\stub, \respo) \land \obsstate{\aexec,\aexec\prjT,\respo}}
+    \func{h2e}{\h, (\conguar, \respo)} & \defeq & \Setcon{\aexec}{\h \in \obsstate{\aexec,\aexec\prjT,\respo}}
 \end{rclarray}
 \]
 \end{defn}
