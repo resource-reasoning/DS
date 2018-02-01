@@ -128,7 +128,37 @@ If one only want to read, the initial local state will be any value smaller than
 
 Each box assertion together with the interference must make sense with respect to the consistency model.
 }
-\begin{defn}
+
+\begin{defn}[Observation]
+\label{def:observation}
+Given the local assertion \(\lpre, \lpost \in \LAst \) (\defref{def:local_assertions}), the set of \emph{observation assertions}, \( \oass \in \OAst \), is defined by the following grammar, 
+\[
+\begin{rclarray}
+    \oass & ::= & \emptyset \mid \Set{ \lpre \oassto \lpost} \cup \oass
+\end{rclarray}
+\]
+The observation assertion will be interpreted to \emph{observation} that is a function from heaps that represent the global states, to sets of heaps that represent the observable states,
+\[
+\begin{rclarray}
+    \observation \in \Observations & \eqdef & \Heaps \to \powerset{\Heaps} \\
+\end{rclarray}
+\]
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{observation interpretation} function, $\evalO[(., .)]{.}: \OAst \times \LEnv \times \Stacks \to \Observations$, is defined as follows.
+\[
+\begin{rclarray}
+\evalO{\emptyset}(\h) & \defeq & \emptyset \\
+\evalO{\Set{ \lpre \oassto \lpost} \cup \oass}(\h) & \defeq &
+\begin{cases}
+\evalO{\oass}(\h)  \cup \evalLS{\lpost} & \text{if } (\h, \emptyset) \in \evalLS{\lpre}\\
+\evalO{\oass}(\h) & \text{otherwise}\\
+\end{cases} \\
+\end{rclarray}
+\]
+\end{defn}
+
+
+\subsubsection{One action model}
+\begin{defn}[Actions]
 Given the set of transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
 \[
     \begin{rclarray}
@@ -137,8 +167,35 @@ Given the set of transaction events \( \Events \) (\defref{def:transaction-event
 \]
 \end{defn}
 
+\begin{defn}[Interference]
+\label{def:intf}
+Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}) and observation assertion \( \oass \in \OAst \) (\defref{def:observation}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
+\[
+\begin{rclarray}
+	\intass & ::=  &
+	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \fp \mat \oass } \cup \intass 
+\end{rclarray}
+\]
+It will be interpreted to a set of \emph{interference environments}, this is,
+\[
+\begin{rclarray}
+    \inter \in \Interference & \defeq & \Kaps \parfun  ( \powerset{\Actions} \parfun \Observations )
+\end{rclarray}
+\]
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
+%
+\[
+\begin{rclarray}
+	\evalI{\emptyset}(\kap) & \eqdef & \text{undefined} \\
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \fp \mat \oass } \cup \intass }(\kap) & \eqdef &
+    \Setcon{ \evalF[\lenv',\stk]{\fp} \mapsto \evalO[\lenv',\stk]{\oass} }{\exsts{ \vec{v} } \lenv' = \lenv\remapsto{\vec{\lvar}}{\vec v} }
+	\uplus
+	\evalI{\intass}(\kap) \\
+\end{rclarray}
+\] 
+\end{defn}
 
-
+\subsubsection{Another action model}
 \begin{definition}[Actions]
 \label{def:action}
 Given the set of heaps \( \Heaps \) (\defref{def:heaps}) and transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
@@ -166,43 +223,13 @@ where, the \emph{orthogonal} \(\orth{(.)} \) is defined as follows, for all doma
 \]
 \end{definition}
 
-\begin{defn}[Observation]
-An \emph{observation} is a function from heaps that represent the global states, to sets of heaps that represent the observable states,
-\[
-\begin{rclarray}
-    \observation \in \Observations & \eqdef & \Heaps \to \powerset{\Heaps} \\
-\end{rclarray}
-\]
-\end{defn}
-
-\sx{For a given action, we attach a pair of assertions (or multiple pairs), to specify what is the observable state by a given global state}
-\begin{defn}[Observation assertions]
-The set of \emph{observation assertions}, \( \oass \in \OAst \), is defined by the following grammar, 
-\[
-\begin{rclarray}
-    \oass & ::= & \emptyset \mid \Set{ \exsts{\vec{\lvar}} \lpre \oassto \lpost} \cup \oass
-\end{rclarray}
-\]
-Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{observation interpretation} function, $\evalO[(., .)]{.}: \OAst \times \LEnv \times \Stacks \to \Observations$, is defined as follows, 
-\[
-\begin{rclarray}
-\evalO{\emptyset}(\h) & \defeq & \emptyset \\
-\evalO{\Set{ \exsts{\vec{\lvar}} \lpre \oassto \lpost} \cup \oass}(\h) & \defeq &
-\begin{cases}
-\evalO{\oass}(\h)  \cup \evalLS[\lenv', \stk]{\lpost} & \text{if } \exsts{ \vec{\val}} \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \land \h \in \evalLS[\lenv', \stk]{\lpre}\\
-\evalO{\oass}(\h) & \text{otherwise}\\
-\end{cases} \\
-\end{rclarray}
-\]
-\end{defn}
-
 \begin{defn}[Interference]
 \label{def:intf}
-Given the local assertion \( \lpre, \lpost \in \LAst \) and observation assertion \( \oass \in \OAst \), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
+Given the local assertion \( \lpre, \lpost \in \LAst \) and observation assertion \( \oass \in \OAst \) (\defref{def:observation}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
 \[
 \begin{rclarray}
 	\intass & ::=  &
-	\emptyset \mid \Set{ \perm{\kap} : \oass \mat \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass 
+	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \oass \mat \lpre \transfersto \lpost } \cup \intass 
 \end{rclarray}
 \]
 The set of \emph{interference environments} is $\inter \in \Interference \defeq \Kaps \parfun  ( \Observations \to \powerset{\Actions} )$.
@@ -211,11 +238,11 @@ Then given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks
 \[
 \begin{rclarray}
 	\evalI{\emptyset}(\kap)(\obs) & \eqdef & \emptyset \\
-	\evalI{\Set{ \perm{\kap} : \oass \mat \exsts{\vec{\lvar}} \lpre \transfersto \lpost } \cup \intass }(\kap)(\obs) & \eqdef &
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \oass \mat \lpre \transfersto \lpost } \cup \intass }(\kap)(\obs) & \eqdef &
     \begin{cases}
     \{ \setaction \mid \dagger  \}
 	\cup 
-	\evalI{\intass}(\kap)(\obs) & \text{if } \evalO{\oass}  = \obs \\
+	\evalI{\intass}(\kap)(\obs) & \text{if } \exsts{ \vec{v}, \lenv'} \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} \land \evalO[\lenv',\stk]{\oass} = \obs \\
 	\evalI{\intass}(\kap)(\obs) & \text{otherwise} \\
     \end{cases}
     \\
@@ -223,8 +250,6 @@ Then given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks
     \begin{array}[t]{l}
         \for{ \action \in \setaction }
         \action \in \Actions 
-        \land \exsts{\rid, \vec{v}, \lenv'} \\
-        \quad \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} 
 		\land \action\projection{1} \in \evalLS[\lenv', \stk]{\lpre} 
         \land \action\projection{2} \in \evalLS[\lenv', \stk]{\lpost}  \\
     \end{array}
@@ -323,6 +348,7 @@ The well-form condition of a region, namely \( \wfW{\rid, \intf}\) predicate, is
 \end{rclarray}
 \]
 All the auxiliary functions and predicates are defined as the follows,
+\sx{depend on the action model, the reachable predicate might be slightly different}
 \[
 \begin{rclarray}
     \func{iter}{\rid, \intf, 0} & \defeq & \func{init}{\rid}  \\
