@@ -6,6 +6,7 @@ This is because once a location has been re-written, the rest read are considere
 
 \begin{figure}[t]
 \hrule\vspace{5pt}
+\sx{Need to be careful about the implication, esp. for fingerprint assertion.}
 \[
     \infer[\rl{TRSkip}]{%
         \tripleL{\assemp }{ \pskip }{\assemp }
@@ -78,14 +79,11 @@ This is because once a location has been re-written, the rest read are considere
 \label{fig:rule-trans}
  \end{figure}
 
-
 \subsection{Rely and Guarantee}
 
 \begin{definition}[Rely and guarantee]
 \label{def:rely-guarantee}
 Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} relation, $\relyU \subseteq \World \times \World$, is defined as follows,
-\sx{depend on the action model, the rely and guar might be slightly different}
-%
 \[	
     \begin{rclarray}
 	\relyU & \eqdef &
@@ -96,34 +94,28 @@ Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} re
 	} \\
     \dagger & \equiv & 
     \begin{array}[t]{l}
-        \exsts{\kap, \kap', \evset} 
-        \kap' \leq \kap
-        \land \kap \composeK \ca(\rid)\isdef
-        \land ((\stub,\stub)(\stub,\evset)) \in \intf(\kap') \\
-        {} \land \exsts{\aexec, \aexec'}  \\
-        \quad \aexec \in \func{s2e}{\rid,\h, \intf, \como} 
+        \exsts{\kap, \kap', \evset,\aexec, \aexec'} 
+        ( \kap \composeK \kap' \composeK \ca(\rid) ) \isdef
+        \land \evset \in \dom(\intf(\kap)) \\
+        \quad {} \land \aexec \in \func{s2e}{\rid,\h, \intf, \como} 
         \land \aexec' \in \func{s2e}{\rid, \h', \intf, \como} 
         \land \aexec' \in \func{apply}{\aexec, \evset, \como}
     \end{array}
     \end{rclarray}
 \]
-The \emph{rely} relation, $\RelyI \eqdef \ConsisModels \to \World \times \World$, is defined as follows:
+The \emph{rely} relation, $\RelyI \eqdef \World \times \World$, is defined as follows:
 \[
     \begin{rclarray}
          \RelyI &\eqdef & \closure{\left(\relyU\right)} \\
     \end{rclarray}
 \]
-%
 A set of fingerprint worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
-%
 \[
     \begin{rclarray}
         \stable{\setworld} & \eqdef & \for{\w_{p}, \w_{q}}  \w_{p} \in \setworld \land (\w_{p}, \w_{q}) \in \RelyI \implies \w_{q} \in \setworld
     \end{rclarray}
 \]
-%
-The \emph{update guarantee} relation, $\guarU: \ConsisModels \to \World \times \World$, is defined as follows:
-%
+The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined as follows:
 \[	
     \begin{rclarray}
 	\guarU & \eqdef &
@@ -134,11 +126,10 @@ The \emph{update guarantee} relation, $\guarU: \ConsisModels \to \World \times \
 	} \\
     \dagger & \equiv & 
     \begin{array}[t]{l}
-        \exsts{\kap, \evset} 
+        \exsts{\kap, \evset, \aexec, \aexec'} 
         \kap \leq \ca(\rid)
-        \land ((\stub,\stub)(\stub,\evset)) \in \intf(\kap) \\
-        {} \land \exsts{\aexec, \aexec'}  \\
-        \quad \aexec \in \func{s2e}{\rid,\h, \intf, \como} 
+        \land \evset \in dom(\intf(\kap)) \\
+        \quad {} \land \aexec \in \func{s2e}{\rid,\h, \intf, \como} 
         \land \aexec' \in \func{s2e}{\rid, \h', \intf, \como} 
         \land \aexec' \in \func{apply}{\aexec, \evset, \como}
     \end{array}
@@ -152,7 +143,6 @@ The \emph{guarantee} relation, $\GuarI: \ConsisModels \to \World \times \World$,
 
 \subsection{Rules for Global}
 
-\sx{Given the new idea that each interference is attached with function from global assertions to local assertions, the commit rule can be simplify by cutting some unnecessary  semantics checks.}
 The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to global level by first converting global state to (local) observable state and then propagating the local fingerprint to the global state.
 \[
     \infer[\rl{PRCommit}]{%
@@ -164,22 +154,21 @@ The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to glo
         && \quad \pred{up}{\gpre,\fp,\gpost} 
     }
 \]
-The \( \predn{down} \) predicate asserts that the local predicate \( \lpre \) is a over-approximation of the valid observation of the current states \( \gpre \).
-The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the result by lifting the local fingerprints \( \fp \) to pre-condition \( \gpre \), if the local fingerprints can be lifted.
+The \( \predn{down} \) predicate asserts that the local predicate \( \lpre \) is a over-approximation of the valid observation that is given by the interference.
+The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the result by lifting the local fingerprints \( \fp \) to pre-condition \( \gpre \).
 \[
 \begin{rclarray}
     \pred{down}{\gpre, \lpre, \fp} & \eqdef &             
     \begin{array}[t]{@{}l}
-        \for{ \h, \ca, \gs } (\ca, \gs) \in \evalW{\gpre} \land \pred{observe}{\h, \gs } \implies ( \h, \emptyset ) \in \evalLS{\lpre} 
+        \for{ \h, \ca, \gs } (\ca, \gs) \in \evalW{\gpre} \land \pred{observe}{\h, \gs, \evalF{\fp}} \implies ( \h, \emptyset ) \in \evalLS{\lpre} 
     \end{array} \\
-    \pred{observe}{\h, \gs} & \defeq & \h = \emptyset \land \gs = \emptyset \\
-    \pred{observe}{\h \composeH \h', \gs \uplus \gs'} & \defeq & 
+    \pred{observe}{\h, \gs, \evset} & \defeq & \h = \emptyset \land \gs = \emptyset \land \evset = \emptyset \\
+    \pred{observe}{\h \composeH \h', \gs \uplus \gs', \evset \uplus \evset'} & \defeq & 
     \begin{array}[t]{@{}l}
-        \exsts{\h'', \intf, \txidset, \aexec} 
+        \exsts{\h'', \intf} 
         \gs = \Set{\rid \mapsto (\h'', \intf)}
-        \land \aexec \in \func{s2e}{\rid, \h'', \intf, \como} \\
-        \h \in \obsstate{\aexec,\txidset, \respo}
-        \land \pred{observe}{\h' ,\gs'} \\
+        \land \h \in \intf(\evset)(\h'')
+        \land \pred{observe}{\h' ,\gs', \evset'} \\
     \end{array} \\
     \pred{up}{\gpre,\fp,\gpost} & \eqdef &
     \begin{array}[t]{@{}l}
@@ -190,12 +179,12 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
         \land (\w, \w') \in \Guar \\
         \qquad {} \implies \w' \in \evalW{\gpost}
     \end{array} \\
-    \pred{propagate}{\gs, \gs', \evset} & \eqdef & \gs = \gs = \emptyset \land \evset = \emptyset \\
+    \pred{propagate}{\gs, \gs', \evset} & \eqdef & \gs = \gs' = \emptyset \land \evset = \emptyset \\
     \pred{propagate}{\gs, \gs', \evset} & \eqdef & 
     \begin{array}[t]{@{}l}
         \exsts{ \rid, \h, \h', \intf, \gs'', \gs''', \evset', \evset''} \\
         \gs = \Set{\rid \mapsto (\h, \intf)} \uplus \gs''
-        \land \gs' = \Set{\rid \mapsto (\h, \intf)} \uplus \gs'''
+        \land \gs' = \Set{\rid \mapsto (\h', \intf)} \uplus \gs'''
         \land \evset = \evset' \uplus \evset'' \\
         {} \land \for{ \aexec, \aexec' } \\
         \qquad \aexec \in \func{s2e}{\rid,\h, \intf, \como} 
