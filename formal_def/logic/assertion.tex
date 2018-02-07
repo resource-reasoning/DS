@@ -252,7 +252,69 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     \] 
     \end{defn}
 }
+ 
+\begin{defn}[Invariant and well-form of a region]
+Assume two functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns possible initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions.
+The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is a set of abstract executions that is closed under the interference \( \intf \),
+\[
+\begin{rclarray}
+    \func{inv}{\rid, \intf} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \nat} 
+\end{rclarray}
+\]
+Then the well-form condition of the interference of a region, namely \( \wfW{\rid, \intf}\) predicate, is defined with respect to the invariant.
+\[
+\begin{rclarray}
+    \wfW{\rid, \intf} & \defeq & \for{\aexec \in \func{inv}{\rid, \intf}} \pred{wfgf}{\rid, \intf, \aexec} 
+\end{rclarray}
+\]
+All the auxiliary functions and predicates are defined as the follows,
+\[
+\begin{rclarray}
+    \func{iter}{\rid, \intf, 0} & \defeq & \func{init}{\rid}  \\
+    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & \aexec \in \func{init}{\rid}  \\
+    \func{iter}{\rid, \intf, \nat + 1} & \defeq & 
+    \Setcon{ 
+        \aexec 
+    }{ 
+        \for{ \txid, \kap, \obs, \aexec' \in \func{iter}{\rid,\intf, \nat} } 
+        \pred{reachable}{\aexec', \aexec, \txid, \rid, \intf, \kap}
+    }  \\
+    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \exsts{ \nat, \txid, \kap, \obs, \aexec' \in \func{iter}{\rid, \intf, \nat} }
+        \land \pred{reachable}{\aexec', \aexec, \txid, \rid, \intf, \kap} \\
+        \quad {} \land \for{\h, \h'} 
+        \h \in \obsstate{\aexec', \aexec'\prjT,\func{como}{\rid}\projection{2}}  \\
+        \qquad {} \land \h' \in \obsstate{\aexec, \aexec\prjV^{-1}(\txid),\func{como}{\rid}\projection{2}}  \\
+        \qqquad {} \implies \h' \in \intf(\kap)(\aexec\prjT(\txid))(\h)
+    \end{array} \\
+    \pred{reachable}{\aexec, \aexec', \txid, \rid, \intf, \kap} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \exsts{\vis, \po, \ar, \evset \in ( \dom(\intf( \kap )) { \color{blue}\uplus \emptyset } ) } { \color{blue} \text{ allow to append an empty `box'} }\\
+        \quad {} \land \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
+        \quad {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} 
+        \land \aexec' \in \evalCOM{\func{como}{\rid}}
+    \end{array}
+\end{rclarray}
+\]
+\end{defn}
 
+\begin{defn}[State-to-execution]
+\label{def:world2aexec}
+\label{def:state2aexec}
+Given a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{s2e} \) returns all the possible abstract executions,
+\[
+\begin{rclarray}
+    \func{s2e}{\rid, \h, \intf} & \eqdef & \func{inv}{\rid, \intf} \cap \func{h2e}{\h,\func{como}{\rid}} \\
+\end{rclarray}
+\]
+where the \( \funcn{h2e} \) returns all the possible abstract executions where the final state satisfies the heap \( \h \), 
+\[
+\begin{rclarray}
+    \func{h2e}{\h, (\conguar, \respo)} & \defeq & \Setcon{\aexec}{\h \in \obsstate{\aexec,\aexec\prjT,\respo}}
+\end{rclarray}
+\]
+\end{defn}
 
 \begin{definition}[Worlds]
 \label{def:world}
@@ -268,7 +330,6 @@ Given the set of heaps $\Heaps$ (\defref{def:heaps}) and a set of \emph{region i
 \end{rclarray}
 \]
 Combining the above with capabilities (\defref{def:capabilities}), the set of \emph{worlds} is defined as follows,
-%
 \[
 \begin{rclarray}
 	\world \in \World  & \eqdef & 
@@ -279,11 +340,20 @@ Combining the above with capabilities (\defref{def:capabilities}), the set of \e
         \land \gs \in \SStates
         \land \for{\rid, \rid'}  \\
         \quad ( \gs(\rid)\projection{1} \composeH \gs(\rid')\projection{1} )\isdef
-        \land \wfW{\rid, \gs(\rid)\projection{2}}
+        \land \func{como}{\rid} = \func{como}{\rid'}
+        \land \clpsW{(\ca, \gs)}\isdef
         \land \dom(\ca) \subseteq \dom(\gs)
     }
 \end{rclarray}
 \]
+The collapse function for a pair of capability and shared state \( \clpsW{.} : \Caps \times \SStates \parfun \powerset{\Aexecs} \) is defined as the follows,
+\[
+\begin{rclarray}
+    \aexec \in \clpsW{( \ca, \emptyset )} & \iffdef & \for{ \txid } \aexec\prjT(\txid) = \emptyset \\
+    ( \aexec \composeAEX \aexec' ) \in \clpsW{(\ca, \Set{\rid \mapsto (\h, \intf)} \uplus \gs)} & \iffdef & 
+            \aexec \in \func{s2e}{\rid, \h, \intf} \land \pred{wf}{\rid, \intf} \land \aexec' \in \clpsW{(\ca, \gs)} \\
+\end{rclarray}
+\] 
 % 
 The \emph{world composition function}, $\composeW: \World \times \World \parfun \World$, is defined component-wise as: $\composeW \eqdef (\composeC, \composeS)$.
 The \emph{world unit set} is $\unitW \eqdef \Setcon{(\ca, \gs)}{(\ca, \gs) \in \World \land \ca \in \unitC}$.
@@ -331,65 +401,3 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \]
 \end{definition}
 
-\begin{defn}[Invariant and well-form of a region]
-Assume two functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns possible initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions.
-The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is a set of abstract executions that is closed under the interference \( \intf \),
-\[
-\begin{rclarray}
-    \func{inv}{\rid, \intf} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \nat} 
-\end{rclarray}
-\]
-Then the well-form condition of the interference of a region, namely \( \wfW{\rid, \intf}\) predicate, is defined with respect to the invariant.
-\[
-\begin{rclarray}
-    \wfW{\rid, \intf} & \defeq & \for{\aexec \in \func{inv}{\rid, \intf}} \pred{wfgf}{\rid, \intf, \aexec} 
-\end{rclarray}
-\]
-All the auxiliary functions and predicates are defined as the follows,
-\[
-\begin{rclarray}
-    \func{iter}{\rid, \intf, 0} & \defeq & \func{init}{\rid}  \\
-    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & \aexec \in \func{init}{\rid}  \\
-    \func{iter}{\rid, \intf, \nat + 1} & \defeq & 
-    \Setcon{ 
-        \aexec 
-    }{ 
-        \for{ \txid, \kap, \obs, \aexec' \in \func{iter}{\rid,\intf, \nat} } 
-        \pred{reachable}{\aexec', \aexec, \txid, \rid, \intf, \kap}
-    }  \\
-    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & 
-    \begin{array}[t]{@{}l}
-        \exsts{ \nat, \txid, \kap, \obs, \aexec' \in \func{iter}{\rid, \intf, \nat} }
-        \land \pred{reachable}{\aexec', \aexec, \txid, \rid, \intf, \kap} \\
-        \quad {} \land \for{\h, \h'} 
-        \h \in \obsstate{\aexec', \aexec'\prjT,\func{como}{\rid}\projection{2}}  \\
-        \qquad {} \land \h' \in \obsstate{\aexec, \aexec\prjV^{-1}(\txid),\func{como}{\rid}\projection{2}}  \\
-        \qqquad {} \implies \h' \in \intf(\kap)(\aexec\prjT(\txid))(\h)
-    \end{array} \\
-    \pred{reachable}{\aexec, \aexec', \txid, \rid, \intf, \kap} & \defeq & 
-    \begin{array}[t]{@{}l}
-        \exsts{\vis, \po, \ar, \evset \in \dom(\intf( \kap ))} \\
-        \quad {} \land \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
-        \quad {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} 
-        \land \aexec' \in \evalCOM{\func{como}{\rid}}
-    \end{array}
-\end{rclarray}
-\]
-\end{defn}
-
-\begin{defn}[State-to-execution]
-\label{def:world2aexec}
-\label{def:state2aexec}
-Given a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{s2e} \) returns all the possible abstract executions,
-\[
-\begin{rclarray}
-    \func{s2e}{\rid, \h, \intf} & \eqdef & \func{inv}{\rid, \intf} \cap \func{h2e}{\h,\func{como}{\rid}} \\
-\end{rclarray}
-\]
-where the \( \funcn{h2e} \) returns all the possible abstract executions where the final state satisfies the heap \( \h \), 
-\[
-\begin{rclarray}
-    \func{h2e}{\h, (\conguar, \respo)} & \defeq & \Setcon{\aexec}{\h \in \obsstate{\aexec,\aexec\prjT,\respo}}
-\end{rclarray}
-\]
-\end{defn}
