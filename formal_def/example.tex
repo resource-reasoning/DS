@@ -1,5 +1,273 @@
 \section{Examples\label{sec:example}}
 
+\sx{New observation:
+\begin{itemize}
+\item We might want to have some assertion to say the initial values of a region.
+\item What is the meaning of sequential composition since some consistency model does not have strong session guarantee, maybe the answer is the ``commit'' order.
+\item Explain stablisation in a roughly syntactic level.
+\end{itemize}
+}
+
+\subsection{Single increment and multi-reader.}
+\[
+    \begin{array}{@{}l@{}}
+        \boxass{\V{x} \pt \V{\nat}}{\lrid}{\intass} \\
+        \C{Inc} \composeK \C{Inc} \text{ is undefined} \\
+        \C{Rd} \text{ is the unit element} \\
+    \end{array}
+\]
+\subsubsection{SER}
+\[
+    \begin{array}{@{}l@{}}
+        \intass : 
+        \begin{rclarray}[t]
+        \C{Inc} & : & \exsts{\V{m, k}} \Set{(\etR, \V{x}, \V{m}), (\etW, \V{x}, \V{m} + 1)} \mat \V{x} \pt \V{k} \oassto \V{x} \pt \V{k} \\
+        \C{Rd}  & : & \exsts{\V{m, k, v}} \Set{(\etR, \V{x}, \V{m})} \mat \V{x} \pt \V{k} \oassto \V{x} \pt \V{k} \\ 
+        \end{rclarray} \\
+    \end{array}
+\]
+
+\[
+\begin{session}
+\specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} } \\
+\specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+\begin{parl}
+    \begin{session}
+    \specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \vx \pt 0 } \\
+        \pderef{\pvar{a}}{\vx} ; \\
+        \specline{ \vx \pt 0 \land \pvar{a} = 0 \sep \Set{(\etR, \vx, 0)} } \\
+        \pmutate{\vx}{\pvar{a} + 1} ; \\
+        \specline{ \vx \pt 1 \land \pvar{a} = 0 \\
+                {} \sep \Set{(\etR, \vx, 0), (\etW, \vx, 1)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \vx \pt 1 } \\
+        \pderef{\pvar{b}}{\vx} ; \\
+        \specline{ \lor \vx \pt 1 \sep \Set{(\etR, \vx, 1)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \vx \pt 1 } \\
+        \pderef{\pvar{a}}{\vx} ; \\
+        \specline{ \vx \pt 1 \land \pvar{a} = 1 \sep \Set{(\etR, \vx, 1)} } \\
+        \pmutate{\vx}{\pvar{a} + 1} ; \\
+        \specline{ \vx \pt 2 \land \pvar{a} = 1 \\
+                {} \sep \Set{(\etR, \vx, 1), (\etW, \vx, 2)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 2}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \end{session}
+    &
+    \begin{session}
+    \specline{\exsts{\V{n}}\boxass{\vx \pt \V{n}}{\lrid}{\intass} \land \V{n} \geq 0 \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \exsts{ \V{v} } \vx \pt \V{v} { \color{gray} \land \V{v} = \V{n} } } \\
+        \pderef{\pvar{c}}{\vx} ; \\
+        \specline{ \exsts{ \V{v} } \vx \pt \V{v} \sep \Set{(\etR, \vx, \V{v})} { \color{gray} \land \V{v} = \V{n} } } \\
+    \end{transaction} \\
+    \specline{\exsts{\V{n}}\boxass{\vx \pt \V{n}}{\lrid}{\intass} \land \V{n} \geq 0 \sep \cass{\C{Rd}}{\lrid} } \\
+    \end{session}
+\end{parl} \\
+\specline{\boxass{\vx \pt 2}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+\specline{\boxass{\vx \pt 2}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} } \\
+\end{session}
+\]
+\subsubsection{SI/PSI}
+\[
+    \begin{array}{@{}l@{}}
+        \intass : 
+        \begin{rclarray}[t]
+        \C{Inc} & : & \exsts{\V{m, k}} \Set{(\etR, \V{x}, \V{m}), (\etW, \V{x}, \V{m} + 1)} \mat \V{x} \pt \V{k} \oassto \V{x} \pt \V{k} \\
+        \C{Rd}  & : & \exsts{\V{m, k, v}} \Set{(\etR, \V{x}, \V{m})} \mat \V{x} \pt \V{k} \oassto \V{x} \pt \V{v} \land \V{v} \leq \V{k} \\ 
+        \end{rclarray} \\
+        \C{Inc} \composeK \C{Inc} \text{ is undefined} \\
+        \C{Rd} \text{ is the unit element} \\
+    \end{array}
+\]
+
+\[
+\begin{session}
+\specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} } \\
+\specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+\begin{parl}
+    \begin{session}
+    \specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \vx \pt 0 } \\
+        \pderef{\pvar{a}}{\vx} ; \\
+        \specline{ \vx \pt 0 \land \pvar{a} = 0 \sep \Set{(\etR, \vx, 0)} } \\
+        \pmutate{\vx}{\pvar{a} + 1} ; \\
+        \specline{ \vx \pt 1 \land \pvar{a} = 0 \\
+                {} \sep \Set{(\etR, \vx, 0), (\etW, \vx, 1)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ {\color{purple} \vx \pt 0} \lor \vx \pt 1 } \\
+        \pderef{\pvar{b}}{\vx} ; \\
+        \specline{ { \color{purple} \vx \pt 0 \sep \Set{(\etR, \vx, 0)} }  \\
+                    {} \lor \vx \pt 1 \sep \Set{(\etR, \vx, 1)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \vx \pt 1 } \\
+        \pderef{\pvar{a}}{\vx} ; \\
+        \specline{ \vx \pt 1 \land \pvar{a} = 1 \sep \Set{(\etR, \vx, 1)} } \\
+        \pmutate{\vx}{\pvar{a} + 1} ; \\
+        \specline{ \vx \pt 2 \land \pvar{a} = 1 \\
+                {} \sep \Set{(\etR, \vx, 1), (\etW, \vx, 2)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 2}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \end{session}
+    &
+    \begin{session}
+    \specline{\exsts{\V{n}}\boxass{\vx \pt \V{n}}{\lrid}{\intass} \land \V{n} \geq 0 \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \exsts{ \V{v} } \vx \pt \V{v} { \color{gray} \land \V{v} \leq \V{n} } } \\
+        \pderef{\pvar{c}}{\vx} ; \\
+        \specline{ \exsts{ \V{v} } \vx \pt \V{v} \sep \Set{(\etR, \vx, \V{v})} { \color{gray} \land \V{v} \leq \V{n} } } \\
+    \end{transaction} \\
+    \specline{\exsts{\V{n}}\boxass{\vx \pt \V{n}}{\lrid}{\intass} \land \V{n} \geq 0 \sep \cass{\C{Rd}}{\lrid} } \\
+    \end{session}
+\end{parl} \\
+\specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+\specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} } \\
+\end{session}
+\]
+
+\subsubsection{Causal}
+
+\[
+    \begin{array}{@{}l@{}}
+        \intass : 
+        \begin{rclarray}[t]
+        \C{Inc} & : & \exsts{\V{m, k}} \Set{(\etR, \V{x}, \V{m}), (\etW, \V{x}, \V{m} + 1)} \mat \V{x} \pt \V{k} \oassto \V{x} \pt \V{v} \land \V{v} \leq \V{k} \\
+        \C{Rd}  & : & \exsts{\V{m, k, v}} \Set{(\etR, \V{x}, \V{m})} \mat \V{x} \pt \V{k} \oassto \V{x} \pt \V{v} \land \V{v} \leq \V{k} \\ 
+        \end{rclarray} \\
+        \C{Inc} \composeK \C{Inc} \text{ is undefined} \\
+        \C{Rd} \text{ is the unit element} \\
+    \end{array}
+\]
+
+\[
+\begin{session}
+\specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} } \\
+\specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+\begin{parl}
+    \begin{session}
+    \specline{\boxass{\vx \pt 0}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \vx \pt 0 } \\
+        \pderef{\pvar{a}}{\vx} ; \\
+        \specline{ \vx \pt 0 \land \pvar{a} = 0 \sep \Set{(\etR, \vx, 0)} } \\
+        \pmutate{\vx}{\pvar{a} + 1} ; \\
+        \specline{ \vx \pt 1 \land \pvar{a} = 0 \\
+                {} \sep \Set{(\etR, \vx, 0), (\etW, \vx, 1)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ {\color{purple} \vx \pt 0} \lor \vx \pt 1 } \\
+        \pderef{\pvar{b}}{\vx} ; \\
+        \specline{ { \color{purple} \vx \pt 0 \sep \Set{(\etR, \vx, 0)} } \\
+                    {} \lor \vx \pt 1 \sep \Set{(\etR, \vx, 1)} } \\
+    \end{transaction} \\
+    \specline{\boxass{\vx \pt 1}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ {\color{purple} \vx \pt 0} \lor \vx \pt 1 } \\
+        \pderef{\pvar{a}}{\vx} ; \\
+        \specline{ { \color{purple} \vx \pt 0 \land \pvar{a} = 0 \sep \Set{(\etR, \vx, 0)} } \\
+                    {} \lor \vx \pt 1 \land \pvar{a} = 1 \sep \Set{(\etR, \vx, 1)} } \\
+        \pmutate{\vx}{\pvar{a} + 1} ; \\
+        \specline{ { \color{purple} \vx \pt 1 \land \pvar{a} = 0 } \\
+                {} { \color{purple} \sep \Set{(\etR, \vx, 0), (\etW, \vx, 1)} } \\
+                {} \lor \vx \pt 2 \land \pvar{a} = 1 \\
+                {} \sep \Set{(\etR, \vx, 1), (\etW, \vx, 2)} } \\
+    \end{transaction} \\
+    \specline{ { \color{purple} \boxass{\vx \pt 1}{\lrid}{\intass} } \lor \boxass{\vx \pt 2}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+    \end{session}
+    &
+    \begin{session}
+    \specline{\exsts{\V{n}}\boxass{\vx \pt \V{n}}{\lrid}{\intass} \land \V{n} \geq 0 \sep \cass{\C{Rd}}{\lrid} } \\
+    \begin{transaction}
+        \specline{ \exsts{ \V{v} } \vx \pt \V{v} { \color{gray} \land \V{v} \leq \V{n} } } \\
+        \pderef{\pvar{c}}{\vx} ; \\
+        \specline{ \exsts{ \V{v} } \vx \pt \V{v} \sep \Set{(\etR, \vx, \V{v})} { \color{gray} \land \V{v} \leq \V{n} } } \\
+    \end{transaction} \\
+    \specline{\exsts{\V{n}}\boxass{\vx \pt \V{n}}{\lrid}{\intass} \land \V{n} \geq 0 \sep \cass{\C{Rd}}{\lrid} } \\
+    \end{session}
+\end{parl} \\
+\specline{ { \color{purple} \boxass{\vx \pt 1}{\lrid}{\intass} } \lor \boxass{\vx \pt 2}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} \sep \cass{\C{Rd}}{\lrid} \sep \cass{\C{Rd}}{\lrid} } \\
+\specline{ { \color{purple} \boxass{\vx \pt 1}{\lrid}{\intass} } \lor \boxass{\vx \pt 2}{\lrid}{\intass} \sep \cass{\C{Inc}}{\lrid} } \\
+\end{session}
+\]
+
+\subsection{Two associated bank accounts}
+\[
+    \begin{array}{@{}l@{}}
+        \boxass{\V{x} \pt \V{n} \sep \V{y} \pt \V{m} }{\lrid}{\intass} \\
+        \C{xx} \composeK \C{xx} \text{ is undefined} \\
+        \C{yy} \composeK \C{yy} \text{ is undefined} \\
+    \end{array}          
+\]
+
+\subsubsection{SER}
+\[
+    \begin{array}{@{}l@{}}
+        \intass : 
+        \begin{rclarray}[t]
+        \C{xx} & : & \exsts{\V{v, k, a, b }} \Setcon{(\etR, \V{x}, \V{v}), (\etR, \V{y}, \V{k}), (\etW, \V{x}, \V{v} - 100)}{\V{v} + \V{k} \geq 100} \\
+        & & \qqquad \mat \V{x} \pt \V{a} \sep \V{y} \pt \V{b} \oassto \V{x} \pt \V{a} \sep \V{y} \pt \V{b} \land \V{a} + \V{b} \geq 0 \\
+        \C{yy} & : & \exsts{\V{v, k, a, b }} \Setcon{(\etR, \V{x}, \V{v}), (\etR, \V{y}, \V{k}), (\etW, \V{y}, \V{k} - 100)}{\V{v} + \V{k} \geq 100} \\
+        & & \qqquad \mat \V{x} \pt \V{a} \sep \V{y} \pt \V{b} \oassto \V{x} \pt \V{a} \sep \V{y} \pt \V{b} \land \V{a} + \V{b} \geq 0 \\
+        \end{rclarray} \\
+    \end{array}
+\]
+
+\[
+\begin{session}
+\specline{ \boxass{\vx \pt 60 \sep \vy \pt 60 }{\lrid}{\intass} \sep \cass{\C{xx}}{\lrid} \sep \cass{\C{yy}}{\lrid} } \\
+\begin{parl}
+    \begin{session}
+        \begin{transaction}
+            \pderef{\pvar{a}}{\vx}; \\
+            \pderef{\pvar{b}}{\vy}; \\
+            \pifs{\pvar{a} + \pvar{b} \geq 100} \\
+            \quad \pmutate{\vx}{\pvar{a} - 100} ; \\
+            \pife 
+        \end{transaction}
+    \end{session}
+    &
+    \begin{session}
+        \begin{transaction}
+            \pderef{\pvar{a}}{\vx}; \\
+            \pderef{\pvar{b}}{\vy}; \\
+            \pifs{\pvar{a} + \pvar{b} \geq 100} \\
+            \quad \pmutate{\vy}{\pvar{b} - 100} ; \\
+            \pife 
+        \end{transaction}
+    \end{session}
+\end{parl} \\
+\specline{ \boxass{\vx \pt -40 \sep \vy \pt 60 }{\lrid}{\intass} \lor \boxass{\vx \pt 60 \sep \vy \pt -40 }{\lrid}{\intass} \sep \cass{\C{xx}}{\lrid} \sep \cass{\C{yy}}{\lrid} } \\
+\end{session}
+\]
+
+\subsubsection{SI/PSI}
+\[
+    \begin{array}{@{}l@{}}
+        \intass : 
+        \begin{rclarray}[t]
+        \C{xx} & : & \exsts{\V{v, k, a, b, c }} \Setcon{(\etR, \V{x}, \V{v}), (\etR, \V{y}, \V{k}), (\etW, \V{x}, \V{v} - 100)}{\V{v} + \V{k} \geq 100} \\
+        & & \qqquad \mat \V{x} \pt \V{a} \sep \V{y} \pt \V{b} \oassto \V{x} \pt \V{a} \sep \V{y} \pt \V{b} + ( \V{c} * 100 ) \\
+        \C{yy} & : & \exsts{\V{v, k, a, b, c }} \Setcon{(\etR, \V{x}, \V{v}), (\etR, \V{y}, \V{k}), (\etW, \V{y}, \V{k} - 100)}{\V{v} + \V{k} \geq 100} \\
+        & & \qqquad \mat \V{x} \pt \V{a} \sep \V{y} \pt \V{b} \oassto \V{x} \pt \V{a} + ( \V{c} * 100 ) \sep \V{y} \pt \V{b} \\
+        \end{rclarray} \\
+    \end{array}
+\]
+
+
+\newpage
+
 A dummy bank transfer example that is not serialisable.
 
 \[
