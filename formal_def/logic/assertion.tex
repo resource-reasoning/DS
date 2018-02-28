@@ -7,7 +7,7 @@ Assume a countably infinite set of \emph{logical variables} $\V x \in \LVar$.
 The set of \emph{logical expressions}, $ \lexpr \in \LExpr$ is defined by the following inductive grammar, where \(\val \in \Val\) (\defref{def:program_values}), \(\txvar \in \TxVars\) and \( \thvar \in \ThdVars \) (\defref{def:stacks}),
 \[
 \begin{rclarray}
-   \lexpr & ::= & \val \mid \txvar \mid \thvar \mid \lvar \mid \lexpr + \lexpr \mid \lexpr * \lexpr \mid \dots 
+   \lexpr & ::= & \val \mid \txvar \mid \thvar \mid \lvar \mid \lexpr + \lexpr \mid \lexpr \times \lexpr \mid \dots 
 \end{rclarray}
 \]
 Assume a set of \emph{logical environments} \(\lenv \in \LEnv: \LVar \parfun \Val\) which associates logical variables with values.
@@ -20,7 +20,7 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}) and a logical environm
         \evalLE{\thvar} & \defeq & \stk(\thvar) \\
         \evalLE{\lvar} & \defeq & \lenv(\lvar) \\
         \evalLE{\lexpr_1 + \lexpr_2} & \defeq & \evalLE{\lexpr_1} + \evalLE{\lexpr_2} \\
-        \evalLE{\lexpr_1 * \lexpr_2} & \defeq & \evalLE{\lexpr_1} * \evalLE{\lexpr_2} \\
+        \evalLE{\lexpr_1 \times \lexpr_2} & \defeq & \evalLE{\lexpr_1} \times \evalLE{\lexpr_2} \\
         \dots & \defeq & \dots \\
     \end{rclarray}
 \]
@@ -89,22 +89,17 @@ Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contain
 
 \subsection{Global/Program}
 
-\sx{This is probably the simplified form  for a counter example (not necessary to be stable at the assertion level) in SI
+\sx{This is probably the simplified form  for a counting example (not necessary to be stable at the assertion level) in SI
 \[
 \begin{array}{@{}l@{}}
     \boxass{\vx \pt 1}{\lrid}{\intass} \\
-    \intass: \perm{INC} : \Set{(\etR, \vx, k), (\etW, \vx, k + 1)} \mat \vx \pt n \oassto \vx \pt n \\
-    \intass: \perm{READ} : \Set{(\etR, \vx, k)} \mat  \vx \pt n \oassto \vx \pt m \land m \leq n \\
+    \intass: \perm{INC} : \Set{(\etR, \vx, k), (\etW, \vx, k + 1)} \mat \vx \pt k \\
+    \intass: \perm{READ} : \Set{(\etR, \vx, k)} \mat  \vx \pt n \land k \leq n \\
 \end{array}
 \]
-The first line of interference says one can increase the counter from \( k \) to \( k + 1 \) given by the fingerprint way to specify the action.
-It also say if one want to increase the counter, it will have local state the same as the global state, specified by the thing after, which currently I call it observation assertion which will be interpreted into a function that maps a heap to a set of heap.
-For example In the box assertion we show here, it will have \( \vx \pt 1\) as the initial local state if one increases the counter.
-The second line says one can always read the value of \( \vx \) which will be an arbitrary \( k \).
-If one only want to read, the initial local state will be any value \( m \) smaller than the global value \( n \).
-For example In the box assertion we show here, it will have \( \vx \pt 0 \lor \vx \pt 1 \) as the initial local state if one only wants to read the counter.
-
-Each box assertion together with the interference must make sense with respect to the consistency model.
+The first line of interference says one can increase the counter from \( k \) to \( k + 1 \), by reading it and write back, when the shared state is a heap satisfying assertion \( \vx \pt k \).
+The second line says one can always read the value of \( \vx \) which will be an value \( k \) which is equal or smaller than the shared state.
+The interference must make sense with respect to the consistency model.
 }
 
 \begin{definition}[Capabilities]
@@ -126,6 +121,7 @@ Then given a set of \emph{region identifiers} \( \rid \in \RegionID \), the \emp
 \end{definition}
 
 
+{ \color{gray}
 \begin{defn}[Observation]
 \label{def:observation}
 
@@ -153,9 +149,8 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \end{rclarray}
 \]
 \end{defn}
+}
 
-
-\subsubsection{One action model}
 \begin{defn}[Actions]
 Given the set of transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
 \[
@@ -167,95 +162,97 @@ Given the set of transaction events \( \Events \) (\defref{def:transaction-event
 
 \begin{defn}[Interference]
 \label{def:intf}
-Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}) and observation assertion \( \oass \in \OAst \) (\defref{def:observation}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
+Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}) and local assertion \( \lpre \in \LAst \) (\defref{def:local_assertions}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
 \[
 \begin{rclarray}
 	\intass & ::=  &
-	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \fp \mat \oass } \cup \intass 
+	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \fp \mat \lpre } \cup \intass 
 \end{rclarray}
 \]
 It will be interpreted to a set of \emph{interference environments}, this is,
 \[
 \begin{rclarray}
-    \inter \in \Interference & \defeq & \Kaps \parfun  ( \powerset{\Actions} \parfun \Observations )
+    \inter \in \Interference & \defeq & \Kaps \parfun \Actions \parfun \powerset{\Heaps}
 \end{rclarray}
 \]
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
 %
 \[
 \begin{rclarray}
-	\evalI{\emptyset}(\kap) & \eqdef & \text{undefined} \\
-	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \fp \mat \oass } \cup \intass }(\kap) & \eqdef &
-    \Setcon{ \evalF[\lenv',\stk]{\fp} \mapsto \evalO[\lenv',\stk]{\oass} }{\exsts{ \vec{v} } \lenv' = \lenv\remapsto{\vec{\lvar}}{\vec v} }
-	\uplus
-	\evalI{\intass}(\kap) \\
+	\evalI{\emptyset}(\kap)(\action) & \eqdef & \text{undefined} \\
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \fp \mat \lpre } \cup \intass }(\kap)(\action) & \eqdef &
+    \begin{cases}
+    \evalLS[\lenv',\stk]{\lpre} & \action \in \evalF[\lenv',\stk]{\fp} \\
+    \evalI{\intass}(\kap)(\action) & \text{ otherwise} \\
+    \end{cases} \\
+    & & \text{where there exists a vector of values \( \vec{\val}\) such that } \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \\
 \end{rclarray}
 \] 
 \end{defn}
 
-{ \color{gray}
-    \subsubsection{Another action model}
-    \begin{definition}[Actions]
-    \label{def:action}
-    Given the set of heaps \( \Heaps \) (\defref{def:heaps}) and transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
-    %
-    \[
-        \begin{rclarray}
-    	\action \in \Actions & \eqdef &
-    	\Setcon{
-    		((\h_{\lpre},\emptyset), (h_{\lpost},\evset))
-    	}{
-    		\h_{\lpre}, \h_{\lpost} \in \Heaps 
-            \land \orth{\h_{\lpre}} = \orth{\h_{\lpost}}
-            \land \evset \subseteq \Events \\
-            \quad {} \land \for{\addr,\val}  
-            (\etR, \addr, \val) \in \evset \implies \h_{\lpre}(\addr)  = \val \\
-            \qquad {} \land (\etW, \addr, \val) \in \evset \implies \h_{\lpost}(\addr)  = \val
-    	}
-        \end{rclarray}
-    \] 
-    where, the \emph{orthogonal} \(\orth{(.)} \) is defined as follows, for all domains \( \sort M \), all \( m \in \sort{M} \) and its composition function \( \compose{} \),
-    \[
-        \begin{rclarray}
-        \orth{m} & \eqdef & \Setcon{m}{m \compose{} m \isdef} \\
-        \end{rclarray}
-    \]
-    \end{definition}
+%{ \color{gray}
+    %\subsubsection{Another action model}
+    %\begin{definition}[Actions]
+    %\label{def:action}
+    %Given the set of heaps \( \Heaps \) (\defref{def:heaps}) and transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
+    %%
+    %\[
+        %\begin{rclarray}
+        %\action \in \Actions & \eqdef &
+        %\Setcon{
+            %((\h_{\lpre},\emptyset), (h_{\lpost},\evset))
+        %}{
+            %\h_{\lpre}, \h_{\lpost} \in \Heaps 
+            %\land \orth{\h_{\lpre}} = \orth{\h_{\lpost}}
+            %\land \evset \subseteq \Events \\
+            %\quad {} \land \for{\addr,\val}  
+            %(\etR, \addr, \val) \in \evset \implies \h_{\lpre}(\addr)  = \val \\
+            %\qquad {} \land (\etW, \addr, \val) \in \evset \implies \h_{\lpost}(\addr)  = \val
+        %}
+        %\end{rclarray}
+    %\] 
+    %where, the \emph{orthogonal} \(\orth{(.)} \) is defined as follows, for all domains \( \sort M \), all \( m \in \sort{M} \) and its composition function \( \compose{} \),
+    %\[
+        %\begin{rclarray}
+        %\orth{m} & \eqdef & \Setcon{m}{m \compose{} m \isdef} \\
+        %\end{rclarray}
+    %\]
+    %\end{definition}
     
-    \begin{defn}[Interference]
-    \label{def:intf}
-    Given the local assertion \( \lpre, \lpost \in \LAst \) and observation assertion \( \oass \in \OAst \) (\defref{def:observation}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
-    \[
-    \begin{rclarray}
-    	\intass & ::=  &
-    	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \oass \mat \lpre \transfersto \lpost } \cup \intass 
-    \end{rclarray}
-    \]
-    The set of \emph{interference environments} is $\inter \in \Interference \defeq \Kaps \parfun  ( \Observations \to \powerset{\Actions} )$.
-    Then given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
-    %
-    \[
-    \begin{rclarray}
-    	\evalI{\emptyset}(\kap)(\obs) & \eqdef & \emptyset \\
-    	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \oass \mat \lpre \transfersto \lpost } \cup \intass }(\kap)(\obs) & \eqdef &
-        \begin{cases}
-        \{ \setaction \mid \dagger  \}
-    	\cup 
-    	\evalI{\intass}(\kap)(\obs) & \text{if } \exsts{ \vec{v}, \lenv'} \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} \land \evalO[\lenv',\stk]{\oass} = \obs \\
-    	\evalI{\intass}(\kap)(\obs) & \text{otherwise} \\
-        \end{cases}
-        \\
-        \dagger & \equiv & 
-        \begin{array}[t]{l}
-            \for{ \action \in \setaction }
-            \action \in \Actions 
-    		\land \action\projection{1} \in \evalLS[\lenv', \stk]{\lpre} 
-            \land \action\projection{2} \in \evalLS[\lenv', \stk]{\lpost}  \\
-        \end{array}
-    \end{rclarray}
-    \] 
-    \end{defn}
-}
+    %\begin{defn}[Interference]
+    %\label{def:intf}
+    %Given the local assertion \( \lpre, \lpost \in \LAst \) and observation assertion \( \oass \in \OAst \) (\defref{def:observation}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
+    %\[
+    %\begin{rclarray}
+        %\intass & ::=  &
+        %\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \oass \mat \lpre \transfersto \lpost } \cup \intass 
+    %\end{rclarray}
+    %\]
+    %The set of \emph{interference environments} is $\inter \in \Interference \defeq \Kaps \parfun  ( \Observations \to \powerset{\Actions} )$.
+    %Then given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
+    %%
+    %\[
+    %\begin{rclarray}
+        %\evalI{\emptyset}(\kap)(\obs) & \eqdef & \emptyset \\
+        %\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \oass \mat \lpre \transfersto \lpost } \cup \intass }(\kap)(\obs) & \eqdef &
+        %\begin{cases}
+        %\{ \setaction \mid \dagger  \}
+        %\cup 
+        %\evalI{\intass}(\kap)(\obs) & \text{if } \exsts{ \vec{v}, \lenv'} \lenv' = \lenv \remapsto{\vec{\lvar}}{\vec v} \land \evalO[\lenv',\stk]{\oass} = \obs \\
+        %\evalI{\intass}(\kap)(\obs) & \text{otherwise} \\
+        %\end{cases}
+        %\\
+        %\dagger & \equiv & 
+        %\begin{array}[t]{l}
+            %\for{ \action \in \setaction }
+            %\action \in \Actions 
+            %\land \action\projection{1} \in \evalLS[\lenv', \stk]{\lpre} 
+            %\land \action\projection{2} \in \evalLS[\lenv', \stk]{\lpost}  \\
+        %\end{array}
+    %\end{rclarray}
+    %\] 
+    %\end{defn}
+%}
  
 \begin{defn}[Invariant and well-form of a region]
 Assume two functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns possible initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions.
