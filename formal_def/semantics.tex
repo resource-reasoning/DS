@@ -91,16 +91,33 @@ The events are the first read and the last write of each address.
 \begin{defn}[Transactions and transaction events]
 \label{def:transaction-event}
 \label{def:transactions}
-Assume a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \dots}\).
-The set of \emph{transaction events} \( \Events \) is defined as the follows,
+Assume a set of \emph{Event tags}, a \emph{transaction event} \( \ev \in \Events \) is a tuple of event tag, an address and a value that represent read or write of the address.
+The \emph{event tags} \( \etR \) and \( \etW \) correspond to read and write respectively.
 \[
 \begin{rclarray}
 \ETags & \defeq & \Set{\etR, \etW} \\
-\ev \in \evset \subseteq \Events & \defeq  & \ETags \times \Addr \times \Val
+\ev \in \Events & \defeq  & \ETags \times \Addr \times \Val
 \end{rclarray}
 \]
-The \emph{event tags} \( \etR \) and \( \etW \) correspond to read and write respectively.
-Given above, the \emph{flush read} \( \flushR \) and \emph{flush write} \(\flushW \) operators are defined as the follows, 
+A \emph{set of valid events}, \( \evset \in \Evsets \), is a subset of \( \Events \) where for any two elements within the set, they either have different tags or address.
+\[
+    \begin{rclarray}
+        \Evsets & \defeq & \Setcon{\evset}{\evset \subseteq \Events \land \for{\ev, \ev' \in \evset} \ev\projection{1} \neq  \ev'\projection{1} \lor \ev\projection{2} \neq  \ev'\projection{2} } \\
+    \end{rclarray}
+\]
+The composition of two sets of events is,
+
+\[ 
+\begin{rclarray}
+    \evset \composeE \evset' & \defeq & 
+    \begin{cases}
+        \evset \uplus \evset' & \text{if } \for{\ev \in \evset, \ev' \in \evset'} \ev\projection{1} \neq  \ev'\projection{1} \lor \ev\projection{2} \neq  \ev'\projection{2} \\
+        \text{undefined} & \text{otherwise}
+    \end{cases}
+\end{rclarray}
+\]
+and the unit element is \( \unitE \defeq \emptyset\).
+The \emph{flush read} \( \flushR \) and \emph{flush write} \(\flushW \) operators are defined as the follows, 
 \[
 \begin{rclarray}
     \evset \flushR (\etR, \addr, \val) & \defeq & 
@@ -113,37 +130,24 @@ Given above, the \emph{flush read} \( \flushR \) and \emph{flush write} \(\flush
 \]
 The flush read \( \flushR\) includes the new read event if there is no other read or write event to the same address.
 While the flush write  \( \flushW \) deletes other write events from the set and includes the new one.
-Assume the following,
-\[
-    \begin{rclarray}
-        (\etag, \addr, \stub) \compose[\ev] (\etag', \addr', \stub) & \defeq & 
-        \begin{cases}
-        \text{defined} & \text{ if } \addr \neq \addr' \lor \etag \neq \etag' \\
-        \text{undefined} & \text{ otherwise} \\
-        \end{cases}
-    \end{rclarray}
-\]
-A set of events is valid if the compositions of any of two elements are defined,
-\[
-    \begin{rclarray}
-        \pred{valid}{\evset} & \defeq & \for{\ev, \ev' \in \evset} (\ev \compose[\ev] \ev')\isdef
-    \end{rclarray}
-\]
-All the valid sets of events form a PCM, \( (\Setcon{\evset}{\evset \subseteq \Events \land \pred{valid}{\evset}}, \composeE, \unitE) \) , where \( \composeE \defeq \uplus \) and \( \unitE \defeq \emptyset\).
-Last, the \emph{transactions} \( \tx \in \Tx \) is defined as a finite partial function from transactions identifiers \( \TxID \) to a valid set of events,
+Assuming a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \dots}\), the \emph{transactions} \( \tx \in \Tx \) is defined as a finite partial function from transactions identifiers \( \TxID \) to valid sets of events \( \Evsets \),
 \[
 \begin{rclarray}
-\tx \in \Tx & \defeq & \TxID \parfinfun \Setcon{\evset}{\evset \subseteq \Events \land \pred{valid}{\evset}}
+\tx \in \Tx & \defeq & \TxID \parfinfun \Evsets
 \end{rclarray}
 \]
 \end{defn}
+
+\begin{lem}
+The flush read and flush write preserve validity of set.
+\end{lem}
 
 \begin{defn}[Transaction operational semantics]
 Given the set of stacks including thread stacks \( \ThdStacks \) and transaction stacks \( \TxStacks \) (\defref{def:stacks}), heaps \( \Heaps \) (\defin\ref{def:heaps}) and transactions \( \Transactions \) (\defin\ref{def:language}), the \emph{operational semantics of transactions}, 
 \[
 \begin{rclarray}
 \toL & : & \ThdStacks \times \\
-& & \quad ((\TxStacks \times \Heaps \times \powerset{\Events}) \times \Transactions) \times ((\TxStacks \times \Heaps \times \powerset{\Events}) \times \Transactions)
+& & \quad ((\TxStacks \times \Heaps \times \Evsets) \times \Transactions) \times ((\TxStacks \times \Heaps \times \Evsets) \times \Transactions)
 \end{rclarray}
 \]
 is given in \fig\ref{fig:transaction_semantics}.
@@ -276,7 +280,7 @@ The composition of two runtime abstract executions, \( \composeAEXRUN : \Aexecru
 \begin{rclarray}
     \aexecrun_{1} \composeAEXRUN \aexecrun_{2} & \defeq & 
     \begin{cases}
-        \left( \lambda \txid \ldotp \aexecrun_{1}\prjT(\txid) \uplus \aexecrun_{2}\prjT(\txid), \aexecrun_{1}\prjI, \aexecrun_{1}\prjP, \aexecrun_{1}\prjV, \aexecrun_{1}\prjA \right) & \dagger \\
+        \left( \lambda \txid \ldotp \aexecrun_{1}\prjT(\txid) \composeE \aexecrun_{2}\prjT(\txid), \aexecrun_{1}\prjI, \aexecrun_{1}\prjP, \aexecrun_{1}\prjV, \aexecrun_{1}\prjA \right) & \dagger \\
         \text{undefined} & \text{ otherwise}
     \end{cases} \\
     \dagger & \equiv &  

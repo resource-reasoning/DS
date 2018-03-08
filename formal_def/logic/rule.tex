@@ -24,7 +24,7 @@ This is because once a location has been re-written, the rest read are considere
 
 \[
     \infer[\rl{TRDeref}]{%
-        \tripleL{\expr \pt \lexpr \sep \fp }{ \pderef{\txvar}{\expr} }{\txvar \dot= \lexpr \sep \expr \pt \lexpr \sep \fp' }
+        \tripleL{\expr \pt \lexpr \sep \fpF }{ \pderef{\txvar}{\expr} }{\txvar \dot= \lexpr \sep \expr \pt \lexpr \sep \fpto{\fp'} }
     }{%
         \txvar \notin \func{fv}{\expr}
         && \txvar \notin \func{fv}{\lexpr}  
@@ -35,7 +35,7 @@ This is because once a location has been re-written, the rest read are considere
 
 \[
     \infer[\rl{TRMutate}]{%
-        \tripleL{\expr_1 \pt \stub \sep \fp }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \pt \expr_2 \sep \fp' } 
+        \tripleL{\expr_1 \pt \stub \sep \fpF }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \pt \expr_2 \sep \fpto{\fp'} } 
     }{
         \fp' = \fp \flushW (\etW, \expr_{1}, \expr_{2})
     }
@@ -94,21 +94,18 @@ Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} re
     \begin{rclarray}
 	\relyU & \eqdef &
 	\myset{
-		((\ca, \Set{\rid \mapsto (\h, \intf)} \uplus \gs_{f}), (\ca, \Set{\rid \mapsto (\h', \intf)} \uplus \gs_{f}))	
+		((\ca, \Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs), (\ca, \Set{\rid \mapsto (\h', \hset', \intf)} \uplus \gs))	
 	}{
-        \dagger
+        \exsts{\kap, \kap', \evset,\aexec, \aexec'}  \\
+        \quad ( \kap \composeK \kap' \composeK \ca(\rid) ) \isdef
+        \land \evset \in \dom(\intf(\kap))  \\
+        \quad {} \land \aexec \in \clpsW{\Set{\rid \mapsto (\h, \hset, \intf)}} \\
+        \quad {} \land \aexec' \in \clpsW{\Set{\rid \mapsto (\h', \hset', \intf)}}  \\
+        \quad {} \land (\aexec, \evset, \aexec') \in \func{transinv}{\rid, \intf}
 	} \\
-    \dagger & \equiv & 
-    \begin{array}[t]{l}
-        \exsts{\txid, \kap, \kap', \evset,\aexec, \aexec'} 
-        ( \kap \composeK \kap' \composeK \ca(\rid) ) \isdef
-        \land \evset \in ( \dom(\intf(\kap)) \uplus \Set{\emptyset} ) \\
-        \quad {} \land \aexec \in \func{s2e}{\rid,\h, \intf} 
-        \land \aexec' \in \func{s2e}{\rid, \h', \intf} 
-        \land \pred{reachable}{\aexec, \aexec', \txid, \evset, \func{como}{\rid}}
-    \end{array}
     \end{rclarray}
 \]
+The invariant of a shared state is a lift of the invariants of interferences of regions.
 The \emph{rely} relation, $\RelyI \eqdef \World \times \World$, is defined as follows:
 \[
     \begin{rclarray}
@@ -126,19 +123,15 @@ The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined
     \begin{rclarray}
 	\guarU & \eqdef &
 	\myset{
-		((\ca, \Set{\rid \mapsto (\h, \intf)} \uplus \gs_{f}), (\ca, \Set{\rid \mapsto (\h', \intf)} \uplus \gs_{f}))	
+		((\ca, \Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs), (\ca, \Set{\rid \mapsto (\h', \hset', \intf)} \uplus \gs))	
 	}{
-        \dagger
+        \exsts{\kap, \evset,\aexec, \aexec'}  \\
+        \quad \kap \leq \ca(\rid)
+        \land \evset \in \dom(\intf(\kap))  \\
+        \quad {} \land \aexec \in \clpsW{\Set{\rid \mapsto (\h, \hset, \intf)}} \\
+        \quad {} \land \aexec' \in \clpsW{\Set{\rid \mapsto (\h', \hset', \intf)}}  \\
+        \quad {} \land (\aexec, \evset, \aexec') \in \func{transinv}{\rid, \intf}
 	} \\
-    \dagger & \equiv & 
-    \begin{array}[t]{l}
-        \exsts{\txid, \kap, \evset, \aexec, \aexec'} 
-        \kap \leq \ca(\rid)
-        \land \evset \in ( \dom(\intf(\kap)) \uplus \Set{\emptyset} ) \\
-        \quad {} \land \aexec \in \func{s2e}{\rid, \h, \intf} 
-        \land \aexec' \in \func{s2e}{\rid, \h', \intf} 
-        \land \pred{reachable}{\aexec, \aexec', \txid, \evset, \func{como}{\rid}}
-    \end{array}
     \end{rclarray}
 \]
 The \emph{guarantee} relation, $\GuarI: \ConsisModels \to \World \times \World$, is defined as follows:
@@ -157,15 +150,16 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 \begin{figure}[t!]
 \hrule\vspace{5pt}
 
-\sx{not right}
+\sx{not right, we want to say a transaction \( \trans \) can be abstracted to a fingerprint \( \fp \)}
 
 \[
     \infer[\rl{PRCommit}]{%
         \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
     }{%
         \begin{array}{c}
-        \tripleL{\lpre \sep \emptyset}{\trans}{\lpost \sep \fp}
-        \land \rpt{\gpre}{\gpost}{\fp} \\
+        \gpre \snap \bar{\lpre}
+        \quad \tripleL{\bar{\lpre} \sep \fpEMP}{\trans}{\bar{\lpost} \sep \fpF}
+        \quad \rpt{\gpre}{\gpost}{\fp} \\
         \stable{\gpre} 
         \quad \stable{\gpost} 
         \end{array}
@@ -232,6 +226,9 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 
 \[
 \begin{rclarray}
+    \gpre \snap \bar{\lpre} & \defeq & \for{ \w, \h } \w \in \evalW{\gpre} \land \pred{unbox}{\w, \h} \implies \h \in \evalLS{\bar{\lpre}}\\
+    \pred{unbox}{\gs, \h} & \defeq & \gs = \emptyset \land \h = \unitH \\
+    \pred{unbox}{\Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs, \h \composeH \h'} & \defeq & \h \in \hset \land \pred{unbox}{\gs,\h'}\\
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l@{}}
         \for{\w, \w'}
@@ -246,7 +243,7 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
     \pred{allowed}{\gs \uplus \gs', \evset \uplus \evset'} & \defeq & 
     \begin{array}[t]{@{}l}
         \exsts{\h, \h', \intf, \kap} 
-        \gs = \Set{\rid \mapsto (\h, \intf)}
+        \gs = \Set{\rid \mapsto (\h, \stub, \intf)}
         \land \h' \in \intf(\kap)(\evset)
         \land \h' \sqsubseteq \h
         \land \pred{allowed}{\gs', \evset'} \\
@@ -261,7 +258,10 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 \end{rclarray}                          
 \]
 
-\sx{the allowed predicate might be redundant since we require the pre- and post- conditions are in guarantee and guarantee is  defined with respect to the invariant of a region, and the invariant of a region require similar conditions as the allowed predicate.}
+\sx{
+    the allowed predicate might be redundant since we require the pre- and post- conditions are in guarantee and guarantee is  defined with respect to the invariant of a region, and the invariant of a region require similar conditions as the allowed predicate.
+    For LLW the propagate can be done by syntactically update those addresses that has been written.
+}
 
 \hrule\vspace{5pt}
 \caption{The rules for programs}

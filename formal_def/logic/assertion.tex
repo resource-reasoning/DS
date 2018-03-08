@@ -60,7 +60,7 @@ Notice that even though the fingerprint assertion is a set of syntactic events b
 Given the set of logical expressions \( \LExpr \), logical variables \( \LVar \) and fingerprint assertion \( \FAst \), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined inductively by the following grammar, 
 \[
 \begin{rclarray}
-	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \lexpr \pt \lexpr \mid \fp \mid \lpre \sep \lpost  \\
+	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \lexpr \pt \lexpr \mid \fpF \mid \lpre \sep \lpost  \\
 \end{rclarray}	 
 \]
 Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \parfun \Heaps \times \powerset{ \Events } $, is defined over the structure of local assertions as follows,
@@ -72,9 +72,9 @@ Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation fu
 	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
 	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
 	\evalLS{\lpre \implies \lpost} & \defeq & \evalLS{\lpre} \subseteq \evalLS{\lpost}  \\
-	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \emptyset) }  \\
-	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \emptyset) } \\
-	\evalLS{ \fp } & \defeq & \Set{ (\unitH, \evalF{\fp}) } \\
+	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
+	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \unitE) } \\
+	\evalLS{ \fpF } & \defeq & \Set{ (\unitH, \evalF{\fp}) } \\
 	\evalLS{\lpre \sep \lpost} & \defeq & 
     \Setcon{
         (\h_1 \composeH \h_2, \evset_{1} \composeE \evset_{2})
@@ -257,40 +257,52 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     %\end{defn}
 %}
  
-\begin{defn}[Invariant and well-form of a region]
+\begin{defn}[Transition invariant and well-form of a region]
+\label{def:world2aexec}
+\label{def:state2aexec}
 Assume two functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns possible initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions.
 Also assume all the initial states for a region satisfy the consistency model, \ie
 \[
 \for{\rid, \aexec} \aexec \in \func{init}{\rid} \implies \aexec \in \evalCOM{\func{como}{\rid}}
 \]
-The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is a set of paired abstract executions that is closed under the interference \( \intf \),
+The  invariant of transitions for a region, namely \( \func{transinv}{\rid, \intf} \), is a set of paired abstract executions that is closed under the interference \( \intf \),
 \[
 \begin{rclarray}
-    \func{inv}{\rid, \intf} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \nat} 
+    \func{transinv}{\rid, \intf} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \nat} 
 \end{rclarray}
 \]
-Then the well-form condition of the interference of a region, namely \( \wfW{\rid, \intf}\) predicate, is defined with respect to the invariant.
+The well-form condition of the interference of a region, namely \( \pred{wfintf}{\rid, \intf}\) predicate, is defined with respect to the invariant.
 \[
 \begin{rclarray}
-    \wfW{\rid, \intf} & \defeq & \for{\aexec \in \func{inv}{\rid, \intf}} \pred{wfgf}{\rid, \intf, \aexec} 
+    \pred{wfintf}{\rid, \intf} & \defeq & \for{\aexec} \aexec \in \func{inv}{\rid, \intf} \land \pred{wfabs}{\rid, \intf, \aexec} 
+\end{rclarray}
+\]
+Where the \( \funcn{inv} \) is the second projection of \( \funcn{transinv} \), this is, 
+\[
+\begin{rclarray}
+    \func{inv}{\rid, \intf} & \defeq & \func{transinv}{\rid, \intf}\projection{3}
 \end{rclarray}
 \]
 All the auxiliary functions and predicates are defined as the follows,
 \[
 \begin{rclarray}
-    \func{iter}{\rid, \intf, 0} & \defeq & \func{init}{\rid}  \\
-    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & \aexec \in \func{init}{\rid}  \\
+    \func{iter}{\rid, \intf, 0} & \defeq & \Setcon{(\aexec, \unitE, \aexec)}{ \aexec \in \func{init}{\rid}}  \\
+    \pred{wfabs}{\rid, \intf, \aexec} & \defeq & \aexec \in \func{init}{\rid}  \\
     \func{iter}{\rid, \intf, \nat + 1} & \defeq & 
     \Setcon{ 
-        \aexec 
+        (\aexec, \evset, \aexec')
     }{ 
-        \for{ \txid, \kap, \obs, \aexec' \in \func{iter}{\rid,\intf, \nat}, \evset \in ( \dom(\intf( \kap )) \uplus \Set{\emptyset} ) }  \\
-        \quad \pred{reachable}{\aexec', \aexec, \txid, \evset, \func{como}{\rid}}
+        \for{ \txid, \kap, \obs, \aexec}
+        (\stub, \aexec) \in \func{iter}{\rid,\intf, \nat}
+        \land \evset \in ( \dom(\intf( \kap )) \cup \Set{\emptyset} \\
+        \quad \pred{reachable}{\aexec, \aexec', \txid, \evset, \func{como}{\rid}}
     }  \\
-    \pred{wfgf}{\rid, \intf, \aexec} & \defeq & 
+    \pred{wfabs}{\rid, \intf, \aexec'} & \defeq & 
     \begin{array}[t]{@{}l}
-        \exsts{ \nat, \txid, \kap, \obs, \aexec' \in \func{iter}{\rid, \intf, \nat}, \evset \in ( \dom(\intf( \kap )) \uplus \Set{\emptyset} ) } \\
-        \quad \pred{reachable}{\aexec', \aexec, \txid, \evset, \func{como}{\rid}}  \\
+        \exsts{ \nat, \txid, \kap, \obs, \aexec, \evset }
+        (\aexec, \evset, \aexec') \in \func{iter}{\rid, \intf, \nat}
+        \land \evset \in ( \dom(\intf( \kap )) \uplus \Set{\emptyset} ) \\
+        \quad \pred{reachable}{\aexec, \aexec', \txid, \evset, \func{como}{\rid}}  \\
         \qquad \implies \obsstate{\aexec', \aexec'\prjT,\func{como}{\rid}\projection{2}} \subseteq \intf(\kap)(\evset)
     \end{array} \\
     \pred{reachable}{\aexec, \aexec', \txid, \evset, \como} & \defeq & 
@@ -302,31 +314,39 @@ All the auxiliary functions and predicates are defined as the follows,
     \end{array}
 \end{rclarray}
 \]
+Given a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{r2e} \) returns all the possible abstract executions that are included in the invariant of a region and satisfy the state \( \h \),
+\[
+\begin{rclarray}
+    \func{r2e}{\rid, \h, \intf} & \eqdef & \Setcon{\aexec}{\aexec \in \func{inv}{\rid, \intf} \land \h \in \obsstate{\aexec,\aexec\prjT,\func{como}{\rid}\projection{2}}} \\
+\end{rclarray}
+\]
+A set of heaps \( \hset \) approximates the observation of a region \( \rid \) under state \( \h \), namely \( \pred{approx}{\rid, \h, \hset, \intf} \), when an abstract execution satisfies the state \( \h \) and it can reach a new state by appending a new transaction \( \txid \), the observable state of the new transaction must included in the approximation \( \hset \),
+\[
+\begin{rclarray}
+    \pred{approx}{\rid, \h, \hset, \intf} & \eqdef & 
+    \begin{array}[t]{@{}l}
+    \for{ \aexec, \aexec' } (\aexec, \aexec') \in \func{transinv}{\rid, \intf}
+    \land \aexec \in \func{r2e}{\rid, \h, \intf } \\
+    {} \land \exsts{ \txid } \txid = \max_{\ar}{\aexec'\prjT} 
+    \land \obsstate{\aexec,\aexec\prjV^{-1}(\txid),\func{como}{\rid}\projection{2}} \subseteq \hset
+    \end{array}
+\end{rclarray}
+\]
+Therefore, a region is well-form, if the interference is well-form and the approximation is well-form,
+\[
+\begin{rclarray}
+    \pred{wf}{\rid, \h, \hset, \intf} & \eqdef & \pred{wfintf}{\rid, \intf} \land \pred{approx}{\rid, \h, \hset, \intf}
+\end{rclarray}
+\]
 \end{defn}
-
 The \( \predn{reachable} \) predicate allows the new abstract execution \( \aexec' \) to be appended with a transaction \( \txid \) associated with a empty event set, \ie \( \evset = \emptyset \).
 The reason for that is, since a region is a representation of part of the entire machine state, we have to take into account the rest of the state, meaning the frame.
 
-\begin{defn}[State-to-execution]
-\label{def:world2aexec}
-\label{def:state2aexec}
-Given a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{s2e} \) returns all the possible abstract executions,
-\[
-\begin{rclarray}
-    \func{s2e}{\rid, \h, \intf} & \eqdef & \func{inv}{\rid, \intf} \cap \func{h2e}{\h,\func{como}{\rid}} \\
-\end{rclarray}
-\]
-where the \( \funcn{h2e} \) returns all the possible abstract executions where the final state satisfies the heap \( \h \), 
-\[
-\begin{rclarray}
-    \func{h2e}{\h, (\conguar, \respo)} & \defeq & \Setcon{\aexec}{\h \in \obsstate{\aexec,\aexec\prjT,\respo}}
-\end{rclarray}
-\]
-\end{defn}
-
 \begin{definition}[Worlds]
 \label{def:world}
-Given the set of heaps $\Heaps$ (\defref{def:heaps}) and a set of \emph{region identifiers} \( \rid \in \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \to \Heaps \times \Interference \) and the \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as $\composeS \eqdef \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$,
+Given the set of heaps $\Heaps$ (\defref{def:heaps}) and a set of \emph{region identifiers} \( \rid \in \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \to \Heaps \times \powerset{\Heaps} \times \Interference \).
+Each region has its current state, a set of possible initial states for transitions and the interference.
+The \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as $\composeS \eqdef \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$,
 %
 \[
 \begin{rclarray}
@@ -337,7 +357,7 @@ Given the set of heaps $\Heaps$ (\defref{def:heaps}) and a set of \emph{region i
 	\end{cases}
 \end{rclarray}
 \]
-Combining the above with capabilities (\defref{def:capabilities}), the set of \emph{worlds} is defined as follows,
+A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and capabilities \( \ca \) (\defref{def:capabilities}), where regions are associated with the same consistency model and the collapse of the pair exists, \ie regions are well-form and compatible.
 \[
 \begin{rclarray}
 	\world \in \World  & \eqdef & 
@@ -346,20 +366,23 @@ Combining the above with capabilities (\defref{def:capabilities}), the set of \e
     }{ 
         \ca \in \Caps 
         \land \gs \in \SStates
-        \land \for{\rid, \rid'}  \\
-        \quad ( \gs(\rid)\projection{1} \composeH \gs(\rid')\projection{1} )\isdef
-        \land \func{como}{\rid} = \func{como}{\rid'}
-        \land \clpsW{(\ca, \gs)}\isdef
-        \land \dom(\ca) \subseteq \dom(\gs)
+        \land \clpsW{\gs} \neq \emptyset
+        \land \dom(\ca) \subseteq \dom(\gs) \\
+        \quad {} \land \for{\rid, \rid'}
+        \land \func{como}{\rid} = \func{como}{\rid'} \\
+        \quad {} \land \for{\h, \h' }
+        \h \in \Set{\gs(\rid)\projection{1}} \cup \gs(\rid)\projection{2}
+        \land \h' \in \Set{\gs(\rid')\projection{1}} \cup \gs(\rid')\projection{2} 
+        \land ( \h \composeH \h' )\isdef
     }
 \end{rclarray}
 \]
-The collapse function for a pair of capability and shared state \( \clpsW{.} : \Caps \times \SStates \parfun \powerset{\Aexecs} \) is defined as the follows,
+The function, \( \clpsW{.} : \SStates \parfun \powerset{\Aexecs} \), collapses shared states to sets of abstract executions as the follows,
 \[
 \begin{rclarray}
-    \clpsW{( \ca, \emptyset )} & \defeq & \Setcon{\aexec }{ \for{ \txid } \aexec\prjT(\txid) = \emptyset }\\
-    \clpsW{(\ca, \Set{\rid \mapsto (\h, \intf)} \uplus \gs)} & \defeq & 
-        \Setcon{ \aexec \composeAEX \aexec' }{ \aexec \in \func{s2e}{\rid, \h, \intf} \land \pred{wf}{\rid, \intf} \land \aexec' \in \clpsW{(\ca, \gs)} }\\
+    \clpsW{\emptyset} & \defeq & \Setcon{\aexec }{ \for{ \txid } \aexec\prjT(\txid) = \emptyset }\\
+    \clpsW{\Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs } & \defeq & 
+        \Setcon{ \aexec \composeAEX \aexec' }{ \aexec \in \func{r2e}{\rid, \h, \intf} \land \pred{wf}{\rid, \h, \hset, \intf} \land \aexec' \in \clpsW{\gs} }\\
 \end{rclarray}
 \] 
 % 
@@ -371,10 +394,10 @@ The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$
 \sx{Take a short cut of the grammar but the interpretation disallows fingerprint inside the box}
 \begin{definition}[Assertions]
 \label{def:assertion}
-Given the local assertion \( \lpre \in \LAst \) (\defref{def:local_assertions}), The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
+Assume standard separation logic assertion \( \bar{\lpre}, \bar{\lpost }\) (the local assertion \( \LAst \) without fingerprint) and the interpretation function, The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
 \[
 \begin{rclarray}
-	\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \boxass{\lpre}{\lrid}{\intass}\\
+	\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \boxass{\bar{\lpre} \mid \bar{\lpost}}{\lrid}{\intass}\\
 \end{rclarray}
 \]
 %
@@ -390,20 +413,21 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 	\evalW{\gpre \lor \gpost} & \defeq & \evalW{\gpre} \cup \evalW{\gpost} \\
 	\evalW{\exsts{\lvar}  \gpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}} \evalW[\lenv\remapsto{\lvar}{\val}, \stk]{\gpre} \\
 	\evalW{\gpre \implies \gpost} & \defeq & \evalW{\gpre} \subseteq \evalW{\gpost} \\
-	\evalW{\cass{\kap}{\lrid}} & \defeq & \Set{ (\Set{\lrid \mapsto \kap}, \unitH) } \\
+	\evalW{\cass{\kap}{\lrid}} & \defeq & \Setcon{ (\Set{\lrid \mapsto \kap}, \gs) }{\gs \in \SStates} \\
 	\evalW{ \gpre \sep \gpost } & \defeq & 
 	\Setcon{
 	   (\world_1 \composeW \world_2) 
     }{
        \world_1 \in \evalW{\gpre} \land \world_2 \in \evalW{\gpost}
 	} \\
-	\evalW{ \boxass{\lpre}{\lrid}{\intass} } & \defeq & 
+	\evalW{ \boxass{\bar{\lpre} \mid \bar{\lpost}}{\lrid}{\intass} } & \defeq & 
     \Setcon{
-        (\ca,\gs)
+        (\ca,\Set{\lrid \mapsto (\h, \hset, \intf)} \uplus \gs)
     }{
         \ca \in \unitC 
-        \land (\gs(\lrid)\projection{1}, \emptyset) \in \evalLS{\lpre}
-        \land \gs(\lrid)\projection{2}  = \evalI{\intass}
+        \land \h \in \evalLS{\bar{\lpre}}
+        \land \hset \subseteq \evalLS{\bar{\lpost}}
+        \land \intf  = \evalI{\intass}
     } \\
 \end{rclarray}
 \]
