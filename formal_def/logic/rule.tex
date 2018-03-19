@@ -91,19 +91,28 @@ This is because once a location has been re-written, the rest read are considere
 
 \begin{definition}[Rely and guarantee]
 \label{def:rely-guarantee}
+The \( \funcn{allowed} \) function asserts that a event is allowed by the owned capabilities,
+\[
+\begin{rclarray}
+    \func{allowed}{\evset, \ca, \gs} & \defeq & \evset = \unitE \\
+    \func{allowed}{\evset \composeE \evset', \ca, \gs \uplus \Set{\rid \mapsto (\stub, \stub, \intf)}} & \defeq & 
+    \exsts{\kap } \kap \sqsubseteq \ca(\rid)
+    \land \evset \in \dom(\intf(\kap)) 
+    \land \func{allowed}{\evset', \ca, \gs}
+\end{rclarray}
+\]
 Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} relation, $\relyU \subseteq \World \times \World$, is defined as follows,
 \[	
     \begin{rclarray}
 	\relyU & \eqdef &
 	\myset{
-		((\ca, \Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs), (\ca, \Set{\rid \mapsto (\h', \hset', \intf)} \uplus \gs))	
+		((\ca, \gs), (\ca, \gs'))	
 	}{
-        \exsts{\kap, \kap', \evset,\aexec, \aexec'}  \\
-        \quad ( \kap \composeK \kap' \composeK \ca(\rid) ) \isdef
-        \land \evset \in \dom(\intf(\kap))  \\
-        \quad {} \land \aexec \in \clpsW{\Set{\rid \mapsto (\h, \hset, \intf)}} \\
-        \quad {} \land \aexec' \in \clpsW{\Set{\rid \mapsto (\h', \hset', \intf)}}  \\
-        \quad {} \land (\aexec, \evset, \aexec') \in \func{transinv}{\rid, \intf}
+        \exsts{\evset,\aexec, \aexec'}  
+        \func{allowed}{\evset, \ca, \gs}  \\
+        \quad {} \land \aexec \in \clpsW{\gs} 
+        \land \aexec' \in \clpsW{\gs'}
+        \land (\aexec, \evset, \aexec') \in \func{transinv}{\gs}
 	} \\
     \end{rclarray}
 \]
@@ -125,18 +134,18 @@ The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined
     \begin{rclarray}
 	\guarU & \eqdef &
 	\myset{
-		((\ca, \Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs), (\ca, \Set{\rid \mapsto (\h', \hset', \intf)} \uplus \gs))	
+		((\ca, \gs), (\ca, \gs'))	
 	}{
-        \exsts{\kap, \evset,\aexec, \aexec'}  \\
-        \quad \kap \leq \ca(\rid)
-        \land \evset \in \dom(\intf(\kap))  \\
-        \quad {} \land \aexec \in \clpsW{\Set{\rid \mapsto (\h, \hset, \intf)}} \\
-        \quad {} \land \aexec' \in \clpsW{\Set{\rid \mapsto (\h', \hset', \intf)}}  \\
-        \quad {} \land (\aexec, \evset, \aexec') \in \func{transinv}{\rid, \intf}
+        \exsts{\evset, \ca', \aexec, \aexec'}  
+        (\ca' \composeC \ca)\isdef
+        \land \func{allowed}{\evset, \ca, \gs}  \\
+        \quad {} \land \aexec \in \clpsW{\gs} 
+        \land \aexec' \in \clpsW{\gs'}
+        \land (\aexec, \evset, \aexec') \in \func{transinv}{\gs}
 	} \\
     \end{rclarray}
 \]
-The \emph{guarantee} relation, $\GuarI: \ConsisModels \to \World \times \World$, is defined as follows:
+The \emph{guarantee} relation, $\GuarI \subseteq \World \times \World$, is defined as follows:
 \sx{take away of the closure}
 \[
 	\GuarI \eqdef \guarU
@@ -234,36 +243,18 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
     \pred{unbox}{\Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs, \h \composeH \h'} & \defeq & \h \in \hset \land \pred{unbox}{\gs,\h'}\\
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l@{}}
-        \for{\w, \w'}
-        \w \in \evalW{\gpre}
-        \land (\w, \w') \in \Guar
-        { \color{gray} \land \pred{allowed}{\w\projection{2}, \evalF{\fp}} } \\
-        \qquad {} \land \pred{propagate}{\w, \w', \evalF{\fp}}
+        \for{\w, \w', \aexec, \aexec'} \\
+        \quad \w \in \evalW{\gpre}
+        \land \aexec \in \clpsW{\w}
+        \land \func{reachable}{\aexec, \aexec', \stub, \evalF{\fp}, \como}  \\
+        \quad {} \land \aexec' \in \clpsW{\w'}
+        \land (\w, \w') \in \Guar 
         \implies \w' \in \evalW{\gpost}
-    \end{array} \\
-    \pred{propagate}{\w, \w', \evset} & \eqdef & 
-    \begin{array}[t]{@{}l}
-        \for{\aexec, \aexec'}
-        \aexec \in \clpsW{\w}
-        \land \func{reachable}{\aexec, \aexec', \stub, \evset, \func{como}{\rid}} 
-        \implies \aexec' \in \clpsW{\w'}
-    \end{array} \\
-    \pred{allowed}{\gs, \evset} & \defeq & \gs = \emptyset \land \evset = \emptyset \\
-    \pred{allowed}{\gs \uplus \gs', \evset} & \defeq &  \pred{allowed}{\gs', \evset} \\
-    \pred{allowed}{\gs \uplus \gs', \evset \uplus \evset'} & \defeq & 
-    \begin{array}[t]{@{}l}
-        \exsts{\h, \h', \intf, \kap} 
-        \gs = \Set{\rid \mapsto (\h, \stub, \intf)}
-        \land \h' \in \intf(\kap)(\evset)
-        \land \h' \sqsubseteq \h
-        \land \pred{allowed}{\gs', \evset'} \\
     \end{array} \\
 \end{rclarray}                          
 \]
 
 \sx{
-    Allowed rules out update a region twice.
-    the allowed predicate might be redundant since we require the pre- and post- conditions are in guarantee and guarantee is  defined with respect to the invariant of a region, and the invariant of a region require similar conditions as the allowed predicate.
     For LLW the propagate can be done by syntactically update those addresses that has been written.
 }
 
