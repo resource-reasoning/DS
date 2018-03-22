@@ -170,8 +170,8 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
         \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
     }{%
         \begin{array}{c}
-        \gpre \snap \bar{\lpre}
-        \quad \tripleL{\bar{\lpre} \sep \fpEMP}{\trans}{\bar{\lpost} \sep \fpF}
+        \gpre \snap \lpre
+        \quad \tripleL{\lpre \sep \fpEMP}{\trans}{\lpost \sep \fpF}
         \quad \rpt{\gpre}{\gpost}{\fp} \\
         \stable{\gpre} 
         \quad \stable{\gpost} 
@@ -239,7 +239,7 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 
 \[
 \begin{rclarray}
-    \gpre \snap \bar{\lpre} & \defeq & \for{ \w, \h } \w \in \evalW{\gpre} \land \pred{takeinv}{\w, \h} \implies \h \in \evalLS{\bar{\lpre}}\\
+    \gpre \snap \lpre & \defeq & \for{ \w, \h } \w \in \evalW{\gpre} \land \pred{takeinv}{\w, \h} \implies \h \in \evalLS{\lpre}\\
     \pred{takeinv}{\gs, \h} & \defeq & \gs = \emptyset \land \h = \unitH \\
     \pred{takeinv}{\Set{\rid \mapsto (\stub, \hset, \intf)} \uplus \gs, \h \composeH \h'} & \defeq & \h \in \hset \land \pred{takeinv}{\gs,\h'}\\
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
@@ -265,35 +265,42 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 \end{figure}
 
 Many consistency model use last write win resolution policy, such as snapshot isolation, therefore the repartition \( \rpt{\gpre}{\gpost}{\fp} \) can be simplified by checking the guarantee and then syntactically propagating the write fingerprints.
+Also in practice, many implementation of consistency model assume strong session constraint.
 
 \begin{figure}
 \hrule\vspace{5pt}
 
 \[
    \infer[\rl{FRead}]{%
-       \tripleF{ \lexpr \pt \lexpr' }{ \Set{(\etR, \lexpr, \stub)} }{ \lexpr \pt \lexpr' }
+       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etR, \lexpr, \lexpr'')} }{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr''}
    }{}
 \]
 
 \[
-   \infer[\rl{FWrite}]{%
-       \tripleF{ \lexpr \pt \lexpr' }{ \Set{(\etW, \lexpr, \lexpr'')} }{ \lexpr \pt \lexpr'' }
+   \infer[\rl{FWriteNS}]{%
+       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etW, \lexpr, \lexpr''')} }{ \lexpr \pt \lexpr''' \mid ( \lexpr \pt \lexpr'' \lor \lexpr \pt \lexpr''') }
+   }{}
+\]
+
+\[
+   \infer[\rl{FWriteS}]{%
+       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etW, \lexpr, \lexpr''')} }{ \lexpr \pt \lexpr''' \mid \lexpr \pt \lexpr'''}
    }{}
 \]
 
 \[
    \infer[\rl{FFrame}]{%
-       \tripleF{ \lpre \sep \lframe }{ \fp }{ \lpost \sep \lframe }
+       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
    }{%
-       \tripleF{ \lpre }{ \fp }{ \lpost }
+       \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost' }
    }
 \]
 
 \[
    \infer[\rl{FContinue}]{%
-       \tripleF{ \lpre }{ \fp \uplus \fp' }{ \lpost }
+       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp  \uplus \fp' }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
    }{%
-       \tripleF{ \lpre }{ \fp }{ \lpost }
+       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
    }
 \]
 
@@ -301,13 +308,15 @@ Many consistency model use last write win resolution policy, such as snapshot is
 \begin{rclarray}
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l}
-    \for{\w, \w', \h, \h', \lpre, \lpost}
-    \w \in \evalW{\gpre}
-    \land \pred{unbox}{\w\projection{2}, \h}
-    \land \h \in \evalLS{\lpre} \\
-    \quad {} \land \tripleF{ \lpre }{ \fp }{ \lpost }
-    \land \pred{unbox}{\w',\h'}
-    \land \h' \in \evalLS{\lpost} \\
+    \for{\w, \w', \h, \h', \lpre, \lpre', \lpost, \lpost'}
+    \w \in \evalW{\gpre} \\
+    \quad {} \land \pred{unbox}{\w\projection{2}, \h}
+    \land \h \in \evalLS{\lpre} 
+    \land \gpre \snap \lpre' \\
+    \quad {} \land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost | \lpost'} \\
+    \quad {} \land \pred{unbox}{\w'\projection{2},\h'}
+    \land \h' \in \evalLS{\lpost} 
+    \land \gpost \snap \lpost' \\
     \quad \implies \w' \in \evalW{\gpost}
     \end{array} \\
     \pred{unbox}{\gs, \h} & \defeq & \gs = \emptyset \land \h = \unitH \\
