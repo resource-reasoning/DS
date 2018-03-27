@@ -28,7 +28,7 @@ Note that the stack \( \stk \) includes transaction variables and thread variabl
 \end{definition}
 
 \emph{Fingerprint assertion} or \emph{fingerprint} is a set of tuples in the form of \( (\etag, \lexpr_{1}, \lexpr_{2}) \) where \( \etag \) is either read tag \( \etR \) or write \( \etW \) and the second and third elements are logical assertions representing the address and value respectively.
-This assertion is interpreted to a set of events as expected.
+This assertion is interpreted to a set of transaction events as expected.
 
 \begin{defn}[Fingerprint Assertions]
 \label{def:fingerprint}
@@ -51,9 +51,8 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \]
 \end{defn}
 
-The local assertions includes normal separation logic assertions and extra fingerprint assertion (\defref{def:fingerprint}).
-The interpretation are either classic interpretation for normal standard separation logic or to a set of events.
-Notice that even though the fingerprint assertion is a set of syntactic events but it cannot be split.
+The local assertions includes normal separation logic assertions and extra fingerprint assertions, which are interpreted as sets of heaps and a set of events respectively.
+Notice that the fingerprint assertion cannot be split.
 
 \begin{definition}[Local assertions]
 \label{def:local_assertions}
@@ -88,24 +87,10 @@ Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation fu
 \]
 \end{definition}
 
-For readability, we will write angle brackets, \eg \( \fpass{\etR, \vx, 0} \) instead of curl brackets \( \fpto{\Set{\etR, \vx, 0}} \) for fingerprint assertion.
-
-Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contained in logical expressions $\LExpr$ (\defin\ref{def:local_assertions} above). That is, $\Expr \subset \LExpr$. 
+Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contained in logical expressions $\LExpr$ (\defin\ref{def:local_assertions} above), \ie $\Expr \subset \LExpr$. 
+For readability, we will write angle brackets, \eg \( \fpass{(\etR, \vx, 0)} \) instead of curly brackets \( \fpto{\Set{(\etR, \vx, 0)}} \) for fingerprint assertions.
 
 \subsection{Global/Program}
-
-\sx{This is probably the simplified form  for a counting example (not necessary to be stable at the assertion level) in SI
-\[
-\begin{array}{@{}l@{}}
-    \boxass{\vx \pt 1}{\lrid}{\intass} \\
-    \intass: \perm{INC} : \Set{(\etR, \vx, k), (\etW, \vx, k + 1)} \mat \vx \pt k \\
-    \intass: \perm{READ} : \Set{(\etR, \vx, k)} \mat  \vx \pt n \land k \leq n \\
-\end{array}
-\]
-The first line of interference says one can increase the counter from \( k \) to \( k + 1 \), by reading it and write back, when the shared state is a heap satisfying assertion \( \vx \pt k \).
-The second line says one can always read the value of \( \vx \) which will be an value \( k \) which is equal or smaller than the shared state.
-The interference must make sense with respect to the consistency model.
-}
 
 \begin{definition}[Capabilities]
 \label{def:capabilities}
@@ -187,7 +172,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 	\evalI{\emptyset}(\kap)(\action) & \eqdef & \text{undefined} \\
 	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \fp \mat \lpre } \cup \intass }(\kap)(\action) & \eqdef &
     \begin{cases}
-    \evalLS[\lenv',\stk]{\lpre} & \action \in \evalF[\lenv',\stk]{\fp} \\
+    \evalLS[\lenv',\stk]{\lpre} & \action = \evalF[\lenv',\stk]{\fp} \\
     \evalI{\intass}(\kap)(\action) & \text{ otherwise} \\
     \end{cases} \\
     & & \text{where there exists a vector of values \( \vec{\val}\) such that } \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \\
@@ -258,62 +243,56 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     %\] 
     %\end{defn}
 %}
- 
-\begin{defn}[Transition invariant and well-form of a region]
-\label{def:world2aexec}
-\label{def:state2aexec}
-Assume two functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns possible initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions.
-Also assume all the initial states for a region satisfy the consistency model, \ie
-\[
-\for{\rid, \aexec} \aexec \in \func{init}{\rid} \implies \aexec \in \evalCOM{\func{como}{\rid}}
-\]
-The  invariant of transitions for a region, namely \( \func{transinv}{\rid, \intf} \), is a set of paired abstract executions that is closed under the interference \( \intf \),
+
+\begin{defn}[Labelled transition system]
+The labelled transition system is a tuple, \( (\aexecset,\actionset,\toLTS{}, \aexecset_{0}, \como) \), consisting of a set of abstract executions \( \aexecset \subseteq \Aexecs \), a set of actions \( \actionset \subseteq \Actions \), a relation \( \toLTS{} : \Aexecs \times \Actions \times \Aexecs \), a set of initial abstract executions \( \aexecset_{0}\) and the consistency model associated with the transition system \( \como \).
+Assume all the initial abstract executions satisfies the consistency model.
+The relation \( \toLTS{}\) is defined as the follows,
 \[
 \begin{rclarray}
-    \func{transinv}{\rid, \intf} & \defeq & \bigcup\limits_{\nat \in \Nat}\func{iter}{\rid, \intf, \nat} 
-\end{rclarray}
-\]
-The well-form condition of the interference of a region, namely \( \pred{wfintf}{\rid, \intf}\) predicate, is defined with respect to the invariant.
-\[
-\begin{rclarray}
-    \pred{wfintf}{\rid, \intf} & \defeq & \for{\aexec} \aexec \in \func{inv}{\rid, \intf} \land \pred{wfabs}{\rid, \intf, \aexec} 
-\end{rclarray}
-\]
-Where the \( \funcn{inv} \) is the second projection of \( \funcn{transinv} \), this is, 
-\[
-\begin{rclarray}
-    \func{inv}{\rid, \intf} & \defeq & \func{transinv}{\rid, \intf}\projection{3}
-\end{rclarray}
-\]
-All the auxiliary functions and predicates are defined as the follows,
-\[
-\begin{rclarray}
-    \func{iter}{\rid, \intf, 0} & \defeq & \Setcon{(\aexec, \unitE, \aexec)}{ \aexec \in \func{init}{\rid}}  \\
-    \pred{wfabs}{\rid, \intf, \aexec} & \defeq & \aexec \in \func{init}{\rid}  \\
-    \func{iter}{\rid, \intf, \nat + 1} & \defeq & 
-    \Setcon{ 
-        (\aexec, \evset, \aexec')
-    }{ 
-        \for{ \txid, \kap, \obs, \aexec}
-        (\stub, \aexec) \in \func{iter}{\rid,\intf, \nat}
-        \land \evset \in ( \dom(\intf( \kap )) \cup \Set{\emptyset} \\
-        \quad \pred{reachable}{\aexec, \aexec', \txid, \evset, \func{como}{\rid}}
-    }  \\
-    \pred{wfabs}{\rid, \intf, \aexec'} & \defeq & 
-    \begin{array}[t]{@{}l}
-        \exsts{ \nat, \txid, \kap, \obs, \aexec, \evset }
-        (\aexec, \evset, \aexec') \in \func{iter}{\rid, \intf, \nat}
-        \land \evset \in ( \dom(\intf( \kap )) \uplus \Set{\emptyset} ) \\
-        \quad \pred{reachable}{\aexec, \aexec', \txid, \evset, \func{como}{\rid}}  \\
-        \qquad \implies \obsstate{\aexec', \aexec'\prjT,\func{como}{\rid}\projection{2}} \subseteq \intf(\kap)(\evset)
-    \end{array} \\
-    \pred{reachable}{\aexec, \aexec', \txid, \evset, \como} & \defeq & 
-    \begin{array}[t]{@{}l}
-        \exsts{\vis, \po, \ar } \\
+    \aexec \toLTS{\evset} \aexec' & \defeq &
+        \begin{array}[t]{@{}l}
+        \exsts{\vis, \po, \ar, \txid } \\
         \quad {} \land \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
         \quad {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} 
         \land \aexec' \in \evalCOM{\como}
     \end{array}
+\end{rclarray}
+\]
+\end{defn}
+ 
+\begin{defn}[Invariant a region]
+\label{def:invariant-region}
+\label{def:world2aexec}
+\label{def:state2aexec}
+Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions.
+Also assume all the initial states for a region satisfy the consistency model, \ie
+\[
+\for{\rid, \aexec_{0}} \aexec_{0} \in \func{init}{\rid} \implies \aexec_{0} \in \evalCOM{\func{como}{\rid}}
+\]
+The invariant of a region, namely \( \func{transinv}{\rid, \intf} \), is the labelled transition system where the initial state is \( \func{init}{\rid}\) and all the actions are included in the interference.
+\[
+\begin{rclarray}
+    \func{inv}{\rid, \intf} & \defeq & (\aexecset,\actionset \cup \Set{\unitE},\toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
+    & & \text{where } \for{\evset} \evset \in \actionset \implies \exsts{\kap} \evset \in \dom(\intf(\kap))
+\end{rclarray}
+\]
+For brevity, \( \aexec \in \func{inv}{\rid, \intf} \) is short-hand for \( \aexec \in \aexecset \), and similarly \( \aexec \toLTS{\evset} \aexec' \in \func{inv}{\rid, \intf} \).
+\end{defn}
+The empty (unit) event \( \unitE \) in the invariant is a place-holder for other regions.
+They might append a concrete event, while the composition of abstract executions composes events point-wise if the two executions have the same structure.
+
+\begin{defn}[Well-form of a region]
+\label{def:well-form-region}
+The well-form condition of the interference, namely \( \pred{wfintf}{\rid, \intf} \) predicate, assertions for any concrete events \( \evset \), the state before the events must be included in the interference.
+\[
+\begin{rclarray}
+    \pred{wfintf}{\rid, \intf} & \defeq & \for{\aexec, \aexec', \evset} \aexec \toLTS{\evset} \aexec' \in \func{inv}{\rid, \intf} \land ( \evset \neq \unitE \implies \pred{wfabs}{\rid, \intf, \aexec, \evset, \aexec'} ) \\ 
+    \pred{wfabs}{\rid, \intf, \aexec, \evset, \aexec'} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \exsts{ \kap }
+        \evset \in ( \dom(\intf( \kap )) ) \land \obsstate{\aexec, \aexec\prjT,\func{como}{\rid}\projection{2}} \subseteq \intf(\kap)(\evset)
+    \end{array} \\
 \end{rclarray}
 \]
 Given a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{r2e} \) returns all the possible abstract executions that are included in the invariant of a region and satisfy the state \( \h \),
@@ -325,24 +304,15 @@ Given a region (identifier) \(\rid\), its current state \( \h \), and its interf
 A set of heaps \( \hset \) approximates the observation of a region \( \rid \) under state \( \h \), namely \( \pred{approx}{\rid, \h, \hset, \intf} \), when an abstract execution satisfies the state \( \h \) and it can reach a new state by appending a new transaction \( \txid \), the observable state of the new transaction must included in the approximation \( \hset \),
 \[
 \begin{rclarray}
-    \pred{approx}{\rid, \h, \hset, \intf} & \eqdef & 
+    \pred{approx}{\rid, \aexec, \hset, \intf} & \eqdef & 
     \begin{array}[t]{@{}l}
-    \for{ \aexec, \aexec' } (\aexec, \aexec') \in \func{transinv}{\rid, \intf}
-    \land \aexec \in \func{r2e}{\rid, \h, \intf } \\
-    {} \land \exsts{ \txid } \txid = \max_{\ar}{\aexec'\prjT} 
+    \for{ \aexec' } \aexec \toLTS{\stub} \aexec' \in \func{inv}{\rid, \intf} \\
+    \quad {} \land \exsts{ \txid } \txid = \max_{\ar}\Set{\aexec'\prjT}
     \land \obsstate{\aexec,\aexec\prjV^{-1}(\txid),\func{como}{\rid}\projection{2}} \subseteq \hset
     \end{array}
 \end{rclarray}
 \]
-Therefore, a region is well-form, if the interference is well-form and the approximation is well-form,
-\[
-\begin{rclarray}
-    \pred{wf}{\rid, \h, \hset, \intf} & \eqdef & \pred{wfintf}{\rid, \intf} \land \pred{approx}{\rid, \h, \hset, \intf}
-\end{rclarray}
-\]
 \end{defn}
-The \( \predn{reachable} \) predicate allows the new abstract execution \( \aexec' \) to be appended with a transaction \( \txid \) associated with a empty event set, \ie \( \evset = \emptyset \).
-The reason for that is, since a region is a representation of part of the entire machine state, we have to take into account the rest of the state, meaning the frame.
 
 \begin{definition}[Worlds]
 \label{def:world}
@@ -371,7 +341,7 @@ A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and cap
         \land \clpsW{\gs} \neq \emptyset
         \land \dom(\ca) \subseteq \dom(\gs) \\
         \quad {} \land \for{\rid, \rid'}
-        \land \func{como}{\rid} = \func{como}{\rid'} \\
+        \func{como}{\rid} = \func{como}{\rid'} \\
         \quad {} \land \for{\h, \h' }
         \h \in \Set{\gs(\rid)\projection{1}} \cup \gs(\rid)\projection{2}
         \land \h' \in \Set{\gs(\rid')\projection{1}} \cup \gs(\rid')\projection{2} 
@@ -384,7 +354,7 @@ The function, \( \clpsW{.} : \SStates \parfun \powerset{\Aexecs} \), collapses s
 \begin{rclarray}
     \clpsW{\emptyset} & \defeq & \unitAEX \\
     \clpsW{\Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs } & \defeq & 
-        \Setcon{ \aexec \composeAEX \aexec' }{ \aexec \in \func{r2e}{\rid, \h, \intf} \land \pred{wf}{\rid, \h, \hset, \intf} \land \aexec' \in \clpsW{\gs} }\\
+        \Setcon{ \aexec \composeAEX \aexec' }{ \aexec \in \func{r2e}{\rid, \h, \intf} \land \pred{approx}{\rid, \aexec, \hset, \intf} \land \pred{wfintf}{\rid, \intf} \land \aexec' \in \clpsW{\gs} }\\
 \end{rclarray}
 \] 
 % 
@@ -393,11 +363,12 @@ The \emph{world unit set} is $\unitW \eqdef \Setcon{(\ca, \gs)}{(\ca, \gs) \in \
 The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
 \end{definition}
 
+\sx{point-wise composition}
 \begin{defn}[Invariant of worlds]
 Because regions in a well-defined world must disjointed with each other and have the same consistency model, it is easy to lift the invariant of a region to a shared state,
 \[
 \begin{rclarray}
-    \func{inv}{\emptyset} & \defeq & \unitAEX \\
+    \func{inv}{\emptyset} & \defeq & (\aexecset, ... ) \\
     \func{inv}{\Set{\rid \mapsto (\stub, \stub, \intf)} \uplus \gs} & \defeq & \Setcon{\aexec \composeAEX \aexec' }{\aexec \in \func{inv}{\rid, \intf} \land \aexec' \in \func{inv}{\gs}} \\
     \func{transinv}{\emptyset} & = & \Setcon{ ( \aexec , \unitE, \aexec' ) }{\aexec, \aexec' \in \unitAEX } \\
     \func{transinv}{\Set{\rid \mapsto (\stub, \stub, \intf)} \uplus \gs} & = & 
@@ -411,19 +382,17 @@ Because regions in a well-defined world must disjointed with each other and have
 \]
 \end{defn}
 
- 
-\sx{Take a short cut of the grammar but the interpretation disallows fingerprint inside the box}
 \begin{definition}[Assertions]
 \label{def:assertion}
 Assume standard separation logic assertion \( \bar{\lpre}, \bar{\lpost }\) (the local assertion \( \LAst \) without fingerprint) and the interpretation function, The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
 \[
 \begin{rclarray}
-	\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \boxass{\bar{\lpre} \mid \bar{\lpost}}{\lrid}{\intass}\\
+	\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \sptboxass{\bar{\lpre}}{\bar{\lpost}}{\lrid}{\intass}\\
 \end{rclarray}
 \]
 %
 where $\lvar, \lrid \in \LVar$, $\lexpr_1, \lexpr_2 \in \LExpr$ (\defin\ref{def:local_assertions}), $\kap \in \Kaps$ (\defin\ref{def:capabilities}) and $\intass \in \IAst$ (\defin\ref{def:intf}).
-Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{assertion interpretation} function, $\evalW[(., .)]{.}: \Ast \times \LEnv \times \Stacks \rightarrow \World$, is defined as follows:
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{assertion interpretation} function, $\evalW[(., .)]{.}: \Ast \times \LEnv \times \Stacks \to \powerset{\World}$, is defined as follows:
 %
 \[
 \begin{rclarray}
@@ -465,7 +434,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     }{
        \world_1 \in \evalW{\gpre} \land \world_2 \in \evalW{\gpost}
 	} \\
-	\evalW{ \boxass{\bar{\lpre} \mid \bar{\lpost}}{\lrid}{\intass} } & \defeq & 
+	\evalW{ \sptboxass{\bar{\lpre}}{\bar{\lpost}}{\lrid}{\intass} } & \defeq & 
     \Setcon{
         (\ca,\Set{\lrid \mapsto (\h, \hset, \intf)} \uplus \gs)
     }{
