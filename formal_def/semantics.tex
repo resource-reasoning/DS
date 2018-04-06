@@ -65,7 +65,7 @@ The $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by 
         \thvar \mid
         \txvar \mid
         \expr + \expr \mid
-        \expr * \expr \mid
+        \expr \times \expr \mid
         \dots 
     \end{rclarray}
 \]
@@ -77,7 +77,7 @@ Given a thread stack \( \thstk \in \ThdStacks  \), a transaction stack \( \txstk
         \evalE[\thstk \uplus \txstk]{\thvar} & \defeq & \thstk(\thvar) \\
         \evalE[\thstk \uplus \txstk]{\txvar} & \defeq & \txstk(\txvar) \\
         \evalE{\expr_{1} + \expr_{2}} & \defeq & \evalE{\expr_{1}} + \evalE{\expr_{2}} \\
-        \evalE{\expr_{1} * \expr_{2}} & \defeq & \evalE{\expr_{1}} * \evalE{\expr_{2}} \\
+        \evalE{\expr_{1} \times \expr_{2}} & \defeq & \evalE{\expr_{1}} \times \evalE{\expr_{2}} \\
         \dots & \eqdef & \dots \\
     \end{rclarray}
 \]
@@ -85,14 +85,15 @@ Given a thread stack \( \thstk \in \ThdStacks  \), a transaction stack \( \txstk
 
 \subsection{Local/Transaction Semantics}
 
-We define the operational semantics of transactions \(\trans \in \Transactions\) with respect to a configuration of the form $(\txstk, \h, \evset)$ comprising a transaction stack, a (local) heap and a set of events that might affect other transactions.
-The events are the first read and the last write of each address.
+We define the operational semantics of transactions \(\trans \in \Transactions\) with respect to a configuration of the form $(\txstk, \h, \evset)$ comprising a transaction stack, a (local) heap and a set of operations that might affect other transactions.
+The operations are the first read and the last write of each address.
 
 \begin{defn}[Transactions and transaction events]
 \label{def:transaction-event}
 \label{def:transactions}
-Assume a set of \emph{Event tags}, a \emph{transaction event} \( \ev \in \Events \) is a tuple of event tag, an address and a value that represent read or write of the address.
-The \emph{event tags} \( \etR \) and \( \etW \) correspond to read and write respectively.
+Assume a set of \emph{Operations tags}, a \emph{transaction operation} \( \op \in \Ops \) is a tuple of an operation tag, an address and a value.
+This tuple represents  either read or write of the address.
+The \emph{operation tags} \( \etR \) and \( \etW \) correspond to read and write respectively.
 \[
 \begin{rclarray}
 \ETags & \defeq & \Set{\etR, \etW} \\
@@ -117,19 +118,19 @@ The composition of two sets of events is,
 \end{rclarray}
 \]
 and the unit element is \( \unitE \defeq \emptyset\).
-The \emph{flush read} \( \flushR \) and \emph{flush write} \(\flushW \) operators are defined as the follows, 
+A partial binary operation \( \addO \) that adds a new operation to a set,
 \[
 \begin{rclarray}
-    \evset \flushR (\etR, \addr, \val) & \defeq & 
+    \evset \addO (\etR, \addr, \val) & \defeq & 
     \begin{cases}
         \evset \uplus \Set{(\etR, \addr, \val)} & (\stub, \addr, \stub) \notin \evset \\
         \evset &  \text{otherwise} \\
     \end{cases} \\
-    \evset \flushW (\etW, \addr, \val) & \defeq & ( \evset \setminus \Set{(\etW, \addr, \stub)} ) \uplus \Set{(\etW, \addr, \val)} \\
+    \evset \addO (\etW, \addr, \val) & \defeq & ( \evset \setminus \Set{(\etW, \addr, \stub)} ) \uplus \Set{(\etW, \addr, \val)} \\
 \end{rclarray}
 \]
-The flush read \( \flushR\) includes the new read event if there is no other read or write event to the same address.
-While the flush write  \( \flushW \) deletes other write events from the set and includes the new one.
+This operation \( \addO \) includes the new read event if there is no other read or write event to the same address.
+While it deletes other write events from the set and includes the new one.
 Assuming a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \dots}\), the \emph{transactions} \( \tx \in \Tx \) is defined as a finite partial function from transactions identifiers \( \TxID \) to valid sets of events \( \Evsets \),
 \[
 \begin{rclarray}
@@ -139,7 +140,7 @@ Assuming a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \d
 \end{defn}
 
 \begin{lem}
-The flush read and flush write preserve validity of set.
+The \( \addO \) operator preserves validity of set.
 \end{lem}
 
 \begin{defn}[Transaction operational semantics]
@@ -151,7 +152,7 @@ Given the set of stacks including thread stacks \( \ThdStacks \) and transaction
 \end{rclarray}
 \]
 is given in \fig\ref{fig:transaction_semantics}.
-Note that arithmetic expression evaluation \( \evalE[\thstk \uplus \txstk]{\expr} \) is defined in \defref{def:language} and the flush read \( \flushR \) and flush write \( \flushW \) operators are defined in \defref{def:transactions}.
+Note that arithmetic expression evaluation \( \evalE[\thstk \uplus \txstk]{\expr} \) is defined in \defref{def:language} and the \( \addO \) operators is defined in \defref{def:transactions}.
 \end{defn}
 
 \begin{figure}[!t]
@@ -167,7 +168,7 @@ Note that arithmetic expression evaluation \( \evalE[\thstk \uplus \txstk]{\expr
 
 \[
     \infer[\rl{TRead}]{
-        \thstk \vdash (\txstk, \h, \evset) , \pderef{\txvar}{\expr} \ \toL \  (\txstk\remapsto{\txvar}{\val}, \h, \evset \flushR (\etR, \addr, \val)), \pskip
+        \thstk \vdash (\txstk, \h, \evset) , \pderef{\txvar}{\expr} \ \toL \  (\txstk\remapsto{\txvar}{\val}, \h, \evset \addO (\etR, \addr, \val)), \pskip
     }{
         \evalE[\thstk \uplus \txstk]{\expr} = \addr
         && \h(\addr) = \val 
@@ -177,7 +178,7 @@ Note that arithmetic expression evaluation \( \evalE[\thstk \uplus \txstk]{\expr
 
 \[
     \infer[\rl{TMutate}]{%
-        \thstk \vdash (\txstk, \h, \evset), \pmutate{\expr_{1}}{\expr_{2}} \ \toL \  (\txstk, \h \remapsto{\addr}{\val}, \evset \flushW (\etW, \addr, \val)) , \pskip
+        \thstk \vdash (\txstk, \h, \evset), \pmutate{\expr_{1}}{\expr_{2}} \ \toL \  (\txstk, \h \remapsto{\addr}{\val}, \evset \addO (\etW, \addr, \val)) , \pskip
     }{%
         \evalE[\thstk \uplus \txstk]{\expr_{1}} = \addr 
         && \evalE[\thstk \uplus \txstk]{\expr_{2}} = \val 

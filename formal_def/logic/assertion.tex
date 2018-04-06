@@ -1,6 +1,5 @@
 \subsection{Local/Transaction}
 
- 
 \begin{definition}[Logical Expressions]
 \label{def:logical-expr}
 Assume a countably infinite set of \emph{logical variables} $\V x \in \LVar$.
@@ -16,8 +15,8 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}) and a logical environm
 \[
     \begin{rclarray}
         \evalLE{\val} & \defeq & \val \\
-        \evalLE{\txvar} & \defeq & \stk(\txvar) \\
-        \evalLE{\thvar} & \defeq & \stk(\thvar) \\
+        \evalLE[\lenv, \thstk \uplus \txstk]{\thvar} & \defeq & \thstk(\thvar) \\
+        \evalLE[\lenv, \thstk \uplus \txstk]{\txvar} & \defeq & \txstk(\txvar) \\
         \evalLE{\lvar} & \defeq & \lenv(\lvar) \\
         \evalLE{\lexpr_1 + \lexpr_2} & \defeq & \evalLE{\lexpr_1} + \evalLE{\lexpr_2} \\
         \evalLE{\lexpr_1 \times \lexpr_2} & \defeq & \evalLE{\lexpr_1} \times \evalLE{\lexpr_2} \\
@@ -27,7 +26,7 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}) and a logical environm
 Note that the stack \( \stk \) includes transaction variables and thread variables.
 \end{definition}
 
-\emph{Fingerprint assertion} or \emph{fingerprint} is a set of tuples in the form of \( (\etag, \lexpr_{1}, \lexpr_{2}) \) where \( \etag \) is either read tag \( \etR \) or write \( \etW \) and the second and third elements are logical assertions representing the address and value respectively.
+\emph{Fingerprint assertion} or \emph{fingerprint} is a set of tuples in the form of \( (\otag, \lexpr_{1}, \lexpr_{2}) \) where \( \otag \) is either read tag \( \etR \) or write \( \etW \) and the second and third elements are logical assertions representing the address and value respectively.
 This assertion is interpreted to a set of transaction events as expected.
 
 \begin{defn}[Fingerprint Assertions]
@@ -35,18 +34,14 @@ This assertion is interpreted to a set of transaction events as expected.
 The \emph{fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
 \[
 \begin{rclarray}
-    \fp & \subseteq & \Setcon{ (\etag,\lexpr_{1},\lexpr_{2}) }{ \etag \in \ETags \land \lexpr_{1}, \lexpr_{2} \in \LExpr } \\
+    \fp & \subseteq & \Setcon{ (\otag,\lexpr_{1},\lexpr_{2}) }{ \otag \in \OTags \land \lexpr_{1}, \lexpr_{2} \in \LExpr } \\
 \end{rclarray}
 \] 
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint interpretation} function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \powerset{\Events}$, is defined as follows,
 \[
 \begin{rclarray}
     \evalF{\emptyset} & \defeq & \emptyset  \\
-    \evalF{\Set{(\etag, \lexpr_{1}, \lexpr_{2})} \uplus \fp} & \defeq & 
-    \begin{cases}
-        \Set{ (\etag, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}}) } \uplus \evalF{\fp} & \text{ if } \pred{valid}{\Set{ (\etag, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}}) } \uplus \evalF{\fp}} \\
-        \text{undefined} & \text{ otherwise}  \\
-    \end{cases}
+    \evalF{\fp \addF (\otag, \lexpr_{1}, \lexpr_{2})} & \defeq & \evalF{\fp} \addO (\otag, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})
 \end{rclarray}
 \]
 \end{defn}
@@ -62,7 +57,7 @@ Given the set of logical expressions \( \LExpr \), logical variables \( \LVar \)
 	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \lexpr \pt \lexpr \mid \fpF \mid \lpre \sep \lpost  \\
 \end{rclarray}	 
 \]
-Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \parfun \Heaps \times \powerset{ \Events } $, is defined over the structure of local assertions as follows,
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \Heaps \times \powerset{ \Events } $, is defined over the structure of local assertions as follows,
 \[
 \begin{rclarray}
 	\evalLS{\assfalse} & \eqdef & \emptyset \\
@@ -70,7 +65,7 @@ Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation fu
 	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
 	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
 	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
-	\evalLS{\lpre \implies \lpost} & \defeq & \\
+	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{\h}{\h \in \evalLS{\lpre} \implies \h \in \evalLS{\lpost}}\\
 	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
 	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \unitE) } \\
 	\evalLS{ \fpF } & \defeq & \Set{ (\unitH, \evalF{\fp}) } \\
@@ -141,14 +136,14 @@ Then given a set of \emph{region identifiers} \( \rid \in \RegionID \), the \emp
 %\end{defn}
 %}
 
-\begin{defn}[Actions]
-Given the set of transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
-\[
-    \begin{rclarray}
-        \action \in \Actions & \eqdef & \powerset{\Events}
-    \end{rclarray}
-\]
-\end{defn}
+%\begin{defn}[Actions]
+%Given the set of transaction events \( \Events \) (\defref{def:transaction-event}), the set of \emph{actions} is defined as the follows,
+%\[
+    %\begin{rclarray}
+        %\action \in \Actions & \eqdef & \powerset{\Events}
+    %\end{rclarray}
+%\]
+%\end{defn}
 
 \begin{defn}[Interference]
 \label{def:intf}
@@ -156,24 +151,24 @@ Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerpr
 \[
 \begin{rclarray}
 	\intass & ::=  &
-	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \fp \mat \lpre } \cup \intass 
+	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \lpre \mat \fp } \cup \intass 
 \end{rclarray}
 \]
 It will be interpreted to a set of \emph{interference environments}, this is,
 \[
 \begin{rclarray}
-    \inter \in \Interference & \defeq & \Kaps \parfun \Actions \parfun \powerset{\Heaps}
+    \inter \in \Interference & \defeq & \Kaps \parfun \powerset{\Heaps} \times \Opsets
 \end{rclarray}
 \]
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
 %
 \[
 \begin{rclarray}
-	\evalI{\emptyset}(\kap)(\action) & \eqdef & \text{undefined} \\
-	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \fp \mat \lpre } \cup \intass }(\kap)(\action) & \eqdef &
+	\evalI{\emptyset}(\kap) & \eqdef & \text{undefined} \\
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \mat \fp } \cup \intass }(\kap') & \eqdef &
     \begin{cases}
-    \evalLS[\lenv',\stk]{\lpre} & \action = \evalF[\lenv',\stk]{\fp} \\
-    \evalI{\intass}(\kap)(\action) & \text{ otherwise} \\
+    (\evalLS[\lenv',\stk]{\lpre}, \evalF[\lenv',\stk]{\fp}) \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
+    \evalI{\intass}(\kap') & \text{ otherwise} \\
     \end{cases} \\
     & & \text{where there exists a vector of values \( \vec{\val}\) such that } \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \\
 \end{rclarray}
@@ -426,7 +421,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
         \land \gs_{q}(\rid) = (\h, \hset_{q}, \intf)
     } \\
 	\evalW{\exsts{\lvar}  \gpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}} \evalW[\lenv\remapsto{\lvar}{\val}, \stk]{\gpre} \\
-	\evalW{\gpre \implies \gpost} & \defeq &  \\
+	\evalW{\gpre \implies \gpost} & \defeq & \Setcon{\w}{\w \in \evalW{\gpre} \implies \w \in \evalW{\gpost}} \\
 	\evalW{\cass{\kap}{\lrid}} & \defeq & \Setcon{ (\Set{\lrid \mapsto \kap}, \gs) }{\gs \in \SStates} \\
 	\evalW{ \gpre \sep \gpost } & \defeq & 
 	\Setcon{
