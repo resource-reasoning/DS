@@ -1,0 +1,252 @@
+\subsection{Program Semantics}
+\begin{defn}[History Heaps]
+\label{def:his_heap}
+Assuming a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \dots}\), the \emph{transactions} \( \tx \in \Tx \) is defined as a finite partial function from transactions identifiers \( \TxID \) to valid sets of events \( \Evsets \),
+\[
+\begin{rclarray}
+\tx \in \Tx & \defeq & \TxID \parfinfun \Evsets
+\end{rclarray}
+\]
+A \emph{history heap}, \( \hh \in \HisHeaps \), is a `heap' such that each address maps to a list of values.
+Each value in the history heap is associated with a transaction (identifier) who writes the value and a set of transactions (identifiers) who read the it.
+\[
+\begin{rclarray}
+    \HisHeaps & \defeq & \Addr \parfinfun (\Val \times \TxID \times \powerset{\TxID})^{*}
+\end{rclarray}
+\]
+Let \( \hh(\addr)(i)\) denotes the \emph{i-th} (starting from 1) tuple of the list associated with address \( \addr \), and \( \hhV(\addr)(i) \), \( \hhW(\addr)(i) \) and \( \hhR(\addr)(i) \) denote the first, second and third element of the tuple.
+\end{defn}
+
+\begin{defn}[Cuts of history heaps]
+\label{def:cuts}
+\emph{A cut of of a history heap} is a partial function from addresses to indexes,
+\[
+\begin{rclarray}
+    \cu \in \Cuts & \defeq & \Addr \parfinfun \Nat
+\end{rclarray}
+\]                                                                      
+A cut \( \cu \) can collapse a history heap \( \hh \) to a (normal) heap \( h \) by the function \(\funcn{clps} : \HisHeaps \times \Cuts \parfun \Heaps\),
+\[
+\begin{rclarray}
+    \func{clps}{\hh, \cu} & \defeq & 
+    \begin{cases}
+        \lambda \addr \ldotp \hhV(\addr)(\cu(\addr)) & \text{if } \dom(\hh) = \dom(\cu) \land \for{\addr'} \cu(\addr') \leq \left|\hh(\addr')\right| \\
+        \text{undefined} & \text{otherwise}
+    \end{cases}
+\end{rclarray}
+\]
+The order between two cuts that have the same domain is the order of all the indexes, 
+\[
+\begin{rclarray}
+    \cu \orderCU \cu' & \defiff & \dom(\cu) = \dom(\cu') \land \for{\addr} \cu(\addr) \leq \cu'(\addr) \\
+\end{rclarray}
+\]
+Assuming a countably infinite set of thread identifiers \( \setthid \subseteq \ThreadID \defeq \Set{\thid, \dots} \), \emph{a cuts' runtime} is a function from thread identifiers to cuts, \ie \( \thcu \in \ThCuts \defeq \ThreadID \parfun \Cuts\).
+\end{defn}
+
+\begin{defn}[Consistency Models]
+\label{def:consistency-models}
+A \emph{Consistency model} \( \como \) is a set of tuples in the form of \( ((\hh,\thcu),(\hh',\thcu')) \) that the transition from the state \( (\hh,\thcu)\) to the state \( (\hh',\thcu') \) satisfies certain constraints.
+\end{defn}
+
+\begin{defn}[Thread transition labels]
+\label{def:label}
+Given the set of thread identifiers \(\ThreadID\) (\defref{def:abs-exec}), the set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defref{def:language}), the $\txid$ demotes a transaction identifier and $\thstk$ denotes a thread stack (\defref{def:stacks}),
+\[
+    \begin{rclarray}
+	\iota \in \Translabel & ::= & \lbID \mid \lbC{\txid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\thstk}
+    \end{rclarray}
+\]
+\end{defn}
+
+\begin{defn}[Thread semantics]
+\label{def:thread_semantics}
+Given the thread identifiers \(\thid \in \ThreadID\), the set of \emph{intermediate programs}, \(\iprog \in \IntermediatePrograms\), is defined by the following grammar,
+\[
+    \iprog ::= \prog \mid \iprog \pseq \pwait{\thid}
+\]
+Given the set of consistency model \( \ConsisModels \) (\defref{def:consistency-models}), thread stacks \( \ThdStacks \) (\defref{def:stacks}), history heaps \( \HisHeaps \) (\defref{def:his_heap}) and cuts' runtime (\defref{def:cuts}), the \emph{per-thread operational semantics} of programs,
+\[
+\begin{rclarray}
+	\toT{} & : &
+    \begin{array}[t]{@{}l@{}}
+    \Como \times \ThreadID 
+    \times \\
+	\quad \left( ( \ThdStacks \times \HisHeaps \times \ThCuts ) \times \IntermediatePrograms \right) 
+	\times  \Translabel \times
+	\left( ( \ThdStacks \times \HisHeaps \times \ThCuts ) \times \IntermediatePrograms \right) 
+    \end{array}
+\end{rclarray}
+\]
+is defined in \figref{fig:thread_semantics}.
+\end{defn}
+
+\begin{figure}[!t]
+%
+\hrule
+%
+\[
+    \infer[\rl{PCommit}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ), \ptrans{\trans} \ \toT{\lbC{\txid}} \ ( \thstk', \hh', \thcu' ) , \pskip
+    }{%
+        \begin{array}{c}
+            \txid \in \func{fresh}{\hh}  
+            \quad \h = \func{clps}{\hh,\thcu(\thid)}, \emptyset) \\
+            \thstk \vdash (\txstk_{0}, \h, \unitO), \trans \ \toL^{*} \  (\txstk, \h', \opset) , \pskip \\
+            \thstk' = \thstk\rmto{\ret}{\txstk(\ret)} 
+            \quad \hh' = \func{commit}{\hh, \thcu(\thid), \txid, \opset}  \\
+            \cu = \func{update}{\hh', \thcu(\thid), \opset} 
+            \quad \thcu\rmto{\thid}{\cu} \orderCU \thcu
+            \quad ((\hh,\thcu),(\hh',\thcu')) \in \como
+        \end{array}
+    }
+\]
+
+\[
+    \infer[\rl{PAssign}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \passign{\thvar}{\expr} \ \toT{\lbID} \  ( \thstk\rmto{\thvar}{\val}, \hh, \thcu ) , \pskip
+    }{
+        \val = \evalE[\thstk]{\expr}
+        && \thvar \in \ThdVars
+    }
+\]
+
+\[
+    \infer[\rl{PAssume}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \passume{\expr} \ \toT{\lbID} \  ( \thstk, \hh, \thcu ) , \pskip
+    }{%
+        \evalE[\thstk]{\expr} = 0
+    }
+\]
+
+\[
+    \infer[\rl{PCutShift}]{
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \prog \ \toT{\lbID} \  ( \thstk, \hh, \thcu' ) , \prog
+    }{
+        \thcu \leq \thcu'
+    }
+\]
+
+\[
+    \infer[\rl{PChoice}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \prog_{1} \pchoice \prog_{2} \ \toT{\lbID} \  ( \thstk, \hh, \thcu ) , \prog'
+    }{
+        \prog' \in \Set{\prog_{1}, \prog_{2}}
+    }
+\]
+
+\[
+    \infer[\rl{PLoop}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \prog\prepeat \ \toT{\lbID} \  ( \thstk, \hh, \thcu ) , \pskip \pchoice (\prog \pseq \prog\prepeat)
+    }{}
+\]
+
+\[
+    \infer[\rl{PSeqSkip}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \pskip \pseq \iprog \ \toT{\lbID} \  ( \thstk, \hh, \thcu ) , \iprog
+    }{}
+\]
+
+\[
+    \infer[\rl{PSeq}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog_{1} \pseq \iprog_{2} \ \toT{\lb} \ ( \thstk', \hh, \thcu' ) , {\iprog_{1}}' \pseq \iprog_{2}
+    }{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog_{1} \ \toT{\lb} \  ( \thstk', \hh, \thcu' ) , {\iprog_{1}}' 
+    }
+\]
+
+\[
+    \infer[\rl{PPar}]{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \prog_{1} \ppar \prog_{2} \ \toT{\lbF{\thid', \prog_{2}}} \  \left( \thstk, \hh, \thcu \uplus \Set{\thid' \mapsto \thcu(\thid)} \right) , \prog_{1} \pseq \pwait{\thid'}
+    }{}
+\]
+
+\[
+    \infer[\rl{PWait}]{%
+        \como, \thid \vdash \left( \thstk_{1} \uplus \thstk_{f}, \hh, \thcu \uplus \Set{\thid' \mapsto \thcu(\thid)} \right) , \pwait{\thid'} \ \toT{\lbJ{\thid', \thstk_{2} \uplus \thstk_{f}}} \  ( \thstk_{1} \uplus \thstk_{2} \uplus \thstk_{f}, \hh, \thcu ) , \pskip 
+    }{}
+\]
+
+\sx{The stack could be polluted by the child thread, but they must agree?}
+ 
+where,
+\[
+\begin{rclarray}                                 
+    \func{commit}{\hh, \cu, \txid, \opset} & \defeq & 
+    \begin{cases}
+        \hh & \text{if } \opset = \unitO \\
+        \func{commit}{\hh', \cu, \txid, \opset'} & \text{if } \opset = \opset' \addO (\otR, \addr, \val) \\
+        \func{commit}{\hh'', \cu, \txid, \opset''} & \text{if } \opset = \opset'' \addO (\otW, \addr, \val) \\
+    \end{cases} \\
+    \hh' & \equiv & \hh\rmto{\addr}{\hh(\addr)\rmto{\cu(\addr)}{\left(\hhV(\addr)(\cu(\addr)),\hhW(\addr)(\cu(\addr)),\hhR(\addr)(\cu(\addr)) \uplus \Set{\txid} \right)}} \\
+    \hh'' & \equiv & \hh\rmto{\addr}{\hh(\addr) +\!\!+ [(\val, \txid, \emptyset)] } \\
+%
+%
+    \func{update}{\hh, \cu, \opset} & \defeq &
+    \begin{cases}
+        \cu & \text{if } \opset = \unitO \\
+        \func{update}{\hh, \cu, \opset'} & \text{if } \opset = \opset' \addO (\otR, \addr, \val) \\
+        \func{update}{\hh, \cu\rmto{\addr}{\left| \hh(\addr) \right|}, \opset''} & \text{if } \opset = \opset'' \addO (\otW, \addr, \val) \\
+    \end{cases} \\
+%
+%              
+	\func{fresh}{\aexecrun}  & \defeq & \Setcon{ \txid }{ \txid \in \TxID \land \for{\addr, i} \txid \neq \hhW(\addr)(i) \land \txid \notin \hhR(\addr)(i) } \\
+\end{rclarray}
+\]
+\hrule
+\caption{Per-thread operational semantics}
+\label{fig:thread_semantics}
+\end{figure}
+
+\sx{The full version should support dynamic thread, but we might only need fixed thread so that the thread pool semantics will be pick one thread and run one step}
+
+\begin{defn}[Thread pools]
+\label{def:thread_pools}
+Given the set of thread stacks $\ThdStacks$ (\defref{def:stacks}) and intermediate programs $\IntermediatePrograms$ (\defref{def:thread_semantics}), a \emph{thread pool} is a a finite partial function from thread identifiers to triples of thread stacks and intermediate programs, \(\thpl \in \TPool \eqdef \ThreadID \parfinfun \ThdStacks \times \IntermediatePrograms\).
+\end{defn}
+ 
+\begin{defn}[Thread pool semantics] 
+\label{def:thread_pool_semantics}
+Given the set of consistent models \( \ConsisModels \) (\defref{def:consistency-models}), history heaps \(\HisHeaps\) (\defref{def:his_heap}), cuts' runtime \(\ThCuts\) (\defref{def:cuts}), transition labels \( \Translabel \) (\defref{def:label}) and thread pools  \( \TPool \) (\defref{def:thread_pools}), the \emph{thread pool semantics}, 
+\[
+	\toG{} : \Como \times (\HisHeaps \times \ThCuts \times \TPool) \times \Translabel \times (\HisHeaps \times \ThCuts \times \TPool) 
+\]
+is defined in \figref{fig:thread_pool_semantics}.
+\end{defn}
+ 
+The thread pool operational semantics is given in \figref{fig:thread_pool_semantics}, where an arbitrary thread in the pool \(\thpl\) is picked to run for one step.
+If the next execution step is a thread fork, then a new thread \(\thid'\) is allocated in the pool to be executed with its thread stack copied from its parent (forking) thread.
+Conversely, when the next execution step is the joining of thread \(\thid'\), then \(\thid'\) is removed from the thread pool and the stack from the child thread merges into the parent thread.
+
+\begin{figure}
+\hrule\vspace{5pt}
+%
+\[
+    \infer[\rl{PSingle}]{%
+        \como \vdash ( \hh, \thcu, \thpl \uplus \Set{ \thid \mapsto (\thstk, \iprog) } ) \ \toG{\lb} \  ( \hh', \thcu', \thpl \uplus \Set{ \thid \mapsto (\thstk', {\iprog}') } ) 
+    }{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog \ \toT{\lb} \  ( \thstk', \hh', \thcu' ) , {\iprog}' 
+        \quad \lb \in \Set{ \lbID, \lbC{\stub} }
+    }
+\]
+
+\[
+    \infer[\rl{PFork}]{%
+        \como \vdash ( \hh, \thcu, \thpl \uplus \Set{ \thid \mapsto (\thstk, \iprog) } ) \ \toG{\lbF{\thid', \prog}} \  ( \hh', \thcu', \thpl \uplus \Set{ \thid \mapsto (\thstk, {\iprog}'), \thid' \mapsto (\thstk, \prog) } )
+    }{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog \ \toT{\lbF{\thid', \prog}} \  ( \thstk, \hh', \thcu' ) , {\iprog}' 
+    }
+\]
+
+\[
+    \infer[\rl{PJoin}]{%
+        \como \vdash ( \hh, \thcu, \thpl \uplus \Set{ \thid \mapsto (\thstk, \iprog), \thid' \mapsto (\thstk', \pskip) } )  \ \toG{\lbJ{\thid',\thstk''}} \ ( \hh', \thcu', \thpl \uplus \Set{ \thid \mapsto (\thstk'', {\iprog}')} )
+    }{%
+        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog \ \toT{\lbJ{\thid',\thstk'}} \  ( \thstk'', \hh', \thcu' ) , {\iprog}' 
+    }
+\]
+%
+\hrule\vspace{5pt}
+\caption{Thread pool semantics}
+\label{fig:thread_pool_semantics}
+\end{figure}

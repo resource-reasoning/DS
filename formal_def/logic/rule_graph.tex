@@ -1,0 +1,331 @@
+\subsection{Rules for Local}
+
+The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
+The \rl{TRDeref} rule add read fingerprint in finger-tracking set, only if there is no write finger-print.
+This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
+
+\begin{figure}[t]
+\hrule\vspace{5pt}
+\sx{Need to be careful about the implication, esp. for fingerprint assertion.}
+\[
+    \infer[\rl{TRSkip}]{%
+        \tripleL{\assemp }{ \pskip }{\assemp }
+    }{}
+\]
+
+\[
+    \infer[\rl{TRAss}]{%
+        \tripleL{\txvar \dot= \lexpr }{ \pass{\txvar}{\expr} }{\txvar \dot= \expr\sub{\txvar}{\lexpr} }
+    }{%
+        \txvar \notin \func{fv}{\lexpr} 
+        && \txvar \in \TxVars  
+    }
+\]
+
+\[
+    \infer[\rl{TRDeref}]{%
+        \tripleL{\expr \pt \lexpr \sep \fpF }{ \pderef{\txvar}{\expr} }{\txvar \dot= \lexpr \sep \expr \pt \lexpr \sep \fpto{\fp'} }
+    }{%
+        \txvar \notin \func{fv}{\expr}
+        && \txvar \notin \func{fv}{\lexpr}  
+        && \txvar \in \TxVars  
+        && \fp' = \fp \addF (\etR, \expr, \lexpr)
+    }
+\]
+
+\[
+    \infer[\rl{TRMutate}]{%
+        \tripleL{\expr_1 \pt \stub \sep \fpF }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \pt \expr_2 \sep \fpto{\fp'} } 
+    }{
+        \fp' = \fp \addF (\etW, \expr_{1}, \expr_{2})
+    }
+\]
+
+\[
+    \infer[\rl{TRAssume}]{%
+        \tripleL{ \expr \doteq 0 }{ \passume{\expr} }{ \expr \doteq 0 } 
+    }{}
+\]
+
+\[
+    \infer[\rl{TRChoice}]{%
+        \tripleL{ \lpre }{ \trans_{1} \pchoice \trans_{2} }{ \lpost }
+    }{%
+        \tripleL{ \lpre }{ \trans_{1} }{ \lpost } && 
+        \tripleL{ \lpre }{ \trans_{2} }{ \lpost } 
+    }
+\]
+
+\[
+    \infer[\rl{TRSeq}]{%
+        \tripleL{ \lpre }{ \trans_{1} \pseq \trans_{2} }{ \lpost }
+    }{%
+        \tripleL{ \lpre }{ \trans_{1} }{ \lframe }  && 
+        \tripleL{ \lframe }{ \trans_{2} }{ \lpost }
+    }
+\]
+
+\sx{check the loop invariant with fingerprint}
+
+\[
+    \infer[\rl{TRLoop}]{%
+        \tripleL{ \lpre }{ \trans\prepeat }{ \lpre }
+    }{%
+        \tripleL{ \lpre }{ \trans }{ \lpre } 
+    }
+\]
+ 
+\[
+   \infer[\rl{TRFrame}]{%
+       \tripleL{ \lpre \sep \lframe }{ \trans }{ \lpost \sep \lframe }
+   }{%
+       \tripleL{ \lpre }{ \trans }{ \lpost } 
+   }
+\]
+\hrule\vspace{5pt}
+\caption{The rules for transactions}
+\label{fig:rule-trans}
+ \end{figure}
+
+\subsection{Rely and Guarantee}
+
+\begin{definition}[Rely and guarantee]
+\label{def:rely-guarantee}
+The \( \funcn{allowed} \) function asserts that a event is allowed by the owned capabilities,
+\[
+\begin{rclarray}
+    \func{allowed}{\evset, \ca, \gs} & \defeq & \evset = \unitE \\
+    \func{allowed}{\evset \composeE \evset', \ca, \gs \uplus \Set{\rid \mapsto (\stub, \stub, \intf)}} & \defeq & 
+    \exsts{\kap } \kap \sqsubseteq \ca(\rid)
+    \land \evset \in \dom(\intf(\kap)) 
+    \land \func{allowed}{\evset', \ca, \gs}
+\end{rclarray}
+\]
+Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} relation, $\relyU \subseteq \World \times \World$, is defined as follows,
+\[	
+    \begin{rclarray}
+	\relyU & \eqdef &
+	\myset{
+		((\ca, \gs), (\ca, \gs'))	
+	}{
+        \exsts{\evset,\aexec, \aexec'}  
+        \func{allowed}{\evset, \ca, \gs}  \\
+        \quad {} \land \aexec \in \clpsW{\gs} 
+        \land \aexec' \in \clpsW{\gs'}
+        \land (\aexec, \evset, \aexec') \in \func{transinv}{\gs}
+	} \\
+    \end{rclarray}
+\]
+The invariant of a shared state is a lift of the invariants of interferences of regions.
+The \emph{rely} relation, $\RelyI \eqdef \World \times \World$, is defined as follows:
+\[
+    \begin{rclarray}
+         \RelyI &\eqdef & \closure{\left(\relyU\right)} \\
+    \end{rclarray}
+\]
+A set of fingerprint worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
+\[
+    \begin{rclarray}
+        \stable{\setworld} & \eqdef & \for{\w_{p}, \w_{q}}  \w_{p} \in \setworld \land (\w_{p}, \w_{q}) \in \RelyI \implies \w_{q} \in \setworld
+    \end{rclarray}
+\]
+The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined as follows:
+\[	
+    \begin{rclarray}
+	\guarU & \eqdef &
+	\myset{
+		((\ca, \gs), (\ca, \gs'))	
+	}{
+        \exsts{\evset, \ca', \aexec, \aexec'}  
+        (\ca' \composeC \ca)\isdef
+        \land \func{allowed}{\evset, \ca, \gs}  \\
+        \quad {} \land \aexec \in \clpsW{\gs} 
+        \land \aexec' \in \clpsW{\gs'}
+        \land (\aexec, \evset, \aexec') \in \func{transinv}{\gs}
+	} \\
+    \end{rclarray}
+\]
+The \emph{guarantee} relation, $\GuarI \subseteq \World \times \World$, is defined as follows:
+\sx{take away of the closure}
+\[
+	\GuarI \eqdef \guarU
+\]
+\end{definition}
+
+\subsection{Rules for Global}
+
+The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to global level by first converting global state to (local) observable state and then propagating the local fingerprint to the global state.
+The \( \predn{down} \) predicate asserts that the local predicate \( \lpre \) is a over-approximation of the valid observation that is given by the interference.
+The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the result by lifting the local fingerprints \( \fp \) to pre-condition \( \gpre \).
+
+
+
+\begin{figure}[t!]
+\hrule\vspace{5pt}
+
+\sx{not right, we want to say a transaction \( \trans \) can be abstracted to a fingerprint \( \fp \)}
+
+\[
+    \infer[\rl{PRCommit}]{%
+        \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
+    }{%
+        \begin{array}{c}
+        \gpre \snap \lpre
+        \quad \tripleL{\lpre \sep \fpEMP}{\trans}{\lpost \sep \fpF}
+        \quad \rpt{\gpre}{\gpost}{\fp} \\
+        \stable{\gpre} 
+        \quad \stable{\gpost} 
+        \end{array}
+    }
+\]
+
+\[
+    \infer[\rl{PRAss}]{%
+        \tripleG{\thvar \dot= \lexpr }{ \pass{\thvar}{\expr} }{\thvar \dot= \expr\sub{\thvar}{\lexpr} }
+    }{%
+        \thvar \notin \func{fv}{\lexpr} 
+        && \thvar \in \ThdVars  
+    }
+\]
+
+\[
+    \infer[\rl{PRAssume}]{%
+        \tripleG{ \expr \doteq 0 }{ \passume{\expr} }{ \expr \doteq 0 } 
+    }{}
+\]
+
+\[
+    \infer[\rl{PRChoice}]{%
+        \tripleG{ \gpre }{ \prog_{1} \pchoice \prog_{2} }{ \gpost }
+    }{%
+        \tripleG{ \gpre }{ \prog_{1} }{ \gpost } && 
+        \tripleG{ \gpre }{ \prog_{2} }{ \gpost } 
+    }
+\]
+
+\[
+    \infer[\rl{TRSeq}]{%
+        \tripleG{ \gpre }{ \prog_{1} \pseq \prog_{2} }{ \gpost }
+    }{%
+        \tripleG{ \gpre }{ \prog_{1} }{ \gframe }  && 
+        \tripleG{ \gframe }{ \prog_{2} }{ \gpost }
+    }
+\]
+
+\[
+    \infer[\rl{TRLoop}]{%
+        \tripleG{ \gpre }{ \prog\prepeat }{ \gpre }
+    }{%
+        \tripleG{ \gpre }{ \prog }{ \gpre } 
+    }
+\]
+ 
+\[
+   \infer[\rl{TRFrame}]{%
+       \tripleG{ \gpre \sep \gframe }{ \prog }{ \gpost \sep \gframe }
+   }{%
+       \tripleG{ \gpre }{ \prog }{ \gpost } 
+   }
+\]
+ 
+\[
+   \infer[\rl{TRPar}]{%
+       \tripleG{ \gpre_{1} \sep \gpre_{2} }{ \prog_{1} \ppar \prog_{2} }{ \gpost_{1} \sep \gpost_{2} }
+   }{%
+       \tripleG{ \gpre_{1} }{ \prog_{1} }{ \gpost_{1} }
+       && \tripleG{ \gpre_{2} }{ \prog_{2} }{ \gpost_{2} }
+   }
+\]
+
+\[
+\begin{rclarray}
+    \gpre \snap \lpre & \defeq & \for{ \w, \h } \w \in \evalW{\gpre} \land \pred{takeinv}{\w, \h} \implies \h \in \evalLS{\lpre}\\
+    \pred{takeinv}{\gs, \h} & \defeq & \gs = \emptyset \land \h = \unitH \\
+    \pred{takeinv}{\Set{\rid \mapsto (\stub, \hset, \intf)} \uplus \gs, \h \composeH \h'} & \defeq & \h \in \hset \land \pred{takeinv}{\gs,\h'}\\
+    \rpt{\gpre}{\gpost}{\fp} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+        \for{\w, \w', \aexec, \aexec'} \\
+        \quad \w \in \evalW{\gpre}
+        \land \aexec \in \clpsW{\w}
+        \land \func{reachable}{\aexec, \aexec', \stub, \evalF{\fp}, \como}  \\
+        \quad {} \land \aexec' \in \clpsW{\w'}
+        \land (\w, \w') \in \Guar 
+        \implies \w' \in \evalW{\gpost}
+    \end{array} \\
+\end{rclarray}                          
+\]
+
+\sx{
+    For LLW the propagate can be done by syntactically update those addresses that has been written.
+}
+
+\hrule\vspace{5pt}
+\caption{The rules for programs}
+\label{fig:rule-prog}
+\end{figure}
+
+Many consistency model use last write win resolution policy, such as snapshot isolation, therefore the repartition \( \rpt{\gpre}{\gpost}{\fp} \) can be simplified by checking the guarantee and then syntactically propagating the write fingerprints.
+Also in practice, many implementation of consistency model assume strong session constraint.
+
+\begin{figure}
+\hrule\vspace{5pt}
+
+\[
+   \infer[\rl{FRead}]{%
+       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etR, \lexpr, \lexpr'')} }{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr''}
+   }{}
+\]
+
+\[
+   \infer[\rl{FWriteNS}]{%
+       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etW, \lexpr, \lexpr''')} }{ \lexpr \pt \lexpr''' \mid ( \lexpr \pt \lexpr'' \lor \lexpr \pt \lexpr''') }
+   }{}
+\]
+
+\[
+   \infer[\rl{FWriteS}]{%
+       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etW, \lexpr, \lexpr''')} }{ \lexpr \pt \lexpr''' \mid \lexpr \pt \lexpr'''}
+   }{}
+\]
+
+\[
+   \infer[\rl{FFrame}]{%
+       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
+   }{%
+       \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost' }
+   }
+\]
+
+\[
+   \infer[\rl{FContinue}]{%
+       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp  \uplus \fp' }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
+   }{%
+       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
+   }
+\]
+
+\[
+\begin{rclarray}
+    \rpt{\gpre}{\gpost}{\fp} & \defeq & 
+    \begin{array}[t]{@{}l}
+    \for{\w, \w', \h, \h', \lpre, \lpre', \lpost, \lpost'}
+    \w \in \evalW{\gpre} \\
+    \quad {} \land \pred{unbox}{\w\projection{2}, \h}
+    \land \h \in \evalLS{\lpre} 
+    \land \gpre \snap \lpre' \\
+    \quad {} \land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost | \lpost'} \\
+    \quad {} \land \pred{unbox}{\w'\projection{2},\h'}
+    \land \h' \in \evalLS{\lpost} 
+    \land \gpost \snap \lpost' \\
+    \quad \implies \w' \in \evalW{\gpost}
+    \end{array} \\
+    \pred{unbox}{\gs, \h} & \defeq & \gs = \emptyset \land \h = \unitH \\
+    \pred{unbox}{\Set{\rid \mapsto (\h, \stub, \stub)} \uplus \gs, \h \composeH \h' } & \defeq & \pred{unbox}{\gs, \h'} \\
+\end{rclarray}
+\]
+
+\hrule\vspace{5pt}
+\caption{Simplified repartition for last write win}
+\label{fig:rule-prog}
+\end{figure}
+

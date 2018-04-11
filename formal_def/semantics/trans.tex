@@ -1,0 +1,228 @@
+\begin{defn}[Program values]
+\label{def:program_values}
+Assume a countably infinite set of \emph{addresses}, $\addr \in \Addr$. The set of \emph{program values} is $\val \in \Val \eqdef \Nat \cup \Addr$, where $\Nat$ denotes the set of natural numbers.
+\end{defn}
+ 
+\begin{defn}[Stacks]
+\label{def:stacks}
+Given the program values (\defref{def:program_values}) and a set of \emph{transaction variables} \( \TxVars \defeq \Set{\txvar, \dots}\), a \emph{transaction stack} is a partial function from transaction variables to values \( \txstk \in \TxStacks \defeq \TxVars \parfun \Val \).
+Similarly, assuming a set of \emph{thread variables} \( \ThdVars \defeq \Set{\thvar, \dots}\), a \emph{thread stack} is defined as \( \thstk \in \ThdStacks \defeq \ThdVars \parfun \Val \).
+Then, the set of \emph{stacks} is defined as the union of transaction stacks and thread stacks \( \stk \in \Stacks \eqdef \TxStacks \uplus \ThdStacks \).
+\end{defn}
+
+\begin{definition}[Heaps]
+\label{def:heaps}
+Given the sets of program values $\Val$  and addresses \( \Addr\)  (\defin\ref{def:program_values}), the set of \emph{heaps} is: $\h \in \Heaps \eqdef \Addr \parfinfun \Val$.
+The \emph{heap composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ heap unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
+The \emph{partial commutative monoid of  heaps} is $(\Heaps, \composeH, \{\unitH\})$.
+\end{definition}
+
+Our program, ranged over by $\prog$, are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\prog; \prog$), non-deterministic choice ($\prog+\prog$), loops ($\prog^*$) and  parallel composition ($\prog \ppar \prog$) (\defref{def:language}).
+To simulate conditional branching and loop, we also have assume (\( \passume{\expr}\)) and assignment to thread variables (\( \passign{\thvar}{\expr} \)), where \( \expr \) denotes arithmetic expressions.
+Additionally, our programming language contains the \emph{transaction} construct $\ptrans{\trans}$ denoting the \emph{atomic} execution of the transaction $\trans$. 
+The atomicity guarantees the execution are dictated by the underlying consistency model.
+Transactions, ranged over by $\trans$, are defined by a similar inductive grammar comprising $\pskip$, non-deterministic choice, loops and sequential composition, as well as constructs for assignment, lookup and mutation. 
+Transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are to be executed atomically.
+Transactions can only assign to their own variables, namely transaction variables (\defref{def:program_values}), but it can read from both the thread and transaction stacks.
+
+\begin{defn}[Programming language]
+\label{def:language}
+Given the set of thread variables \( \thvar \in \ThdVars \) (\defref{def:stacks}), the set of \emph{programs}, $\prog \in \Programs$, is defined by the following grammar:
+\[
+    \begin{rclarray}
+    \prog & ::= &
+        \pskip \mid 
+        \passign{\thvar}{\expr} \mid
+        \passume{\expr} \mid
+        \ptrans{\trans} \mid 
+        \prog \pseq \prog \mid 
+        \prog \pchoice \prog \mid 
+        \prog\prepeat \mid
+        \prog \ppar \prog 
+    \end{rclarray}
+\]
+Given the set of thread variables \( \txvar \in \TxVars \) (\defref{def:stacks}), the $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar,
+\[
+    \begin{rclarray}
+        \trans & ::= &
+        \pskip \mid
+        \pass{\txvar}{\expr} \mid
+        \pderef{\txvar}{\expr} \mid
+        \pmutate{\expr}{\expr} \mid
+        \passume{\expr} \mid
+        \preturn{\expr} \mid
+        \trans \pseq \trans \mid
+        \trans \pchoice \trans \mid
+        \trans\prepeat
+    \end{rclarray}
+\]
+The $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar below with $\val \in \Val$, $\thvar \in \ThdVars$ and \( \txvar \in \TxVars \) (\defin\ref{def:program_values}).
+\[
+    \begin{rclarray}
+        \expr & ::= &
+        \val \mid
+        \thvar \mid
+        \txvar \mid
+        \expr + \expr \mid
+        \expr \times \expr \mid
+        \dots 
+    \end{rclarray}
+\]
+Given a thread stack \( \thstk \in \ThdStacks  \), a transaction stack \( \txstk \in \TxStacks \) and a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{arithmetic expression evaluation} function, $\evalE[(.)]{.}:\Expressions \times \Stacks \parfun \Val$, is defined inductively over the structure of expressions as follows: 
+%
+\[
+    \begin{rclarray}
+        \evalE{\val} & \defeq & \val \\
+        \evalE[\thstk \uplus \txstk]{\thvar} & \defeq & \thstk(\thvar) \\
+        \evalE[\thstk \uplus \txstk]{\txvar} & \defeq & \txstk(\txvar) \\
+        \evalE{\expr_{1} + \expr_{2}} & \defeq & \evalE{\expr_{1}} + \evalE{\expr_{2}} \\
+        \evalE{\expr_{1} \times \expr_{2}} & \defeq & \evalE{\expr_{1}} \times \evalE{\expr_{2}} \\
+        \dots & \eqdef & \dots \\
+    \end{rclarray}
+\]
+\end{defn}
+
+\subsection{Local/Transaction Semantics}
+
+We define the operational semantics of transactions \(\trans \in \Transactions\) with respect to a configuration of the form $(\txstk, \h, \opset)$ comprising a transaction stack, a (local) heap and a set of operations that might affect other transactions.
+The operations are the first read and the last write of each address.
+
+\begin{defn}[Transactions and transaction events]
+\label{def:transaction-event}
+\label{def:transactions}
+Assume a set of \emph{Operations tags}, a \emph{transaction operation} \( \op \in \Ops \) is a tuple of an operation tag, an address and a value.
+This tuple represents  either read or write of the address.
+The \emph{operation tags} \( \etR \) and \( \etW \) correspond to read and write respectively.
+\[
+\begin{rclarray}
+\OTags & \defeq & \Set{\otR, \otW} \\
+\op \in \Ops & \defeq  & \OTags \times \Addr \times \Val
+\end{rclarray}
+\]
+A \emph{set of valid events}, \( \opset \in \Opsets \), is a subset of \( \Events \) where for any two elements within the set, they either have different tags or address.
+\[
+    \begin{rclarray}
+        \Opsets & \defeq & \Setcon{\opset}{\opset \subseteq \Events \land \for{\op, \op' \in \opset} \op\projection{1} \neq  \op'\projection{1} \lor \op\projection{2} \neq  \op'\projection{2} } \\
+    \end{rclarray}
+\]
+The unit element is \( \unitE \defeq \emptyset\) and the composition of two set of operations is only defined when at least one of them is the unit,
+\[ 
+\begin{rclarray}
+    \opset \composeO \opset' & \defeq & 
+    \begin{cases}
+        \opset & \text{if } \opset' = \unitO \\
+        \opset' & \text{if } \opset = \unitO \\
+        \text{undefined} & \text{otherwise}
+    \end{cases}
+\end{rclarray}
+\]
+A partial binary operation \( \addO \) adds a new operation to a set that ensures the set contains the first read and last write,
+\[
+\begin{rclarray}
+    \opset \addO (\etR, \addr, \val) & \defeq & 
+    \begin{cases}
+        \opset \uplus \Set{(\etR, \addr, \val)} & (\stub, \addr, \stub) \notin \opset \\
+        \opset &  \text{otherwise} \\
+    \end{cases} \\
+    \opset \addO (\etW, \addr, \val) & \defeq & ( \opset \setminus \Set{(\etW, \addr, \stub)} ) \uplus \Set{(\etW, \addr, \val)} \\
+\end{rclarray}
+\]
+\end{defn}
+
+\begin{lem}
+The \( \addO \) operator preserves validity of set.
+\end{lem}
+
+\begin{defn}[Transaction operational semantics]
+Given the set of stacks including thread stacks \( \ThdStacks \) and transaction stacks \( \TxStacks \) (\defref{def:stacks}), heaps \( \Heaps \) (\defin\ref{def:heaps}) and transactions \( \Transactions \) (\defin\ref{def:language}), the \emph{operational semantics of transactions}, 
+\[
+\begin{rclarray}
+\toL & : & \ThdStacks \times \\
+& & \quad ((\TxStacks \times \Heaps \times \Opsets) \times \Transactions) \times ((\TxStacks \times \Heaps \times \Opsets) \times \Transactions)
+\end{rclarray}
+\]
+is given in \fig\ref{fig:transaction_semantics}.
+Note that arithmetic expression evaluation \( \evalE[\thstk \uplus \txstk]{\expr} \) is defined in \defref{def:language} and the \( \addO \) operators is defined in \defref{def:transactions}.
+\end{defn}
+
+\begin{figure}[!t]
+\hrule\vspace{5pt}
+\[	
+    \infer[\rl{TAss}]{%
+        \thstk \vdash (\txstk, \h, \opset) , \pass{\txvar}{\expr} \ \toL \  (\txstk \remapsto{\txvar}{\val}, \h, \opset) , \pskip
+    }{%
+        \evalE[\thstk \uplus \txstk]{\expr} = \val
+        && \txvar \in \TxVars
+    }
+\]
+
+\[
+    \infer[\rl{TRead}]{
+        \thstk \vdash (\txstk, \h, \opset) , \pderef{\txvar}{\expr} \ \toL \  (\txstk\remapsto{\txvar}{\val}, \h, \opset \addO (\etR, \addr, \val)), \pskip
+    }{
+        \evalE[\thstk \uplus \txstk]{\expr} = \addr
+        && \h(\addr) = \val 
+        && \txvar \in \TxVars
+    }
+\]
+
+\[
+    \infer[\rl{TMutate}]{%
+        \thstk \vdash (\txstk, \h, \opset), \pmutate{\expr_{1}}{\expr_{2}} \ \toL \  (\txstk, \h \remapsto{\addr}{\val}, \opset \addO (\etW, \addr, \val)) , \pskip
+    }{%
+        \evalE[\thstk \uplus \txstk]{\expr_{1}} = \addr 
+        && \evalE[\thstk \uplus \txstk]{\expr_{2}} = \val 
+    }
+\]
+
+\[
+    \infer[\rl{TAssume}]{%
+        \thstk \vdash (\txstk, \h, \opset), \passume{\expr} \ \toL \  (\txstk, \h, \opset), \pskip
+    }{%
+        \evalE[\thstk \uplus \txstk]{\expr} = 0
+    }
+\]
+
+\[
+    \infer[\rl{TReturn}]{%
+        \thstk \vdash (\txstk, \h, \opset), \preturn{\expr} \ \toL \  (\txstk\rmto{\ret}{\val}, \h, \opset), \pskip
+    }{ 
+        \val = \evalE[\thstk \uplus \txstk]{\expr}
+    }
+\]
+
+\[
+    \infer[\rl{TChoice}]{%
+        \thstk \vdash (\txstk, \h, \opset) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\txstk, \h, \opset) , \trans'
+    }{
+        \trans' \in \Set{\trans_{1}, \trans_{2}}
+    }
+\]
+
+\[
+    \infer[\rl{TLoop}]{%
+        \thstk \vdash (\txstk, \h, \opset),  \trans\prepeat \ \toL \  (\txstk, \h, \opset), \pskip \pchoice (\trans \pseq \trans\prepeat)
+    }{}
+\]
+
+
+\[
+    \infer[\rl{TSeqSkip}]{%
+        \thstk \vdash (\txstk, \h, \opset), \pskip \pseq \trans \ \toL \  (\txstk, \h, \opset), \trans
+    }{%
+    }
+\]
+
+\[
+    \infer[\rl{TSeq}]{%
+        \thstk \vdash (\txstk, \h, \opset), \trans_{1} \pseq \trans_{2} \ \toL \  (\txstk', \h', \opset'), \trans_{1}' \pseq \trans_{2}
+    }{%
+        \thstk \vdash (\txstk, \h, \opset), \trans_{1} \ \toL \  (\txstk', \h', \opset'), \trans_{1}'
+    }
+\]
+
+\hrule\vspace{5pt}
+\caption{The transaction operational semantics}
+\label{fig:transaction_semantics}
+\end{figure}
+
