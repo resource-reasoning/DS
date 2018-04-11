@@ -57,24 +57,24 @@ Given the set of logical expressions \( \LExpr \), logical variables \( \LVar \)
 	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \lexpr \pt \lexpr \mid \fpF \mid \lpre \sep \lpost  \\
 \end{rclarray}	 
 \]
-Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \Heaps \times \powerset{ \Events } $, is defined over the structure of local assertions as follows,
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \Opsets} $, is defined over the structure of local assertions as follows,
 \[
 \begin{rclarray}
 	\evalLS{\assfalse} & \eqdef & \emptyset \\
-	\evalLS{\asstrue} & \defeq & \Heaps \times \powerset{ \Events } \\
+	\evalLS{\asstrue} & \defeq & \Heaps \times \Opsets \\
 	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
 	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
 	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
-	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{\h}{\h \in \evalLS{\lpre} \implies \h \in \evalLS{\lpost}}\\
+	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{(\h, \opset)}{(\h , \opset) \in \evalLS{\lpre} \implies (\h , \opset) \in \evalLS{\lpost}}\\
 	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
 	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \unitE) } \\
 	\evalLS{ \fpF } & \defeq & \Set{ (\unitH, \evalF{\fp}) } \\
 	\evalLS{\lpre \sep \lpost} & \defeq & 
     \Setcon{
-        (\h_1 \composeH \h_2, \evset_{1} \composeE \evset_{2})
+        (\h_1 \composeH \h_2, \opset_{1} \composeE \opset_{2})
     }{ 
-        (\h_{1},\evset_{1}) \in \evalLS{\lpre} 
-        \land (\h_{2}, \evset_{2} ) \in \evalLS{\lpost} 
+        (\h_{1},\opset_{1}) \in \evalLS{\lpre} 
+        \land (\h_{2}, \opset_{2} ) \in \evalLS{\lpost} 
     } 
 \end{rclarray}
 \]
@@ -103,19 +103,23 @@ Then given a set of \emph{region identifiers} \( \rid \in \RegionID \), the \emp
 , and the units set \( \unitC \defeq \Setcon{\ca}{\for{\rid} \ca(\rid) \in \unitK } \) .
 \end{definition}
 
+The interference \( \perm{\kap} :  \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp \) says if a thread holds the capability \( \cass{\kap}{}\) and \emph{the current state of database} satisfies the assertions \( \bar{\lpre} \), the thread is allowed to commit a transaction that has the fingerprint \( \fp \).
+The current state of database refers to the state that all the committed transactions are visible.
+
 \begin{defn}[Interference]
 \label{def:intf}
-Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}) and local assertion \( \lpre \in \LAst \) (\defref{def:local_assertions}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
+Assume standard separation logic assertion \( \bar{\lpre}\) (the local assertion \( \LAst \) without fingerprint).
+Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
 \[
 \begin{rclarray}
 	\intass & ::=  &
-	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \lpre \mat \fp } \cup \intass 
+	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp } \cup \intass 
 \end{rclarray}
 \]
-It will be interpreted to a set of \emph{interference environments}, this is,
+The interference assertions are interpreted to a set of \emph{interference environments} that is a function from client-specified capabilities to pairs of history heaps and operations,
 \[
 \begin{rclarray}
-    \inter \in \Interference & \defeq & \Kaps \parfun \powerset{\Heaps} \times \Opsets
+    \inter \in \Interference & \defeq & \Kaps \parfun \powerset{\powerset{\HisHeaps} \times \Opsets}
 \end{rclarray}
 \]
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
@@ -123,9 +127,9 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \[
 \begin{rclarray}
 	\evalI{\emptyset}(\kap) & \eqdef & \text{undefined} \\
-	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \lpre \mat \fp } \cup \intass }(\kap') & \eqdef &
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp } \cup \intass }(\kap') & \eqdef &
     \begin{cases}
-    (\evalLS[\lenv',\stk]{\lpre}, \evalF[\lenv',\stk]{\fp}) \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
+    \left(\Setcon{\hh}{\exsts{\h, \cu_{max}}\h \in \evalLS[\lenv',\stk]{\bar{\lpre}} \land {} \\ \h = \func{clps}{\hh,\cu_{max}} \land {} \\ \for{\addr} \cu_{max}(\addr) = \left| \hh(\addr) \right|}, \evalF[\lenv',\stk]{\fp}\right) \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
     \evalI{\intass}(\kap') & \text{ otherwise} \\
     \end{cases} \\
     & & \text{where there exists a vector of values \( \vec{\val}\) such that } \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \\
@@ -133,18 +137,19 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \] 
 \end{defn}
 
+We will write \( \intfH(\kap) \)  and \( \intfO(\kap) \) for the first and second projections of all the elements.
+
+\sx{define \( \hh \in \como \) }
+
 \begin{defn}[Labelled transition system]
-The labelled transition system is a tuple, \( (\aexecset,\actionset,\toLTS{}, \aexecset_{0}, \como) \), consisting of a set of abstract executions \( \aexecset \subseteq \Aexecs \), a set of actions \( \actionset \subseteq \Actions \), a relation \( \toLTS{} : \Aexecs \times \Actions \times \Aexecs \), a set of initial abstract executions \( \aexecset_{0}\) and the consistency model associated with the transition system \( \como \).
+The labelled transition system is a tuple \( (\hhset, \opsetset,\toLTS{}, \hhset_{0}, \como) \) consisting of a set of history heaps \( \hhset \subseteq \HisHeaps \), a set of sets of operations \( \opsetset \subseteq \Opsets \), a relation \( \toLTS{} : \HisHeaps \times \Opsets \times \HisHeaps \), a set of initial history heaps \( \hhset_{0}\) and the consistency model associated with the transition system \( \como \).
 Assume all the initial abstract executions satisfies the consistency model.
 The relation \( \toLTS{}\) is defined as the follows,
 \[
 \begin{rclarray}
-    \aexec \toLTS{\evset} \aexec' & \defeq &
-        \begin{array}[t]{@{}l}
-        \exsts{\vis, \po, \ar, \txid } \\
-        \quad {} \land \aexec' = (\aexec\prjT \uplus \Set{ \txid \mapsto \evset }, \aexec\prjP \uplus \po, \aexec\prjV \uplus \vis, \aexec\prjA \uplus \ar) \\
-        \quad {} \land \vis, \po \subseteq \ar = \Setcon{(\txid', \txid)}{\txid' \in \dom(\aexec\prjT)} 
-        \land \aexec' \in \evalCOM{\como}
+    \hh \toLTS{\opset} \hh' & \defeq &
+    \begin{array}[t]{@{}l}
+        \exsts{\cu, \txid} \txid \in \func{fresh}{\hh} \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} \land \hh \in \como
     \end{array}
 \end{rclarray}
 \]
@@ -154,51 +159,45 @@ The relation \( \toLTS{}\) is defined as the follows,
 \label{def:invariant-region}
 \label{def:world2aexec}
 \label{def:state2aexec}
-Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{\Aexecs} \) that returns initial abstract executions for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated with regions.
+Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{\HisHeaps} \) that returns initial history heaps for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated to regions.
 Also assume all the initial states for a region satisfy the consistency model, \ie
 \[
-\for{\rid, \aexec_{0}} \aexec_{0} \in \func{init}{\rid} \implies \aexec_{0} \in \evalCOM{\func{como}{\rid}}
+\for{\rid, \hh_{0}} \hh_{0} \in \func{init}{\rid} \implies \hh_{0} \in \func{como}{\rid}
 \]
-The invariant of a region, namely \( \func{transinv}{\rid, \intf} \), is the labelled transition system where the initial state is \( \func{init}{\rid}\) and all the actions are included in the interference.
+The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system where the initial state is \( \func{init}{\rid}\) and all the operations are included in the interference.
 \[
 \begin{rclarray}
-    \func{inv}{\rid, \intf} & \defeq & (\aexecset,\actionset \cup \Set{\unitE},\toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
-    & & \text{where } \for{\evset} \evset \in \actionset \implies \exsts{\kap} \evset \in \dom(\intf(\kap))
+    \func{inv}{\rid, \intf} & \defeq & (\hhset,\opsetset, \toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
+    & & \text{where } \for{\opset} \opset \in \opsetset \implies \exsts{\kap} \opset \in \intfO(\kap)
 \end{rclarray}
 \]
-For brevity, \( \aexec \in \func{inv}{\rid, \intf} \) is short-hand for \( \aexec \in \aexecset \), and similarly \( \aexec \toLTS{\evset} \aexec' \in \func{inv}{\rid, \intf} \).
 \end{defn}
 
-The empty (unit) event \( \unitE \) in the invariant is a place-holder for other regions.
-They might append a concrete event, while the composition of abstract executions composes events point-wise if the two executions have the same structure.
+For brevity, \( \hh \in \func{inv}{\rid, \intf} \) denotes \( \hh \in \hhset \), and similarly \( \hh \toLTS{\opset} \hh' \in \func{inv}{\rid, \intf} \).
 
 \begin{defn}[Well-form of a region]
 \label{def:well-form-region}
-The well-form condition of the interference, namely \( \pred{wfintf}{\rid, \intf} \) predicate, assertions for any concrete events \( \evset \), the state before the events must be included in the interference.
+The well-form condition of the interference, namely \( \pred{wfintf}{\rid, \intf} \) predicate, assertions for any concrete events \( \opset \), the state before the events must be included in the interference.
 \[
 \begin{rclarray}
-    \pred{wfintf}{\rid, \intf} & \defeq & \for{\aexec, \aexec', \evset} \aexec \toLTS{\evset} \aexec' \in \func{inv}{\rid, \intf} \land ( \evset \neq \unitE \implies \pred{wfabs}{\rid, \intf, \aexec, \evset, \aexec'} ) \\ 
-    \pred{wfabs}{\rid, \intf, \aexec, \evset, \aexec'} & \defeq & 
+    \pred{wfintf}{\rid, \intf} & \defeq & 
     \begin{array}[t]{@{}l}
-        \exsts{ \kap }
-        \evset \in ( \dom(\intf( \kap )) ) \land \obsstate{\aexec, \aexec\prjT,\func{como}{\rid}\projection{2}} \subseteq \intf(\kap)(\evset)
+        \for{\hh, \hh', \opset} 
+        \hh \toLTS{\opset} \hh' \in \func{inv}{\rid, \intf} 
+        \implies \exsts{ \kap, \hhset }
+        \hh \in \hhset \land (\hhset, \opset ) \in \intf( \kap )
     \end{array} \\
 \end{rclarray}
 \]
-Given a region (identifier) \(\rid\), its current state \( \h \), and its interference \( \intf \), the function \(\funcn{r2e} \) returns all the possible abstract executions that are included in the invariant of a region and satisfy the state \( \h \),
+A cut \( \cu \) is a valid observation for a history heap \( \hh \) of a region \( \rid \), namely \( \pred{validOb}{\rid, \intf, \cu, \hh} \), when the history heap can reach a new state by committing operations \( \opset \), and the heap by collapsing the history heap with the cut is compatible with the new operations,
 \[
 \begin{rclarray}
-    \func{r2e}{\rid, \h, \intf} & \eqdef & \Setcon{\aexec}{\aexec \in \func{inv}{\rid, \intf} \land \h \in \obsstate{\aexec,\aexec\prjT,\func{como}{\rid}\projection{2}}} \\
-\end{rclarray}
-\]
-A set of heaps \( \hset \) approximates the observation of a region \( \rid \) under state \( \h \), namely \( \pred{approx}{\rid, \h, \hset, \intf} \), when an abstract execution satisfies the state \( \h \) and it can reach a new state by appending a new transaction \( \txid \), the observable state of the new transaction must included in the approximation \( \hset \),
-\[
-\begin{rclarray}
-    \pred{approx}{\rid, \aexec, \hset, \intf} & \eqdef & 
+    \pred{validOb}{\rid, \intf, \hh, \cu} & \eqdef & 
     \begin{array}[t]{@{}l}
-    \for{ \aexec' } \aexec \toLTS{\stub} \aexec' \in \func{inv}{\rid, \intf} \\
-    \quad {} \land \exsts{ \txid } \txid = \max_{\ar}\Set{\aexec'\prjT}
-    \land \obsstate{\aexec,\aexec\prjV^{-1}(\txid),\func{como}{\rid}\projection{2}} \subseteq \hset
+        \exsts{ \hh', \opset, \h } 
+        \hh \toLTS{\opset} \hh' \in \func{inv}{\rid, \intf} 
+        \land \h = \func{clps}{\hh,\cu} \\
+        \quad {} \land \for{\addr,\val} (\otR, \addr, \val)  \in \opset \implies \h(\addr) = \val
     \end{array}
 \end{rclarray}
 \]
@@ -263,10 +262,10 @@ Because regions in a well-defined world must disjointed with each other and have
     \func{transinv}{\emptyset} & = & \Setcon{ ( \aexec , \unitE, \aexec' ) }{\aexec, \aexec' \in \unitAEX } \\
     \func{transinv}{\Set{\rid \mapsto (\stub, \stub, \intf)} \uplus \gs} & = & 
     \Setcon{
-        ( \aexec \composeAEX \aexec_{f}, \evset \composeE \evset_{f}, \aexec' \composeAEX \aexec_{f}' ) 
+        ( \aexec \composeAEX \aexec_{f}, \opset \composeE \opset_{f}, \aexec' \composeAEX \aexec_{f}' ) 
     }{
-        (\aexec, \evset, \aexec') \in \func{transinv}{\rid, \intf} \\
-        \quad \land (\aexec_{f}, \evset_{f}, \aexec_{f}') \in \func{transinv}{\gs}
+        (\aexec, \opset, \aexec') \in \func{transinv}{\rid, \intf} \\
+        \quad \land (\aexec_{f}, \opset_{f}, \aexec_{f}') \in \func{transinv}{\gs}
     }
 \end{rclarray}
 \]
