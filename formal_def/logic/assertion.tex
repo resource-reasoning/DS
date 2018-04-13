@@ -141,15 +141,24 @@ We will write \( \intfH(\kap) \)  and \( \intfO(\kap) \) for the first and secon
 
 \sx{define \( \hh \in \como \) }
 
+\sx{Pick notation}
+
 \begin{defn}[Labelled transition system]
-The labelled transition system is a tuple \( (\hhset, \opsetset,\toLTS{}, \hhset_{0}, \como) \) consisting of a set of history heaps \( \hhset \subseteq \HisHeaps \), a set of sets of operations \( \opsetset \subseteq \Opsets \), a relation \( \toLTS{} : \HisHeaps \times \Opsets \times \HisHeaps \), a set of initial history heaps \( \hhset_{0}\) and the consistency model associated with the transition system \( \como \).
+The labelled transition system is a tuple \( ( \hhset \times \cuset, \opsetset,\toLTS{}, \hhset_{0} \times \cuset_{0}, \como) \) consisting of pairs of history heaps and cuts \( \hhset \times \cuset \), a set of sets of operations \( \opsetset \subseteq \Opsets \), a relation \( \toLTS{} : \HisHeaps \times \Opsets \times \HisHeaps \), a set of initial history heaps and cuts \( \hhset_{0} \times \cuset_{0} \) and the consistency model associated with the transition system \( \como \).
 Assume all the initial abstract executions satisfies the consistency model.
 The relation \( \toLTS{}\) is defined as the follows,
 \[
 \begin{rclarray}
-    \hh \toLTS{\opset} \hh' & \defeq &
+    (\hh, \cu) \toLTS{\opset} (\hh',\cu') & \defeq &
     \begin{array}[t]{@{}l}
-        \exsts{\cu, \txid} \txid \in \func{fresh}{\hh} \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} \land \hh \in \como
+        \exsts{\thcu, \thcu', \txid, \thid}
+        \txid \in \func{fresh}{\hh} 
+        \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} \\
+        \quad {} \land ((\hh,\thcu),(\hh',\thcu')) \in \como
+        \land \h = \func{clps}{\hh,\cu} 
+        \land \thcu(\thid) = \cu 
+        \land \thcu'(\thid) = \cu' \\
+        \quad {} \land \for{\addr,\val} (\otR, \addr, \val)  \in \opset \implies \h(\addr) = \val
     \end{array}
 \end{rclarray}
 \]
@@ -159,21 +168,18 @@ The relation \( \toLTS{}\) is defined as the follows,
 \label{def:invariant-region}
 \label{def:world2aexec}
 \label{def:state2aexec}
-Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{\HisHeaps} \) that returns initial history heaps for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated to regions.
-Also assume all the initial states for a region satisfy the consistency model, \ie
-\[
-\for{\rid, \hh_{0}} \hh_{0} \in \func{init}{\rid} \implies \hh_{0} \in \func{como}{\rid}
-\]
+Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps \times \Cuts } \) that returns initial history heaps and cuts for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated to regions.
 The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system where the initial state is \( \func{init}{\rid}\) and all the operations are included in the interference.
 \[
 \begin{rclarray}
-    \func{inv}{\rid, \intf} & \defeq & (\hhset,\opsetset, \toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
-    & & \text{where } \for{\opset} \opset \in \opsetset \implies \exsts{\kap} \opset \in \intfO(\kap)
+    \func{inv}{\rid, \intf} & \defeq & (\hhset \times \cuset, \Setcon{\opset}{\exsts{\kap} \opset \in \intfO(\kap)}, \toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
 \end{rclarray}
 \]
 \end{defn}
 
-For brevity, \( \hh \in \func{inv}{\rid, \intf} \) denotes \( \hh \in \hhset \), and similarly \( \hh \toLTS{\opset} \hh' \in \func{inv}{\rid, \intf} \).
+For brevity, \( (\hh,\cu) \in \func{inv}{\rid, \intf} \) denotes \( (\hh,\cu) \in \func{inv}{\rid,\intf}\projection{1} \), and similarly \( (\hh,\cu) \toLTS{\opset} (\hh',\cu') \in \func{inv}{\rid, \intf} \).
+
+\sx{This well form condition allows one to write weaker interference, \eg interference satisfies both SI and SER but to prove the correctness of SER. It is fine since logic only need to be sound?}
 
 \begin{defn}[Well-form of a region]
 \label{def:well-form-region}
@@ -183,30 +189,18 @@ The well-form condition of the interference, namely \( \pred{wfintf}{\rid, \intf
     \pred{wfintf}{\rid, \intf} & \defeq & 
     \begin{array}[t]{@{}l}
         \for{\hh, \hh', \opset} 
-        \hh \toLTS{\opset} \hh' \in \func{inv}{\rid, \intf} 
+        (\hh, \stub) \toLTS{\opset} (\hh',\stub) \in \func{inv}{\rid, \intf} 
         \implies \exsts{ \kap, \hhset }
         \hh \in \hhset \land (\hhset, \opset ) \in \intf( \kap )
     \end{array} \\
-\end{rclarray}
-\]
-A cut \( \cu \) is a valid observation for a history heap \( \hh \) of a region \( \rid \), namely \( \pred{validOb}{\rid, \intf, \cu, \hh} \), when the history heap can reach a new state by committing operations \( \opset \), and the heap by collapsing the history heap with the cut is compatible with the new operations,
-\[
-\begin{rclarray}
-    \pred{validOb}{\rid, \intf, \hh, \cu} & \eqdef & 
-    \begin{array}[t]{@{}l}
-        \exsts{ \hh', \opset, \h } 
-        \hh \toLTS{\opset} \hh' \in \func{inv}{\rid, \intf} 
-        \land \h = \func{clps}{\hh,\cu} \\
-        \quad {} \land \for{\addr,\val} (\otR, \addr, \val)  \in \opset \implies \h(\addr) = \val
-    \end{array}
 \end{rclarray}
 \]
 \end{defn}
 
 \begin{definition}[Worlds]
 \label{def:world}
-Given the set of heaps $\Heaps$ (\defref{def:heaps}) and a set of \emph{region identifiers} \( \rid \in \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \to \Heaps \times \powerset{\Heaps} \times \Interference \).
-Each region has its current state, a set of possible initial states for transitions and the interference.
+Given the set of history heaps $\HisHeaps$ (\defref{def:his_heap}) and region identifiers \( \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \to \HisHeaps \times \Cuts \times \Interference \).
+Each region has its current state and the interference.
 The \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as $\composeS \eqdef \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$,
 %
 \[
@@ -218,7 +212,8 @@ The \emph{shared state composition function}, $\composeS: \SStates \times \SStat
 	\end{cases}
 \end{rclarray}
 \]
-A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and capabilities \( \ca \) (\defref{def:capabilities}), where regions are associated with the same consistency model and the collapse of the pair exists, \ie regions are well-form and compatible.
+A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and capabilities \( \ca \) (\defref{def:capabilities}) such that regions are associated with the same consistency model and the entire shared state must be well-form, \ie the collapse \(\clpsS{\gs}\) contains at least one element.
+Specifically, it requires regions are disjointed with each other, their states are included in the invariants and the interferences are well-form.
 \[
 \begin{rclarray}
 	\world \in \World  & \eqdef & 
@@ -227,23 +222,19 @@ A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and cap
     }{ 
         \ca \in \Caps 
         \land \gs \in \SStates
-        \land \clpsW{\gs} \neq \emptyset
+        \land \clpsS{\gs} \neq \emptyset
         \land \dom(\ca) \subseteq \dom(\gs) \\
         \quad {} \land \for{\rid, \rid'}
         \func{como}{\rid} = \func{como}{\rid'} \\
-        \quad {} \land \for{\h, \h' }
-        \h \in \Set{\gs(\rid)\projection{1}} \cup \gs(\rid)\projection{2}
-        \land \h' \in \Set{\gs(\rid')\projection{1}} \cup \gs(\rid')\projection{2} 
-        \land ( \h \composeH \h' )\isdef
     }
 \end{rclarray}
 \]
-The function, \( \clpsW{.} : \SStates \parfun \powerset{\Aexecs} \), collapses shared states to sets of abstract executions as the follows,
+The function, \( \clpsS{.} : \SStates \parfun \powerset{\Aexecs} \), collapses shared states to sets of abstract executions as the follows,
 \[
 \begin{rclarray}
-    \clpsW{\emptyset} & \defeq & \unitAEX \\
-    \clpsW{\Set{\rid \mapsto (\h, \hset, \intf)} \uplus \gs } & \defeq & 
-        \Setcon{ \aexec \composeAEX \aexec' }{ \aexec \in \func{r2e}{\rid, \h, \intf} \land \pred{approx}{\rid, \aexec, \hset, \intf} \land \pred{wfintf}{\rid, \intf} \land \aexec' \in \clpsW{\gs} }\\
+    \clpsS{\emptyset} & \defeq & \Set{(\unitHH, \unitCU)} \\
+    \clpsS{\Set{\rid \mapsto (\hh, \cu, \intf)} \uplus \gs } & \defeq & 
+        \Setcon{ (\hh \composeHH \hh', \cu \composeCU \cu') }{ (\hh,\cu) \in \func{inv}{\rid, \intf} \land \pred{wfintf}{\rid, \intf} \land (\hh',\cu') \in \clpsS{\gs} }\\
 \end{rclarray}
 \] 
 % 
@@ -252,24 +243,23 @@ The \emph{world unit set} is $\unitW \eqdef \Setcon{(\ca, \gs)}{(\ca, \gs) \in \
 The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
 \end{definition}
 
-\sx{point-wise composition}
-\begin{defn}[Invariant of worlds]
-Because regions in a well-defined world must disjointed with each other and have the same consistency model, it is easy to lift the invariant of a region to a shared state,
-\[
-\begin{rclarray}
-    \func{inv}{\emptyset} & \defeq & (\aexecset, ... ) \\
-    \func{inv}{\Set{\rid \mapsto (\stub, \stub, \intf)} \uplus \gs} & \defeq & \Setcon{\aexec \composeAEX \aexec' }{\aexec \in \func{inv}{\rid, \intf} \land \aexec' \in \func{inv}{\gs}} \\
-    \func{transinv}{\emptyset} & = & \Setcon{ ( \aexec , \unitE, \aexec' ) }{\aexec, \aexec' \in \unitAEX } \\
-    \func{transinv}{\Set{\rid \mapsto (\stub, \stub, \intf)} \uplus \gs} & = & 
-    \Setcon{
-        ( \aexec \composeAEX \aexec_{f}, \opset \composeE \opset_{f}, \aexec' \composeAEX \aexec_{f}' ) 
-    }{
-        (\aexec, \opset, \aexec') \in \func{transinv}{\rid, \intf} \\
-        \quad \land (\aexec_{f}, \opset_{f}, \aexec_{f}') \in \func{transinv}{\gs}
-    }
-\end{rclarray}
-\]
-\end{defn}
+%\begin{defn}[Invariant of worlds]
+%Because regions in a well-defined world must disjointed with each other and have the same consistency model, the invariants of regions can be lifted to a world,
+%\[
+%\begin{rclarray}
+    %\func{inv}{(\ca, \emptyset),\como} & \defeq & ( \Set{\unitHH}, \Set{\unitO}, \Set{(\unitHH, \unitO, \unitHH)}, \Set{\unitHH}, \como \right) \\
+    %\func{inv}{\Set{\rid \mapsto (\stub, \stub, \intf)} \uplus \gs} & \defeq & \Setcon{\aexec \composeAEX \aexec' }{\aexec \in \func{inv}{\rid, \intf} \land \aexec' \in \func{inv}{\gs}} \\
+    %\func{transinv}{\emptyset} & = & \Setcon{ ( \aexec , \unitE, \aexec' ) }{\aexec, \aexec' \in \unitAEX } \\
+    %\func{transinv}{\Set{\rid \mapsto (\stub, \stub, \intf)} \uplus \gs} & = & 
+    %\Setcon{
+        %( \aexec \composeAEX \aexec_{f}, \opset \composeE \opset_{f}, \aexec' \composeAEX \aexec_{f}' ) 
+    %}{
+        %(\aexec, \opset, \aexec') \in \func{transinv}{\rid, \intf} \\
+        %\quad \land (\aexec_{f}, \opset_{f}, \aexec_{f}') \in \func{transinv}{\gs}
+    %}
+%\end{rclarray}
+%\]
+%\end{defn}
 
 \begin{definition}[Assertions]
 \label{def:assertion}
@@ -288,32 +278,8 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 	\evalW{\False} & \defeq & \emptyset \\
 	\evalW{\True} & \defeq & \World \\
 	\evalW{\emp} & \defeq & \unitW \\
-	\evalW{\gpre \land \gpost} & \defeq & 
-    \Setcon{
-        (\ca, \gs)
-    }{
-        \exsts{\gs_{p}, \gs_{q}} 
-        (\ca, \gs_{p}) \in \evalW{\gpre} 
-        \land (\ca, \gs_{q}) \in \evalW{\gpost} \\
-        \quad {} \land \for{\rid} 
-        \exsts{\h, \hset_{p}, \hset_{q}, \intf} 
-        \gs(\rid) = (\h, \hset_{p} \cap \hset_{q}, \intf) \\
-        \qquad {} \land \gs_{p}(\rid) = (\h, \hset_{p}, \intf)
-        \land \gs_{q}(\rid) = (\h, \hset_{q}, \intf)
-    } \\
-	\evalW{\gpre \lor \gpost} & \defeq & 
-    \Setcon{
-        (\ca, \gs)
-    }{
-        \exsts{\gs_{p}, \gs_{q}} 
-        (\ca, \gs_{p}) \in \evalW{\gpre} 
-        \land (\ca, \gs_{q}) \in \evalW{\gpost} \\
-        \quad {} \land \for{\rid} 
-        \exsts{\h, \hset_{p}, \hset_{q}, \intf} 
-        \gs(\rid) = (\h, \hset_{p} \cup \hset_{q}, \intf) \\
-        \qquad {} \land \gs_{p}(\rid) = (\h, \hset_{p}, \intf)
-        \land \gs_{q}(\rid) = (\h, \hset_{q}, \intf)
-    } \\
+	\evalW{\gpre \land \gpost} & \defeq & \evalW{\gpre} \cap \evalW{\gpost} \\
+	\evalW{\gpre \lor \gpost} & \defeq & \evalW{\gpre} \cup \evalW{\gpost} \\ 
 	\evalW{\exsts{\lvar}  \gpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}} \evalW[\lenv\remapsto{\lvar}{\val}, \stk]{\gpre} \\
 	\evalW{\gpre \implies \gpost} & \defeq & \Setcon{\w}{\w \in \evalW{\gpre} \implies \w \in \evalW{\gpost}} \\
 	\evalW{\cass{\kap}{\lrid}} & \defeq & \Setcon{ (\Set{\lrid \mapsto \kap}, \gs) }{\gs \in \SStates} \\
@@ -325,12 +291,15 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 	} \\
 	\evalW{ \sptboxass{\bar{\lpre}}{\bar{\lpost}}{\lrid}{\intass} } & \defeq & 
     \Setcon{
-        (\ca,\Set{\lrid \mapsto (\h, \hset, \intf)} \uplus \gs)
-    }{
+        (\ca,\Set{\lrid \mapsto (\hh, \cu, \intf)} \uplus \gs)
+    }{         
+        \exsts{\h_{p}, \h_{q}, \cu_{max}}
         \ca \in \unitC 
-        \land \h \in \evalLS{\bar{\lpre}}
-        \land \hset = \evalLS{\bar{\lpost}}
-        \land \intf  = \evalI{\intass}
+        \land \h_{q} \in \evalLS{\bar{\lpost}}
+        \land \h_{q} = \func{clps}{\hh, \cu} \\
+        \quad {} \land \h_{p} \in \evalLS{\bar{\lpre}}
+        \land \h_{p} = \func{clps}{\hh, \cu_{max}} 
+        \land \for{\addr} \cu_{max}(\addr) = \left|\hh(\addr)\right|
     } \\
 \end{rclarray}
 \]

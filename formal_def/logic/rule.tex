@@ -89,67 +89,69 @@ This is because once a location has been re-written, the rest read are considere
 
 \subsection{Rely and Guarantee}
 
+\sx{To allow a transaction update multiple regions}
+
 \begin{definition}[Rely and guarantee]
 \label{def:rely-guarantee}
-The \( \funcn{allowed} \) function asserts that a event is allowed by the owned capabilities,
+The \( \predn{to} \) predicate asserts that operations \( \opset\) is allowed by the capabilities \(\ca\) and the state transfer from \( \gs \) to \( \gs' \).
 \[
 \begin{rclarray}
-    \func{allowed}{\evset, \ca, \gs} & \defeq & \evset = \unitE \\
-    \func{allowed}{\evset \composeE \evset', \ca, \gs \uplus \Set{\rid \mapsto (\stub, \stub, \intf)}} & \defeq & 
-    \exsts{\kap } \kap \sqsubseteq \ca(\rid)
-    \land \evset \in \dom(\intf(\kap)) 
-    \land \func{allowed}{\evset', \ca, \gs}
+    \func{to}{\opset, \ca, \gs, \gs'} & \defeq & \opset = \unitE \land \gs = \gs' \\
+    \func{to}{\opset \uplus \opset', \ca, \gs ,\gs'} & \defeq & 
+    \begin{array}[t]{@{}l}
+    \exsts{\rid, \hh, \hh', \cu, \cu', \kap, \intf, \gs'',\gs''' }  \\
+    \quad \gs = \gs'' \uplus \Set{\rid \mapsto (\hh, \cu, \intf)} 
+    \land \gs' = \gs''' \uplus \Set{\rid \mapsto (\hh, \cu, \intf)}  \\
+    \quad {} \land \kap \sqsubseteq \ca(\rid)
+    \land \opset \in \intf(\kap)\projection{2}
+    \land (\hh,\cu) \toLTS{\opset} (\hh',\cu') \in \func{inv}{\rid, \intf }
+    \land \pred{to}{\opset', \ca, \gs'',\gs'''}
+    \end{array}
 \end{rclarray}
 \]
 Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} relation, $\relyU \subseteq \World \times \World$, is defined as follows,
 \[	
     \begin{rclarray}
-	\relyU & \eqdef &
+	\Rely & \eqdef &
 	\myset{
 		((\ca, \gs), (\ca, \gs'))	
 	}{
-        \exsts{\evset,\aexec, \aexec'}  
-        \func{allowed}{\evset, \ca, \gs}  \\
-        \quad {} \land \aexec \in \clpsW{\gs} 
-        \land \aexec' \in \clpsW{\gs'}
-        \land (\aexec, \evset, \aexec') \in \func{transinv}{\gs}
+        \exsts{\opset} 
+        \pred{to}{\opset, \ca, \gs, \gs'}
 	} \\
     \end{rclarray}
 \]
-The invariant of a shared state is a lift of the invariants of interferences of regions.
-The \emph{rely} relation, $\RelyI \eqdef \World \times \World$, is defined as follows:
+%The invariant of a shared state is a lift of the invariants of interferences of regions.
+%The \emph{rely} relation, $\RelyI \eqdef \World \times \World$, is defined as follows:
+%\[
+    %\begin{rclarray}
+         %\RelyI &\eqdef & \closure{\left(\relyU\right)} \\
+    %\end{rclarray}
+%\]
+A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
 \[
     \begin{rclarray}
-         \RelyI &\eqdef & \closure{\left(\relyU\right)} \\
-    \end{rclarray}
-\]
-A set of fingerprint worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
-\[
-    \begin{rclarray}
-        \stable{\setworld} & \eqdef & \for{\w_{p}, \w_{q}}  \w_{p} \in \setworld \land (\w_{p}, \w_{q}) \in \RelyI \implies \w_{q} \in \setworld
+        \stable{\setworld} & \eqdef & \for{\w_{p}, \w_{q}}  \w_{p} \in \setworld \land (\w_{p}, \w_{q}) \in \Rely \implies \w_{q} \in \setworld
     \end{rclarray}
 \]
 The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined as follows:
 \[	
     \begin{rclarray}
-	\guarU & \eqdef &
+	\Guar & \eqdef &
 	\myset{
 		((\ca, \gs), (\ca, \gs'))	
 	}{
-        \exsts{\evset, \ca', \aexec, \aexec'}  
+        \exsts{\opset, \ca'}  
         (\ca' \composeC \ca)\isdef
-        \land \func{allowed}{\evset, \ca, \gs}  \\
-        \quad {} \land \aexec \in \clpsW{\gs} 
-        \land \aexec' \in \clpsW{\gs'}
-        \land (\aexec, \evset, \aexec') \in \func{transinv}{\gs}
+        \land \pred{to}{\opset, \ca', \gs, \gs'}
 	} \\
     \end{rclarray}
 \]
-The \emph{guarantee} relation, $\GuarI \subseteq \World \times \World$, is defined as follows:
-\sx{take away of the closure}
-\[
-	\GuarI \eqdef \guarU
-\]
+%The \emph{guarantee} relation, $\GuarI \subseteq \World \times \World$, is defined as follows:
+%\sx{take away of the closure}
+%\[
+	%\GuarI \eqdef \guarU
+%\]
 \end{definition}
 
 \subsection{Rules for Global}
@@ -239,25 +241,25 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 
 \[
 \begin{rclarray}
-    \gpre \snap \lpre & \defeq & \for{ \w, \h } \w \in \evalW{\gpre} \land \pred{takeinv}{\w, \h} \implies \h \in \evalLS{\lpre}\\
-    \pred{takeinv}{\gs, \h} & \defeq & \gs = \emptyset \land \h = \unitH \\
-    \pred{takeinv}{\Set{\rid \mapsto (\stub, \hset, \intf)} \uplus \gs, \h \composeH \h'} & \defeq & \h \in \hset \land \pred{takeinv}{\gs,\h'}\\
+    \gpre \snap \lpre & \defeq & 
+    \begin{array}[t]{@{}l}
+        \for{ \w, \h, \hh, \cu }
+        \w \in \evalW{\gpre} 
+        \land (\hh, \cu) \in \clpsS{\w}  \\
+        \quad {} \land \h = \func{clps}{\hh, \cu} \implies \h \in \evalLS{\lpre}\\
+    \end{array} \\
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l@{}}
-        \for{\w, \w', \aexec, \aexec'} \\
+        \for{\w, \w', \hh, \hh', \cu, \cu'} \\
         \quad \w \in \evalW{\gpre}
-        \land \aexec \in \clpsW{\w}
-        \land \func{reachable}{\aexec, \aexec', \stub, \evalF{\fp}, \como}  \\
-        \quad {} \land \aexec' \in \clpsW{\w'}
+        \land (\hh, \cu) \in \clpsW{\w}
+        \land \exsts{\txid} \hh' = \func{commit}{\hh, \cu, \txid, \evalF{\fp}}  \\
+        \quad {} \land (\hh',\cu') \in \clpsW{\w'}
         \land (\w, \w') \in \Guar 
         \implies \w' \in \evalW{\gpost}
     \end{array} \\
 \end{rclarray}                          
 \]
-
-\sx{
-    For LLW the propagate can be done by syntactically update those addresses that has been written.
-}
 
 \hrule\vspace{5pt}
 \caption{The rules for programs}
@@ -277,13 +279,7 @@ Also in practice, many implementation of consistency model assume strong session
 \]
 
 \[
-   \infer[\rl{FWriteNS}]{%
-       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etW, \lexpr, \lexpr''')} }{ \lexpr \pt \lexpr''' \mid ( \lexpr \pt \lexpr'' \lor \lexpr \pt \lexpr''') }
-   }{}
-\]
-
-\[
-   \infer[\rl{FWriteS}]{%
+   \infer[\rl{FWrite}]{%
        \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etW, \lexpr, \lexpr''')} }{ \lexpr \pt \lexpr''' \mid \lexpr \pt \lexpr'''}
    }{}
 \]
@@ -308,24 +304,22 @@ Also in practice, many implementation of consistency model assume strong session
 \begin{rclarray}
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l}
-    \for{\w, \w', \h, \h', \lpre, \lpre', \lpost, \lpost'}
-    \w \in \evalW{\gpre} \\
-    \quad {} \land \pred{unbox}{\w\projection{2}, \h}
-    \land \h \in \evalLS{\lpre} 
-    \land \gpre \snap \lpre' \\
-    \quad {} \land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost | \lpost'} \\
-    \quad {} \land \pred{unbox}{\w'\projection{2},\h'}
-    \land \h' \in \evalLS{\lpost} 
+    \for{\w, \w', \lpre, \lpre', \lpost, \lpost'}
+    \w \in \evalW{\gpre}
+    \land \pred{unboxleft}{\w, \lpre}
+    \land \gpre \snap \lpre' 
+    \land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost'} \\
+    \quad {} \land (\w, \w') \in \Guar
+    \land \pred{unboxleft}{\w',\lpost}
     \land \gpost \snap \lpost' \\
-    \quad \implies \w' \in \evalW{\gpost}
+    \quad {} \implies \w' \in \evalW{\gpost}
     \end{array} \\
-    \pred{unbox}{\gs, \h} & \defeq & \gs = \emptyset \land \h = \unitH \\
-    \pred{unbox}{\Set{\rid \mapsto (\h, \stub, \stub)} \uplus \gs, \h \composeH \h' } & \defeq & \pred{unbox}{\gs, \h'} \\
+    \pred{unboxleft}{\w, \lpre} & \defeq & \for{\hh} (\hh, \stub) \in \clpsW{\w} \land \exsts{\cu_{max}} \for{\addr} \cu(\addr) = \left| \hh(\addr) \right|  \implies \func{clps}{\hh, \cu_{max}} \in \evalLS{\lpre}
 \end{rclarray}
 \]
 
 \hrule\vspace{5pt}
-\caption{Simplified repartition for last write win}
+\caption{Syntactic repartition for SI and SER and Causal}
 \label{fig:rule-prog}
 \end{figure}
 
