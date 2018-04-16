@@ -89,9 +89,9 @@ This is because once a location has been re-written, the rest read are considere
 
 \subsection{Rely and Guarantee}
 
-\sx{To allow a transaction update multiple regions}
+\sx{To allow a transaction update multiple regions but a region multiple times}
 
-\begin{definition}[Rely and guarantee]
+\begin{defn}[Rely and guarantee]
 \label{def:rely-guarantee}
 The \( \predn{to} \) predicate asserts that operations \( \opset\) is allowed by the capabilities \(\ca\) and the state transfer from \( \gs \) to \( \gs' \).
 \[
@@ -101,9 +101,9 @@ The \( \predn{to} \) predicate asserts that operations \( \opset\) is allowed by
     \begin{array}[t]{@{}l}
     \exsts{\rid, \hh, \hh', \cu, \cu', \kap, \intf, \gs'',\gs''' }  \\
     \quad \gs = \gs'' \uplus \Set{\rid \mapsto (\hh, \cu, \intf)} 
-    \land \gs' = \gs''' \uplus \Set{\rid \mapsto (\hh, \cu, \intf)}  \\
+    \land \gs' = \gs''' \uplus \Set{\rid \mapsto (\hh', \cu', \intf)}  \\
     \quad {} \land \kap \sqsubseteq \ca(\rid)
-    \land \opset \in \intf(\kap)\projection{2}
+    \land \opset \in \intfO(\kap)
     \land (\hh,\cu) \toLTS{\opset} (\hh',\cu') \in \func{inv}{\rid, \intf }
     \land \pred{to}{\opset', \ca, \gs'',\gs'''}
     \end{array}
@@ -128,12 +128,6 @@ Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} re
          %\RelyI &\eqdef & \closure{\left(\relyU\right)} \\
     %\end{rclarray}
 %\]
-A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
-\[
-    \begin{rclarray}
-        \stable{\setworld} & \eqdef & \for{\w_{p}, \w_{q}}  \w_{p} \in \setworld \land (\w_{p}, \w_{q}) \in \Rely \implies \w_{q} \in \setworld
-    \end{rclarray}
-\]
 The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined as follows:
 \[	
     \begin{rclarray}
@@ -152,7 +146,16 @@ The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined
 %\[
 	%\GuarI \eqdef \guarU
 %\]
-\end{definition}
+\end{defn}
+
+\begin{defn}[Stable]
+A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
+\[
+    \begin{rclarray}
+        \stable{\setworld} & \eqdef & \for{\w, \w'}  \w \in \setworld \land (\w, \w') \in \Rely \implies \w' \in \setworld
+    \end{rclarray}
+\]
+\end{defn}
 
 \subsection{Rules for Global}
 
@@ -243,19 +246,24 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 \begin{rclarray}
     \gpre \snap \lpre & \defeq & 
     \begin{array}[t]{@{}l}
-        \for{ \w, \h, \hh, \cu }
+        \for{ \w, \h, \hh, \cu, \lenv, \stk }
         \w \in \evalW{\gpre} 
-        \land (\hh, \cu) \in \clpsS{\w}  \\
-        \quad {} \land \h = \func{clps}{\hh, \cu} \implies \h \in \evalLS{\lpre}\\
+        \land (\hh, \cu) \in \eraseW{\w}
+        \land \h = \func{clps}{\hh, \cu} 
+        \implies \h \in \evalLS{\lpre}\\
     \end{array} \\
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l@{}}
-        \for{\w, \w', \hh, \hh', \cu, \cu'} \\
-        \quad \w \in \evalW{\gpre}
-        \land (\hh, \cu) \in \clpsW{\w}
-        \land \exsts{\txid} \hh' = \func{commit}{\hh, \cu, \txid, \evalF{\fp}}  \\
-        \quad {} \land (\hh',\cu') \in \clpsW{\w'}
-        \land (\w, \w') \in \Guar 
+        \for{\w, \w', \hh, \hh', \cu, \cu', \lenv, \stk, \txid} \\
+        \quad 
+        \begin{B}
+            \w \in \evalW{\gpre}
+            \land (\hh, \cu) \in \eraseW{\w}
+            \land \txid \in \func{fresh}{\hh} \\
+            {} \land \hh' = \func{commit}{\hh, \cu, \txid, \evalF{\fp}} 
+            \land (\hh',\cu') \in \eraseW{\w'}
+            \land (\w, \w') \in \Guar 
+        \end{B}
         \implies \w' \in \evalW{\gpost}
     \end{array} \\
 \end{rclarray}                          
@@ -304,22 +312,25 @@ Also in practice, many implementation of consistency model assume strong session
 \begin{rclarray}
     \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l}
-    \for{\w, \w', \lpre, \lpre', \lpost, \lpost'}
-    \w \in \evalW{\gpre}
-    \land \pred{unboxleft}{\w, \lpre}
-    \land \gpre \snap \lpre' 
-    \land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost'} \\
-    \quad {} \land (\w, \w') \in \Guar
-    \land \pred{unboxleft}{\w',\lpost}
-    \land \gpost \snap \lpost' \\
-    \quad {} \implies \w' \in \evalW{\gpost}
+    \for{\w, \w', \lpre, \lpre', \lpost, \lpost', \lenv, \stk} \\
+    \quad 
+    \begin{B}
+        \w \in \evalW{\gpre}
+        \land \pred{unboxleft}{\w, \lpre}
+        \land \gpre \snap \lpre' 
+        \land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost'} \\
+        {} \land (\w, \w') \in \Guar
+        \land \pred{unboxleft}{\w',\lpost}
+        \land \gpost \snap \lpost'
+    \end{B}
+    \implies \w' \in \evalW{\gpost}
     \end{array} \\
-    \pred{unboxleft}{\w, \lpre} & \defeq & \for{\hh} (\hh, \stub) \in \clpsW{\w} \land \exsts{\cu_{max}} \for{\addr} \cu(\addr) = \left| \hh(\addr) \right|  \implies \func{clps}{\hh, \cu_{max}} \in \evalLS{\lpre}
+    \pred{unboxleft}{\w, \lpre} & \defeq & \for{\hh} (\hh, \stub) \in \eraseW{\w} \implies \func{clps}{\hh} \in \evalLS{\lpre}
 \end{rclarray}
 \]
 
 \hrule\vspace{5pt}
-\caption{Syntactic repartition for SI and SER and Causal}
+\caption{Syntactic repartition for SI, SER and Causal under strong sessions}
 \label{fig:rule-prog}
 \end{figure}
 

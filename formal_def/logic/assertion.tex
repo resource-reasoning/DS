@@ -119,17 +119,17 @@ Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerpr
 The interference assertions are interpreted to a set of \emph{interference environments} that is a function from client-specified capabilities to pairs of history heaps and operations,
 \[
 \begin{rclarray}
-    \inter \in \Interference & \defeq & \Kaps \parfun \powerset{\powerset{\HisHeaps} \times \Opsets}
+    \inter \in \Interference & \defeq & \Kaps \to \powerset{\powerset{\HisHeaps} \times \Opsets}
 \end{rclarray}
 \]
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
 %
 \[
 \begin{rclarray}
-	\evalI{\emptyset}(\kap) & \eqdef & \text{undefined} \\
+	\evalI{\emptyset}(\kap) & \eqdef & \emptyset \\
 	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp } \cup \intass }(\kap') & \eqdef &
     \begin{cases}
-    \left(\Setcon{\hh}{\exsts{\h, \cu_{max}}\h \in \evalLS[\lenv',\stk]{\bar{\lpre}} \land {} \\ \h = \func{clps}{\hh,\cu_{max}} \land {} \\ \for{\addr} \cu_{max}(\addr) = \left| \hh(\addr) \right|}, \evalF[\lenv',\stk]{\fp}\right) \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
+    \left(\Setcon{\hh}{\exsts{\h} \h \in \evalLS[\lenv',\stk]{\bar{\lpre}} \land {} \\ \h = \clpsHH{\hh} }, \evalF[\lenv',\stk]{\fp}\right) \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
     \evalI{\intass}(\kap') & \text{ otherwise} \\
     \end{cases} \\
     & & \text{where there exists a vector of values \( \vec{\val}\) such that } \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \\
@@ -138,10 +138,6 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \end{defn}
 
 We will write \( \intfH(\kap) \)  and \( \intfO(\kap) \) for the first and second projections of all the elements.
-
-\sx{define \( \hh \in \como \) }
-
-\sx{Pick notation}
 
 \begin{defn}[Labelled transition system]
 The labelled transition system is a tuple \( ( \hhset \times \cuset, \opsetset,\toLTS{}, \hhset_{0} \times \cuset_{0}, \como) \) consisting of pairs of history heaps and cuts \( \hhset \times \cuset \), a set of sets of operations \( \opsetset \subseteq \Opsets \), a relation \( \toLTS{} : \HisHeaps \times \Opsets \times \HisHeaps \), a set of initial history heaps and cuts \( \hhset_{0} \times \cuset_{0} \) and the consistency model associated with the transition system \( \como \).
@@ -155,7 +151,7 @@ The relation \( \toLTS{}\) is defined as the follows,
         \txid \in \func{fresh}{\hh} 
         \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} \\
         \quad {} \land ((\hh,\thcu),(\hh',\thcu')) \in \como
-        \land \h = \func{clps}{\hh,\cu} 
+        \land \h = \clpsHH{\hh,\cu} 
         \land \thcu(\thid) = \cu 
         \land \thcu'(\thid) = \cu' \\
         \quad {} \land \for{\addr,\val} (\otR, \addr, \val)  \in \opset \implies \h(\addr) = \val
@@ -164,6 +160,8 @@ The relation \( \toLTS{}\) is defined as the follows,
 \]
 \end{defn}
  
+\sx{ Need a standard way to say it is the least fixed point given the initial states and operations }
+
 \begin{defn}[Invariant a region]
 \label{def:invariant-region}
 \label{def:world2aexec}
@@ -212,7 +210,7 @@ The \emph{shared state composition function}, $\composeS: \SStates \times \SStat
 	\end{cases}
 \end{rclarray}
 \]
-A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and capabilities \( \ca \) (\defref{def:capabilities}) such that regions are associated with the same consistency model and the entire shared state must be well-form, \ie the collapse \(\clpsS{\gs}\) contains at least one element.
+A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and capabilities \( \ca \) (\defref{def:capabilities}) such that regions are associated with the same consistency model and the entire shared state must be well-form, \ie \(\eraseS{\gs}\) contains at least one element.
 Specifically, it requires regions are disjointed with each other, their states are included in the invariants and the interferences are well-form.
 \[
 \begin{rclarray}
@@ -222,19 +220,22 @@ Specifically, it requires regions are disjointed with each other, their states a
     }{ 
         \ca \in \Caps 
         \land \gs \in \SStates
-        \land \clpsS{\gs} \neq \emptyset
+        \land \eraseS{\gs} \neq \emptyset
         \land \dom(\ca) \subseteq \dom(\gs) \\
         \quad {} \land \for{\rid, \rid'}
         \func{como}{\rid} = \func{como}{\rid'} \\
     }
 \end{rclarray}
 \]
-The function, \( \clpsS{.} : \SStates \parfun \powerset{\Aexecs} \), collapses shared states to sets of abstract executions as the follows,
+The function, \( \eraseS{.} : \SStates \parfun \powerset{\HisHeaps \times \Cuts} \), erases the region identifiers from the shared state as the follows,
 \[
 \begin{rclarray}
-    \clpsS{\emptyset} & \defeq & \Set{(\unitHH, \unitCU)} \\
-    \clpsS{\Set{\rid \mapsto (\hh, \cu, \intf)} \uplus \gs } & \defeq & 
-        \Setcon{ (\hh \composeHH \hh', \cu \composeCU \cu') }{ (\hh,\cu) \in \func{inv}{\rid, \intf} \land \pred{wfintf}{\rid, \intf} \land (\hh',\cu') \in \clpsS{\gs} }\\
+    \eraseS{\emptyset} & \defeq & \Set{(\unitHH, \unitCU)} \\
+    \eraseS{\Set{\rid \mapsto (\hh, \cu, \intf)} \uplus \gs } & \defeq & 
+        \Setcon{ 
+            (\hh \composeHH \hh', \cu \composeCU \cu') 
+        }{ 
+            \dom(\hh) = \dom(\cu) \land (\hh,\cu) \in \func{inv}{\rid, \intf} \\ \quad {} \land \pred{wfintf}{\rid, \intf} \land (\hh',\cu') \in \eraseS{\gs} }\\
 \end{rclarray}
 \] 
 % 
@@ -243,6 +244,7 @@ The \emph{world unit set} is $\unitW \eqdef \Setcon{(\ca, \gs)}{(\ca, \gs) \in \
 The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
 \end{definition}
 
+We also use the notation \( \eraseW{.}\) for a world, which denotes to erase the shared state, \ie \( \eraseW{(\ca, \gs)} \defeq \eraseS{\gs}\).
 %\begin{defn}[Invariant of worlds]
 %Because regions in a well-defined world must disjointed with each other and have the same consistency model, the invariants of regions can be lifted to a world,
 %\[
@@ -293,13 +295,12 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     \Setcon{
         (\ca,\Set{\lrid \mapsto (\hh, \cu, \intf)} \uplus \gs)
     }{         
-        \exsts{\h_{p}, \h_{q}, \cu_{max}}
+        \exsts{\h_{p}, \h_{q}}
         \ca \in \unitC 
         \land \h_{q} \in \evalLS{\bar{\lpost}}
         \land \h_{q} = \func{clps}{\hh, \cu} \\
         \quad {} \land \h_{p} \in \evalLS{\bar{\lpre}}
-        \land \h_{p} = \func{clps}{\hh, \cu_{max}} 
-        \land \for{\addr} \cu_{max}(\addr) = \left|\hh(\addr)\right|
+        \land \h_{p} = \func{clps}{\hh} 
     } \\
 \end{rclarray}
 \]
