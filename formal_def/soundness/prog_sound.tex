@@ -1,4 +1,132 @@
 \subsection{Program Soundness}
+\begin{lem}[Locality of cut]
+\label{lem:locality-cut}
+A thread can only update its own cut when commit a new transaction,
+\[
+\begin{array}{@{}l}
+    \for{\thstk, \thstk', \hh, \hh', \thcu, \thcu', \cu, \cu', \thid, \como} \exsts{\thcu''} \\
+    \quad \thid, \como \vdash (\thstk, \hh, \thcu), \ptrans{\trans} \toT{\lbC{\stub}} (\thstk', \hh', \thcu'), \pskip \\
+    \qquad \implies \thcu  = \thcu'' \uplus \setminus \Set{\thid \mapsto \cu } \land \thcu' = \thcu'' \uplus \setminus \Set{ \thid \mapsto \cu' }
+\end{array}
+\]
+This means the cut environment can be arbitrary as long as the local update remains the same and the entire environment satisfy the consistency model.
+\[
+\begin{array}{@{}l}
+    \for{\thstk, \thstk', \hh, \hh', \thcu, \thcu', \cu, \cu', \thid, \thid', \como} \\
+    \quad \thid, \como \vdash (\thstk, \hh, \thcu \uplus \Set{\thid \mapsto \cu}), \ptrans{\trans} \toT{\lbC{\stub}} (\thstk', \hh', \thcu \uplus \Set{\thid \mapsto \cu'}), \pskip \\
+    \quad {} \land ((\hh,\thcu' \uplus \Set{\thid' \mapsto \cu}),(\hh',\thcu' \uplus \Set{\thid' \mapsto \cu'})) \in \como \\
+    \qquad \implies \thid', \como \vdash (\thstk, \hh, \thcu' \uplus \Set{\thid' \mapsto \cu}), \ptrans{\trans} \toT{\lbC{\stub}} (\thstk', \hh', \thcu' \uplus \Set{\thid' \mapsto \cu'}), \pskip \\
+\end{array}
+\]
+\end{lem}
+\begin{proof}
+The first one is trivial as \( \thcu' = \thcu\rmto{\thid}{\cu'}\) in the \rl{PCommit} rule, and no other side condition has side effect on \( \thcu' \).
+For the second part, by the hypothesis we have the following which are exactly the side conditions of the \rl{PCommit},
+\[
+\begin{array}{@{}l}
+    \exsts{\h, \h', \txstk_{0}, \txstk, \txid, \opset } \\
+    \quad \txid \in \func{fresh}{\hh}  
+    \land \h = \clpsHH{\hh,\cu}
+    \land \txstk_{0} = \emptyset 
+    \land \thstk \vdash (\txstk_{0}, \h, \unitO), \trans \ \toL^{*} \  (\txstk, \h', \opset) , \pskip \\
+    \quad {} \land \thstk' = \thstk\rmto{\ret}{\txstk(\ret)} 
+    \land \hh' = \func{commit}{\hh, \cu, \txid, \opset}  \\
+    \quad {} \land \cu' = \func{update}{\hh', \cu, \opset} 
+    \land ((\hh,\thcu \uplus \Set{\thid \mapsto \cu}),(\hh',\thcu \uplus \Set{\thid \mapsto \cu})) \in \como
+\end{array}
+\]
+If we replace \( \thcu \) by \( \thcu' \) and the thread identifier such that \( ((\hh, \thcu' \uplus \Set{\thid' \mapsto \cu}),(\hh',\thcu' \uplus \Set{\thid' \mapsto \cu'})) \in \como \) holds, it is easy to see other side conditions still hold, therefore we have the proof.
+\end{proof}
+\begin{lem}
+\label{lem:rely-guar-como}
+Any transition in the rely or guarantee should satisfies the consistency model,
+\[
+\begin{array}{@{}l}
+    \for{\w, \w', \hh, \hh', \cu, \cu'}
+    \exsts{\thcu, \thcu', \thid} \\
+    \quad (\w, \w') \in \Rely \cup \Guar
+    \land (\hh, \cu) \in \clpsW{\w}
+    \land (\hh', \cu') \in \clpsW{\w'} \\
+    \qquad \implies 
+    \thcu(\thid) = \cu
+    \land \thcu'(\thid) = \cu'
+    \land ((\hh, \thcu),(\hh', \thcu')) \in \func{como}{\w}
+\end{array}
+\]
+\end{lem}
+\begin{proof}
+The rely and guarantee are defined using the \( \predn{to}\) predicate by plugging in different capabilities.
+It is sufficient to prove that any transition allowed by the \predn{to} predicate is also allowed by the consistency model,
+\[
+\begin{array}{@{}l}
+    \for{\opset, \ca, \gs, \gs', \hh, \hh', \cu, \cu'}
+    \exsts{\thcu, \thcu', \thid} \\
+    \quad \pred{to}{\opset, \ca, \gs, \gs'} 
+    \land (\hh, \cu) \in \clpsS{\gs}
+    \land (\hh', \cu') \in \clpsS{\gs'} \\
+    \qquad \implies 
+    \thcu(\thid) = \cu
+    \land \thcu'(\thid) = \cu'
+    \land ((\hh, \thcu),(\hh', \thcu')) \in \como
+\end{array}
+\]
+where the \( \como \) is the consistency model associated to regions.
+Since it is a recursive predicate, we are going to prove the property by induction.
+\caseB{\(\opset = \unitO\)}
+It is trivial as \(\gs = \gs'\), thus \( \hh = \hh' \) and \( \thcu = \thcu' \).
+\caseI{\(\opset \neq \unitO\)}
+There exist a region \( \rid \) that has been updated from \( (\hh, \cu) \) to \( (\hh', \cu') \) which is allowed by the invariant, and the update for other regions satisfies the predicate, which is allowed by the consistency model by \ih,
+\[
+    \begin{array}[t]{@{}l}
+    \exsts{\rid, \hh, \hh', \cu, \cu', \opset', \intf, \gs'',\gs''' }  \\
+    \quad \opset' \subseteq \opset
+    \land \gs = \gs'' \uplus \Set{\rid \mapsto (\hh, \cu, \intf)} 
+    \land \gs' = \gs''' \uplus \Set{\rid \mapsto (\hh', \cu', \intf)}  \\
+    \quad {} \land (\hh,\cu) \toLTS{\opset'} (\hh',\cu') \in \func{inv}{\rid, \intf }
+    \land \pred{to}{\opset'', \ca, \gs'',\gs'''}
+    \end{array}
+\]
+Given the definition of labelled transition system for a region (\defref{def:labelled-transition-system}), we have the transition \( (\hh, \cu) \toLTS{\opset} (\hh', \cu') \) satisfies the consistency model and all the read operations must compatible with the cut \( \cu \),
+\[
+\begin{array}{@{}l}
+    \for{\hh, \hh', \cu, \cu', \rid, \intf}
+    \exsts{ \thcu, \thcu', \txid, \thid, \opset } \\
+    \quad (\hh, \cu) \toLTS{\opset} (\hh', \cu') \in \func{inv}{\rid, \intf} \\
+    \quad \implies
+    \begin{B}
+    \txid \in \func{fresh}{\hh} 
+    \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} 
+    \land \cu' = \func{update}{\hh', \cu, \opset} \\
+    {} \land ((\hh,\thcu),(\hh',\thcu')) \in \como
+    \land \h = \clpsHH{\hh,\cu} 
+    \land \thcu(\thid) = \cu 
+    \land \thcu'(\thid) = \cu' 
+    \end{B}
+\end{array}
+\]
+\sx{might need a lemma}
+Since regions included in a well-formed world are associated with the same consistency model and heaps associated with different regions are disjointed, therefore, transitions from the guarantee should satisfy the consistency model,
+\begin{equation}
+\label{equ:transition-sat-consitency-model}
+\begin{array}{@{}l}
+    \for{\w, \w', \hh, \hh', \cu, \cu'}
+    \exsts{ \thcu, \thcu', \txid, \thid, \opset }
+    (\w, \w') \in \Guar \\
+    \implies 
+    \begin{B}
+    (\hh, \cu) \in \clpsW{\w}
+    \land (\hh', \cu') \in \clpsW{\w'} \\
+    {} \land \txid \in \func{fresh}{\hh} 
+    \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} 
+    \land \cu' = \func{update}{\hh', \cu, \opset} \\
+    {} \land ((\hh,\thcu),(\hh',\thcu')) \in \func{como}{\w}
+    \land \h = \clpsHH{\hh,\cu} 
+    \land \thcu(\thid) = \cu 
+    \land \thcu'(\thid) = \cu' \\
+    \end{B}
+\end{array}
+\end{equation}
+\end{proof}
 \begin{thm}[Program soundness]
 The program soundness is the follows,
 \[
@@ -64,7 +192,7 @@ We split the formulae into three parts,
         \land (\hh', \cu') \in \clpsW{\w'} 
     \end{B} 
     \implies  \w' \in \evalW[\lenv, \thstk']{\gpost} 
-    \end{array} \tag{Commit} \\
+    \end{array} \label{equ:commit-transaction} \tag{Commit} \\
     \for{\w, \w',\lenv, \thstk}  
     \stable{\gpost} 
     \land \w \in \evalW[\lenv, \thstk]{\gpost} 
@@ -72,7 +200,9 @@ We split the formulae into three parts,
     \implies \w' \in \evalW[\lenv, \thstk]{\gpost} \tag{Stable Post} 
 \end{gather}
 \textbf{Stable pre-condition.} 
-The \( \stable{\gpre} \) predicate asserts any world \( \w \) that satisfies the pre-condition \( \gpre \), if the world can transfer to another world \( \w' \) through rely \( \Rely \), the new world \( \w' \) also satisfies the pre-condition, which implies \equref{equ:stable-pre-condition}. \\
+The \( \stable{\gpre} \) predicate asserts any world \( \w \) that satisfies the pre-condition \( \gpre \), if the world can transfer to another world \( \w' \) through rely \( \Rely \), the new world \( \w' \) also satisfies the pre-condition, which implies \equref{equ:stable-pre-condition}. 
+\\
+\sx{make sure the stack is correct}
 \textbf{Commit.}
 For any \( \w, \hh, \cu, \lenv, \thstk \) such that \( \w \in \evalW[\lenv,\thstk]{\gpre} \) and \( (\hh, \cu) \in \clpsW{\w} \), by the predicate \( \gpre \snap \bar{\lpre} \) we know \( \clpsHH{\hh, \cu} \in \evalLS{\bar{\lpre}} \), this is,
 \begin{equation}
@@ -112,7 +242,7 @@ First, if we eliminate the fingerprint \( \fp \) from \equref{equ:repartition} u
 \begin{equation}
 \label{equ:combined-transaction-sound}
 \begin{array}{@{}l}
-    \for{\w, \w', \hh, \hh', \cu, \cu', \lenv, \stk, \txid, \h, \h', \txstk', \opset} \\
+    \for{\w, \w', \hh, \hh', \cu, \cu', \lenv, \txid, \h, \h', \thstk, \txstk, \txstk', \opset} \\
     \begin{B}
         \w \in \evalW{\gpre}
         \land (\hh, \cu) \in \eraseW{\w}
@@ -127,65 +257,13 @@ First, if we eliminate the fingerprint \( \fp \) from \equref{equ:repartition} u
     \implies \w' \in \evalW{\gpost}
 \end{array}
 \end{equation}
-Second, the guarantee \( \Guar \) ensures the updated states of regions must not violate their invariants,
+Then, by the \lemref{lem:rely-guar-como} that the guarantee \( \Guar \) ensures the transition from \( \w \) to \( \w' \) satisfies the consistent model and picking the empty transaction stack as the initial \( \txstk = \txstk_{0} = \emptyset \) transaction stack for the transaction code \( \trans \), we have the follows,
 \[
 \begin{array}{@{}l}
-\for{\w,\w', \rid, \intf, \hh, \hh', \cu, \cu', \opset}
-(\w,\w') \in \Guar  \\
-\implies 
-\w(\rid) = \w'(\rid) \lor 
-\w(\rid) = (\hh, \cu, \intf)
-\land \w'(\rid) = (\hh', \cu', \intf)
-\land (\hh, \cu) \toLTS{\opset} (\hh', \cu') \in \func{inv}{\rid, \intf}
-\end{array}
-\]
-\sx{The quantification}
-Given the definition of labelled transition system for a region (\defref{def:labelled-transition-system}), we have the transition \( (\hh, \cu) \toLTS{\opset} (\hh', \cu') \) satisfies the consistency model and all the read operations must compatible with the cut \( \cu \),
-\[
-\begin{array}{@{}l}
-    \for{\hh, \hh', \cu, \cu', \rid, \intf}
-    \exsts{ \thcu, \thcu', \txid, \thid, \opset } \\
-    \quad (\hh, \cu) \toLTS{\opset} (\hh', \cu') \in \func{inv}{\rid, \intf} \\
-    \quad \implies
+    \for{\w, \w', \hh, \hh', \cu, \cu', \lenv, \stk, \txid, \h, \h', \thstk} 
+    \exsts{\thcu, \thcu', \thid } \\
     \begin{B}
-    \txid \in \func{fresh}{\hh} 
-    \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} 
-    \land \cu' = \func{update}{\hh', \cu, \opset} \\
-    {} \land ((\hh,\thcu),(\hh',\thcu')) \in \como
-    \land \h = \clpsHH{\hh,\cu} 
-    \land \thcu(\thid) = \cu 
-    \land \thcu'(\thid) = \cu' \\
-    {} \land \for{\addr,\val} (\otR, \addr, \val)  \in \opset \implies \h(\addr) = \val
-    \end{B}
-\end{array}
-\]
-\sx{might need a lemma}
-Since regions included in a well-formed world are associated with the same consistency model and heaps associated with different regions are disjointed, therefore, transitions from the guarantee should satisfy the consistency model,
-\begin{equation}
-\label{equ:transition-sat-consitency-model}
-\begin{array}{@{}l}
-    \for{\w, \w', \hh, \hh', \cu, \cu'}
-    \exsts{ \thcu, \thcu', \txid, \thid, \opset }
-    (\w, \w') \in \Guar \\
-    \implies 
-    \begin{B}
-    (\hh, \cu) \in \clpsW{\w}
-    \land (\hh', \cu') \in \clpsW{\w'} \\
-    {} \land \txid \in \func{fresh}{\hh} 
-    \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} 
-    \land \cu' = \func{update}{\hh', \cu, \opset} \\
-    {} \land ((\hh,\thcu),(\hh',\thcu')) \in \func{como}{\w}
-    \land \h = \clpsHH{\hh,\cu} 
-    \land \thcu(\thid) = \cu 
-    \land \thcu'(\thid) = \cu' \\
-    \end{B}
-\end{array}
-\end{equation}
-We apply the \equref{equ:transition-sat-consitency-model} to the \equref{equ:combined-transaction-sound} and pick the empty transaction stack as the initial \( \txstk = \txstk_{0} = \emptyset \) transaction stack for the transaction code \( \trans \), then we have the follows,
-\[
-\begin{array}{@{}l}
-    \begin{B}
-        \exsts{\h, \h', \txstk_{0}, \txstk', \thcu, \thcu', \txid, \thid, \opset } \\
+        \exsts{\h, \h', \txstk_{0}, \txstk', \txid, \opset } \\
         \quad \w \in \evalW{\gpre} 
         \land (\hh, \cu) \in \eraseW{\w}
         \land \txid \in \func{fresh}{\hh} 
@@ -202,8 +280,27 @@ We apply the \equref{equ:transition-sat-consitency-model} to the \equref{equ:com
     \implies \w' \in \evalW{\gpost}
 \end{array}
 \]
-In the equation above, we have all the side conditions of the semantics for reducing a single transaction \( \ptrans{\trans}\), by folding these side conditions we have the proof for the \equref{equ:commit-new-transaction}.
-\sx{Need to think twice}
+In the equation above, we have all the side conditions of the \rl{PCommit} rule except the return value, \ie \( \thstk' = \thstk\rmto{\ret}{\txstk(\ret)} \).
+Since the return value does not affect how the post condition \( \gpost \) is interpreted by the repartition, we can fold all the side conditions to the follows,
+\[
+\begin{array}{@{}l}
+    \for{\w, \w', \hh, \hh', \cu, \cu', \lenv, \stk, \txid, \h, \h', \thstk, \thstk', \txid} 
+    \exsts{\thcu, \thcu', \thid } \\
+    \begin{B}
+        \quad \w \in \evalW{\gpre} 
+        \land (\hh, \cu) \in \eraseW{\w}
+        \land \thid, \func{como}{\w} \vdash (\thstk, \hh, \thcu), \ptrans{\trans} 
+        \toT{\lbC{\txid}} (\thstk', \hh', \thcu'), \pskip  \\
+        \quad {} \land (\hh',\cu') \in \eraseW{\w'}  
+        {} \land ((\hh,\thcu),(\hh',\thcu')) \in \func{como}{\w}
+        \land \thcu(\thid) = \cu 
+        \land \thcu'(\thid) = \cu' \\
+    \end{B}
+    \implies \w' \in \evalW{\gpost}
+\end{array}
+\]
+Now we can apply the \lemref{lem:locality-cut} which allows us to convert the existential quantification for \( \thcu, \thcu', \thid\) to global quantification, thus we have the proof for committing a new transaction, \ie \equref{equ:commit-transaction}. 
+\\
 \textbf{Stable post-condition.} 
 It can be proven for the similar reason as the proof for stable pre-condition.
 \end{proof}
