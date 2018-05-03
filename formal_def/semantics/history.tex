@@ -1,54 +1,46 @@
 \subsection{Program Semantics}
+
+We model the state of database as a history heap, where each address has a list \emph{versions} from the initial one to the latest one.
+Each version contains a value and a transaction identifier who writes it and a set of transactions who read it.
+
 \begin{defn}[History Heaps]
 \label{def:his_heap}
-Assuming a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \dots}\), a \emph{history heap}, \( \hh \in \HisHeaps \), is a partial function from addresses to lists of values.
-Each element in the list is a value associated with a transaction (identifier) who writes the value and a set of transactions (identifiers) who read it.
+Assuming a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \dots}\), a \emph{history heap}, \( \hh \in \HisHeaps \), is a partial function from addresses to lists of \emph{versions}.
+Each version a tuple contains a value, a transaction (identifier) and a set of transactions (identifiers).
 \[
 \begin{rclarray}
-    \HisHeaps & \defeq & \Addr \parfinfun (\Val \times \TxID \times \powerset{\TxID})^{*}
+    \Versions & \defeq &  \Val \times \TxID \times \powerset{\TxID} \\
+    \HisHeaps & \defeq & \Addr \parfinfun \Versions^{*}
 \end{rclarray}
 \]
-Let \( \hh(\addr)(i)\) denotes the \emph{i-th} (starting from 1) tuple of the list associated with address \( \addr \), and \( \hhV(\addr)(i) \), \( \hhW(\addr)(i) \) and \( \hhR(\addr)(i) \) denote the first, second and third element of the tuple.
 The composition of two history heaps is \( \hh \composeHH \hh' \defeq \hh \uplus \hh' \) and the unit element is \( \unitHH \defeq \emptyset \). 
 \end{defn}
+ 
+Let \( \hh(\addr)(i)\) denotes the \emph{i-th} version associated with address \( \addr \), and \( \hhV(\addr)(i) \), \( \hhW(\addr)(i) \) and \( \hhR(\addr)(i) \) denote the first (value), second (write) and third element (read) of the version.
+We assume the version number starts from 1.
 
+For weak consistency models, or weak isolation levels which are more common term used in database community, a session is not necessary to work on the up-to-date version of a database in exchange for better performance. 
+Even in a single machine database, a session wants to make less synchronisation with the hard drivers and other running threads.
+This means a session could operate on a out-of-date state.
+We use \emph{views} to model sessions of a database.
+A \emph{view} is a cut in a history heap that corresponds the version that a session work with.
 
-
-\begin{defn}[Cuts of history heaps]
+\begin{defn}[Views]
 \label{def:cuts}
-\emph{A cut of of a history heap} is a partial function from addresses to indexes,
+\emph{A view of of a history heap}, short as \emph{view}, is a partial function from addresses to indexes,
 \[
 \begin{rclarray}
-    \cu \in \Cuts & \defeq & \Addr \parfinfun \Nat
+    \vi \in \Views & \defeq & \Addr \parfinfun \Nat
 \end{rclarray}
 \]                                                                     
-The composition is \( \cu \composeCU \cu' \defeq \cu \uplus \cu'\) and the unit is \( \unitCU \defeq \emptyset\).
-The order between two cuts that have the same domain is the order of all the indexes, 
+The composition is \( \vi \composeVI \vi' \defeq \vi \uplus \vi'\) and the unit is \( \unitVI \defeq \emptyset\).
+The order between two views if they have the same domain is the order of all the indexes, 
 \[
 \begin{rclarray}
     \cu \orderCU \cu' & \defiff & \dom(\cu) = \dom(\cu') \land \for{\addr} \cu(\addr) \leq \cu'(\addr) \\
 \end{rclarray}
 \]
-Assuming a countably infinite set of thread identifiers \( \setthid \subseteq \ThreadID \defeq \Set{\thid, \dots} \), \emph{a cuts' runtime} is a function from thread identifiers to cuts, \ie \( \thcu \in \ThCuts \defeq \ThreadID \parfun \Cuts\).
-\end{defn}
-
-\begin{defn}[Collapse of history heaps]
-A cut \( \cu \) can collapse a history heap \( \hh \) to a (normal) heap \( h \) through the function \(\funcn{clps} : \HisHeaps \times \Cuts \parfun \Heaps\),
-\[
-\begin{rclarray}
-    \clpsHH{\hh, \cu} & \defeq & 
-    \begin{cases}
-        \lambda \addr \ldotp \hhV(\addr)(\cu(\addr)) & \text{if } \dom(\hh) = \dom(\cu) \land \for{\addr'} \cu(\addr') \leq \left|\hh(\addr')\right| \\
-        \text{undefined} & \text{otherwise}
-    \end{cases}
-\end{rclarray}
-\]
-The function is overloaded with one parameter version that collapses history heaps by picking the last values,
-\[
-\begin{rclarray}
-    \clpsHH{\hh} & \defeq & \lambda \addr \ldotp \hhV(\addr)(\left|\hh(\addr)\right|) 
-\end{rclarray}
-\]
+Assuming a set of thread identifiers \( \setthid \subseteq \ThreadID \), \emph{a view environment} is a function from thread identifiers to views, this is, \( \vienv \in \ViEnv \defeq \ThreadID \parfun \Views \).
 \end{defn}
 
 \begin{defn}[Consistency Models]
@@ -69,11 +61,16 @@ The constraints should be local to the owned history heaps, so that the combinat
         \qquad \implies  ((\hh \composeHH \hh'', \thcu \uplus \thcu''),(\hh' \composeHH \hh''',\thcu' \uplus \thcu''')) \in \como
     \end{array}
 \]
+\sx{The following says the consistency model transfer from a valid state to another valid state. }
+A consistency model also requires to transfer from a \emph{valid} state to another \emph{valid} state, and the validity is independent from the transition.
+\[
+    \for{\como} \exsts{\funcn{valid}} (\hh, \vienv) \in \como \implies \func{valid}{\hh, \vienv}
+\]
 \end{defn}
 
-\sx{Need Andrea for more clarify about defining consistency model, especially what kind of style we should use here, for example we can constraint history heap or/and the cuts. }
+\sx{Need Andrea for more clarify about defining consistency model}
 
-There are two ways to specify the consistency models, one by converting the history heap to dependant graphs while another by checking if the cuts satisfy certain property.
+There are two ways to specify consistency models, one by converting the history heaps to dependant graphs and checking if the cycles satisfy certain property, while another by checking if the view environment satisfy certain property.
 We introduce \( \funcn{graph} : \HisHeaps \to \sort{DGraph} \) function for converting history heaps to dependant graphs.
 \[
 \begin{rclarray}
@@ -101,32 +98,62 @@ Any cycle in the corresponding dependant graph of the history heap after the tra
 \]
 \end{example}
 
+{ \color{gray}
 \begin{defn}[Thread transition labels]
 \label{def:label}
-Given the set of thread identifiers \(\ThreadID\) (\defref{def:abs-exec}), the set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defref{def:language}), the $\txid$ demotes a transaction identifier and $\thstk$ denotes a thread stack (\defref{def:stacks}),
+Given the set of thread identifiers \(\thid \in \ThreadID\), the set of \emph{thread transition labels}, $\lb \in \Translabel$, is defined by the following grammar, where $\prog$ denotes a program (\defref{def:language}), the $\txid$ demotes a transaction identifier and $\thstk$ denotes a thread stack (\defref{def:stacks}),
 \[
     \begin{rclarray}
 	\iota \in \Translabel & ::= & \lbID \mid \lbC{\txid} \mid \lbF{\thid,\prog} \mid \lbJ{\thid,\thstk}
     \end{rclarray}
 \]
 \end{defn}
+}
+
+We introduce \( \funcn{clps} \) function that collapses a history heap with a view to a normal heap, which is the local state with respect to the view.
+{ \color{gray}
+A spacial version of this function only takes a history heap, and it returns a normal heap that is the latest state of the database.
+}
+
+\begin{defn}[Collapse of history heaps]
+A view \( \vi \) can collapse a history heap \( \hh \) to a (normal) heap \( h \) through the function \(\funcn{clps} : \HisHeaps \times \Cuts \parfun \Heaps\),
+\[
+\begin{rclarray}
+    \clpsHH{\hh, \cu} & \defeq & 
+    \begin{cases}
+        \lambda \addr \ldotp \hhV(\addr)(\cu(\addr)) & \text{if } \dom(\hh) = \dom(\cu) \land \for{\addr'} \cu(\addr') \leq \left|\hh(\addr')\right| \\
+        \text{undefined} & \text{otherwise}
+    \end{cases}
+\end{rclarray}
+\]
+{ \color{gray}
+The function is overloaded with one parameter version that collapses history heaps by picking the last values,
+\[
+\begin{rclarray}
+    \clpsHH{\hh} & \defeq & \lambda \addr \ldotp \hhV(\addr)(\left|\hh(\addr)\right|) 
+\end{rclarray}
+\]
+}
+\end{defn}
 
 \begin{defn}[Thread semantics]
 \label{def:thread_semantics}
+{ \color{gray}
 Given the thread identifiers \(\thid \in \ThreadID\), the set of \emph{intermediate programs}, \(\iprog \in \IntermediatePrograms\), is defined by the following grammar,
 \[
     \iprog ::= \prog \mid \iprog \pseq \pwait{\thid}
 \]
-Given the set of consistency model \( \ConsisModels \) (\defref{def:consistency-models}), thread stacks \( \ThdStacks \) (\defref{def:stacks}), history heaps \( \HisHeaps \) (\defref{def:his_heap}) and cuts' runtime (\defref{def:cuts}), the \emph{per-thread operational semantics} of programs,
+}
+Given the set of consistency model \( \ConsisModels \) (\defref{def:consistency-models}), stacks \( \Stacks \) (\defref{def:stacks}), history heaps \( \HisHeaps \) (\defref{def:his_heap}) and views \( \Views \) (\defref{def:cuts}), the \emph{per-thread operational semantics} of programs,
 \[
 \begin{rclarray}
 	\toT{} & : &
     \begin{array}[t]{@{}l@{}}
-    \Como \times \ThreadID 
-    \times \\
-	\quad \left( ( \ThdStacks \times \HisHeaps \times \ThCuts ) \times \IntermediatePrograms \right) 
-	\times  \Translabel \times
-	\left( ( \ThdStacks \times \HisHeaps \times \ThCuts ) \times \IntermediatePrograms \right) 
+    \Como 
+    \times {} \\
+	\quad \left( ( \Stacks \times \HisHeaps \times \Views ) \times \Commands \right) 
+	\times 
+	\left( ( \Stacks \times \HisHeaps \times \Views ) \times \Commands \right) 
     \end{array}
 \end{rclarray}
 \]
@@ -139,34 +166,30 @@ is defined in \figref{fig:thread_semantics}.
 %
 \[
     \infer[\rl{PCommit}]{%
-        \como, \thid \vdash ( \thstk, \hh, \thcu ), \ptrans{\trans} \ \toT{\lbC{\txid}} \ ( \thstk', \hh', \thcu' ) , \pskip
+        \como \vdash ( \stk, \hh, \vi ), \ptrans{\trans} \ \toT \ ( \stk', \hh', \vi' ) , \pskip
     }{%
         \begin{array}{c}
             \txid \in \func{fresh}{\hh}  
-            \quad \h = \clpsHH{\hh,\thcu(\thid)}
-            \quad \txstk_{0} = \emptyset \\
-            \thstk \vdash (\txstk_{0}, \h, \unitO), \trans \ \toL^{*} \  (\txstk, \h', \opset) , \pskip \\
-            \thstk' = \thstk\rmto{\ret}{\txstk(\ret)} 
-            \quad \hh' = \func{commit}{\hh, \thcu(\thid), \txid, \opset}  \\
-            \cu = \func{update}{\hh', \thcu(\thid), \opset} 
-            \quad \thcu = \thcu\rmto{\thid}{\cu} 
-            \quad ((\hh,\thcu),(\hh',\thcu')) \in \como
+            \quad \h = \clpsHH{\hh,\vi}
+            \quad \vdash (\stk, \h, \unitO), \trans \ \toL^{*} \  (\stk', \h', \opset) , \pskip \\
+            \hh' = \func{commit}{\hh, \vi, \txid, \opset}  
+            \quad \cu = \func{update}{\hh', \vi, \opset} 
+            \quad ((\hh,\vi),(\hh',\vi)) \in \como
         \end{array}
     }
 \]
 
 \[
     \infer[\rl{PAssign}]{%
-        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \passign{\thvar}{\expr} \ \toT{\lbID} \  ( \thstk\rmto{\thvar}{\val}, \hh, \thcu ) , \pskip
+        \como \vdash ( \stk, \hh, \vi ) , \passign{\var}{\expr} \ \toT \  ( \stk\rmto{\var}{\val}, \hh, \vi ) , \pskip
     }{
         \val = \evalE[\thstk]{\expr}
-        && \thvar \in \ThdVars
     }
 \]
 
 \[
     \infer[\rl{PAssume}]{%
-        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \passume{\expr} \ \toT{\lbID} \  ( \thstk, \hh, \thcu ) , \pskip
+        \como \vdash ( \stk, \hh, \vi ) , \passume{\expr} \ \toT \  ( \stk, \hh, \vi ) , \pskip
     }{%
         \evalE[\thstk]{\expr} = 0
     }
