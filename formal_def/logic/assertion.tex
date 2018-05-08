@@ -2,11 +2,11 @@
 
 \begin{definition}[Logical Expressions]
 \label{def:logical-expr}
-Assume a countably infinite set of \emph{logical variables} $\V x \in \LVar$.
-The set of \emph{logical expressions}, $ \lexpr \in \LExpr$ is defined by the following inductive grammar, where \(\val \in \Val\) (\defref{def:program_values}), \(\txvar \in \TxVars\) and \( \thvar \in \ThdVars \) (\defref{def:stacks}),
+Assume a countably infinite set of \emph{logical variables} $\lvar \in \LVar$.
+The set of \emph{logical expressions}, $ \lexpr \in \LExpr$ is defined by the following inductive grammar, where \(\val \in \Val\) (\defref{def:program_values}) and \(\var \in \Vars\)(\defref{def:stacks}),
 \[
 \begin{rclarray}
-   \lexpr & ::= & \val \mid \txvar \mid \thvar \mid \lvar \mid \lexpr + \lexpr \mid \lexpr \times \lexpr \mid \dots 
+   \lexpr & ::= & \val \mid \lvar \mid \var \mid \lexpr + \lexpr \mid \lexpr \times \lexpr \mid \dots 
 \end{rclarray}
 \]
 Assume a set of \emph{logical environments} \(\lenv \in \LEnv: \LVar \parfun \Val\) which associates logical variables with values.
@@ -15,9 +15,8 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}) and a logical environm
 \[
     \begin{rclarray}
         \evalLE{\val} & \defeq & \val \\
-        \evalLE[\lenv, \thstk \uplus \txstk]{\thvar} & \defeq & \thstk(\thvar) \\
-        \evalLE[\lenv, \thstk \uplus \txstk]{\txvar} & \defeq & \txstk(\txvar) \\
         \evalLE{\lvar} & \defeq & \lenv(\lvar) \\
+        \evalLE{\var} & \defeq & \txstk(\var) \\
         \evalLE{\lexpr_1 + \lexpr_2} & \defeq & \evalLE{\lexpr_1} + \evalLE{\lexpr_2} \\
         \evalLE{\lexpr_1 \times \lexpr_2} & \defeq & \evalLE{\lexpr_1} \times \evalLE{\lexpr_2} \\
         \dots & \defeq & \dots \\
@@ -26,64 +25,7 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}) and a logical environm
 Note that the stack \( \stk \) includes transaction variables and thread variables.
 \end{definition}
 
-\emph{Fingerprint assertion} or \emph{fingerprint} is a set of tuples in the form of \( (\otag, \lexpr_{1}, \lexpr_{2}) \) where \( \otag \) is either read tag \( \etR \) or write \( \etW \) and the second and third elements are logical assertions representing the address and value respectively.
-This assertion is interpreted to a set of transaction events as expected.
-
-\begin{defn}[Fingerprint Assertions]
-\label{def:fingerprint}
-The \emph{fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
-\[
-\begin{rclarray}
-    \fp & \subseteq & \Setcon{ (\otag,\lexpr_{1},\lexpr_{2}) }{ \otag \in \OTags \land \lexpr_{1}, \lexpr_{2} \in \LExpr } \\
-\end{rclarray}
-\] 
-Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint interpretation} function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \Opsets$, is defined as follows,
-\[
-\begin{rclarray}
-    \evalF{\emptyset} & \defeq & \unitO  \\
-    \evalF{\fp \addF (\otag, \lexpr_{1}, \lexpr_{2})} & \defeq & \evalF{\fp} \addO (\otag, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})
-\end{rclarray}
-\]
-\end{defn}
-
-The local assertions includes normal separation logic assertions and extra fingerprint assertions, which are interpreted as sets of heaps and a set of events respectively.
-Notice that the fingerprint assertion cannot be split.
-
-\begin{definition}[Local assertions]
-\label{def:local_assertions}
-Given the set of logical expressions \( \LExpr \), logical variables \( \LVar \) and fingerprint assertion \( \FAst \), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined inductively by the following grammar, 
-\[
-\begin{rclarray}
-	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \lexpr \pt \lexpr \mid \fpF \mid \lpre \sep \lpost  \\
-\end{rclarray}	 
-\]
-Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \Opsets} $, is defined over the structure of local assertions as follows,
-\[
-\begin{rclarray}
-	\evalLS{\assfalse} & \eqdef & \emptyset \\
-	\evalLS{\asstrue} & \defeq & \Heaps \times \Opsets \\
-	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
-	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
-	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
-	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{(\h, \opset)}{(\h , \opset) \in \evalLS{\lpre} \implies (\h , \opset) \in \evalLS{\lpost}}\\
-	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
-	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \unitE) } \\
-	\evalLS{ \fpF } & \defeq & \Set{ (\unitH, \evalF{\fp}) } \\
-	\evalLS{\lpre \sep \lpost} & \defeq & 
-    \Setcon{
-        (\h_1 \composeH \h_2, \opset_{1} \composeE \opset_{2})
-    }{ 
-        (\h_{1},\opset_{1}) \in \evalLS{\lpre} 
-        \land (\h_{2}, \opset_{2} ) \in \evalLS{\lpost} 
-    } 
-\end{rclarray}
-\]
-\end{definition}
-
-Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contained in logical expressions $\LExpr$ (\defin\ref{def:local_assertions} above), \ie $\Expr \subset \LExpr$. 
-For readability, we will write angle brackets, \eg \( \fpass{(\etR, \vx, 0)} \) instead of curly brackets \( \fpto{\Set{(\etR, \vx, 0)}} \) for fingerprint assertions.
-
-\subsection{Global/Program}
+\sx{The variable \( \kap \) is a bit confused, since it is used in the model and the assertion}
 
 \begin{definition}[Capabilities]
 \label{def:capabilities}
@@ -101,25 +43,154 @@ Then given a set of \emph{region identifiers} \( \rid \in \RegionID \), the \emp
     \end{rclarray}
 \]
 , and the units set \( \unitC \defeq \Setcon{\ca}{\for{\rid} \ca(\rid) \in \unitK } \) .
+A capability assertion is in the form of \( \cass{\kap(\vec{\lvar})}{\lrid} \in \CAst \), where \( \kap(\vec{\lvar}) \) is a token parametrised by logical variables and \( \lrid \) is the region identifiers.
+The capability assertion is interpreted to a capability in the model by interpreting all the logical expressions,
+\[
+\begin{rclarray}
+    \evalC{\cass{\kap(\vec{\lvar})}{\lrid}} & \defeq & \Set{\lrid \mapsto \kap(\evalLE{\vec{\lvar}})} \\
+\end{rclarray}
+\]
 \end{definition}
 
-The interference \( \perm{\kap} :  \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp \) says if a thread holds the capability \( \cass{\kap}{}\) and \emph{the current state of database} satisfies the assertions \( \bar{\lpre} \), the thread is allowed to commit a transaction that has the fingerprint \( \fp \).
-The current state of database refers to the state that all the committed transactions are visible.
+The capability are used, first, as a token that grants some abilities to access to access the database if a session holds the token.
+Second, it is ghost resources to help the reasoning.
+For brevity, when we write \( \cass{\kap}{\lrid} \), and this means there are implicit parameters.
+
+\emph{Fingerprint assertion} or \emph{fingerprint} describes the possible global effect from a transaction.
+It includes the first read \( \lexpr_{1} \fpR \lexpr_{2} \) and last write \( \lexpr_{1} \fpW \lexpr_{2} \) for the address \( \lexpr_{1} \).
+If an address remains untouched, it will have the default fingerprint \( \lexpr \fpI \).
+For better presentation, we introduce \( \fpE \) which means ``untouched for the rest addresses''.
+We will use fingerprint assertions to specify local transition (shown later), therefore we also have fingerprint for transfer of capabilities, \ie adding to the shared state \( \cass{\kap}{\lrid} \fpA \) and deleting from the shared state \( \cass{\kap}{\lrid} \fpD \).
+The shared state, intuitively, is the state aware by all sessions and we will explain the details later.
+
+\begin{defn}[Fingerprint Assertions]
+\label{def:fingerprint}
+The \emph{fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
+\[
+\begin{rclarray}    
+    \fp, \fp' & ::= & \lexpr \fpR \lexpr \mid \lexpr \fpW \lexpr \mid \lexpr \fpI \mid \fpE \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpA \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpD \mid \fp \sep \fp'
+\end{rclarray}
+\] 
+The fingerprint assertions is interpreted to a set of extended operations \( \ExtOps \).
+It is extended from \( \Ops \) by including tuple for initial of address \( (\otI, \addr) \), adding capability \( (\otA, \ca) \) and deleting capability \( (\otD, \ca) \).
+The well-form condition is also extended so that the initial of address is the bottom element, and a capability can transfer only one way. 
+\[
+\begin{rclarray}
+    \wfO{\extopset} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \for{ \otag, \otag', \addr, \addr', \ca, \ca'}  \\
+        \quad (\otag, \addr, \stub),(\otag', \addr', \stub) \in \extopset  \implies \otag \neq \otag' \lor \addr \neq \addr' \\
+        \quad {} \land (\otag, \ca),(\otag', \ca') \in \extopset  \implies \ca \neq \ca' \\
+        \quad {} \land (\otI, \addr) \in \extopset \implies (\stub, \addr, \stub) \notin \extopset \\ 
+    \end{array}
+\end{rclarray}
+\] 
+The composition \(\extopset_{1} \composeO \extopset_{2} \) is disjointed set union if the result is well-formed.
+Then, given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint} is interpreted through function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \powerset{\scalebox{.8}{\(\powerset{\ExtOps}\)}}$.
+\[
+\begin{rclarray}
+    \evalF{\lexpr_{1} \fpR \lexpr_{2}} & \defeq & \Set{\Set{(\otR, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})}} \\
+    \evalF{\lexpr_{1} \fpW \lexpr_{2}} & \defeq & \Set{\Set{(\otW, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})}} \\
+    \evalF{\lexpr \fpI} & \defeq & \Set{\Set{(\otI, \evalLE{\lexpr})}} \\
+    \evalF{\fpE} & \defeq & \Setcon{\extopset}{\for{\extop \in \extopset} \extop = (\otI, \stub)} \\
+    \evalF{\cass{\kap(\vec{\lvar})}{\lrid} \fpA} & \defeq & \Set{\Set{(\otA, \evalC{\cass{\kap(\vec{\lvar})}{\lrid}})}} \\
+    \evalF{\cass{\kap(\vec{\lvar})}{\lrid} \fpD} & \defeq & \Set{\Set{(\otD, \evalC{\cass{\kap(\vec{\lvar})}{\lrid}})}} \\
+    \evalF{\fp_{1} \sep \fp_{2}} & \defeq & \Setcon{\extopset_{1} \composeO \extopset_{2}}{\extopset_{1} \in \evalF{\fp_{1}} \land \extopset_{2} \in \evalF{\fp_{2}}} \\
+\end{rclarray}
+\]
+\end{defn}
+
+\sx{ It should be fine for local assertion to include the capabilities, as it either becomes frame or (not sure) helps local reasoning}
+The local assertions include normal separation logic assertions and fingerprint assertions.
+The standard separation assertions describe the current local state, while the fingerprints are all the local effects that will be committed to the database.
+
+\begin{definition}[Local assertions]
+\label{def:local_assertions}
+Given the set of logical expressions \( \LExpr \), logical variables \( \LVar \) and fingerprint assertion \( \fp \in \FAst \), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined inductively by the following grammar, 
+\[
+\begin{rclarray}
+	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \lexpr \pt \lexpr \mid \fp \mid \lpre \sep \lpost  \\
+\end{rclarray}	 
+\]
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \powerset{\ExtOps}} $, is defined over the structure of local assertions as follows,
+\[
+\begin{rclarray}
+	\evalLS{\assfalse} & \eqdef & \emptyset \\
+	\evalLS{\asstrue} & \defeq & \Heaps \times \Opsets \\
+	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
+	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
+	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
+	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{(\h, \extopset)}{(\h , \extopset) \in \evalLS{\lpre} \implies (\h , \extopset) \in \evalLS{\lpost}}\\
+	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
+	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \unitE) } \\
+	\evalLS{ \fp } & \defeq & \Setcon{ (\unitH, \extopset )}{\extopset \in \evalF{\fp}} \\
+	\evalLS{\lpre \sep \lpost} & \defeq & 
+    \Setcon{
+        (\h_1 \composeH \h_2, \extopset_{1} \composeE \extopset_{2})
+    }{ 
+        (\h_{1},\extopset_{1}) \in \evalLS{\lpre} 
+        \land (\h_{2}, \extopset_{2} ) \in \evalLS{\lpost} 
+    } 
+\end{rclarray}
+\]
+\end{definition}
+
+Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contained in logical expressions $\LExpr$ (\defin\ref{def:local_assertions} above), \ie $\Expr \subset \LExpr$. 
+%For readability, we will write angle brackets, \eg \( \fpass{(\etR, \vx, 0)} \) instead of curly brackets \( \fpto{\Set{(\etR, \vx, 0)}} \) for fingerprint assertions.
+
+\subsection{Global/Program}
+
+%The interference \( \perm{\kap} :  \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp \) says if a thread holds the capability \( \cass{\kap}{}\) and \emph{the current state of database} satisfies the assertions \( \bar{\lpre} \), the thread is allowed to commit a transaction that has the fingerprint \( \fp \).
+%The current state of database refers to the state that all the committed transactions are visible.
+
+%\begin{defn}[Interference]
+%\label{def:intf}
+%Assume standard separation logic assertion \( \bar{\lpre}\) (the local assertion \( \LAst \) without fingerprint).
+%Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
+%\[
+%\begin{rclarray}
+	%\intass & ::=  &
+	%\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp } \cup \intass 
+%\end{rclarray}
+%\]
+%The interference assertions are interpreted to a set of \emph{interference environments} that is a function from client-specified capabilities to pairs of history heaps and operations,
+%\[
+%\begin{rclarray}
+    %\inter \in \Interference & \defeq & \Kaps \to \powerset{\HisHeaps \times \Opsets}
+%\end{rclarray}
+%\]
+%Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,
+%%
+%\[
+%\begin{rclarray}
+	%\evalI{\emptyset}(\kap) & \eqdef & \emptyset \\
+	%\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp } \cup \intass }(\kap') & \eqdef &
+    %\begin{cases}
+    %\Setcon{(\hh, \evalF[\lenv',\stk]{\fp})}{\exsts{\h} \h \in \evalLS[\lenv',\stk]{\bar{\lpre}} \land {} \\ \h = \clpsHH{\hh} } \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
+    %\evalI{\intass}(\kap') & \text{ otherwise} \\
+    %\end{cases} \\
+    %& & \text{where there exists a vector of values \( \vec{\val}\) such that } \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \\
+%\end{rclarray}
+%\] 
+%\end{defn}
+
+%We will write \( \intfH(\kap) \)  and \( \intfO(\kap) \) for the first and second projections of all the elements.
+
+The interference \( \perm{\kap} : \exsts{\vec{\lvar}} \fp \) says if a thread holds the capability \( \perm{\kap} \), it is allowed to commit a transaction that has the fingerprint \( \fp \).
 
 \begin{defn}[Interference]
 \label{def:intf}
-Assume standard separation logic assertion \( \bar{\lpre}\) (the local assertion \( \LAst \) without fingerprint).
 Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
 \[
 \begin{rclarray}
 	\intass & ::=  &
-	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp } \cup \intass 
+	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \fp } \cup \intass 
 \end{rclarray}
 \]
 The interference assertions are interpreted to a set of \emph{interference environments} that is a function from client-specified capabilities to pairs of history heaps and operations,
 \[
 \begin{rclarray}
-    \inter \in \Interference & \defeq & \Kaps \to \powerset{\HisHeaps \times \Opsets}
+    \inter \in \Interference & \defeq & \Kaps \to \powerset{\powerset{\ExtOps}}
 \end{rclarray}
 \]
 Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$, is defined as follows,

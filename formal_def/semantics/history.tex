@@ -20,8 +20,7 @@ Let \( \hh(\addr)(i)\) denotes the \emph{i-th} version associated with address \
 We assume the version number starts from 1.
 
 For weak consistency models, or weak isolation levels which are more common term used in database community, a session is not necessary to work on the up-to-date version of a database in exchange for better performance. 
-Even in a single machine database, a session wants to make less synchronisation with the hard drivers and other running threads.
-This means a session could operate on a out-of-date state.
+Even in a single machine database, a session running under weak consistency model can make less synchronisation with the hard drivers and other running threads, which means the session could observe out-of-date state.
 We use \emph{views} to model sessions of a database.
 A \emph{view} is a cut in a history heap that corresponds the version that a session work with.
 
@@ -30,7 +29,7 @@ A \emph{view} is a cut in a history heap that corresponds the version that a ses
 \emph{A view of of a history heap}, short as \emph{view}, is a partial function from addresses to indexes,
 \[
 \begin{rclarray}
-    \vi \in \Views & \defeq & \Addr \parfinfun \Nat
+    \vi \in \viset \subseteq \Views & \defeq & \Addr \parfinfun \Nat
 \end{rclarray}
 \]                                                                     
 The composition is \( \vi \composeVI \vi' \defeq \vi \uplus \vi'\) and the unit is \( \unitVI \defeq \emptyset\).
@@ -47,29 +46,29 @@ Consistency models are specified as relations over pairs of history heaps and cu
 
 \begin{defn}[Consistency Models]
 \label{def:consistency-models}
-A \emph{Consistency model} \( \como \) is a \emph{reflexive and transitive relation} over pairs of history heaps and cut environments, written \( ((\hh,\vienv),(\hh',\vienv')) \in \como \) or \( (\hh, \vienv) \toCO{\como} (\hh', \vienv )\), that the transition from the state \( (\hh,\thcu)\) to the state \( (\hh',\thcu') \) satisfies certain constraints.
+A \emph{Consistency model} \( \como \) is a \emph{reflexive and transitive relation} over pairs of history heaps and cut environments, written \( ((\hh,\viset),(\hh',\viset')) \in \como \) or \( (\hh, \viset) \toCO{\como} (\hh', \viset' )\), that the transition from the state \( (\hh,\viset)\) to the state \( (\hh',\viset') \) satisfies certain constraints.
 Each tuple in the set should satisfy a well-formed condition that the cut environment should contain no more address than the history heap,
 \[
-    \bigcup\limits_{\thid \in \dom(\thcu)} \dom(\thcu(\thid)) \subseteq \dom(\hh)
+    \bigwedge\limits_{\vi \in \viset} \dom(\vi) \subseteq \dom(\hh)
 \]
 \sx{Might be useful constraint for soundness of logic, if never used, just delete this.}
 The specification of a certain consistency model should be local to the owned history heaps, so that the combination of two disjointed parts also satisfies the specification.
 \[
     \begin{array}{@{}l}
-    \for{\hh,\hh',\hh'',\hh''', \thcu, \thcu', \thcu'', \thcu'''} \\
-        \quad ((\hh, \thcu),(\hh',\thcu')) \in \como 
-        \land ((\hh'', \thcu''),(\hh''',\thcu''')) \in\como 
+    \for{\hh,\hh',\hh'',\hh''', \viset, \viset', \viset'', \viset'''} \\
+        \quad ((\hh, \viset),(\hh',\viset')) \in \como 
+        \land ((\hh'', \viset''),(\hh''',\viset''')) \in\como 
         \land ( \hh \composeHH \hh'' )\isdef
         \land ( \hh' \composeHH \hh''' )\isdef \\
-        \qquad \implies  ((\hh \composeHH \hh'', \thcu \uplus \thcu''),(\hh' \composeHH \hh''',\thcu' \uplus \thcu''')) \in \como
+        \qquad \implies  ((\hh \composeHH \hh'', \viset \uplus \viset''),(\hh' \composeHH \hh''',\viset' \uplus \viset''')) \in \como
     \end{array}
 \]
 \sx{The following says the consistency model transfer from a valid state to another valid state. }
 A consistency model also requires to transfer from a \emph{valid} state to another \emph{valid} state where the validity is independent from the transition.
 \[
-    \for{\como} \exsts{\funcn{valid}} (\hh, \vienv) \in \como \implies \func{valid}{\hh, \vienv}
+    \for{\como} \exsts{\funcn{valid}} (\hh, \viset) \in \como \implies \func{valid}{\hh, \viset}
 \]
-where \( (\hh , \vienv) \in \como\) means the state \((\hh, \vienv)\) appears in the relation.
+where \( (\hh , \viset) \in \como\) means the state \((\hh, \viset)\) appears in the relation.
 \end{defn}
 
 \sx{Need Andrea for more clarify about defining consistency model}
@@ -114,22 +113,10 @@ Any cycle in the corresponding dependant graph of the history heap after the tra
 %\end{defn}
 %}
 
-We introduce \( \funcn{clps} \) function that collapses a history heap by a view to a normal heap, which is the local state with respect to the view.
 %{ \color{gray}
 %A spacial version of this function only takes a history heap, and it returns a normal heap that is the latest state of the database.
 %}
 
-\begin{defn}[Collapse of history heaps]
-A view \( \vi \) can collapse a history heap \( \hh \) to a (normal) heap \( h \) through the function \(\funcn{clps} : \HisHeaps \times \Cuts \parfun \Heaps\),
-\[
-\begin{rclarray}
-    \clpsHH{\hh, \cu} & \defeq & 
-    \begin{cases}
-        \lambda \addr \ldotp \hhV(\addr)(\cu(\addr)) & \text{if } \dom(\hh) = \dom(\cu) \land \for{\addr'} \cu(\addr') \leq \left|\hh(\addr')\right| \\
-        \text{undefined} & \text{otherwise}
-    \end{cases}
-\end{rclarray}
-\]
 %{ \color{gray}
 %The function is overloaded with one parameter version that collapses history heaps by picking the last values,
 %\[
@@ -138,7 +125,7 @@ A view \( \vi \) can collapse a history heap \( \hh \) to a (normal) heap \( h \
 %\end{rclarray}
 %\]
 %}
-\end{defn}
+%\end{defn}
 
 \begin{defn}[Thread semantics]
 \label{def:thread_semantics}
@@ -179,8 +166,9 @@ The labels includes commit \( \lbC{\txid} \), view shift \( \lbV \) and identify
             \quad \h = \clpsHH{\hh,\vi}
             \quad \vdash (\stk, \h, \unitO), \trans \ \toL^{*} \  (\stk', \h', \opset) , \pskip \\
             \hh' = \func{updHisHp}{\hh, \vi, \txid, \opset}  
-            \quad \func{updView}{\hh', \vi, \opset} \orderVI \vi
-            \quad ((\hh,\vi),(\hh',\vi)) \in \como
+            \quad \func{updView}{\hh', \vi, \opset} \orderVI \vi 
+            \quad \pred{wfView}{\hh', \vi'}  \\
+            \hh,\Set{\vi} \toCO{\como} \hh',\Set{\vi}
         \end{array}
     }
 \]
@@ -237,23 +225,30 @@ The labels includes commit \( \lbC{\txid} \), view shift \( \lbV \) and identify
     }
 \]
 
-{ \color{gray}
-\[
-    \infer[\rl{PPar}]{%
-        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \prog_{1} \ppar \prog_{2} \ \toT{\lbF{\thid', \prog_{2}}} \  \left( \thstk, \hh, \thcu \uplus \Set{\thid' \mapsto \thcu(\thid)} \right) , \prog_{1} \pseq \pwait{\thid'}
-    }{}
-\]
+%{ \color{gray}
+%\[
+    %\infer[\rl{PPar}]{%
+        %\como, \thid \vdash ( \thstk, \hh, \thcu ) , \prog_{1} \ppar \prog_{2} \ \toT{\lbF{\thid', \prog_{2}}} \  \left( \thstk, \hh, \thcu \uplus \Set{\thid' \mapsto \thcu(\thid)} \right) , \prog_{1} \pseq \pwait{\thid'}
+    %}{}
+%\]
 
-\[
-    \infer[\rl{PWait}]{%
-        \como, \thid \vdash \left( \thstk_{1} \uplus \thstk_{f}, \hh, \thcu \uplus \Set{\thid' \mapsto \thcu(\thid)} \right) , \pwait{\thid'} \ \toT{\lbJ{\thid', \thstk_{2} \uplus \thstk_{f}}} \  ( \thstk_{1} \uplus \thstk_{2} \uplus \thstk_{f}, \hh, \thcu ) , \pskip 
-    }{}
-\]
-}
+%\[
+    %\infer[\rl{PWait}]{%
+        %\como, \thid \vdash \left( \thstk_{1} \uplus \thstk_{f}, \hh, \thcu \uplus \Set{\thid' \mapsto \thcu(\thid)} \right) , \pwait{\thid'} \ \toT{\lbJ{\thid', \thstk_{2} \uplus \thstk_{f}}} \  ( \thstk_{1} \uplus \thstk_{2} \uplus \thstk_{f}, \hh, \thcu ) , \pskip 
+    %}{}
+%\]
+%}
+
+\hrule
  
-where,
 \[
 \begin{rclarray}                                 
+    \pred{wfView}{\hh,\vi} & \defeq & \for{\addr} \vi(\addr) \leq \left|\hh(\addr) \right| \\
+    \clpsHH{\hh, \cu} & \defeq & 
+    \begin{cases}
+        \lambda \addr \ldotp \hhV(\addr)(\cu(\addr)) & \text{if } \dom(\hh) = \dom(\cu) \land \for{\addr'} \cu(\addr') \leq \left|\hh(\addr')\right| \\
+        \text{undefined} & \text{otherwise}
+    \end{cases} \\
     \func{updHisHp}{\hh, \vi, \txid, \opset} & \defeq & 
     \begin{cases}
         \hh & \text{if } \opset = \unitO \\
@@ -272,7 +267,7 @@ where,
     \end{cases} \\
 %
 %              
-	\func{fresh}{\aexecrun}  & \defeq & \Setcon{ \txid }{ \txid \in \TxID \land \for{\addr, i} \txid \neq \hhW(\addr)(i) \land \txid \notin \hhR(\addr)(i) } \\
+	\func{fresh}{\hh}  & \defeq & \Setcon{ \txid }{ \txid \in \TxID \land \for{\addr, i} \txid \neq \hhW(\addr)(i) \land \txid \notin \hhR(\addr)(i) } \\
 \end{rclarray}
 \]
 \hrule
@@ -280,18 +275,35 @@ where,
 \label{fig:thread_semantics}
 \end{figure}
 
+A new transaction is committed through the \rl{PCommit} rule.
+The transaction code \( \trans \) is executed locally given the local state that is decided by the current state of database and the local view, \ie the history heap \( \hh \) and view \( \vi \) respectively.
+The \( \funcn{clps} \) function collapses a history heap and a view to a normal heap by picking the versions corresponding to the view.
+After local execution, the transaction picks a fresh identifier \( \txid \) and commits the set of operations \( \opset \).
+The operations are the first read and last write of each address, which are the operations might affect the database, because of the atomicity of transactions.
+The \funcn{updHisHp} function updates the history heap.
+If there is a read operation, it includes the new identifier to the version relates to the address and the local view \( \vi \).
+If there is a write operation, it extends a new version to the end and puts the new identifier as the writer.
+Since we assume strong session, we set the lower bound for the new local view by \funcn{updView} function.
+This function shifts the view to the latest version if the version is written by the current transaction.
+This guarantees if there is no currency, the following transaction will read the write.
+Since it is a lower bound, the new local view \( \vi' \) can advance the view as long as it is not out-of-bound.
+Finally, the transition from \( (\hh, \vi) \) to \( (\hh', \vi') \) should be allowed by the consistency model \( \como \).
+
+To model synchronisation between sessions, the \rl{PViewLShift} rule allows to non-deterministically advance a view.
+Except \rl{PCommit} and \rl{PViewLShift}, the rest rules have the expected behaviours.
+
 \begin{lem}[Confluence of \funcn{updHisHp} and \funcn{updView}]
 Given a valid set of operations \( \opset \), all the computation paths for \( \funcn{updHisHp} \) function (\( \funcn{updView} \) function) yield the same result.
 \end{lem}
 
 %\sx{The full version should support dynamic thread, but we might only need fixed thread so that the thread pool semantics will be pick one thread and run one step}
 
-{ \color{gray}
-\begin{defn}[Thread pools]
-\label{def:thread_pools}
-Given the set of thread stacks $\ThdStacks$ (\defref{def:stacks}) and intermediate programs $\IntermediatePrograms$ (\defref{def:thread_semantics}), a \emph{thread pool} is a a finite partial function from thread identifiers to triples of thread stacks and intermediate programs, \(\thpl \in \TPool \eqdef \ThreadID \parfinfun \ThdStacks \times \IntermediatePrograms\).
-\end{defn}
-}
+%{ \color{gray}
+%\begin{defn}[Thread pools]
+%\label{def:thread_pools}
+%Given the set of thread stacks $\ThdStacks$ (\defref{def:stacks}) and intermediate programs $\IntermediatePrograms$ (\defref{def:thread_semantics}), a \emph{thread pool} is a a finite partial function from thread identifiers to triples of thread stacks and intermediate programs, \(\thpl \in \TPool \eqdef \ThreadID \parfinfun \ThdStacks \times \IntermediatePrograms\).
+%\end{defn}
+%}
  
 \begin{defn}[Programs semantics] 
 \label{def:thread_pool_semantics}
@@ -310,7 +322,8 @@ The program has standard interleaving semantics by picking a thread and then run
 If the step is commit \( \lbC{\txid} \), the overall transition of history heap and view environment should satisfy consistency model.
 In anther words, the view that has been changed should be compatible with those has not been changed.
 It is necessary to check the compatibility because some consistency models are specified as constraints among all views.
-If the step is view shift \( \lbV \), it should shift to a valid state\footnote{It is not necessary to always shift to a valid state, yet it is a design choice for abstract operational semantics}.
+We write \( \hh, \vienv \toCO{\como} \hh', \vienv' \) as short-hand for \( \hh, \func{range}{\vienv} \toCO{\como} \hh', \func{range}{\vienv'} \).
+If the step is view shift \( \lbV \), it should shift to a valid state\footnote{It is not necessary to always shift to a valid state, yet it is a design choice for abstract operational semantics.}.
  
 %The thread pool operational semantics is given in \figref{fig:thread_pool_semantics}, where an arbitrary thread in the pool \(\thpl\) is picked to run for one step.
 %If the next execution step is a thread fork, then a new thread \(\thid'\) is allocated in the pool to be executed with its thread stack copied from its parent (forking) thread.
@@ -328,28 +341,30 @@ If the step is view shift \( \lbV \), it should shift to a valid state\footnote{
         \quad \vi = \vienv(\thid)
         \quad \cmd = \prog(\thid) \\
         \como \vdash ( \stk, \hh, \vi ), \cmd, \ \toT{\lb} \  ( \stk', \hh', \vi' ) , \cmd'  \\
-        \lb = \lbID \lor (\lb = \lbC{\stub} \land ((\hh, \vienv),(\hh', \vienv')) \in \como ) \lor (\lb = \lbV \land \pred{valid}{\hh',\vienv'})
+        \begin{B}
+        \lb = \lbID \lor (\lb = \lbC{\stub} \land \hh, \vienv \toCO{\como} \hh', \vienv') \lor \begin{B}\lb = \lbV \land \pred{valid}{\hh',\vienv'}\end{B}
+        \end{B}
     \end{array}
     }
 \]
 
-{ \color{gray}
-\[
-    \infer[\rl{PFork}]{%
-        \como \vdash ( \hh, \thcu, \thpl \uplus \Set{ \thid \mapsto (\thstk, \iprog) } ) \ \toG{\lbF{\thid', \prog}} \  ( \hh', \thcu', \thpl \uplus \Set{ \thid \mapsto (\thstk, {\iprog}'), \thid' \mapsto (\thstk, \prog) } )
-    }{%
-        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog \ \toT{\lbF{\thid', \prog}} \  ( \thstk, \hh', \thcu' ) , {\iprog}' 
-    }
-\]
+%{ \color{gray}
+%\[
+    %\infer[\rl{PFork}]{%
+        %\como \vdash ( \hh, \thcu, \thpl \uplus \Set{ \thid \mapsto (\thstk, \iprog) } ) \ \toG{\lbF{\thid', \prog}} \  ( \hh', \thcu', \thpl \uplus \Set{ \thid \mapsto (\thstk, {\iprog}'), \thid' \mapsto (\thstk, \prog) } )
+    %}{%
+        %\como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog \ \toT{\lbF{\thid', \prog}} \  ( \thstk, \hh', \thcu' ) , {\iprog}' 
+    %}
+%\]
 
-\[
-    \infer[\rl{PJoin}]{%
-        \como \vdash ( \hh, \thcu, \thpl \uplus \Set{ \thid \mapsto (\thstk, \iprog), \thid' \mapsto (\thstk', \pskip) } )  \ \toG{\lbJ{\thid',\thstk''}} \ ( \hh', \thcu', \thpl \uplus \Set{ \thid \mapsto (\thstk'', {\iprog}')} )
-    }{%
-        \como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog \ \toT{\lbJ{\thid',\thstk'}} \  ( \thstk'', \hh', \thcu' ) , {\iprog}' 
-    }
-\]
-}
+%\[
+    %\infer[\rl{PJoin}]{%
+        %\como \vdash ( \hh, \thcu, \thpl \uplus \Set{ \thid \mapsto (\thstk, \iprog), \thid' \mapsto (\thstk', \pskip) } )  \ \toG{\lbJ{\thid',\thstk''}} \ ( \hh', \thcu', \thpl \uplus \Set{ \thid \mapsto (\thstk'', {\iprog}')} )
+    %}{%
+        %\como, \thid \vdash ( \thstk, \hh, \thcu ) , \iprog \ \toT{\lbJ{\thid',\thstk'}} \  ( \thstk'', \hh', \thcu' ) , {\iprog}' 
+    %}
+%\]
+%}
 %
 \hrule\vspace{5pt}
 \caption{Thread pool semantics}
