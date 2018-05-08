@@ -944,8 +944,15 @@ view $V$, we can construct a heap as follows:
 %the command $\cmd$. 
 Judgements in the semantics of commands take the form 
 \[ 
-\langle \hh, \sigma, V: C \rangle \rightarrow \langle \hh', \thdstack', V': \cmd' \rangle
+\langle \hh, \sigma, V: C \rangle \xrightarrow{\alpha} \langle \hh', \thdstack', V': \cmd' \rangle
 \]
+
+where $\alpha \in \{ \lambda, \delta \}$ identifies whether a transition performed within 
+a command corresponds to a local computation ($\lambda$), such as executing a 
+non-transactional primitive command or some housekeeping activity, or to an interaction with 
+the database ($\delta$), that is executing a transaction.
+\ac{Introducing labelled transitions was necessary to remove complications later on when dealing 
+with the parallel composition of threads. More details when discussing the rule.}
 
 The main rule in the operational semantics of commands is the one corresponding 
 to the execution of a transaction, i.e. $\cmd = [\trans].\cmd'$. For this rule, we must specify the following: 
@@ -1028,50 +1035,55 @@ because we need to remove thread identifiers.}
 %\qquad \txstack(\retvar) = v}
 %\]
 \[
-\infer[{\scriptstyle(Tx-exec)}]{\langle \hh, \thdstack, V: [\trans].\cmd \rangle \rightarrow \langle \hh', \thdstack', V': \cmd \rangle}
+\infer[{\scriptstyle(Tx-exec)}]{\langle \hh, \thdstack, V, [\trans].\cmd \rangle \xrightarrow{\delta} \langle \hh', \thdstack', V', \cmd \rangle}
 {\begin{array}{c}
 \thdstack \vdash \langle \txstack_{0}, \heap, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \txstack, \_, \mathcal{O}, \nil \rangle \\
 %(\hh, V) \leadsto_{CM} (\hh', V') \\
 \qquad
-\hh' = \mathsf{HHupdate}(\hh, V, \mathcal{O}) \qquad \mathsf{ViewUpdate}(\hh, V, \mathcal{O}) \sqsubseteq V' \qquad 
+\hh' = \mathsf{HHupdate}(\hh, V, \mathcal{O}) \qquad V' = \mathsf{ViewUpdate}(\hh, V, \mathcal{O}) \qquad 
 \thdstack' = \thdstack[\retvar \mapsto \txstack(\retvar)]
 \end{array}
 }
 \]
-\ac{Check that $V'$ is well-formed with respect to $\hh'$ is missing from the rule above.}.
+\ac{Check that $V'$ is well-formed with respect to $\hh'$ is missing from the rule above. 
+Also, for the moment I am going with the possibility of having conflicts in views as long as 
+transactions cannot be executed. My catch here is that there are cases where whether 
+a view is conflicting depends on the code of the transaction to be executed (i.e. write-conflict 
+detection), so conflicting views cannot be avoided without losing completeness of the semantics). 
+The rule below allows for views to be pushed to the right, so as to resolve conflicts.}
 
-%We also introduce a rule that allows to update the view of the thread executing a command. 
-%We say that the view $V$ is dominated by $V'$, written $V \sqsubseteq V'$, if for any 
-%location $[n]$ we have that $V([n]) \leq V'([n])$.
-%\[
-%\infer[{\scriptstyle{(C-View-Update)}}]
-%{\langle \hh, \thdstack, V: \cmd \rangle \rightarrow \langle \hh, \thdstack, V' : \cmd \rangle }
-%{ V \sqsubseteq V'}
-%\]
+We also introduce a rule that allows to update the view of the thread executing a command. 
+We say that the view $V$ is dominated by $V'$, written $V \sqsubseteq V'$, if for any 
+location $[n]$ we have that $V([n]) \leq V'([n])$.
+\[
+\infer[{\scriptstyle{(C-View-Update)}}]
+{\langle \hh, \thdstack, V, \cmd \rangle \xrightarrow{\lambda} \langle \hh, \thdstack, V', \cmd \rangle }
+{ V \sqsubseteq V'}
+\]
 
 The other rules of the operational semantics are standard: 
 
 \[
 \infer[{\scriptstyle{(prim-c)}}]
-{\langle \hh, \thdstack, V: \primc.\cmd \rangle \rightarrow \langle \hh, \thdstack', V: \cmd \rangle}
+{\langle \hh, \thdstack, V, \primc.\cmd \rangle \xrightarrow{\lambda} \langle \hh, \thdstack', V, \cmd \rangle}
 {\thdstack \rightsquigarrow_c \thdstack'} 
 \]
 
 \[
 \infer[{\scriptstyle{(C-Choice-L)}}]
-{\langle \hh, \thdstack, V: \cmd_1 + \cmd_2 \rangle \rightarrow \langle \hh, \thdstack, V: \cmd_1 \rangle}
+{\langle \hh, \thdstack, V, \cmd_1 + \cmd_2 \rangle \xrightarrow{\lambda} \langle \hh, \thdstack, V, \cmd_1 \rangle}
 {} 
 \]
 
 \[
 \infer[{\scriptstyle{(C-Choice-L)}}]
-{\langle \hh, \thdstack, V: \cmd_1 + \cmd_2 \rangle \rightarrow \langle \hh, \thdstack, V: \cmd_2 \rangle}
+{\langle \hh, \thdstack, V, \cmd_1 + \cmd_2 \rangle \xrightarrow{\lambda} \langle \hh, \thdstack, V, \cmd_2 \rangle}
 {} 
 \]
 
 \[
 \infer[{\scriptstyle{(C-Choice-L)}}]
-{\langle \hh, \thdstack, V: \mu X.\cmd \rangle \rightarrow \langle \hh, \thdstack, V: \{\mu X.\cmd/X\}\cmd \rangle}
+{\langle \hh, \thdstack, V, \mu X.\cmd \rangle \xrightarrow{\lambda} \langle \hh, \thdstack, V, \{\mu X.\cmd/X\}\cmd \rangle}
 {} 
 \]
 
@@ -1112,16 +1124,53 @@ a consistency model.
 In this sense, a consistency model specification is the set of all the possible transitions that 
 are allowed by the semantics. Formally, a consistency model specification $CM$ is 
 a set of quadruples of the form $(\hh, \mathcal{V}, \hh', \mathcal{V}')$, 
-where $\mathcal{V}, \mathcal{V}'$ are non-empty, finite sets of views,
+where $\mathcal{V}, \mathcal{V}'$ are non-empty, finite multi-sets of views,
 and we often write $(\hh, \mathcal{V}) \leadsto_{CM} (\hh, \mathcal{V}')$ 
 in lieu of $(\hh, \mathcal{V}, \hh', \mathcal{V}') \in CM$. 
-\ac{Subtle error here, two threads may have the same view, so that 
-multi-sets should be used rather than sets. I really don't like multisets.}
-Given two multi-sets of views $\mathcal{V}_1, \mathcal{V}_2$, 
-we write $\mathcal{V}_1 \Subset \mathcal{V}_2$, if there is 
-a one-to-one mapping from $\mathsf{push}: \mathcal{V}_1 \rightarrow \mathcal{V}_2$ 
-such that for any $V \in \mathcal{V}_1$, $V_1 \sqsubseteq \mathsf{push}(V_1)$.
-\ac{Again, notation should be re-adapted to multisets}.
+\ac{Had to switch to multi-sets, though I'm looking for alternatives.}
+%We place the following well-formedness constraints on specifications 
+%of consistency models. We say that $CM$ is well-formed if: 
+%\begin{enumerate}
+%\item[Views can be pushed] for any $\hh, \mathcal{V}, V, V'$ such that 
+%$V \sqsubseteq V'$, then $(\hh, \mathcal{V} \cup \{V\} \leadsto_{CM} \hh, \mathcal{V} \cup \{V'\})$. 
+%This condition also implies that $CM$ must be reflexive, 
+%\item[Transactions can be renamed] for any $\hh, \mathcal{V}, \hh', \mathcal{V}'$ and transaction $\tsid$ that does not appear 
+%$\hh, \hh'$, $(\hh[\tsid \mapsto \tsid'], \mathcal{V}) \leadsto_{CM} (\hh'[\tsid \mapsto \tsid'], \mathcal{V}')$, 
+%\item[Atomic Visibility], let us say that a configuration $(\hh, \{V\})$ enjoys atomic visibility 
+%if, whenever $\hh([n])(i) = (\_, \tsid, \_)$ for some $i \leq V([n])$, then for any $[m]$ and 
+%$j'$ such that $\hh([m])(j') = (\_, \tsid, \_)$, $j' \leq V([m])$. We say that $(\hh, \mathcal{V})$ 
+%enjoys atomic visibility if $(\hh, \{V\})$ enjoys atomic visibility for all $V$ such that 
+%$\mathcal{V} = \mathcal{V}' \cup \{V\}$. A consistency model specification enjoys atomic 
+%visibility if and only if, whenever $(\hh, \mathcal{V}) \leadsto_{CM} (\hh', \mathcal{V}')$, 
+%then $(\hh, \mathcal{V}$ and $(\hh, \mathcal{V}')$ enjoy atomic visibility.
+%\end{enumerate}
+%The well-formedness condition reflects the fact that internal computations of threads that do not 
+%result in an interaction with the database (i.e. resolution of non-deterministic choices, unfolding 
+%of fixed point operators, pushing views) must always be allowed by the consistency model. 
+%Obviously, any consistency model $CM$ can be strengthened to a well-formed one $\overline{CM}$.
+%
+%\ac{Ok, this is completely screwed. Atomic visibility clashes with the closure constraint that 
+%views can be always pushed. The reason why we have the closure constraint is because, when 
+%we define the rule for the parallel composition, we check that an action performed by a single 
+%thread does not conflict with the views of other threads, and we always want local computation 
+%of threads to be allowed. 
+%One possible solution to this problem would be to first constrain all configurations to 
+%those that enjoy atomic visibility. A second solution would be 
+%to just assume atomic visibility for those transitions $(\hh, \mathcal{V}) \leadsto_{CM} 
+%(\hh', \mathcal{V}')$ where $\hh \neq \hh'$. Both solutions are patches to a flawed 
+%definition, and we don't do patches. I think the best strategy here would be that 
+%of distinguishing between local computations $(\lambda)$ and database interactions 
+%$(\delta)$ in the semantics, and define a parallel rule that checks for transitions allowed 
+%by the consistency model, only when a thread performs a $\delta$ action. I am first 
+%typing up the semantics as it is now, and then I will make the appropriate changes. 
+% Actually screw it, I'm going to change the semantics immediately.}
+%
+%Given two multi-sets of views $\mathcal{V}_1, \mathcal{V}_2$, 
+%we write $\mathcal{V}_1 \Subset \mathcal{V}_2$, if there is 
+%a one-to-one mapping from $\mathsf{push}: \mathcal{V}_1 \rightarrow \mathcal{V}_2$ 
+%such that for any $V \in \mathcal{V}_1$, $V_1 \sqsubseteq \mathsf{push}(V_1)$.
+%\ac{Again, notation should be re-adapted to multisets}.
+%
 %In general we require a consistency model specification to be reflexive, 
 %and to be closed with respect to pushing the views in the 
 %state of the system: if $(\hh, \{V_1, \cdots, V_n\}) \leadsto 
@@ -1134,7 +1183,7 @@ such that for any $V \in \mathcal{V}_1$, $V_1 \sqsubseteq \mathsf{push}(V_1)$.
 
 In order to define the semantics of programs, we need to associate 
 a thread stack and view to each parallel component (or thread) of the program. 
-To this purpose, we define an enviroment $\mathsf{Env}$ to be 
+To this purpose, we define an environment $\mathsf{Env}$ to be 
 a partial mapping $\mathsf{Env} : \tidset \rightharpoonup (\thdstackset \times \mathsf{Views})$ 
 \ac{Set of Views and thread identifiers never introduced before.} 
 Given two environments, $\mathsf{Env}_1, \mathsf{Env}_2$, we let 
@@ -1159,21 +1208,70 @@ in which case we have
 
 Judgements in the operational semantics take the form 
 \[
-\infer{\langle \hh, \mathsf{Env}, \prog \rangle \rightarrow \langle \hh', \mathsf{Env}', \prog' \rangle}{}
+\infer{\langle \hh, \mathsf{Env}, \prog \rangle \xrightarrow{\alpha}_{CM} \langle \hh', \mathsf{Env}', \prog' \rangle}{}
 \]
 
-\ac{The part below must be rewritten, as the semantics of programs is not up-to-date with 
-the rest of the document. Following Philippa's and Azalea's comments on wanting to 
-preserve the invariant of a consistency model at each step, the rule for parallel composition 
-must be rewritten accordingly}
-
-For programs, the main rule of the operational semantics is as follows: 
+We first define how to lift the semantics of commands to programs. This results 
+in the following rule: 
 \[
-\infer[{\scriptstyle{(C-Par)}}]
-{\langle \hh, \prog_1 \Par \prog_2 \rangle \xrightarrow{CM} \langle \hh', \prog_1' \Par \prog_2 \rangle }
-{\langle \hh, \prog_1 \rangle \xrightarrow{CM} \langle \hh', \prog_1' \rangle \qquad 
-(\hh, \mathsf{Views}(\prog_1)) \bowtie_{\mathsf{Views}(\prog_2)} (\hh', \mathsf{views}(\prog_1'))} 
+\infer[{\scriptstyle(P-thd-exec)}]{\langle \hh, \mathsf{Env}, \tid: \cmd \rangle \xrightarrow{\alpha}_{CM} \langle \hh', \mathsf{Env}', \tid: \cmd' \rangle}
+{
+\begin{array}{c}
+\mathsf{Env} = [\tid \mapsto (\sigma, V)] \qquad \langle \hh, \thdstack, V, \cmd \rangle \xrightarrow{\alpha} \langle \hh', \thdstack', V', \cmd' \rangle 
+\qquad \mathsf{Env}' = [\tid \mapsto (\sigma', V')]\\
+\alpha = \delta \implies (\hh, \{V\}) \leadsto_{CM} (\hh', \{V'\})
+\end{array}
+}
 \]
+Note the side condition $\alpha = \delta \implies (\hh, \{V\} \leadsto_{CM} (\hh', \{V'\})$ in the rule above. 
+This is were consistency models come into play. This side condition states that if performing a computation 
+in a command resulted in an interaction with the database $(\alpha = \delta)$, then such a computation 
+should be performed only if it is consistent with the consistency model specification ($(\hh, \{V\}) \leadsto_{CM} 
+(\hh', \{V'\})$).
+
+
+Finally, we need to define how to compose programs together. 
+Here the main idea is that computations that are valid for a 
+program $\prog_1$ are not necessarily valid anymore in 
+a composite program of the form $\prog_1 \Par \prog_2$. 
+This is because the views of the threads that constitute $\prog_2$ 
+may be conflicting with the thread performing a computation step in 
+$\prog_1$. We will give some examples of consistency models 
+that exhibit this behaviour in the next section. 
+
+Formally, given a transition of the form $(\hh, \mathcal{V}_1) 
+\leadsto (\hh, \mathcal{V}_1')$, and a set of views $\mathcal{V}_2$, 
+we write
+$\mathcal{V}_2 \Vdash (\hh, \mathcal{V}_1) \leadsto_{CM} 
+(\hh', \mathcal{V}_1')$ if whenever $(\hh, \mathcal{V}_1) 
+\leadsto_{CM} (\hh', \mathcal{V}_1)'$, then  
+$(\hh, \mathcal{V}_1 \uplus \mathcal{V}_2) \leadsto_{CM} (\hh', \mathcal{V}_1' \uplus \mathcal{V}_2')$. 
+\ac{I am pretty sure that for how the semantics is defined the premise of the implication 
+is always going to be valid, so we may choose to ditch it.}
+The rule for the parallel composition of programs is defined below: 
+\[
+\infer[{\scriptstyle (P-par-L)}]
+{\langle \hh, \mathsf{Env}_1 \uplus \mathsf{Env}_2, \prog_1 \Par \prog_2 \rangle 
+\xrightarrow{\alpha}_{CM} \langle \hh', \mathsf{Env}_1' \uplus \mathsf{Env}_2, 
+\prog_1' \Par \prog_2 \rangle }
+{ \begin{array}{c}
+\langle \hh, \mathsf{Env}_1, \prog_1 \xrightarrow{\alpha}_{CM} \langle \hh', \mathsf{Env}_1', \prog_1' 
+\qquad (\mathsf{Env_1} \uplus \mathsf{Env}_2)\downarrow \\ 
+\alpha = \delta \implies \mathsf{Views}(\mathsf{Env}_2) \Vdash (\hh, \mathsf{Views}(\mathsf{Env}_1) 
+\leadsto_{CM} (\hh', \mathsf{Views}(\mathsf{Env}_1')
+\end{array}
+}
+\]
+
+
+
+%For programs, the main rule of the operational semantics is as follows: 
+%\[
+%\infer[{\scriptstyle{(C-Par)}}]
+%{\langle \hh, \prog_1 \Par \prog_2 \rangle \xrightarrow{CM} \langle \hh', \prog_1' \Par \prog_2 \rangle }
+%{\langle \hh, \prog_1 \rangle \xrightarrow{CM} \langle \hh', \prog_1' \rangle \qquad 
+%(\hh, \mathsf{Views}(\prog_1)) \bowtie_{\mathsf{Views}(\prog_2)} (\hh', \mathsf{views}(\prog_1'))} 
+%\]
 %To do so, we introduce \emph{history heaps}.
 %
 %We assume countably infinite set of transaction identifiers $\TransID$, whose elements 
