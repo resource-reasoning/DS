@@ -4,9 +4,8 @@ The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
 The \rl{TRDeref} rule add read fingerprint in finger-tracking set, only if there is no write finger-print.
 This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
 
-\begin{figure}[t]
+\begin{figure}[!t]
 \hrule\vspace{5pt}
-\sx{Need to be careful about the implication, esp. for fingerprint assertion.}
 \[
     \infer[\rl{TRSkip}]{%
         \tripleL{\assemp }{ \pskip }{\assemp }
@@ -15,29 +14,25 @@ This is because once a location has been re-written, the rest read are considere
 
 \[
     \infer[\rl{TRAss}]{%
-        \tripleL{\txvar \dot= \lexpr }{ \pass{\txvar}{\expr} }{\txvar \dot= \expr\sub{\txvar}{\lexpr} }
-    }{%
-        \txvar \notin \func{fv}{\lexpr} 
-        && \txvar \in \TxVars  
-    }
+        \tripleL{\var \dot= \lexpr }{ \pass{\var}{\expr} }{\var \dot= \expr\sub{\var}{\lexpr} }
+    }{}
 \]
 
 \[
     \infer[\rl{TRDeref}]{%
-        \tripleL{\expr \pt \lexpr \sep \fpF }{ \pderef{\txvar}{\expr} }{\txvar \dot= \lexpr \sep \expr \pt \lexpr \sep \fpto{\fp'} }
+        \tripleL{\expr \pt \lexpr \sep \fp }{ \pderef{\var}{\expr} }{\var \dot= \lexpr \sep \expr \pt \lexpr \sep \fp' }
     }{%
-        \txvar \notin \func{fv}{\expr}
-        && \txvar \notin \func{fv}{\lexpr}  
-        && \txvar \in \TxVars  
-        && \fp' = \fp \addF (\etR, \expr, \lexpr)
+        \var \notin \func{fv}{\expr}
+        && \var \notin \func{fv}{\lexpr}  
+        && \fp \toFP{\otR(\lexpr)} \fp'
     }
 \]
 
 \[
     \infer[\rl{TRMutate}]{%
-        \tripleL{\expr_1 \pt \stub \sep \fpF }{ \pmutate{\expr_1}{\expr_2} }{ \expr_1 \pt \expr_2 \sep \fpto{\fp'} } 
+        \tripleL{\expr_1 \pt \stub \sep \fp }{ \pmutate{\expr_1}{\expr_2} }{ \expr_{1} \pt \expr_{2} \sep \fp' } 
     }{
-        \fp' = \fp \addF (\etW, \expr_{1}, \expr_{2})
+        \fp \toFP{\otW(\expr_{2})} \fp'
     }
 \]
 
@@ -65,7 +60,6 @@ This is because once a location has been re-written, the rest read are considere
     }
 \]
 
-\sx{check the loop invariant with fingerprint}
 
 \[
     \infer[\rl{TRLoop}]{%
@@ -75,12 +69,29 @@ This is because once a location has been re-written, the rest read are considere
     }
 \]
  
+\sx{Side condition for fingerprint for sure, but need to see how to do it in a better way.
+The potential problem here is the mutation rule, as if the precondition is read and write, one can frame off the write, produce a new write, and frame back the write. 
+One way is when frame back, need to update the write fingerprint from the post condition.
+Or we say fingerprint for a single address cannot be split and then we add 2 more primitive fingerprint transitions.
+}
+
 \[
    \infer[\rl{TRFrame}]{%
        \tripleL{ \lpre \sep \lframe }{ \trans }{ \lpost \sep \lframe }
    }{%
        \tripleL{ \lpre }{ \trans }{ \lpost } 
    }
+\]
+\hrule\vspace{5pt}
+\[
+\begin{rclarray}
+    \expr \fpI & \toFP{\otR(\lexpr)} & \expr \fpR \lexpr \\
+    \expr \fpR \expr' & \toFP{\otR(\lexpr)} & \expr \fpR \lexpr' \\
+    \expr \fpW \expr' & \toFP{\otR(\lexpr)} & \expr \fpW \lexpr' \\
+    \expr \fpI & \toFP{\otW(\lexpr)} & \expr \fpW \lexpr \\
+    \expr \fpR \expr' & \toFP{\otW(\lexpr)} & \expr \fpR \lexpr' \sep \expr \fpW \lexpr \\
+    \expr \fpW \expr' & \toFP{\otW(\lexpr)} & \expr \fpW \lexpr \\
+\end{rclarray}
 \]
 \hrule\vspace{5pt}
 \caption{The rules for transactions}
@@ -168,21 +179,38 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 \begin{figure}[t!]
 \hrule\vspace{5pt}
 
-\sx{not right, we want to say a transaction \( \trans \) can be abstracted to a fingerprint \( \fp \)}
+%\[
+    %\infer[\rl{PRCommit}]{%
+        %\tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
+    %}{%
+        %\begin{array}{c}
+        %\gpre \snap \lpre
+        %\quad \tripleL{\lpre \sep \fpE}{\trans}{\lpost \sep \fp} \\
+        %\pred{noFingerprint}{\lpre} 
+        %\quad \pred{noFingerprint}{\lpost} \\
+        %\rpt{\gpre}{\gpost}{\fp}
+        %\quad \stable{\gpre} 
+        %\quad \stable{\gpost} 
+        %\end{array}
+    %}
+%\]
 
 \[
     \infer[\rl{PRCommit}]{%
         \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
     }{%
         \begin{array}{c}
-        \gpre \snap \bar{\lpre}
-        \quad \tripleL{\bar{\lpre} \sep \fpEMP}{\trans}{\lpost \sep \fpF}
-        \quad \rpt{\gpre}{\gpost}{\fp} \\
-        \stable{\gpre} 
+        \gpre \snap \lpre
+        \quad \tripleL{\lpre \sep \fpE}{\trans}{\lpost \sep \fp} \\
+        \pred{noFingerprint}{\lpre} 
+        \quad \pred{noFingerprint}{\lpost} \\
+        \como \rpt{\gpre}{\gpost}{\fp}
+        \quad \stable{\gpre} 
         \quad \stable{\gpost} 
         \end{array}
     }
 \]
+
 
 \[
     \infer[\rl{PRAss}]{%
@@ -244,27 +272,28 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 
 \[
 \begin{rclarray}
-    \gpre \snap \bar{\lpre} & \defeq & 
+    \gpre \snap \lpre & \defeq & 
     \begin{array}[t]{@{}l}
         \for{ \w, \h, \hh, \cu, \lenv, \stk }
         \w \in \evalW{\gpre} 
-        \land (\hh, \cu) \in \eraseW{\w}
+        \land (\hh, \cu, \stub) \in \eraseW{\w}
         \land \h = \func{clps}{\hh, \cu} 
-        \implies \h \in \evalLS{\lpre}\\
+        \implies (\h, \unitO) \in \evalLS{\lpre}\\
     \end{array} \\
-    \rpt{\gpre}{\gpost}{\fp} & \defeq & 
+    \como \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l@{}}
-        \for{\w, \w', \hh, \hh', \cu, \cu', \lenv, \thstk, \txid} \\
-        \quad 
+        \for{\w, \hh, \vi, \ca, \lenv, \stk, \txid} 
+        \exsts{\w', \hh', \vi', \ca'} \\
         \begin{B}
             \w \in \evalW{\gpre}
-            \land (\hh, \cu) \in \eraseW{\w}
-            \land \txid \in \func{fresh}{\hh} \land \hh' = \func{commit}{\hh, \cu, \txid, \evalF{\fp}}  \\
-            \quad {} \land \cu' = \func{update}{\hh, \cu, \evalF{\fp}}
-            \land (\hh',\cu') \in \eraseW{\w'}
-            \land (\w, \w') \in \Guar 
+            \land (\hh, \vi, \ca) \in \eraseW{\w} 
+            \land \txid \in \func{fresh}{\hh}  \\
+            \quad {} \land \hh' = \func{commit}{\hh, \vi, \txid, \evalF{\fp}} \\
+            \quad {} \land \cu' = \func{update}{\hh, \vi, \evalF{\fp}} \\
+            \quad {} \land (\w, \w') \in \Guar  
+            \land (\hh, \Set{\vi}) \toCO{\como} (\hh', \Set{\vi'})
         \end{B}
-        \implies \w' \in \evalW{\gpost}
+        \implies (\hh',\vi', \ca) \in \eraseW{\w'} \land \w' \in \evalW{\gpost}
     \end{array} \\
 \end{rclarray}                          
 \]
