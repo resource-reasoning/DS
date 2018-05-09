@@ -1,0 +1,198 @@
+%\[
+%    \begin{session}
+%        \begin{array}{@{}c || c ||  c || c@{}}
+%            \begin{transaction}      		
+%                \pderef{\vx}{\loc_x}; \\
+%                \pifs{\vx=0} \\
+%                \quad \pmutate{\loc_y}{1}
+%            \end{transaction} & 
+%            \begin{transaction}
+%                \pderef{\vy}{\loc_y}; \\
+%                \pifs{\vx=0} \\
+%                \quad \pmutate{\loc_x}{1}
+%            \end{transaction} & 
+%            \begin{transaction}
+%                \pmutate{\loc_x}{2}
+%            \end{transaction} & 
+%            \begin{transaction}
+%                \pmutate{\loc_y}{2}
+%            \end{transaction} \\
+%        \end{array}
+%    \end{session}
+%\]
+
+
+\ac{Todo: I really need a tikz library to draw history heaps and views.}
+In this Section we present different consistency models specifications. 
+For each of them, we first give an informal specification. Then we 
+present a small program, or litmus tests, that leads to an 
+anomaly that should be forbidden by the consistency model, 
+according to the informal specification. 
+Then we give the formal definition of the consistency model 
+and we show how they rule out undesired anomalies in the litmus test. 
+
+\subsection{Read Atomic} 
+Read atomic \cite{ramp} is the weakest consistency model among 
+those that enjoy \emph{atomic visibility} \cite{concur15}. 
+It requires transactions to read an atomic snapshot of the database 
+\ac{I copied the last sentence from the RAMP paper. By atomic snapshot 
+they mean  that it appears to have been taken at a single 
+instant of time throughout the life cycle of the transaction.} 
+It also requires 
+transactions to never observe the partial effects of other transactions. 
+This is also known as the \emph{all-or-nothing} property: A transaction 
+observes either none or all the updates performed by another transaction. 
+
+The first condition is built-in in the rules of the operational semantics: transactions 
+are always executed by taking a snapshot of the database as the initial state; such a 
+snapshot is determined by the history heap, and the view of the thread that executes 
+the transaction. However, the all-or-nothing property is not enforced by the operational 
+semantics, as the following example shows: 
+\begin{example}
+Consider the following program:
+\[
+    \begin{session}
+        \begin{array}{@{}c || c@{}}
+            \begin{transaction}
+            		\pmutate{\loc_x}{1};
+            		\pmutate{\loc_y}{1};
+              \end{transaction} &
+              \begin{transaction}
+            		\pderef{\vx}{\loc_x};
+            		\pderef{\vy}{\loc_y};
+            		\pifs{\vx=1 \wedge \vy=0}\\
+            			\passign{\retvar}{\Large \frownie{}}
+             \end{transaction}
+        \end{array}
+    \end{session}
+ \]
+ \ac{Note that in this example I don't differentiate between thread stack and transaction stack}
+In the program above we committed an abuse of notation and did not insert thread identifiers. In general, 
+we assume that thread identifiers are fixed by the order in which commands appear in a parallel 
+composition. For exampe, we write $\cmd_1 \Par \cdots \Par \cmd_n$ as a shorthand for 
+$\tid_1: \cmd_1 \Par \cdots \Par \tid_{n}: \cmd_n$. 
+Also, note that the transaction for thread $\tid_2$ may return a special value ${\Large \frownie{}}$, which 
+we did not introduce before. Although in practice we could have chosen any natural number 
+to assign to $\retvar$, we use the special symbol ${\Large \frownie{}}$ to emphasise 
+the fact that the transaction gives rise to an anomaly that should not be allowed by the 
+consistency model that we are considering. In this case, this happens if the transaction 
+executed by thread $\tid_2$ observes the update of $\loc_x$ performed by 
+the transaction executed by $\tid_1$, but not the update of $\loc_y$ performed by 
+the same transaction: in this scenario, atomic visibility is violated.
+
+Next, we show that our operational semantics allows for the transaction executed 
+by $\tsid_2$ to return ${\Large \frownie{}}$. To this end, we consider the 
+most general consistency model $CM_{\mathsf{all}}$ such that 
+$(\hh, V, \mathcal{V}) \triangleright_{CM_{\mathsf{all}}} \mathcal{O}$ for all 
+$\hh, V, \mathcal{V}, \mathcal{O}$. 
+For this example, we assume tha the database consists of only two keys $\loc_x, \loc_y$.
+The initial configuration in which the program is executed is given by 
+is given by $(\hh_{0}, [\tsid_1 \mapsto (\thdstack_0, V_{0}), \tsid_2 \mapsto (\thdstack_0, V_0)]$, 
+where: 
+\begin{enumerate}
+\item $\hh_{0}([\loc_x]) = \hh_{0}([\loc_y]) = (0, \tsid_0, \emptyset)$, and $\tsid_0$ is a random transaction identifier, 
+\item $\thdstack_0 = \lambda \vx.0$ is the initial thread stack.
+\item $V_{0}([n]) = [ [\loc_x] \mapsto 0, \loc_y \mapsto 0] ]$ is the view that maps every 
+key to its initial version.
+\end{enumerate}
+Here and in the rest of the report we will give a graphical representation of views. For the configuration 
+above, we have the following: 
+\begin{center}
+\begin{tikzpicture}[font=\large]
+\node (locx) {$[\loc_x] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.east) + (0.5,0)  node (locx0) {$0$};
+\path (locx0.north east) + (0.3,0) node[font=\small] (locx0ws) {$\tsid_0$};
+\path (locx0.south east) + (0.3,0) node[font=\small] (locx0rs) {$\emptyset$};
+\path (locy.east) + (0.5,0)  node (locy0) {$0$};
+\path (locy0.north east) + (0.3,0) node[font=\small] (locy0ws) {$\tsid_0$};
+\path (locy0.south east) + (0.3,0) node[font=\small] (locy0rs) {$\emptyset$};
+
+\path(locy0.south) + (0,-1) node[font = \small, text=red] (tid1ret) {$\tid_1: \retvar = 0$};
+\path(tid1ret.south) + (0,-0.3) node[font= \small, text=blue] (tid2ret) {$\tid_2: \retvar = 0$};
+\begin{pgfonlayer}{background}
+\node[hheapcell, fit=(locx0) (locx0ws) (locx0rs)] (locx0cell) {};
+\node[hheapcell, fit=(locy0) (locy0ws) (locy0rs)] (locy0cell) {};
+
+\path[-]
+(locx0cell.north) edge (locx0cell.south)
+(locx0cell.center) edge (locx0cell.east)
+(locy0cell.north) edge (locy0cell.south) 
+(locy0cell.center) edge (locy0cell.east);
+
+\path(locx0cell.north) + (-0.5, 0.2) node(v1beforex) {};
+\path(locx0cell.south) + (-0.5, -0.1) node(v1afterx) {};
+\path(locy0cell.north) + (-0.5, 0.1) node(v1beforey) {};
+\path(locy0cell.south) + (-0.5, -0.2) node(v1aftery) {};
+\path(v1beforex.center) + (-0.25,0.15) node[font=\normalsize, text=red] (t1) {$\tid_1$};
+
+\path[-, draw=red!80, very thick]
+ (v1beforex.center) edge (v1afterx.center)
+ (v1afterx.center) edge (v1beforey.center)
+ (v1beforey.center) edge (v1aftery.center);
+ 
+ \path(locx0cell.north) + (-0.1, 0.2) node(v2beforex) {};
+\path(locx0cell.south) + (-0.1, -0.1) node(v2afterx) {};
+\path(locy0cell.north) + (-0.1, 0.1) node(v2beforey) {};
+\path(locy0cell.south) + (-0.1, -0.2) node(v2aftery) {};
+\path(v1beforex.center) + (0.6,0.15) node[font=\normalsize, text=blue] (t2) {$\tid_2$};
+
+\path[-, draw=blue!80, very thick]
+ (v2beforex.center) edge (v2afterx.center)
+ (v2afterx.center) edge (v2beforey.center)
+ (v2beforey.center) edge (v2aftery.center);
+ 
+\end{pgfonlayer}
+
+\end{tikzpicture}
+\end{center}
+In the figure above, each location is mapped to a list of version (one in this case), depicted as a cell 
+consisting of three components: the component at  the left (which is $0$ for both cells in the figure 
+above) consists of the value stored in the version of the location. The component at the top 
+left identifies the transaction that wrote such a version, while the component at the bottom left 
+includes the set of transactions that read such a version. Views of threads are represented each by a vertical  
+line that crosses a location exactly at the cell corresponding to the version to which the view points. 
+At the bottom of the picture, we also included information about the thread stack of individual threads.
+
+
+
+\end{example}
+which a transaction executes is fixed at the moment it starts. However, the 
+The weakest consistency model specification that we consider is given by \emph{Read Atomic}. 
+\ac{Following a discussion with Azalea and Shale, it looks like history heaps alone do not enforce 
+atomic visibility. I find this to be actually good, because that means that there may be some way to 
+reduce transactions in one step, while modelling non-atomic behaviours}.
+This consistency models require that transactions observe either none, or all the updates performed by 
+another transaction (i.e. they enjoy atomic visibility). 
+In terms of history heaps and views, we must ensure that views do not observe only the partial 
+effects of transactions. Given a transaction $\tsid$, if a view of a history heap points to a version of location $[n]$ that 
+is more up-to-date than the one written by some transaction $\tsid$, then we require that the 
+same property holds also for any location $[m]$ that has been written by $\tsid$.
+
+
+\begin{definition}
+We say that a view $V$ \emph{respects atomic visibility} w.r.t a history heap $\hh$ if, 
+whenever $\hh([n])(i) = (\_, \tsid, \_)$, $\hh([m])(j) = (\_, \tsid, \_)$ for some addresses 
+$[n], [m]$ and indexes $i, j$,  then $i \leq V([n])$ implies $j \leq V([n])$.
+The consistency model specification $\mathsf{RA}_{\mathcal{H}}$ is defined to be the smallest set 
+such that 
+\begin{itemize}
+\item for any history-heaps $\hh$, $\hh'$ and  $V$, $V'$, if $V$ respects atomic visibility w.r.t. 
+$\hh$, then $(\hh, \{V\}) \leadsto_{\mathsf{RA}_{\mathcal{H}}} (\hh', \{V'\})$.
+\item for any history-heaps $\hh,\hh'$ and  multi-set of views $\mathcal{V}, \mathcal{V}', 
+\mathcal{V}''$, $\mathcal{V}'' \Vdash (\hh, \mathcal{V}') \leadsto_{\mathsf{RA}_{\mathcal{H}}} 
+(\hh', \mathcal{V}')$.  
+\end{itemize}
+\ac{Hold on! I'm rethinking consistency models specifications completely. It seems that 
+the best way to specify a consistency model is given by triples of the form 
+$(\hh, V, \mathcal{V}, \mathcal{O})$, which may be interpreted as: 
+given a history heap $\hh$, a thread with view $V$ can safely execute a transaction 
+with fingerprint $\mathcal{O}$, when running in an environment where the views 
+of other threads are given by $\mathcal{V}$.) This seems to be closer in spirit 
+to what Crooks and Alvisi do as well in their PODC'17 paper.}
+
+\end{definition}
+
+\ac{Contents: Read Atomic, Causal Consistency, Update Atomic, Consistent Prefix, Parallel Snapshot Isolation, Snapshot Isolation, 
+Serializability. Well-formedness constraint to be placed on consistency models: progress must always be possible - i.e. it is 
+always possible to execute a transaction if the view of all threads are up-to-date.}  
