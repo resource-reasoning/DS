@@ -178,6 +178,7 @@ Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contain
 
 The interference \( \perm{\kap} : \exsts{\vec{\lvar}} \fp \) says if a thread holds the capability \( \perm{\kap} \), it is allowed to commit a transaction that has the fingerprint \( \fp \).
 
+\sx{Parameter of the \( \kap \)?}
 \begin{defn}[Interference]
 \label{def:intf}
 Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerprint}), the grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as the follows,
@@ -187,7 +188,7 @@ Given the fingerprint assertion \( \fp \in \Fingerprint \) (\defref{def:fingerpr
 	\emptyset \mid \Set{ \perm{\kap} :  \exsts{\vec{\lvar}} \fp } \cup \intass 
 \end{rclarray}
 \]
-The interference assertions are interpreted to a set of \emph{interference environments} that is a function from client-specified capabilities to pairs of history heaps and operations,
+The interference assertions are interpreted to a set of \emph{interference environments} that is a function from client-specified capabilities to sets of operations,
 \[
 \begin{rclarray}
     \inter \in \Interference & \defeq & \Kaps \to \powerset{\powerset{\ExtOps}}
@@ -198,79 +199,103 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \[
 \begin{rclarray}
 	\evalI{\emptyset}(\kap) & \eqdef & \emptyset \\
-	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \bar{\lpre} \mat \fp } \cup \intass }(\kap') & \eqdef &
+	\evalI{\Set{ \perm{\kap} : \exsts{\vec{\lvar}} \fp } \cup \intass }(\kap') & \eqdef &
     \begin{cases}
-    \Setcon{(\hh, \evalF[\lenv',\stk]{\fp})}{\exsts{\h} \h \in \evalLS[\lenv',\stk]{\bar{\lpre}} \land {} \\ \h = \clpsHH{\hh} } \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
+    \Setcon{\extopset}{ \exsts{\vec{\val}} \extopset \in \evalF[\lenv\rmto{\vec{\lvar}}{\vec{\val}},\stk]{\fp} } \cup \evalI{\intass}(\kap')  & \kap = \kap' \\
     \evalI{\intass}(\kap') & \text{ otherwise} \\
     \end{cases} \\
-    & & \text{where there exists a vector of values \( \vec{\val}\) such that } \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \\
 \end{rclarray}
 \] 
 \end{defn}
 
-We will write \( \intfH(\kap) \)  and \( \intfO(\kap) \) for the first and second projections of all the elements.
+%\begin{defn}[Labelled transition system]
+%\label{def:labelled-transition-system}
+%The labelled transition system is a tuple \( ( \hhset \times \cuset, \opsetset,\toLTS{}, \hhset_{0} \times \cuset_{0}, \como) \) consisting of pairs of history heaps and cuts \( \hhset \times \cuset \), a set of sets of operations \( \opsetset \subseteq \Opsets \), a relation \( \toLTS{} : \HisHeaps \times \Opsets \times \HisHeaps \), a set of initial history heaps and cuts \( \hhset_{0} \times \cuset_{0} \) and the consistency model associated with the transition system \( \como \).
+%Assume all the initial abstract executions satisfies the consistency model.
+%The relation \( \toLTS{}\) is defined as the follows,
+%\[
+%\begin{rclarray}
+    %(\hh, \cu) \toLTS{\opset} (\hh',\cu') & \defeq &
+    %\begin{array}[t]{@{}l}
+        %\exsts{\thcu, \thcu', \txid, \thid}
+        %\txid \in \func{fresh}{\hh} 
+        %\land \hh' = \func{commit}{\hh, \cu, \txid, \opset} 
+        %\land \cu' = \func{update}{\hh', \cu, \opset} \\
+        %\quad {} \land ((\hh,\thcu),(\hh',\thcu')) \in \como
+        %\land \h = \clpsHH{\hh,\cu} 
+        %\land \thcu(\thid) = \cu 
+        %\land \thcu'(\thid) = \cu' \\
+        %\quad {} \land \for{\addr,\val} (\otR, \addr, \val)  \in \opset \implies \h(\addr) = \val
+    %\end{array}
+%\end{rclarray}
+%\]
+%\end{defn}
 
-\begin{defn}[Labelled transition system]
+\begin{defn}[Invariant of a region]
 \label{def:labelled-transition-system}
-The labelled transition system is a tuple \( ( \hhset \times \cuset, \opsetset,\toLTS{}, \hhset_{0} \times \cuset_{0}, \como) \) consisting of pairs of history heaps and cuts \( \hhset \times \cuset \), a set of sets of operations \( \opsetset \subseteq \Opsets \), a relation \( \toLTS{} : \HisHeaps \times \Opsets \times \HisHeaps \), a set of initial history heaps and cuts \( \hhset_{0} \times \cuset_{0} \) and the consistency model associated with the transition system \( \como \).
-Assume all the initial abstract executions satisfies the consistency model.
-The relation \( \toLTS{}\) is defined as the follows,
+\label{def:invariant-region}
+\label{def:world2aexec}
+\label{def:state2aexec}
+Assuming a global function, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps \times \powerset{\Views} } \) that returns initial history heaps and sets of views for regions, the invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system with respect to \( \intf \), where the initial states \( \func{init}{\rid}\), the configuration is a pair of history heap \( \hh \in \hhset \) and a set of views \( \viset \in \visetset \) and labels are client-specified capabilities \( \kap \).
 \[
 \begin{rclarray}
-    (\hh, \cu) \toLTS{\opset} (\hh',\cu') & \defeq &
+    \func{inv}{\rid, \intf} & \defeq & (\hhset \times \visetset, \toLTS{}, \func{init}{\rid}, \kapset) \\
+\end{rclarray}
+\]
+The transition system is the least fix point from the relation \( {} \toLTS{.} {} : (\HisHeaps \times \powerset{\Views}) \times \Kaps \times (\HisHeaps \times \powerset{\Views}) \) given the set of initial configurations \( \func{init}{\rid} \subseteq \HisHeaps \times \powerset{\Views} \).
+The relation \( \toLTS{.} \) is defined as the follows,
+\[
+\begin{rclarray}
+    (\hh, \viset \uplus \Set{\vi} ) \toLTS{\kap} (\hh',\viset \uplus \Set{\vi'}) & \defeq &
     \begin{array}[t]{@{}l}
-        \exsts{\thcu, \thcu', \txid, \thid}
+        \exsts{\txid, \opset} 
         \txid \in \func{fresh}{\hh} 
-        \land \hh' = \func{commit}{\hh, \cu, \txid, \opset} 
-        \land \cu' = \func{update}{\hh', \cu, \opset} \\
-        \quad {} \land ((\hh,\thcu),(\hh',\thcu')) \in \como
-        \land \h = \clpsHH{\hh,\cu} 
-        \land \thcu(\thid) = \cu 
-        \land \thcu'(\thid) = \cu' \\
-        \quad {} \land \for{\addr,\val} (\otR, \addr, \val)  \in \opset \implies \h(\addr) = \val
+        \land \opset \in \intf(\kap) \\
+        \quad {} \land \hh' = \func{commit}{\hh, \vi, \txid, \opset} 
+        \land \cu' = \func{update}{\hh', \vi, \opset} \\
     \end{array}
 \end{rclarray}
 \]
 \end{defn}
- 
-\sx{ Need a standard way to say it is the least fixed point given the initial states and operations }
 
-\begin{defn}[Invariant a region]
-\label{def:invariant-region}
-\label{def:world2aexec}
-\label{def:state2aexec}
-Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps \times \Cuts } \) that returns initial history heaps and cuts for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated to regions.
-The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system where the initial state is \( \func{init}{\rid}\) and all the operations are included in the interference.
-\[
-\begin{rclarray}
-    \func{inv}{\rid, \intf} & \defeq & (\hhset \times \cuset, \Setcon{\opset}{\exsts{\kap} \opset \in \intfO(\kap)}, \toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
-\end{rclarray}
-\]
-\end{defn}
+%\begin{defn}[Invariant of a region]
+%\label{def:invariant-region}
+%\label{def:world2aexec}
+%\label{def:state2aexec}
+%Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps \times \powerset{\Views} } \) that returns initial history heaps and sets of views for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated to regions.
+%The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system where the initial state is \( \func{init}{\rid}\) and all the operations are included in the interference.
+%\[
+%\begin{rclarray}
+    %\func{inv}{\rid, \intf} & \defeq & (\hhset \times \cuset, \Setcon{\opset}{\exsts{\kap} \opset \in \intfO(\kap)}, \toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
+%\end{rclarray}
+%\]
+%\end{defn}
 
-For brevity, \( (\hh,\cu) \in \func{inv}{\rid, \intf} \) denotes \( (\hh,\cu) \in \func{inv}{\rid,\intf}\projection{1} \), and similarly \( (\hh,\cu) \toLTS{\opset} (\hh',\cu') \in \func{inv}{\rid, \intf} \).
+%For brevity, \( (\hh,\cu) \in \func{inv}{\rid, \intf} \) denotes \( (\hh,\cu) \in \func{inv}{\rid,\intf}\projection{1} \), and similarly \( (\hh,\cu) \toLTS{\opset} (\hh',\cu') \in \func{inv}{\rid, \intf} \).
 
-\sx{This well form condition allows one to write weaker interference, \eg interference satisfies both SI and SER but to prove the correctness of SER. It is fine since logic only need to be sound?}
+%\sx{This well form condition allows one to write weaker interference, \eg interference satisfies both SI and SER but to prove the correctness of SER. It is fine since logic only need to be sound?}
+%\begin{defn}[Well-form of a region]
+%\label{def:well-form-region}
+%The well-form condition of the interference, namely \( \pred{wfintf}{\rid, \intf} \) predicate, assertions for any concrete events \( \opset \), the state before the events must be included in the interference.
+%\[
+%\begin{rclarray}
+    %\pred{wfintf}{\rid, \intf} & \defeq & 
+    %\begin{array}[t]{@{}l}
+        %\for{\hh, \hh', \opset} 
+        %(\hh, \stub) \toLTS{\opset} (\hh',\stub) \in \func{inv}{\rid, \intf} 
+        %\implies \exsts{ \kap}
+        %(\hh, \opset ) \in \intf( \kap )
+    %\end{array} \\
+%\end{rclarray}
+%\]
+%\end{defn}
 
-\begin{defn}[Well-form of a region]
-\label{def:well-form-region}
-The well-form condition of the interference, namely \( \pred{wfintf}{\rid, \intf} \) predicate, assertions for any concrete events \( \opset \), the state before the events must be included in the interference.
-\[
-\begin{rclarray}
-    \pred{wfintf}{\rid, \intf} & \defeq & 
-    \begin{array}[t]{@{}l}
-        \for{\hh, \hh', \opset} 
-        (\hh, \stub) \toLTS{\opset} (\hh',\stub) \in \func{inv}{\rid, \intf} 
-        \implies \exsts{ \kap}
-        (\hh, \opset ) \in \intf( \kap )
-    \end{array} \\
-\end{rclarray}
-\]
-\end{defn}
+
+For brevity, \( (\hh,\vi) \in \func{inv}{\rid, \intf} \), where \( \vi \) is a single view, denotes \( \exsts{\viset } \vi \in \viset \land (\hh,\viset) \in \func{inv}{\rid,\intf}\projection{1} \), and similarly \( (\hh,\vi) \toLTS{\kap} (\hh',\vi') \in \func{inv}{\rid, \intf} \) for the second projection.
 
 \begin{definition}[Worlds]
 \label{def:world}
-Given the set of history heaps $\HisHeaps$ (\defref{def:his_heap}) and region identifiers \( \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \parfun \HisHeaps \times \Cuts \times \Interference \).
+Given the set of history heaps $\HisHeaps$ (\defref{def:his_heap}), views \( \Views \) (\defref{def:views}), capabilities \( \Caps\) (\defref{def:capabilities}) and region identifiers \( \RegionID \), the set of \emph{shared states} is \( \SStates \eqdef \RegionID \parfun \HisHeaps \times \Views \times \Caps \times \Interference \).
 Each region has its current state and the interference.
 The \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as $\composeS \eqdef \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$,
 %
@@ -283,32 +308,33 @@ The \emph{shared state composition function}, $\composeS: \SStates \times \SStat
 	\end{cases}
 \end{rclarray}
 \]
-A \emph{world} \( \w \in \World \) is a pair of a shared state \( \gs \) and capabilities \( \ca \) (\defref{def:capabilities}) such that regions are associated with the same consistency model and the entire shared state must be well-form, \ie \(\eraseS{\gs}\) contains at least one element.
-Specifically, it requires regions are disjointed with each other, their states are included in the invariants and the interferences are well-form.
+A \emph{world} \( \w \in \World \) is a pair of capabilities \( \ca \) (\defref{def:capabilities}) and a shared state \( \gs \) from which regions are well-formed and associated with disjointed part of history heaps, and separately capabilities are compatible.
+Note that these constraints can be derived by \(\eraseS{(\ca, \gs)}\) contains at least one element.
+Finally, there is no garbage capability.
 \[
 \begin{rclarray}
 	\world \in \World  & \eqdef & 
     \Setcon{
         (\ca, \gs) 
     }{ 
+        \exsts{\ca'}
         \ca \in \Caps 
         \land \gs \in \SStates
-        \land \eraseS{\gs} \neq \emptyset
-        \land \dom(\ca) \subseteq \dom(\gs) \\
-        \quad {} \land \for{\rid, \rid'}
-        \func{como}{\rid} = \func{como}{\rid'} \\
+        \land (\stub, \stub, \ca') \in \eraseS{(\ca,\gs)}
+        \land \dom(\ca') \subseteq \dom(\gs) 
     }
 \end{rclarray}
 \]
-The function, \( \eraseS{.} : \SStates \parfun \powerset{\HisHeaps \times \Cuts} \), erases the region identifiers from the shared state as the follows,
+The function, \( \eraseW{.} : \Caps \times \SStates \parfun \powerset{\HisHeaps \times \Views} \), ensure the states of regions satisfy their invariants, erases the region identifiers from the shared state and them compose the states point-wise.
 \[
 \begin{rclarray}
-    \eraseS{\emptyset} & \defeq & \Set{(\unitHH, \unitCU)} \\
-    \eraseS{\Set{\rid \mapsto (\hh, \cu, \intf)} \uplus \gs } & \defeq & 
+    \eraseW{(\ca, \gs)} & \defeq & \Setcon{(\hh, \vi, \ca \composeC \ca')}{(\hh, \vi, \ca \composeC \ca') \in \func{clpsSS}{\gs}} \\
+    \func{clpsSS}{\emptyset} & \defeq & \Set{(\unitHH, \unitVI, \unitC )} \\
+    \func{clpsSS}{\Set{\rid \mapsto (\hh, \vi, \ca, \intf)} \uplus \gs } & \defeq & 
         \Setcon{ 
-            (\hh \composeHH \hh', \cu \composeCU \cu') 
+            (\hh \composeHH \hh', \vi \composeCU \vi', \ca \composeC \ca') 
         }{ 
-            \dom(\hh) = \dom(\cu) \land (\hh,\cu) \in \func{inv}{\rid, \intf} \\ \quad {} \land \pred{wfintf}{\rid, \intf} \land (\hh',\cu') \in \eraseS{\gs} }\\
+            \dom(\hh) = \dom(\cu) \land (\hh,\cu) \in \func{inv}{\rid, \intf} \\ \quad {} \land (\hh', \vi', \ca') \in \eraseS{\gs} }\\
 \end{rclarray}
 \] 
 % 
@@ -317,8 +343,8 @@ The \emph{world unit set} is $\unitW \eqdef \Setcon{(\ca, \gs)}{(\ca, \gs) \in \
 The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
 \end{definition}
 
-We also use the notation \( \eraseW{.}\) for a world, which denotes to erase the shared state, \ie \( \eraseW{(\ca, \gs)} \defeq \eraseS{\gs}\).
-Because the well-form condition requires all the regions in a world must associate with the same consistency model, so we write \( \func{como}{\w} \) for the model.
+%We also use the notation \( \eraseW{.}\) for a world, which denotes to erase the shared state, \ie \( \eraseW{(\ca, \gs)} \defeq \eraseS{\gs}\).
+%Because the well-form condition requires all the regions in a world must associate with the same consistency model, so we write \( \func{como}{\w} \) for the model.
 
 %\begin{defn}[Invariant of worlds]
 %Because regions in a well-defined world must disjointed with each other and have the same consistency model, the invariants of regions can be lifted to a world,
@@ -338,17 +364,64 @@ Because the well-form condition requires all the regions in a world must associa
 %\]
 %\end{defn}
 
+%\begin{definition}[Assertions]
+%\label{def:assertion}
+%Assume standard separation logic assertion \( \bar{\lpre}, \bar{\lpost }\) (the local assertion \( \LAst \) without fingerprint) and the interpretation function, The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
+%\[
+%\begin{rclarray}
+	%\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \sptboxass{\bar{\lpre}}{\bar{\lpost}}{\lrid}{\intass}\\
+%\end{rclarray}
+%\]
+%%
+%where $\lvar, \lrid \in \LVar$, $\lexpr_1, \lexpr_2 \in \LExpr$ (\defin\ref{def:local_assertions}), $\kap \in \Kaps$ (\defin\ref{def:capabilities}) and $\intass \in \IAst$ (\defin\ref{def:intf}).
+%Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{assertion interpretation} function, $\evalW[(., .)]{.}: \Ast \times \LEnv \times \Stacks \to \powerset{\World}$, is defined as follows:
+%%
+%\[
+%\begin{rclarray}
+	%\evalW{\False} & \defeq & \emptyset \\
+	%\evalW{\True} & \defeq & \World \\
+	%\evalW{\emp} & \defeq & \unitW \\
+	%\evalW{\gpre \land \gpost} & \defeq & \evalW{\gpre} \cap \evalW{\gpost} \\
+	%\evalW{\gpre \lor \gpost} & \defeq & \evalW{\gpre} \cup \evalW{\gpost} \\ 
+	%\evalW{\exsts{\lvar}  \gpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}} \evalW[\lenv\remapsto{\lvar}{\val}, \stk]{\gpre} \\
+	%\evalW{\gpre \implies \gpost} & \defeq & \Setcon{\w}{\w \in \evalW{\gpre} \implies \w \in \evalW{\gpost}} \\
+	%\evalW{\cass{\kap}{\lrid}} & \defeq & \Setcon{ (\Set{\lrid \mapsto \kap}, \gs) }{\gs \in \SStates} \\
+	%\evalW{ \gpre \sep \gpost } & \defeq & 
+	%\Setcon{
+	   %(\world_1 \composeW \world_2) 
+    %}{
+       %\world_1 \in \evalW{\gpre} \land \world_2 \in \evalW{\gpost}
+	%} \\
+	%\evalW{ \sptboxass{\bar{\lpre}}{\bar{\lpost}}{\lrid}{\intass} } & \defeq & 
+    %\Setcon{
+        %(\ca,\Set{\lrid \mapsto (\hh, \cu, \evalI{\intass})} \uplus \gs)
+    %}{         
+        %\exsts{\h_{p}, \h_{q}}
+        %\ca \in \unitC 
+        %\land \h_{q} \in \evalLS{\bar{\lpost}}
+        %\land \h_{q} = \func{clps}{\hh, \cu} \\
+        %\quad {} \land \h_{p} \in \evalLS{\bar{\lpre}}
+        %\land \h_{p} = \func{clps}{\hh} 
+    %} \\
+%\end{rclarray}
+%\]
+%\end{definition}
+%We will write \( \boxass{\bar{\lpre}}{\lrid}{\intass} \) as a short-hand for \( \sptboxass{\bar{\lpre}}{\bar{\lpre}}{\lrid}{\intass} \) and \(\expr \pt N\) for \( \exsts{\nat \in N} \expr \pt \nat\) where \( N \subseteq \Val\).
+
+\sx{Explain here: box assertion, local part, shared part, intuitively how they get interpreted}
+
 \begin{definition}[Assertions]
 \label{def:assertion}
-Assume standard separation logic assertion \( \bar{\lpre}, \bar{\lpost }\) (the local assertion \( \LAst \) without fingerprint) and the interpretation function, The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
+The set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
 \[
 \begin{rclarray}
-	\gpre , \gpost & \defeq & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \sptboxass{\bar{\lpre}}{\bar{\lpost}}{\lrid}{\intass}\\
+    \bar{\lpre}, \bar{\lpost} & ::= & \False \mid \True \mid \bar{\lpre} \land \bar{\lpost} \mid \bar{\lpre} \lor \bar{\lpost} \mid \exsts{\lvar} \bar{\lpre} \mid \bar{\lpre} \implies \bar{\lpost} \mid \assemp \mid \cass{\kap}{\lrid} \mid \lexpr \pt \lexpr \mid \bar{\lpre} \sep \bar{\lpost} \\
+	\gpre , \gpost & ::= & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \boxass{\bar{\lpre}}{\lrid}{\intass}\\
 \end{rclarray}
 \]
 %
 where $\lvar, \lrid \in \LVar$, $\lexpr_1, \lexpr_2 \in \LExpr$ (\defin\ref{def:local_assertions}), $\kap \in \Kaps$ (\defin\ref{def:capabilities}) and $\intass \in \IAst$ (\defin\ref{def:intf}).
-Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{assertion interpretation} function, $\evalW[(., .)]{.}: \Ast \times \LEnv \times \Stacks \to \powerset{\World}$, is defined as follows:
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{assertion interpretation} function, $\evalW[(., .)]{.}: \Ast \times \LEnv \times \Stacks \to \powerset{\World}$, is defined as follows,
 %
 \[
 \begin{rclarray}
@@ -359,27 +432,35 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 	\evalW{\gpre \lor \gpost} & \defeq & \evalW{\gpre} \cup \evalW{\gpost} \\ 
 	\evalW{\exsts{\lvar}  \gpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}} \evalW[\lenv\remapsto{\lvar}{\val}, \stk]{\gpre} \\
 	\evalW{\gpre \implies \gpost} & \defeq & \Setcon{\w}{\w \in \evalW{\gpre} \implies \w \in \evalW{\gpost}} \\
-	\evalW{\cass{\kap}{\lrid}} & \defeq & \Setcon{ (\Set{\lrid \mapsto \kap}, \gs) }{\gs \in \SStates} \\
+	\evalW{\cass{\kap}{\lrid}} & \defeq & \Setcon{ (\Set{\lrid \mapsto \evalI{\kap}}, \gs) }{\gs \in \SStates} \\
 	\evalW{ \gpre \sep \gpost } & \defeq & 
 	\Setcon{
 	   (\world_1 \composeW \world_2) 
     }{
        \world_1 \in \evalW{\gpre} \land \world_2 \in \evalW{\gpost}
 	} \\
-	\evalW{ \sptboxass{\bar{\lpre}}{\bar{\lpost}}{\lrid}{\intass} } & \defeq & 
+	\evalW{ \boxass{\bar{\lpre}}{\lrid}{\intass} } & \defeq & 
     \Setcon{
-        (\ca,\Set{\lrid \mapsto (\hh, \cu, \evalI{\intass})} \uplus \gs)
+        (\ca, \gs)
     }{         
-        \exsts{\h_{p}, \h_{q}}
+        \exsts{\hh, \vi, \ca', \intf}
         \ca \in \unitC 
-        \land \h_{q} \in \evalLS{\bar{\lpost}}
-        \land \h_{q} = \func{clps}{\hh, \cu} \\
-        \quad {} \land \h_{p} \in \evalLS{\bar{\lpre}}
-        \land \h_{p} = \func{clps}{\hh} 
+        \land \intf = \evalI{\intass} 
+        \land \gs(\lrid) = (\hh, \vi, \ca', \intf) \\
+        \quad {} \land (\hh, \vi, \ca') \in \func{intp}{\bar{\lpre}, \lenv, \stk} 
+        \land (\hh, \vi) \in \func{inv}{\lrid, \intf}
     } \\
+    \\
+    \func{intp}{\assfalse,\lenv,\stk} & \defeq & \emptyset \\
+    \func{intp}{\asstrue,\lenv,\stk} & \defeq & \HisHeaps \times \Views \times \Caps \\
+    \func{intp}{\assemp,\lenv,\stk} & \defeq & \Setcon{ (\unitHH, \unitVI, \ca) }{\ca \in \unitC } \\
+    \func{intp}{\bar{\lpre} \land \bar{\lpost},\lenv,\stk} & \defeq & \func{intp}{\bar{\lpre},\lenv,\stk} \cap \func{intp}{\bar{\lpost},\lenv,\stk} \\ 
+    \func{intp}{\bar{\lpre} \lor \bar{\lpost},\lenv,\stk} & \defeq & \func{intp}{\bar{\lpre},\lenv,\stk} \cup \func{intp}{\bar{\lpost},\lenv,\stk} \\ 
+    \func{intp}{\exsts{\lvar} \bar{\lpre},\lenv,\stk} & \defeq & \bigcup\limits_{\val \in \Val} \func{intp}{\bar{\lpre}, \lenv\rmto{\lvar}{\val}, \stk} \\
+    \func{intp}{\bar{\lpre} \implies \bar{\lpost},\lenv,\stk} & \defeq & \Setcon{ (\hh, \vi, \ca) }{ (\hh, \vi, \ca) \in \func{intp}{\bar{\lpre},\lenv,\stk} \implies (\hh, \vi, \ca) \in \func{intp}{\bar{\lpost},\lenv,\stk} }\\
+    \func{intp}{\cass{\kap}{\lrid},\lenv,\stk} & \defeq & \Set{ (\unitHH, \unitVI, \Set{\lrid \mapsto \evalC{\kap}}) }\\
+    \func{intp}{\lexpr_{1} \pt \lexpr_{2},\lenv,\stk} & \defeq & \Setcon{ (\hh, \vi, \ca) }{\ca \in \unitC \land \Set{ \evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}} } = \clpsHH{\hh, \vi} }\\
+    \func{intp}{\bar{\lpre} \sep \bar{\lpost},\lenv,\stk} & \defeq & \Setcon{ (\hh \composeHH \hh', \vi \composeVI \vi', \ca \composeC \ca') }{ (\hh, \vi, \ca) \in \func{intp}{\bar{\lpre},\lenv,\stk} \land (\hh', \vi', \ca') \in \func{intp}{\bar{\lpost},\lenv,\stk} }\\
 \end{rclarray}
 \]
 \end{definition}
-
-We will write \( \boxass{\bar{\lpre}}{\lrid}{\intass} \) as a short-hand for \( \sptboxass{\bar{\lpre}}{\bar{\lpre}}{\lrid}{\intass} \) and \(\expr \pt N\) for \( \exsts{\nat \in N} \expr \pt \nat\) where \( N \subseteq \Val\).
-
