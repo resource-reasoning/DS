@@ -1041,7 +1041,9 @@ because we agreed to remove thread identifiers.}
 \[
 \infer[{\scriptstyle(Tx-exec)}]{\langle \hh, \thdstack, V, [\trans].\cmd \rangle \xrightarrow{\mathcal{O}} \langle \hh', \thdstack', V', \cmd \rangle}
 {\begin{array}{c}
-\thdstack \vdash \langle \txstack_{0}, \heap, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \txstack, \_, \mathcal{O}, \nil \rangle \\
+h = \snapshot(\hh, V) \qquad 
+\thdstack \vdash \langle \txstack_{0}, \heap, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \txstack, \_, \mathcal{O}, \nil \rangle 
+\\
 %(\hh, V) \leadsto_{CM} (\hh', V') \\
 \qquad
 \hh' = \mathsf{HHupdate}(\hh, V, \mathcal{O}) \qquad V' = \mathsf{ViewUpdate}(\hh, V, \mathcal{O}) \qquad 
@@ -1461,6 +1463,298 @@ The rule for the parallel composition of programs is defined below:
 %notion of history equivalences found in the literature - conflict equivalence, history equivalence, view equivaence, $\cdots$, 
 %which are way too fine-grained for our purposes.}
 %\bibliography{bibliography2}
+
+\subsection{Operational Semantics: Example} 
+To conclude our discussion on the operational semantics, 
+we show in detail one possible computation of a program consisting 
+of two transactions executing in parallel.  
+The program $\prog_1$ that we consider is illustrated below: 
+\[
+    \begin{session}
+        \begin{array}{@{}c || c@{}}
+            \begin{transaction}
+            		 \pmutate{\loc_x}{1};\\
+            		 \pmutate{\loc_y}{1};
+              \end{transaction} &
+              \begin{transaction}
+            		\pderef{\pvar{a}}{\loc_x};\\
+            		\pderef{\pvar{b}}{\loc_y};\\
+            		\pifs{\pvar{a}=1 \wedge \pvar{b}=0}\\
+            			\;\;\;\;\passign{\retvar}{\Large \frownie{}}
+             \end{transaction}
+        \end{array}
+    \end{session}
+ \]
+Note also that we omitted thread identifiers for commands in $\prog_1$. In general,  
+we often write $\cmd_1 \Par \cdots \cmd_n$ as a shorthand for $\tid_1: \cmd_1 \Par \cdots 
+\tid_n: \cmd_n$. 
+
+The program $\prog_1$ contains a special symbol ${\Large \frownie{}}$ which can be 
+returned by the transaction of $\tid_2$. 
+In practice, this can be an arbitrary fixed value that can be returned by a transaction. 
+However, by using the symbol ${\Large \frownie{}}$ as the return value for the transaction, 
+we want to emphasize the fact that the transaction exhibited some undesirable behaviour. In 
+this case, the undesirable behaviour corresponds to the transaction on the right hand side 
+observing only one of the updates that can be executed by the transaction on the left hand side. 
+
+Although this behaviour clearly violates the constraints that transactions should be executed atomically, 
+we show that if no restrictions are placed on the consistency model specification, 
+it is possible to execute $\prog_1$ and reach a configuration where the transaction executed by 
+$\tid_2$ returns ${\Large \frownie{}}$. To this end, let $CM$ be the most permissive 
+consistency model, i.e. $(\hh, V, \mathcal{V}) \triangleright_{CM} \mathcal{O}$ for any 
+$\hh, V, \mathcal{V}, \mathcal{O}$. 
+
+Before showing the computation of $\prog_1$ that leads to the transaction of 
+$\tid_2$ to return ${\Large \frownie{}}$, we need to introduce some 
+definitions and  notation.
+The initial configuration in which $\prog_1$ is executed is the one in which 
+each key has an initial version written by some initialisation transaction $\tsid_0$, 
+the view of each thread points to the initial version of each location, and all the  
+thread stacks are initialised to $0$. Assuming that the only key in the database 
+are $[\loc_x], [\loc_y]$, and the only variable in the thread stack is $\retvar$, 
+the initial configuration is then given by $\mathcal{C}_0 = (\hh_{0}, \mathsf{Env}_0)$, 
+where $\hh_{0}([\loc_{x}) = \hh_{0}([\loc_y]) =  (0, \tsid_0, \emptyset)$,  
+$\mathsf{Env}_0(\tid_1) = \mathsf{Env}_0(\tid_2) = ([\retvar \mapsto 0], V_0)$, 
+and $V_0([\loc_{x}]) = V_0([\loc_{y}]) = 0$. Here and in the following, we prefer 
+to adopt a more graphical notation for configurations. For example, the initial configuration 
+defined above can also be represented graphically as follows: 
+\begin{center}
+\begin{tikzpicture}[font=\large]
+\node (locx) {$[\loc_x] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.east) + (0.5,0)  node (locx0) {$0$};
+\path (locx0.north east) + (0.4,0) node[font=\small] (locx0ws) {$\tsid_0$};
+\path (locx0.south east) + (0.4,0) node[font=\small] (locx0rs) {$\emptyset$};
+\path (locy.east) + (0.5,0)  node (locy0) {$0$};
+\path (locy0.north east) + (0.4,0) node[font=\small] (locy0ws) {$\tsid_0$};
+\path (locy0.south east) + (0.4,0) node[font=\small] (locy0rs) {$\emptyset$};
+
+\path (locy.south west) + (-0.7, -0.6) node (dashlinestart) {};
+\path (dashlinestart.center) + (5, 0) node (dashlineend) {};
+
+\path(locy0.south) + (0,-1) node[font = \small, text=red] (tid1ret) {$\tid_1: \retvar = 0$};
+\path(tid1ret.south) + (0,-0.3) node[font= \small, text=blue] (tid2ret) {$\tid_2: \retvar = 0$};
+
+\begin{pgfonlayer}{background}
+
+\path[-, dashed, thick] (dashlinestart.center) edge (dashlineend.center);
+
+\node[hheapcell, fit=(locx0) (locx0ws) (locx0rs)] (locx0cell) {};
+\node[hheapcell, fit=(locy0) (locy0ws) (locy0rs)] (locy0cell) {};
+
+\path[-]
+(locx0cell.north) edge (locx0cell.south)
+(locx0cell.center) edge (locx0cell.east)
+(locy0cell.north) edge (locy0cell.south) 
+(locy0cell.center) edge (locy0cell.east);
+
+\path(locx0cell.north) + (-0.5, 0.2) node(v1beforex) {};
+\path(locx0cell.south) + (-0.5, -0.1) node(v1afterx) {};
+\path(locy0cell.north) + (-0.5, 0.1) node(v1beforey) {};
+\path(locy0cell.south) + (-0.5, -0.2) node(v1aftery) {};
+\path(v1beforex.center) + (-0.25,0.15) node[font=\normalsize, text=red] (t1) {$\tid_1$};
+
+\path[-, draw=red!80, very thick]
+ (v1beforex.center) edge (v1afterx.center)
+ (v1afterx.center) edge (v1beforey.center)
+ (v1beforey.center) edge (v1aftery.center);
+ 
+ \path(locx0cell.north) + (-0.1, 0.2) node(v2beforex) {};
+\path(locx0cell.south) + (-0.1, -0.1) node(v2afterx) {};
+\path(locy0cell.north) + (-0.1, 0.1) node(v2beforey) {};
+\path(locy0cell.south) + (-0.1, -0.2) node(v2aftery) {};
+\path(v1beforex.center) + (0.6,0.15) node[font=\normalsize, text=blue] (t2) {$\tid_2$};
+
+\path[-, draw=blue!80, very thick]
+ (v2beforex.center) edge (v2afterx.center)
+ (v2afterx.center) edge (v2beforey.center)
+ (v2beforey.center) edge (v2aftery.center);
+ 
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+In the picture above, the part above the dashed line represents the history heap and 
+view of each thread, while the part below the dashed line contains the thread-stack 
+of each thread. History heaps are represented as mappings to locations to lists of cells, 
+each of which represents a version and has three component: the value of the version 
+to the left, the identifier of the transaction that wrote it to the top right, and the 
+set of transactions that read the version to the bottom right. Vertical lines labelled 
+with thread identifiers are used to represent the views. The position of the view of 
+thread $\tid_1$ relatively to the location $[\loc_x]$ is determined by the version 
+at which the vertical line labelled $\tid_1$ crosses the list of versions for $[\loc_x]$,
+ and similarly for $[\loc_y]$.
+
+We are now ready to show how to derive the computation of $\prog_1$ that 
+violates atomic visibility. First, we reduce the transaction of the thread 
+to the left hand side, $\tid_1$. According to rule $(Tx-exec)$, we first need 
+to determine the snapshot obtained from the history heap $\hh_{0}$ and the 
+view $V_0$ of $\tid_1$: this snapshot corresponds to the heap $h_0 = [ [\loc_x] \mapsto 0, 
+[\loc_y] \mapsto 0]$. Note that $h_0$ can be determined easily from the graphical 
+representation of $\mathcal{C}_0$, by simply looking at the value of the versions at 
+which the view of $\tid_1$ intersects the list of versions of the respective location.
+Once the heap $h_0$ has been determined, we determine the fingerprint of the 
+transaction of $\tid_1$ by running it under the heap $h_0$. By applying twice Rule 
+$(prim-t-fp)$ we obtain the following derivation: 
+\begin{equation}
+\label{eq:tx1}
+\begin{array}{llcll}
+&\left\langle h_0, \_, \emptyset, \begin{array}{l}
+\pmutate{\loc_x}{1};\\ \pmutate{\loc_y}{1} \end{array} \right\rangle 
+&\rightarrow& \left \langle h_0[ [\loc_x] \mapsto 1], \_, \emptyset \oplus \WR\; [\loc_x]: 1, 
+\pmutate{\loc_y}{1} \right\rangle &= \\
+=&\left \langle h_0[[\loc_x] \mapsto 1], \_, \{\WR\; [\loc_x]: 1\}, 
+\pmutate{\loc_y}{1} \right\rangle 
+&\rightarrow& 
+\left\langle h_0[[\loc_x \mapsto_1, \loc_y \mapsto 1], \_, \begin{array}{c} \{\WR\;[\loc_x]:1\} \oplus\\  (\WR\;[\loc_y]: 1) \end{array}, 
+\nil \right\rangle & = \\
+=&\left \langle \_, \_, \{\WR\;[\loc_x]: 1, \WR\;[\loc_y]:1 \}, \nil \right\rangle
+\end{array}
+\end{equation}
+We can now apply rules $(tx-exec), (p-thd-exec)$ and $(p-par-L)$, in this order, 
+to infer how the computation given in \eqref{eq:tx1} affects the whole program $\prog_1$. Here the most important 
+derivation is the one obtained by applying rule $(tx-exec)$. This rule, in fact, states that the history 
+heap $\hh_0$ and the view $V_0$ of $\tid_1$ must be updated to reflect the effects of the 
+transaction $\hh_1$. This leads to a history heap $\hh_1$ where a new version is appended for 
+both locations $\loc_x, \loc_y$. The view of $\tid_1$ is also updated as to point to the versions 
+that the thread $\tid_1$ just installed for the locations $\loc_1, \loc_2$. According to rule 
+$(p-par-L)$, the view of the thread $\tid_2$ is left unchanged by executing a transaction in $\tid_1$. 
+Graphically, we have the following transition: 
+\begin{center}
+\begin{tikzpicture}[font=\large]
+\begin{pgfonlayer}{foreground}
+\node (locx) {$[\loc_x] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.east) + (0.5,0)  node (locx0) {$0$};
+\path (locx0.north east) + (0.4,0) node[font=\small] (locx0ws) {$\tsid_0$};
+\path (locx0.south east) + (0.4,0) node[font=\small] (locx0rs) {$\emptyset$};
+\path (locy.east) + (0.5,0)  node (locy0) {$0$};
+\path (locy0.north east) + (0.4,0) node[font=\small] (locy0ws) {$\tsid_0$};
+\path (locy0.south east) + (0.4,0) node[font=\small] (locy0rs) {$\emptyset$};
+
+\path (locy.south west) + (0, -0.6) node (dashlinestart) {};
+\path (dashlinestart.center) + (3.5, 0) node (dashlineend) {};
+
+\path(locy0.south) + (0,-1) node[font = \small, text=red] (tid1ret) {$\tid_1: \retvar = 0$};
+\path(tid1ret.south) + (0,-0.3) node[font= \small, text=blue] (tid2ret) {$\tid_2: \retvar = 0$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{main}
+
+\path[-, dashed, thick] (dashlinestart.center) edge (dashlineend.center);
+
+\node[hheapcell, fill=white, fit=(locx0) (locx0ws) (locx0rs)] (locx0cell) {};
+\node[hheapcell, fill=white, fit=(locy0) (locy0ws) (locy0rs)] (locy0cell) {};
+
+\path[-]
+(locx0cell.north) edge (locx0cell.south)
+(locx0cell.center) edge (locx0cell.east)
+(locy0cell.north) edge (locy0cell.south) 
+(locy0cell.center) edge (locy0cell.east);
+
+\path(locx0cell.north) + (-0.5, 0.2) node(v1beforex) {};
+\path(locx0cell.south) + (-0.5, -0.1) node(v1afterx) {};
+\path(locy0cell.north) + (-0.5, 0.1) node(v1beforey) {};
+\path(locy0cell.south) + (-0.5, -0.2) node(v1aftery) {};
+\path(v1beforex.center) + (-0.25,0.15) node[font=\normalsize, text=red] (t1) {$\tid_1$};
+
+\path[-, draw=red!80, very thick]
+ (v1beforex.center) edge (v1afterx.center)
+ (v1afterx.center) edge (v1beforey.center)
+ (v1beforey.center) edge (v1aftery.center);
+ 
+ \path(locx0cell.north) + (-0.1, 0.2) node(v2beforex) {};
+\path(locx0cell.south) + (-0.1, -0.1) node(v2afterx) {};
+\path(locy0cell.north) + (-0.1, 0.1) node(v2beforey) {};
+\path(locy0cell.south) + (-0.1, -0.2) node(v2aftery) {};
+\path(v2beforex.center) + (0.2,0.15) node[font=\normalsize, text=blue] (t2) {$\tid_2$};
+
+\path[-, draw=blue!80, very thick]
+ (v2beforex.center) edge (v2afterx.center)
+ (v2afterx.center) edge (v2beforey.center)
+ (v2beforey.center) edge (v2aftery.center);
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node[background, fill=yellow!20, fit= (t1) (t2) (dashlinestart) (dashlineend) (tid1ret) (tid2ret), inner sep=0.05cm] (c1) {};
+\end{pgfonlayer}
+
+\path(c1.east) + (0.8,0)  node [font=\Huge] (p1) {{}, $\prog_1$};
+\path(p1.east) + (0.5,0) node[font=\Huge] (arrow) {${}\xrightarrow{\_}$};
+
+\begin{pgfonlayer}{foreground}
+\path (locx.east) + (6, 0) node (locxf) {$[\loc_x] \mapsto$};
+\path (locxf.south) + (0,-1.5) node (locyf) {$[\loc_y] \mapsto$};
+\path (locxf.east) + (0.5,0)  node (locxf0) {$0$};
+\path (locxf0.north east) + (0.4,0) node[font=\small] (locxf0ws) {$\tsid_0$};
+\path (locxf0.south east) + (0.4,0) node[font=\small] (locxf0rs) {$\emptyset$};
+\path(locxf0.east) + (1.135,0) node (locxf1) {$1$};
+\path (locxf1.north east) + (0.4,0) node[font=\small] (locxf1ws) {$\tsid_1$};
+\path (locxf1.south east) + (0.4,0) node[font=\small] (locxf1rs) {$\emptyset$};
+\path (locyf.east) + (0.5,0)  node (locyf0) {$0$};
+\path (locyf0.north east) + (0.4,0) node[font=\small] (locyf0ws) {$\tsid_0$};
+\path (locyf0.south east) + (0.4,0) node[font=\small] (locyf0rs) {$\emptyset$};
+\path(locyf0.east) + (1.13,0) node (locyf1) {$1$};
+\path (locyf1.north east) + (0.4,0) node[font=\small] (locyf1ws) {$\tsid_1$};
+\path (locyf1.south east) + (0.4,0) node[font=\small] (locyf1rs) {$\emptyset$};
+
+\path (locyf.south west) + (0, -0.6) node (dashlinestartf) {};
+\path (dashlinestartf.center) + (4.5, 0) node (dashlineendf) {};
+
+\path(locyf0.south) + (0,-1) node[font = \small, text=red] (tidf1ret) {$\tid_1: \retvar = 0$};
+\path(tidf1ret.south) + (0,-0.3) node[font= \small, text=blue] (tidf2ret) {$\tid_2: \retvar = 0$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{main}
+
+\path[-, dashed, thick] (dashlinestartf.center) edge (dashlineendf.center);
+
+\node[hheapcell, fill=white, fit=(locxf0) (locxf0ws) (locxf0rs)] (locxf0cell) {};
+\node[hheapcell, fill=white, fit=(locyf0) (locyf0ws) (locyf0rs)] (locyf0cell) {};
+\node[hheapcell, fill=white, fit=(locxf1) (locxf1ws) (locxf1rs)] (locxf1cell) {};
+\node[hheapcell, fill=white, fit=(locyf1) (locyf1ws) (locyf1rs)] (locyf1cell) {};
+
+\path[-]
+(locxf0cell.north) edge (locxf0cell.south)
+(locxf0cell.center) edge (locxf0cell.east)
+(locyf0cell.north) edge (locyf0cell.south) 
+(locyf0cell.center) edge (locyf0cell.east)
+(locxf1cell.north) edge (locxf1cell.south)
+(locxf1cell.center) edge (locxf1cell.east)
+(locyf1cell.north) edge (locyf1cell.south) 
+(locyf1cell.center) edge (locyf1cell.east);
+
+\path(locxf1cell.north) + (-0.5, 0.2) node(vf1beforex) {};
+\path(locxf1cell.south) + (-0.5, -0.1) node(vf1afterx) {};
+\path(locyf1cell.north) + (-0.5, 0.1) node(vf1beforey) {};
+\path(locyf1cell.south) + (-0.5, -0.2) node(vf1aftery) {};
+\path(vf1beforex.center) + (0.25,0.15) node[font=\normalsize, text=red] (tf1) {$\tid_1$};
+
+\path[-, draw=red!80, very thick]
+ (vf1beforex.center) edge (vf1afterx.center)
+ (vf1afterx.center) edge (vf1beforey.center)
+ (vf1beforey.center) edge (vf1aftery.center);
+ 
+ \path(locxf0cell.north) + (-0.1, 0.2) node(vf2beforex) {};
+\path(locxf0cell.south) + (-0.1, -0.1) node(vf2afterx) {};
+\path(locyf0cell.north) + (-0.1, 0.1) node(vf2beforey) {};
+\path(locyf0cell.south) + (-0.1, -0.2) node(vf2aftery) {};
+\path(vf2beforex.center) + (-0.1,0.15) node[font=\normalsize, text=blue] (tf2) {$\tid_2$};
+
+\path[-, draw=blue!80, very thick]
+ (vf2beforex.center) edge (vf2afterx.center)
+ (vf2afterx.center) edge (vf2beforey.center)
+ (vf2beforey.center) edge (vf2aftery.center);
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node[background, fill=yellow!20, fit= (tf1) (tf2) (dashlinestartf) (dashlineendf) (tidf1ret) (tidf2ret), inner sep=0.05cm] (c2) {};
+\end{pgfonlayer}
+\path(c2.east) + (0.8,0)  node [font=\Huge] (p1) {{}, $\prog_1'$};
+
+\end{tikzpicture}
+\end{center}
+
+
 
 \section{Examples of Consistency Models}
 \input{cmexamples}
