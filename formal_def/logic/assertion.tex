@@ -231,29 +231,38 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 %\]
 %\end{defn}
 
+We lift the interference to a invariant.
+The invariant is a labelled transition system that describes how a region evolves providing all the specified operations.
+
 \begin{defn}[Invariant of a region]
 \label{def:labelled-transition-system}
 \label{def:invariant-region}
 \label{def:world2aexec}
 \label{def:state2aexec}
-Assuming a global function, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps \times \powerset{\Views} } \) that returns initial history heaps and sets of views for regions, the invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system with respect to \( \intf \), where the initial states \( \func{init}{\rid}\), the configuration is a pair of history heap \( \hh \in \hhset \) and a set of views \( \viset \in \visetset \) and labels are client-specified capabilities \( \kap \).
+Assuming a global function, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps \times \powerset{\Views} \times \powerset{\Caps} } \) that returns initial history heaps, sets of views, and a set of capabilities for regions, the invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system with respect to \( \intf \), where the initial states \( \func{init}{\rid}\), the configuration is a tuple of history heap \( \hh \in \hhset \), a set of views \( \viset \in \visetset \), and capabilities, and the labels are client-specified capabilities \( \kap \).
 \[
 \begin{rclarray}
     \func{inv}{\rid, \intf} & \defeq & (\hhset \times \visetset, \toLTS{}, \func{init}{\rid}, \kapset) \\
 \end{rclarray}
 \]
-The transition system is the least fix point from the relation \( {} \toLTS{.} {} : (\HisHeaps \times \powerset{\Views}) \times \Kaps \times (\HisHeaps \times \powerset{\Views}) \) given the set of initial configurations \( \func{init}{\rid} \subseteq \HisHeaps \times \powerset{\Views} \).
-The relation \( \toLTS{.} \) is defined as the follows,
+The transition system is the least fix point from the relation \( {} \toLTS{} {} : (\HisHeaps \times \powerset{\Views} \times \powerset{\Caps}) \times \Kaps \times (\HisHeaps \times \powerset{\Views} \times \powerset{\Caps}) \) given the set of initial configurations \( \func{init}{\rid} \).
+The relation \( \toLTS{} \) is defined as the follows,
 \[
 \begin{rclarray}
-    (\hh, \viset \uplus \Set{\vi} ) \toLTS{\kap} (\hh',\viset \uplus \Set{\vi'}) & \defeq &
+    (\hh, \viset \uplus \Set{\vi}, \ca ) \toLTS{\kap} (\hh',\viset \uplus \Set{\vi'}, \ca') & \defeq &
     \begin{array}[t]{@{}l}
-        \exsts{\txid, \opset} 
+        \exsts{\txid, \extopset} 
         \txid \in \func{fresh}{\hh} 
-        \land \opset \in \intf(\kap) \\
-        \quad {} \land \hh' = \func{commit}{\hh, \vi, \txid, \opset} 
-        \land \cu' = \func{update}{\hh', \vi, \opset} \\
-    \end{array}
+        \land \extopset \in \intf(\kap) \\
+        \quad {} \land \hh' = \func{commit}{\hh, \vi, \txid, \func{getOps}{\extopset}}  \\
+        \quad {} \land \cu' = \func{update}{\hh', \vi, \func{getOps}{\extopset}} \\
+        \quad {} \land \pred{updCaps}{\ca', \ca', \func{getCaps}{\extopset}} \\
+    \end{array} \\
+    \func{getOps}{\extopset} & \defeq & \Setcon{\extop}{\extop \in \extopset \land \extop = (\otR,\stub,\stub) \lor \extop = (\otW, \stub, \stub)} \\
+    \func{getCaps}{\extopset} & \defeq & \extopset \setminus \func{getOps}{\extopset} \\
+    \pred{updCaps}{\ca, \ca', \emptyset} & \defeq & \ca = \ca' \\
+    \pred{updCaps}{\ca, \ca', \Set{\otA, \ca''} \uplus \extopset} & \defeq & \exsts{\ca'''} \ca' = \ca''' \composeC \ca'' \land \pred{updCaps}{\ca, \ca''', \extopset}\\
+    \pred{updCaps}{\ca, \ca', \Set{\otD, \ca''} \uplus \extopset} & \defeq & \exsts{\ca'''} \ca''' = \ca' \composeC \ca'' \land \pred{updCaps}{\ca, \ca''', \extopset}\\
 \end{rclarray}
 \]
 \end{defn}
@@ -291,7 +300,7 @@ The relation \( \toLTS{.} \) is defined as the follows,
 %\end{defn}
 
 
-For brevity, \( (\hh,\vi) \in \func{inv}{\rid, \intf} \), where \( \vi \) is a single view, denotes \( \exsts{\viset } \vi \in \viset \land (\hh,\viset) \in \func{inv}{\rid,\intf}\projection{1} \), and similarly \( (\hh,\vi) \toLTS{\kap} (\hh',\vi') \in \func{inv}{\rid, \intf} \) for the second projection.
+For brevity, \( (\hh,\vi,\ca) \in \func{inv}{\rid, \intf} \), where \( \vi \) is a single view, denotes \( \exsts{\viset } \vi \in \viset \land (\hh,\viset,\ca) \in \func{inv}{\rid,\intf}\projection{1} \), and similarly \( (\hh,\vi,\ca) \toLTS{\kap} (\hh',\vi',\ca') \in \func{inv}{\rid, \intf} \) for the second projection.
 
 \begin{definition}[Worlds]
 \label{def:world}
@@ -334,7 +343,7 @@ The function, \( \eraseW{.} : \Caps \times \SStates \parfun \powerset{\HisHeaps 
         \Setcon{ 
             (\hh \composeHH \hh', \vi \composeCU \vi', \ca \composeC \ca') 
         }{ 
-            \dom(\hh) = \dom(\cu) \land (\hh,\cu) \in \func{inv}{\rid, \intf} \\ \quad {} \land (\hh', \vi', \ca') \in \eraseS{\gs} }\\
+            \dom(\hh) = \dom(\cu) \land (\hh,\cu,\ca) \in \func{inv}{\rid, \intf} \\ \quad {} \land (\hh', \vi', \ca') \in \eraseS{\gs} }\\
 \end{rclarray}
 \] 
 % 

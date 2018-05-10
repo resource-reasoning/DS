@@ -100,23 +100,28 @@ Or we say fingerprint for a single address cannot be split and then we add 2 mor
 
 \subsection{Rely and Guarantee}
 
-\sx{To allow a transaction update multiple regions but a region multiple times}
+\sx{To allow a transaction update multiple regions but a region multiple times. Make sure the definition is confluent.}
 
 \begin{defn}[Rely and guarantee]
 \label{def:rely-guarantee}
-The \( \predn{to} \) predicate asserts that operations \( \opset\) are allowed by the capabilities \(\ca\) and the state is transferred from \( \gs \) to \( \gs' \).
+The \( \predn{updWorlds} \) predicate asserts that the world transfers from \( \w \) to \( \w' \) which is allowed by the capabilities \(\ca\).
 \[
 \begin{rclarray}
-    \func{to}{\opset, \ca, \gs, \gs'} & \defeq & \opset = \unitE \land \gs = \gs' \\
-    \func{to}{\opset \uplus \opset', \ca, \gs ,\gs'} & \defeq & 
+    \pred{updWorlds}{\ca, \w, \w'} & \defeq & \w = \w' \\
+    \pred{updWorlds}{\ca, (\ca',\gs \uplus \gs') ,(\ca'',\gs'' \uplus \gs''')} & \defeq & 
     \begin{array}[t]{@{}l}
-    \exsts{\rid, \hh, \hh', \cu, \cu', \kap, \intf, \gs'',\gs''' }  \\
-    \quad \gs = \gs'' \uplus \Set{\rid \mapsto (\hh, \cu, \intf)} 
-    \land \gs' = \gs''' \uplus \Set{\rid \mapsto (\hh', \cu', \intf)}  \\
-    \quad {} \land \kap \sqsubseteq \ca(\rid)
-    \land (\hh,\opset) \in \intf(\kap)
-    \land (\hh,\cu) \toLTS{\opset} (\hh',\cu') \in \func{inv}{\rid, \intf }
-    \land \pred{to}{\opset', \ca, \gs'',\gs'''}
+    \exsts{\kap, \ca'''}
+    \kap \sqsubseteq \ca(\rid) \\
+    \quad {} \land \pred{updWorlds}{\ca, (\ca''',\gs),(\ca'',\gs'')}
+    \land \pred{updW}{\kap, (\ca',\gs),(\ca'',\gs'')}
+    \end{array} \\
+    \pred{updW}{\kap, (\ca, \gs), (\ca' ,\gs')} & \defeq &  
+    \begin{array}[t]{@{}l}
+        \exsts{\rid, \hh, \hh', \vi, \vi', \ca'', \ca''', \intf } \\
+        \quad \gs = \Set{\rid \mapsto (\hh, \vi, \ca'', \intf)} 
+        \land \gs' = \Set{\rid \mapsto (\hh', \vi', \ca''', \intf)}  \\
+        \quad {} \land (\hh, \vi, \ca'') \toLTS{\kap} (\hh', \vi', \ca''') \in \func{inv}{\rid, \intf} 
+        \land \ca \composeC \ca'' = \ca' \composeC \ca'''
     \end{array}
 \end{rclarray}
 \]
@@ -125,11 +130,11 @@ Given the set of worlds $\World$ (\defref{def:world}), the \emph{update rely} re
     \begin{rclarray}
 	\Rely & \eqdef &
 	\Setcon{
-		((\ca, \gs), (\ca, \gs'))	
+		((\ca,\gs), \w')	
 	}{
-        \exsts{\opset, \ca'}  
+        \exsts{\ca'}  
         (\ca' \composeC \ca)\isdef
-        \land \pred{to}{\opset, \ca', \gs, \gs'}
+        \land \pred{updWorlds}{ \ca', (\ca,\gs), \w'}
 	} \\
     \end{rclarray}
 \]
@@ -145,10 +150,9 @@ The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined
     \begin{rclarray}
 	\Guar & \eqdef &
 	\Setcon{
-		((\ca, \gs), (\ca, \gs'))	
+		((\ca,\gs), \w')	
 	}{
-        \exsts{\opset} 
-        \pred{to}{\opset, \ca, \gs, \gs'}
+        \pred{updWorlds}{\ca, (\ca,\gs), \w'}
 	} \\
     \end{rclarray}
 \]
@@ -270,6 +274,7 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
    }
 \]
 
+\sx{type mismatch for interpretation of fingerprint in  repartition.}
 \[
 \begin{rclarray}
     \gpre \snap \lpre & \defeq & 
@@ -283,13 +288,14 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
     \como \rpt{\gpre}{\gpost}{\fp} & \defeq & 
     \begin{array}[t]{@{}l@{}}
         \for{\w, \hh, \vi, \ca, \lenv, \stk, \txid} 
-        \exsts{\w', \hh', \vi', \ca'} \\
+        \exsts{\w', \hh', \vi', \ca',\extopset} \\
         \begin{B}
             \w \in \evalW{\gpre}
-            \land (\hh, \vi, \ca) \in \eraseW{\w} 
-            \land \txid \in \func{fresh}{\hh}  \\
-            \quad {} \land \hh' = \func{commit}{\hh, \vi, \txid, \evalF{\fp}} \\
-            \quad {} \land \cu' = \func{update}{\hh, \vi, \evalF{\fp}} \\
+            \land (\hh, \vi, \ca) \in \eraseW{\w}  \\
+            \quad {} \land \txid \in \func{fresh}{\hh} 
+            \land \extopset \in \evalF{\fp} \\
+            \quad {} \land \hh' = \func{commit}{\hh, \vi, \txid, \func{getOps}{\extopset}} \\
+            \quad {} \land \cu' = \func{update}{\hh, \vi, \func{getOps}{\extopset}} \\
             \quad {} \land (\w, \w') \in \Guar  
             \land (\hh, \Set{\vi}) \toCO{\como} (\hh', \Set{\vi'})
         \end{B}
