@@ -24,7 +24,7 @@ This is because once a location has been re-written, the rest read are considere
     }{%
         \var \notin \func{fv}{\expr}
         && \var \notin \func{fv}{\lexpr}  
-        && \fp \toFP{\otR(\lexpr)} \fp'
+        && \fp \toFP{\otR(\expr, \lexpr)} \fp'
     }
 \]
 
@@ -32,7 +32,7 @@ This is because once a location has been re-written, the rest read are considere
     \infer[\rl{TRMutate}]{%
         \tripleL{\expr_1 \pt \stub \sep \fp }{ \pmutate{\expr_1}{\expr_2} }{ \expr_{1} \pt \expr_{2} \sep \fp' } 
     }{
-        \fp \toFP{\otW(\expr_{2})} \fp'
+        \fp \toFP{\otW(\expr_{1},\expr_{2})} \fp'
     }
 \]
 
@@ -80,17 +80,18 @@ Or we say fingerprint for a single address cannot be split and then we add 2 mor
        \tripleL{ \lpre \sep \lframe }{ \trans }{ \lpost \sep \lframe }
    }{%
        \tripleL{ \lpre }{ \trans }{ \lpost } 
+       && \pred{side\_condition}{}
    }
 \]
 \hrule\vspace{5pt}
 \[
 \begin{rclarray}
-    \expr \fpI & \toFP{\otR(\lexpr)} & \expr \fpR \lexpr \\
-    \expr \fpR \expr' & \toFP{\otR(\lexpr)} & \expr \fpR \lexpr' \\
-    \expr \fpW \expr' & \toFP{\otR(\lexpr)} & \expr \fpW \lexpr' \\
-    \expr \fpI & \toFP{\otW(\lexpr)} & \expr \fpW \lexpr \\
-    \expr \fpR \expr' & \toFP{\otW(\lexpr)} & \expr \fpR \lexpr' \sep \expr \fpW \lexpr \\
-    \expr \fpW \expr' & \toFP{\otW(\lexpr)} & \expr \fpW \lexpr \\
+    \expr \fpI & \toFP{\otR(\expr,\lexpr)} & \expr \fpR \lexpr \\
+    \expr \fpR \expr' & \toFP{\otR(\expr,\lexpr)} & \expr \fpR \lexpr' \\
+    \expr \fpW \expr' & \toFP{\otR(\expr,\lexpr)} & \expr \fpW \lexpr' \\
+    \expr \fpI & \toFP{\otW(\expr,\lexpr)} & \expr \fpW \lexpr \\
+    \expr \fpR \expr' & \toFP{\otW(\expr,\lexpr)} & \expr \fpR \lexpr' \sep \expr \fpW \lexpr \\
+    \expr \fpW \expr' & \toFP{\otW(\expr,\lexpr)} & \expr \fpW \lexpr \\
 \end{rclarray}
 \]
 \hrule\vspace{5pt}
@@ -163,11 +164,23 @@ The \emph{update guarantee} relation, $\guarU: \World \times \World$, is defined
 %\]
 \end{defn}
 
+\sx{It check the consistency model with respect to one view. Feel a bit strange.}
 \begin{defn}[Stable]
-A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld}$, if and only if it is closed under the rely relation: 
+A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld, \como}$, if and only if it is closed under the rely relation: 
 \[
     \begin{rclarray}
-        \stable{\setworld} & \eqdef & \for{\w, \w'}  \w \in \setworld \land (\w, \w') \in \Rely \implies \w' \in \setworld
+        \stable{\setworld, \como} & \eqdef & 
+        \begin{array}[t]{@{}l}
+            \for{\w, \w', \hh, \hh', \vi, \vi'} \\
+            \begin{B}
+            \w \in \setworld 
+            \land (\w, \w') \in \Rely 
+            \land (\hh, \vi, \stub) \in \clpsW{\w}  \\
+            {} \land (\hh', \vi', \stub) \in \clpsW{\w'} 
+            \land (\hh, \Set{\vi}) \toCO{\como} (\hh', \Set{\vi'})
+            \end{B}
+            \implies \w' \in \setworld
+        \end{array}
     \end{rclarray}
 \]
 \end{defn}
@@ -233,44 +246,44 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 
 \[
     \infer[\rl{PRChoice}]{%
-        \tripleG{ \gpre }{ \prog_{1} \pchoice \prog_{2} }{ \gpost }
+        \tripleG{ \gpre }{ \cmd_{1} \pchoice \cmd_{2} }{ \gpost }
     }{%
-        \tripleG{ \gpre }{ \prog_{1} }{ \gpost } && 
-        \tripleG{ \gpre }{ \prog_{2} }{ \gpost } 
+        \tripleG{ \gpre }{ \cmd_{1} }{ \gpost } && 
+        \tripleG{ \gpre }{ \cmd_{2} }{ \gpost } 
     }
 \]
 
 \[
     \infer[\rl{TRSeq}]{%
-        \tripleG{ \gpre }{ \prog_{1} \pseq \prog_{2} }{ \gpost }
+        \tripleG{ \gpre }{ \cmd_{1} \pseq \cmd_{2} }{ \gpost }
     }{%
-        \tripleG{ \gpre }{ \prog_{1} }{ \gframe }  && 
-        \tripleG{ \gframe }{ \prog_{2} }{ \gpost }
+        \tripleG{ \gpre }{ \cmd_{1} }{ \gframe }  && 
+        \tripleG{ \gframe }{ \cmd_{2} }{ \gpost }
     }
 \]
 
 \[
     \infer[\rl{TRLoop}]{%
-        \tripleG{ \gpre }{ \prog\prepeat }{ \gpre }
+        \tripleG{ \gpre }{ \cmd\prepeat }{ \gpre }
     }{%
-        \tripleG{ \gpre }{ \prog }{ \gpre } 
+        \tripleG{ \gpre }{ \cmd }{ \gpre } 
     }
 \]
  
 \[
    \infer[\rl{TRFrame}]{%
-       \tripleG{ \gpre \sep \gframe }{ \prog }{ \gpost \sep \gframe }
+       \tripleG{ \gpre \sep \gframe }{ \cmd }{ \gpost \sep \gframe }
    }{%
-       \tripleG{ \gpre }{ \prog }{ \gpost } 
+       \tripleG{ \gpre }{ \cmd }{ \gpost } 
    }
 \]
  
 \[
    \infer[\rl{TRPar}]{%
-       \tripleG{ \gpre_{1} \sep \gpre_{2} }{ \prog_{1} \ppar \prog_{2} }{ \gpost_{1} \sep \gpost_{2} }
+       \tripleG{ \gpre_{1} \sep \gpre_{2} }{ \cmd_{1} \ppar \cmd_{2} }{ \gpost_{1} \sep \gpost_{2} }
    }{%
-       \tripleG{ \gpre_{1} }{ \prog_{1} }{ \gpost_{1} }
-       && \tripleG{ \gpre_{2} }{ \prog_{2} }{ \gpost_{2} }
+       \tripleG{ \gpre_{1} }{ \cmd_{1} }{ \gpost_{1} }
+       && \tripleG{ \gpre_{2} }{ \cmd_{2} }{ \gpost_{2} }
    }
 \]
 
@@ -294,8 +307,8 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
             \land (\hh, \vi, \ca) \in \eraseW{\w}  \\
             \quad {} \land \txid \in \func{fresh}{\hh} 
             \land \extopset \in \evalF{\fp} \\
-            \quad {} \land \hh' = \func{commit}{\hh, \vi, \txid, \func{getOps}{\extopset}} \\
-            \quad {} \land \cu' = \func{update}{\hh, \vi, \func{getOps}{\extopset}} \\
+            \quad {} \land \hh' = \func{updHisHp}{\hh, \vi, \txid, \func{getOps}{\extopset}} \\
+            \quad {} \land \cu' = \func{updView}{\hh, \vi, \func{getOps}{\extopset}} \\
             \quad {} \land (\w, \w') \in \Guar  
             \land (\hh, \Set{\vi}) \toCO{\como} (\hh', \Set{\vi'})
         \end{B}
@@ -309,63 +322,62 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 \label{fig:rule-prog}
 \end{figure}
 
-Many consistency model use last write win resolution policy, such as snapshot isolation, therefore the repartition \( \rpt{\gpre}{\gpost}{\fp} \) can be simplified by checking the guarantee and then syntactically propagating the write fingerprints.
-Also in practice, many implementation of consistency model assume strong session constraint.
+The \( \funcn{updHisHp}\) and \( \funcn{updView} \) in the repartition can be replaced by syntactic rules.
 
 \begin{figure}
 \hrule\vspace{5pt}
 
 \[
    \infer[\rl{FRead}]{%
-       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etR, \lexpr, \lexpr'')} }{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr''}
+       \tripleF{ \lexpr \pt \lexpr }{ \lexpr \fpR \lexpr }{ \lexpr \pt \lexpr }
    }{}
 \]
 
 \[
    \infer[\rl{FWrite}]{%
-       \tripleF{ \lexpr \pt \lexpr' \mid \lexpr \pt \lexpr'' }{ \Set{(\etW, \lexpr, \lexpr''')} }{ \lexpr \pt \lexpr''' \mid \lexpr \pt \lexpr'''}
+       \tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpW \lexpr' }{ \lexpr \pt \lexpr' }
    }{}
 \]
 
-\[
-   \infer[\rl{FFrame}]{%
-       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
-   }{%
-       \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost' }
-   }
-\]
+%\[
+   %\infer[\rl{FFrame}]{%
+       %\tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
+   %}{%
+       %\tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost' }
+   %}
+%\]
 
-\[
-   \infer[\rl{FContinue}]{%
-       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp  \uplus \fp' }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
-   }{%
-       \tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
-   }
-\]
+%\[
+   %\infer[\rl{FContinue}]{%
+       %\tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp  \uplus \fp' }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
+   %}{%
+       %\tripleF{ \lpre \sep \lframe  \mid \lpre' \sep \lframe' }{ \fp }{ \lpost \sep \lframe \mid \lpost' \sep \lframe' }
+   %}
+%\]
 
-\[
-\begin{rclarray}
-    \rpt{\gpre}{\gpost}{\fp} & \defeq & 
-    \begin{array}[t]{@{}l}
-    \for{\w, \w', \lpre, \lpre', \lpost, \lpost', \lenv, \stk} \\
-    \quad 
-    \begin{B}
-        \w \in \evalW{\gpre}
-        \land \pred{unboxleft}{\w, \lpre}
-        \land \gpre \snap \lpre' 
-        \land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost'} \\
-        {} \land (\w, \w') \in \Guar
-        \land \pred{unboxleft}{\w',\lpost}
-        \land \gpost \snap \lpost'
-    \end{B}
-    \implies \w' \in \evalW{\gpost}
-    \end{array} \\
-    \pred{unboxleft}{\w, \lpre} & \defeq & \for{\hh} (\hh, \stub) \in \eraseW{\w} \implies \func{clps}{\hh} \in \evalLS{\lpre}
-\end{rclarray}
-\]
+%\[
+%\begin{rclarray}
+    %\rpt{\gpre}{\gpost}{\fp} & \defeq & 
+    %\begin{array}[t]{@{}l}
+    %\for{\w, \w', \lpre, \lpre', \lpost, \lpost', \lenv, \stk} \\
+    %\quad 
+    %\begin{B}
+        %\w \in \evalW{\gpre}
+        %\land \pred{unboxleft}{\w, \lpre}
+        %\land \gpre \snap \lpre' 
+        %\land {} \tripleF{ \lpre \mid \lpre' }{ \fp }{ \lpost \mid \lpost'} \\
+        %{} \land (\w, \w') \in \Guar
+        %\land \pred{unboxleft}{\w',\lpost}
+        %\land \gpost \snap \lpost'
+    %\end{B}
+    %\implies \w' \in \evalW{\gpost}
+    %\end{array} \\
+    %\pred{unboxleft}{\w, \lpre} & \defeq & \for{\hh} (\hh, \stub) \in \eraseW{\w} \implies \func{clps}{\hh} \in \evalLS{\lpre}
+%\end{rclarray}
+%\]
 
 \hrule\vspace{5pt}
-\caption{Syntactic repartition for SI, SER and Causal under strong sessions}
+\caption{Syntactic rule for \funcn{updHisHp} and \funcn{updView}}
 \label{fig:rule-prog}
 \end{figure}
 
