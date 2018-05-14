@@ -57,9 +57,9 @@ Second, it is ghost resources to help the reasoning.
 For brevity, when we write \( \cass{\kap}{\lrid} \), and this means there are implicit parameters.
 
 \emph{Fingerprint assertion} or \emph{fingerprint} describes the possible global effect from a transaction.
-It includes the first read \( \lexpr_{1} \fpR \lexpr_{2} \) and last write \( \lexpr_{1} \fpW \lexpr_{2} \) for the address \( \lexpr_{1} \).
-If an address remains untouched, it will have the default fingerprint \( \lexpr \fpI \).
-For better presentation, we introduce \( \fpE \) which means ``untouched for the rest addresses''.
+It includes the first read \( \lexpr_{1} \fpR \lexpr_{2} \), last write \( \lexpr_{1} \fpW \lexpr_{2} \) for the address \( \lexpr_{1} \) and the combination of them \( \lexpr_{1} \fpRW \lexpr_{2} \).
+If an address remains untouched, it will have the default fingerprint with the initial value \( \lexpr_{1} \fpI \lexpr_{2} \).
+%For better presentation, we introduce \( \fpE \) which means ``untouched for the rest addresses''.
 We will use fingerprint assertions to specify local transition (shown later), therefore we also have fingerprint for transfer of capabilities, \ie adding to the shared state \( \cass{\kap}{\lrid} \fpA \) and deleting from the shared state \( \cass{\kap}{\lrid} \fpD \).
 The shared state, intuitively, is the state aware by all sessions and we will explain the details later.
 
@@ -71,12 +71,12 @@ Extend \( \lexpr \fpI\) by replacing \( \backslash \) with the initial value.  }
 The \emph{fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
 \[
 \begin{rclarray}    
-    \fp, \fp' & ::= & \lexpr \fpR \lexpr \mid \lexpr \fpW \lexpr \mid \lexpr \fpRW (\lexpr, \lexpr) \mid \lexpr \fpI \mid \fpE \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpA \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpD \mid \fp \sep \fp'
+    \fp, \fp' & ::= & \lexpr \fpR \lexpr \mid \lexpr \fpW \lexpr \mid \lexpr \fpRW (\lexpr, \lexpr) \mid \lexpr \fpI \lexpr \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpA \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpD \mid \fp \sep \fp'
 \end{rclarray}
 \] 
 The fingerprint assertions is interpreted to a set of extended operations \( \ExtOps \).
-It is extended from \( \Ops \) by including tuple for initial of address \( (\otI, \addr) \), adding capability \( (\otA, \ca) \) and deleting capability \( (\otD, \ca) \).
-The well-form condition is also extended so that the initial of address is the bottom element, and a capability can transfer only one way. 
+It is extended from \( \Ops \) by including tuples for adding capability \( (\otA, \ca) \) and deleting capability \( (\otD, \ca) \).
+The well-form condition is also extended so that capabilities can transfer only one way. 
 \[
 \begin{rclarray}
     \wfO{\extopset} & \defeq & 
@@ -84,22 +84,20 @@ The well-form condition is also extended so that the initial of address is the b
         \for{ \otag, \otag', \addr, \addr', \ca, \ca'}  \\
         \quad (\otag, \addr, \stub),(\otag', \addr', \stub) \in \extopset  \implies \otag \neq \otag' \lor \addr \neq \addr' \\
         \quad {} \land (\otag, \ca),(\otag', \ca') \in \extopset  \implies \ca \neq \ca' \\
-        \quad {} \land (\otI, \addr) \in \extopset \implies (\stub, \addr, \stub) \notin \extopset \\ 
     \end{array}
 \end{rclarray}
 \] 
 The composition \(\extopset_{1} \composeO \extopset_{2} \) is disjointed set union if the result is well-formed.
-Then, given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint} is interpreted through function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \powerset{\scalebox{.8}{\(\powerset{\ExtOps}\)}}$.
+Then, given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{fingerprint} is interpreted through function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \Heaps \times \powerset{\ExtOps}$.
 \[
 \begin{rclarray}
-    \evalF{\lexpr_{1} \fpR \lexpr_{2}} & \defeq & \Set{\Set{(\otR, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})}} \\
-    \evalF{\lexpr_{1} \fpW \lexpr_{2}} & \defeq & \Set{\Set{(\otW, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})}} \\
-    \evalF{\lexpr_{1} \fpRW (\lexpr_{2},\lexpr_{3})} & \defeq & \Set{\Set{(\otR, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}}), (\otW, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{3}})}} \\
-    \evalF{\lexpr \fpI} & \defeq & \Set{\Set{(\otI, \evalLE{\lexpr})}} \\
-    \evalF{\fpE} & \defeq & \Setcon{\extopset}{\for{\extop \in \extopset} \extop = (\otI, \stub)} \\
-    \evalF{\cass{\kap(\vec{\lvar})}{\lrid} \fpA} & \defeq & \Set{\Set{(\otA, \evalC{\cass{\kap(\vec{\lvar})}{\lrid}})}} \\
-    \evalF{\cass{\kap(\vec{\lvar})}{\lrid} \fpD} & \defeq & \Set{\Set{(\otD, \evalC{\cass{\kap(\vec{\lvar})}{\lrid}})}} \\
-    \evalF{\fp_{1} \sep \fp_{2}} & \defeq & \Setcon{\extopset_{1} \composeO \extopset_{2}}{\extopset_{1} \in \evalF{\fp_{1}} \land \extopset_{2} \in \evalF{\fp_{2}}} \\
+    \evalF{\lexpr_{1} \fpR \lexpr_{2}} & \defeq & (\Set{\evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}}}, \Set{(\otR, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})}) \\
+    \evalF{\lexpr_{1} \fpW \lexpr_{2}} & \defeq & (\Set{\evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}}}, \Set{(\otW, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}})}) \\
+    \evalF{\lexpr_{1} \fpRW (\lexpr_{2},\lexpr_{3})} & \defeq & (\Set{\evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{3}}}, \Set{(\otR, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{2}}), (\otW, \evalLE{\lexpr_{1}}, \evalLE{\lexpr_{3}})}) \\
+    \evalF{\lexpr_{1} \fpI \lexpr_{2} } & \defeq & (\Set{\evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}}}, \emptyset) \\
+    \evalF{\cass{\kap(\vec{\lvar})}{\lrid} \fpA} & \defeq & (\unitH, \Set{(\otA, \evalC{\cass{\kap(\vec{\lvar})}{\lrid}})}) \\
+    \evalF{\cass{\kap(\vec{\lvar})}{\lrid} \fpD} & \defeq & (\unitH, \Set{(\otD, \evalC{\cass{\kap(\vec{\lvar})}{\lrid}})}) \\
+    \evalF{\fp_{1} \sep \fp_{2}} & \defeq &  ( h_{1} \composeH \h_{2}, \extopset_{1} \composeO \extopset_{2} ) \text{ where } ( \h_{1}, \extopset_{1} ) \in \evalF{\fp_{1}} \land ( \h_{2},\extopset_{2}) \in \evalF{\fp_{2}} \\
 \end{rclarray}
 \]
 \end{defn}
@@ -110,13 +108,14 @@ The standard separation assertions describe the current local state, while the f
 
 \begin{definition}[Local assertions]
 \label{def:local_assertions}
-Given the set of logical expressions \( \LExpr \), logical variables \( \LVar \) and fingerprint assertion \( \fp \in \FAst \), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined inductively by the following grammar, 
+Given the set of logical expressions \( \LExpr \) and logical variables \( \LVar \), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined by lifting the \emph{read-write fraction of fingerprint assertions} \( \bar{\fp} \),
 \[
 \begin{rclarray}
-	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \lexpr \pt \lexpr \mid \fp \mid \lpre \sep \lpost  \\
+    \bar{\fp} & ::= & \lexpr \fpR \lexpr \mid \lexpr \fpW \lexpr \mid \lexpr \fpRW (\lexpr, \lexpr) \mid \lexpr \fpI \lexpr  \\
+	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \bar{\fp} \mid \lpre \sep \lpost  \\
 \end{rclarray}	 
 \]
-Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \powerset{\ExtOps}} $, is defined over the structure of local assertions as follows,
+Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \Opsets} $, is defined over the structure of local assertions as follows,
 \[
 \begin{rclarray}
 	\evalLS{\assfalse} & \eqdef & \emptyset \\
@@ -124,22 +123,33 @@ Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation fu
 	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
 	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
 	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
-	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{(\h, \extopset)}{(\h , \extopset) \in \evalLS{\lpre} \implies (\h , \extopset) \in \evalLS{\lpost}}\\
+	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{(\h, \opset)}{(\h , \opset) \in \evalLS{\lpre} \implies (\h , \opset) \in \evalLS{\lpost}}\\
 	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
 	\evalLS{\lexpr_{1} \pt \lexpr_2 } & \defeq & \Set{ (\evalLE{\lexpr_1} \pt \evalLE{\lexpr_2}, \unitE) } \\
-	\evalLS{ \fp } & \defeq & \Setcon{ (\unitH, \extopset )}{\extopset \in \evalF{\fp}} \\
+	\evalLS{ \bar{\fp} } & \defeq & \Set{ \evalF{\bar{\fp}} } \\
 	\evalLS{\lpre \sep \lpost} & \defeq & 
     \Setcon{
-        (\h_1 \composeH \h_2, \extopset_{1} \composeE \extopset_{2})
+        (\h_1 \composeH \h_2, \opset_{1} \composeE \opset_{2})
     }{ 
-        (\h_{1},\extopset_{1}) \in \evalLS{\lpre} 
-        \land (\h_{2}, \extopset_{2} ) \in \evalLS{\lpost} 
+        (\h_{1},\opset_{1}) \in \evalLS{\lpre} 
+        \land (\h_{2}, \opset_{2} ) \in \evalLS{\lpost} 
     } 
 \end{rclarray}
 \]
 \end{definition}
 
 Observe that program expressions $\Expr$  (\defin\ref{def:language}) are contained in logical expressions $\LExpr$ (\defin\ref{def:local_assertions} above), \ie $\Expr \subset \LExpr$. 
+Because the local assertions do not contain any assertions related to capabilities, it is enough to interpret them to sets of operations \( \Opsets \).
+
+\begin{lem}
+\(
+    \for{\bar{\fp}} \evalF{\bar{\fp}}\projection{2} \in \Opsets
+\)
+\end{lem}
+\begin{proof}
+Induction on the structures.
+\end{proof}
+
 %For readability, we will write angle brackets, \eg \( \fpass{(\etR, \vx, 0)} \) instead of curly brackets \( \fpto{\Set{(\etR, \vx, 0)}} \) for fingerprint assertions.
 
 \subsection{Global/Program}
@@ -236,7 +246,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 %\end{defn}
 
 We lift the interference to a invariant.
-The invariant is a labelled transition system that describes how a region evolves providing all the specified operations.
+The invariant is a labelled transition system that describes how a region evolves providing all the allowed operations.
 
 \begin{defn}[Invariant of a region]
 \label{def:labelled-transition-system}
