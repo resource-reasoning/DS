@@ -20,7 +20,8 @@
 %        \end{array}
 %    \end{session}
 %\]
-
+\ac{This Section is going to become heavy in pictures, which should be 
+organised into figures.}
 In this Section we present different consistency models specifications. 
 For each of them, we give: 
 \begin{itemize}
@@ -40,7 +41,7 @@ but this should be mentioned here.}
 
 \subsection{Read Atomic} 
 Read atomic \cite{ramp} is the weakest consistency model among 
-those that enjoy \emph{atomic visibility} \cite{concur15}. 
+those that enjoy \emph{atomic visibility} \cite{framework-concur}. 
 It requires transactions to read an atomic snapshot of the database. 
 \ac{I copied the last sentence from the RAMP paper. By atomic snapshot 
 they mean  that it appears to have been taken at a single 
@@ -50,7 +51,7 @@ transactions to never observe the partial effects of other transactions.
 This is also known as the \emph{all-or-nothing} property: A transaction 
 observes either none or all the updates performed by another transaction. 
 
-One litmus test that should be failed in RAMP consists of the program 
+One litmus test that should \textbf{not} be failed in RAMP consists of the program 
 $\prog_1$ from \S \ref{sec:semantics.example}, which we already observed 
 to produce a violation of atomic visibility in no constraints on the consistency 
 model are placed. Intuitively, in such a program, the violation of atomic 
@@ -305,29 +306,721 @@ $(\hh_2', [\tid_2 \mapsto \left( [\retvar \mapsto {\Large \frownie{}}], V_2' \ri
 %\end{definition}
 
 \subsection{Causal Consistency}
-\ac{The only way I can think to define causal consistency right now, is by using 
-write-read dependencies. Hopefully there is a more operational specification. 
+The next consistency model that we consider is \emph{transactional causal consistency} 
+\cite{?}. Intuitively, in this consistency model transactions must be ensured 
+that versions read by transactions are closed with respect to causal dependencies. 
+Consider for example the following program: 
+\[
+    \prog_2 := \begin{session}
+        \begin{array}{@{}c || c || c@{}}
+            \begin{transaction}
+            		 \pmutate{\loc_x}{1};\\
+              \end{transaction} &
+              \begin{transaction}
+            		  \pderef{\pvar{a}}{\loc_x};\\
+            		  \pmutate{\loc_x}{a};\\
+            	  \end{transaction} &
+              \begin{transaction}
+            		   \pderef{\pvar{a}}{\loc_x};\\
+            		   \pderef{\pvar{b}}{\loc_y};\\
+            		   \pifs{\pvar{a}=0 \wedge \pvar{b}=1}\\
+            				\;\;\;\;\passign{\retvar}{\Large \frownie{}}
+            			\}
+             \end{transaction}
+        \end{array}
+    \end{session}
+ \]
+For the sake of simplicity, we label the code of the three transactions above 
+ast $\trans_1, \trans_2, \trans_3$, from left to right.
+It is easy to see that, if no constraints are placed on the  consistency model, 
+then we can have $\ptrans{\trans_3}$ return ${\Large \frownie{}}$. 
+The same is true even if the consistency model specification $\mathsf{RA}$ is assumed. 
+Informally, the return of value ${\Large \frownie{}}$ by $\ptrans{\trans_3}$ can be 
+obtained from the schedule below. In the initial history heap of the execution, 
+$\hh_0$,  both locations $\loc_x, \loc_y$ contain a single version with value $0$, written by transaction $\tsid_0$. 
+\begin{center}
+\begin{tikzpicture}[font=\large]
 
-I take it back, I can give an inductive definition of causally consistent views, 
-without using dependencies explicitly - though in practice I am still tracking down 
-write-read dependencies.}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $T_0$ \\
+  {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $T_0$ \\
+  {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-2pt, yshift=20pt]locx-v0.north east) node (tid1start) {} -- 
+% ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-2pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-2pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v0.north east) -- 
+% ([xshift=-8pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-8pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-5pt, yshift=-10pt]locy-v0.south east) node (tid2start) {};
+ 
+\path (tid2start) node[anchor=north, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+ 
+ %green view
+\draw[-, DarkGreen, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=8pt]locx-v0.north east) node (tid3start) {}-- 
+% ([xshift=-15pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-15pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid3start) node[anchor=south, rectangle, fill=DarkGreen!20, draw=DarkGreen, font=\small, inner sep=1pt] {$\tid_1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+\ac{Green view: $\tid_1$, red view: $\tid_2$, blue view: $\tid_3$}.
+
+\begin{itemize}
+\item $\ptrans{\trans_1}$ executes with the initial view, which points to the 
+initial (and only) version for each location; after this transaction is 
+executed, a new version $\langle 1, T_1, \emptyset \rangle$ is appended 
+at the end of $\hh{\loc_{x}}$, 
+\begin{center}
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v-1) {$1$};
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ \\
+   {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-2pt, yshift=20pt]locx-v0.north east) node (tid1start) {} -- 
+% ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-2pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-2pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v0.north east) -- 
+% ([xshift=-8pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-8pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-5pt, yshift=-10pt]locy-v0.south east) node (tid2start) {};
+ 
+\path (tid2start) node[anchor=north, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+ 
+ %green view
+\draw[-, DarkGreen, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=8pt]locx-v1.north east) node (tid3start) {}-- 
+ ([xshift=-16pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-16pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid3start) node[anchor=south, rectangle, fill=DarkGreen!20, draw=DarkGreen, font=\small, inner sep=1pt] {$\tid_1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+\item next, $\tid_2$ updates its view as to see the version of $\loc_x$ installed by $\tid_1$, after 
+which it proceeds to execute $\ptrans{\trans_2}$. This results in a new version with value $1$ 
+to be installed for $\loc_y$. The history heaps before, and after the execution of $\ptrans{\trans_2}$, 
+are depicted below:
+\begin{center}
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v-1) {$1$};
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ \\
+   {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-2pt, yshift=20pt]locx-v0.north east) node (tid1start) {} -- 
+% ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-2pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-2pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v1.north east) -- 
+ ([xshift=-5pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-5pt, yshift=3pt]locy-v0.north east) -- 
+ ([xshift=-5pt, yshift=-10pt]locy-v0.south east) node (tid2start) {};
+ 
+\path (tid2start) node[anchor=north, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+ 
+ %green view
+\draw[-, DarkGreen, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=8pt]locx-v1.north east) node (tid3start) {}-- 
+ ([xshift=-16pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-16pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid3start) node[anchor=south, rectangle, fill=DarkGreen!20, draw=DarkGreen, font=\small, inner sep=1pt] {$\tid_1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\hfill
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\{\tsid_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v-1) {$1$};
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
+   {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v-1) {$1$};
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-2pt, yshift=20pt]locx-v0.north east) node (tid1start) {} -- 
+% ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-2pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-2pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v1.north east) -- 
+% ([xshift=-5pt, yshift=-5pt]locx-v1.south east) --
+% ([xshift=-5pt, yshift=3pt]locy-v0.north east) -- 
+ ([xshift=-5pt, yshift=-10pt]locy-v1.south east) node (tid2start) {};
+ 
+\path (tid2start) node[anchor=north, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+ 
+ %green view
+\draw[-, DarkGreen, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=8pt]locx-v1.north east) node (tid3start) {}-- 
+ ([xshift=-16pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-16pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid3start) node[anchor=south, rectangle, fill=DarkGreen!20, draw=DarkGreen, font=\small, inner sep=1pt] {$\tid_1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+\item Finally, thread $\tid_3$ updates its view to observe the update of location $[\loc_y]$, but not the update of 
+location $[\loc_y]$, before executing transaction $\ptrans{\trans_3}$. The execution of $\ptrans{\trans_3}$ will 
+return the value ${\Large \frownie{}}$. The resulting history heaps, before and after 
+the execution of $\tid_3$, are depicted below: 
+\begin{center}
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\{\tsid_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v-1) {$1$};
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
+   {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v-1) {$1$};
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-2pt, yshift=20pt]locx-v0.north east) node (tid1start) {} -- 
+ ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+ ([xshift=-2pt, yshift=5pt]locy-v1.north east) -- 
+ ([xshift=-2pt, yshift=-5pt]locy-v1.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v1.north east) -- 
+% ([xshift=-5pt, yshift=-5pt]locx-v1.south east) --
+% ([xshift=-5pt, yshift=3pt]locy-v0.north east) -- 
+ ([xshift=-5pt, yshift=-10pt]locy-v1.south east) node (tid2start) {};
+ 
+\path (tid2start) node[anchor=north, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+ 
+ %green view
+\draw[-, DarkGreen, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=8pt]locx-v1.north east) node (tid3start) {}-- 
+ ([xshift=-16pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-16pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid3start) node[anchor=south, rectangle, fill=DarkGreen!20, draw=DarkGreen, font=\small, inner sep=1pt] {$\tid_1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\hfill
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\{\tsid_3\}$ & {a} & $\{\tsid_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
+   {a} & $\emptyset$ & {a} & $\{\tsid_3\}$\\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-2pt, yshift=20pt]locx-v0.north east) node (tid1start) {} -- 
+ ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+ ([xshift=-2pt, yshift=5pt]locy-v1.north east) -- 
+ ([xshift=-2pt, yshift=-5pt]locy-v1.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v1.north east) -- 
+% ([xshift=-5pt, yshift=-5pt]locx-v1.south east) --
+% ([xshift=-5pt, yshift=3pt]locy-v0.north east) -- 
+ ([xshift=-5pt, yshift=-10pt]locy-v1.south east) node (tid2start) {};
+ 
+\path (tid2start) node[anchor=north, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+ 
+ %green view
+\draw[-, DarkGreen, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=8pt]locx-v1.north east) node (tid3start) {}-- 
+ ([xshift=-16pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-16pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid3start) node[anchor=south, rectangle, fill=DarkGreen!20, draw=DarkGreen, font=\small, inner sep=1pt] {$\tid_1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+\end{itemize}
+
+%\ac{The only way I can think to define causal consistency right now, is by using 
+%write-read dependencies. Hopefully there is a more operational specification. 
+%
+%I take it back, I can give an inductive definition of causally consistent views, 
+%without using dependencies explicitly - though in practice I am still tracking down 
+%write-read dependencies.}
+The reason why the execution outlined above is because, in the last step, 
+thread $\tid_3$ executed transaction $\ptrans{\trans_3}$ in a 
+state where its view observes the update to location $[\loc_y]$, but 
+not the update to location $\loc_2$. However, the update of $[\loc_y]$ 
+performed in  $\ptrans{\trans_2}$, consisted in copying the value of the update 
+of $[\loc_y]$: that is, the update of $[\loc_y]$ \textbf{depends} from the update of $[\loc_x]$. 
+Summarising, the execution of transaction $\ptrans{\trans_3}$ resulted in a violation of 
+causality: the update of $[\loc_y]$ is observed, but not the update of $[\loc_x]$ on which 
+it depends.
+
+To specify formally transactional causal consistency, we define inductively the 
+set of views that are consistent with respect to a history heap $\hh$. 
+Intuitively, the definition below models the fact that, if we start from a 
+causally consistent view, and we wish to update the view for some location $\tid_2$, 
+
 
 \begin{definition}
+Let $\nu_1 = (v_1, \tsid_1, \mathcal{T}_1)$, $\nu_2 = (v_2, \tsid_2, \mathcal{T_2})$. 
+We say that $\nu_2$ directly depends on $\nu_1$ if $\tsid_1 \in \mathcal{T_2}$. 
+\ac{Note to self: the notion of directly depends here has little to do with dependencies 
+between transactions. Note to note to self: directly depends is the name that 
+makes most sense here, though it's going to drive Philippa mad because of the 
+clash of terminology with dependency graphs.}
+
 Let $\hh$ be a history heap. The set of views that are \emph{causally consistent} 
 with respect to $\hh$, $\mathsf{CCViews}(\hh)$, is defined as the smallest set such that: 
 \begin{enumerate} 
 \item $V_0 := \lambda [\loc_x].0 \in \mathsf{CCViews}(\hh)$, 
 \item let $V \in \mathsf{CCViews}(\hh)$, $V' = V[[\loc_x] \mapsto i]$ for some 
-$i: V([\loc_x]) < i \leq \lvert \hh \rvert -1$, and suppose that $\hh([\loc_{x}])(V'([\loc_x])) = 
-(\_, \tsid, \_ )$ for some $\tsid$. If for all locations $\loc_{y}$ and 
-indexes $j$ such that $\hh([\loc_y])(j) = (\_, \_, 
-\_ \cup \{ \tsid \})$, then $j \leq V'([\loc_y])$, then $V' \in \mathsf{CCViews}(\hh)$.
+$i: V([\loc_x]) < i \leq \lvert \hh \rvert -1$.  Suppose that for any location $[\loc_y]$ and 
+index $j = 0, \cdots, \lvert \hh([\loc_y]) \rvert -1$ such that $\hh(V'([\loc_{x}))(V([\loc_x]))$ 
+directly depends on $\hh([\loc_y])(j)$, then $j \leq \hh([\loc_y])(V([\loc_y]))$. Then 
+$V' \in \mathsf{CCViews}(\hh)$.
+% and suppose that $\hh([\loc_{x}])(V'([\loc_x])) = 
+%(\_, \tsid, \_ )$ for some $\tsid$. If for all locations $\loc_{y}$ and 
+%indexes $j$ such that $\hh([\loc_y])(j) = (\_, \_, \_ \cup \{\tsid\})$, 
+%then $j \leq V'([\loc_y])$, then $V' \in \mathsf{CCViews}(\hh)$.
 \end{enumerate}
 \end{definition}
 
+\begin{example}
+\ac{Note to self: I got this example and the definition wrong several times before getting them
+right. Which means that inductive definition of causally dependent views is not really that 
+intuitive after all...}
+Consider the history heap $\hh$ depicted below: 
+\begin{center}
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\{\tsid_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v-1) {$1$};
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
+   {a} & $\emptyset$ & {a} & $\{\tsid_3\}$\\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+\path (locy.south) + (0,-1.5) node (locy) {$[\loc_z] \mapsto$};
+\matrix(loczcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_3$ \\
+   {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+\node[version node, fit=(loczcells-1-1) (loczcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locz-v0) {$0$};
+\node[version node, fit=(loczcells-1-3) (loczcells-2-3), fill=white, inner sep=0cm, font=\Large] (locz-v1) {$1$};
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+%\draw[-, blue, very thick, rounded corners=10pt]
+% ([xshift=-5pt, yshift=5pt]locx-v0.north east) node (tid1start) {} -- 
+% ([xshift=-5pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-5pt, yshift=5pt]locy-v1.north east) -- 
+% ([xshift=-5pt, yshift=-5pt]locy-v1.south east);
+ 
+% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+We want to find a view $V$ that is up-to-date with the update of location $[\loc_z]$; 
+that is, $V[\loc_z] = 1$, and $\hh([\loc_z])(V[\loc_z]) = (1, \tsid_3, \{\tsid_4\})$.
+Furthermore, we want the view $V$ to be causally consistent. 
+We do so by induction. 
+
+We start from the initial view $V_0$, such that $V_0([\loc_{\_}]) = 0$. This view is 
+causally consistent by definition, but it does not include the update to location $[\loc_z]$: 
+$V_0([\loc_z]) = 1$. As a first try, one could immediately consider a view $V'$ 
+where the value for location $[\loc_z]$ is updated to $1$, 
+that is $V' = V_0[ [\loc_z] \mapsto 1]$. However, in this case 
+the view $V'$ is not causally consistent. In fact, the version observed 
+by $V'$ for location $[\loc_z]$ is $\hh([\loc_z])(V'([\loc_z]) = 
+\{1, \tsid_3, \emptyset\}$, meaning that the version has been written 
+by transaction $\tsid_3$. On the other hand, we also have 
+that $V'([\loc_y]) = 0$, while $\hh([\loc_{y}])(1) = (1, \tsid_2, 
+\{\tsid_3\}$. That is, the version observed by $V'$ for $[\loc_z]$ 
+directly depends from the version $\hh([\loc_y])(1)$, but the latter 
+is not observed by $V'$; in fact, $V'([\loc_y]) = 1$. 
+
+As a second attempt, one could then try to update the the view of location 
+$[\loc_y]$ to value $1$, resulting in the value $V'' = V_0[ [\loc_y] \mapsto 1]$, 
+but similarly we would find that the version 
+$\hh([\loc_y])(1) = (\_, \tsid_2, \_)$ directly depends from the version 
+$\hh([\loc_x])(1) = (\_, \_, \{\tsid_2\})$, and $V''([\loc_x]) = 0 < 1$. 
+
+Finally, we can update the view $V_0$ to include the update of $[\loc_x]$: 
+this results in the view $V_1 = V_0[ [\loc_x] \mapsto 1$. Because $\hh([\loc_x])(1) 
+= (\_, \tsid_1, \_)$, and there is no version $\nu$ in $\hh$ on which 
+$\hh([\loc_x])(1)$ depends - i.e. such that  
+$\nu = (\_, \_, \_ \cup \{\tsid_1\})$ - we can conclude that $V_1$ is causally 
+consistent. The view $V_1$ and the history heap $\hh$ are depicted below: 
+We can now proceed to update the view of location $[\loc_y]$ in $T_1$. 
+Because 
+
+\begin{center}
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\{\tsid_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
+   {a} & $\emptyset$ & {a} & $\{\tsid_3\}$\\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+
+
+
+\path (locy.south) + (0,-1.5) node (locz) {$[\loc_z] \mapsto$};
+\matrix(loczcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locz.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_3$ \\
+   {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+
+\node[version node, fit=(loczcells-1-1) (loczcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locz-v0) {$0$};
+\node[version node, fit=(loczcells-1-3) (loczcells-2-3), fill=white, inner sep=0cm, font=\Large] (locz-v1) {$1$};
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v1.north east) node (tid1start) {} -- 
+ ([xshift=-5pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-5pt, yshift=5pt]locy-v0.north east) -- 
+% ([xshift=-5pt, yshift=-5pt]locy-v0.south east) --
+% ([xshift=-5pt, yshift=5pt]locz-v0.north east) -- 
+ ([xshift=-5pt, yshift=-5pt]locz-v0.south east);
+ 
+% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+We can now update the view $V_1$ to include the version $\hh([\loc_y])(1)$, 
+resulting in the view $V_2 := V_1[ [\loc_y] \mapsto 1]$. Because the view $V_1$ is 
+causally consistent, and because all the versions on which $\hh([\loc_y])(V_2([\loc_y]))$ depends
+are included in $V_1$, then $V_2$ is also causally consistent. Similarly, we can define 
+the view $V_3 := V_2[[\loc_z] \mapsto 1]$, and prove that it casually consistent. 
+The views $V_2$ and $V_3$, together with the history heap $\hh$ are depicted below, respectively.
+
+\begin{center}
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\{\tsid_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
+   {a} & $\emptyset$ & {a} & $\{\tsid_3\}$\\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+
+
+
+\path (locy.south) + (0,-1.5) node (locz) {$[\loc_z] \mapsto$};
+\matrix(loczcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locz.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_3$ \\
+   {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+
+\node[version node, fit=(loczcells-1-1) (loczcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locz-v0) {$0$};
+\node[version node, fit=(loczcells-1-3) (loczcells-2-3), fill=white, inner sep=0cm, font=\Large] (locz-v1) {$1$};
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v1.north east) node (tid1start) {} -- 
+% ([xshift=-5pt, yshift=-5pt]locx-v1.south east) --
+% ([xshift=-5pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-5pt, yshift=-5pt]locy-v1.south east) --
+ ([xshift=-5pt, yshift=5pt]locz-v0.north east) -- 
+ ([xshift=-5pt, yshift=-5pt]locz-v0.south east);
+ 
+% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+\end{pgfonlayer}
+\end{tikzpicture}
+\hfill
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
+  {a} & $\emptyset$ & {a} & $\{\tsid_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
+   {a} & $\emptyset$ & {a} & $\{\tsid_3\}$\\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+
+
+
+\path (locy.south) + (0,-1.5) node (locz) {$[\loc_z] \mapsto$};
+\matrix(loczcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locz.east) {
+ {a} & $\tsid_0$ & {a} & $\tsid_3$ \\
+   {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+
+\node[version node, fit=(loczcells-1-1) (loczcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locz-v0) {$0$};
+\node[version node, fit=(loczcells-1-3) (loczcells-2-3), fill=white, inner sep=0cm, font=\Large] (locz-v1) {$1$};
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-5pt, yshift=5pt]locx-v1.north east) node (tid1start) {} -- 
+% ([xshift=-5pt, yshift=-5pt]locx-v1.south east) --
+% ([xshift=-5pt, yshift=5pt]locy-v0.north east) -- 
+% ([xshift=-5pt, yshift=-5pt]locy-v1.south east) --
+% ([xshift=-5pt, yshift=5pt]locz-v0.north east) -- 
+ ([xshift=-5pt, yshift=-5pt]locz-v1.south east);
+ 
+% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_3$};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+\end{example}
+
+Causal consistency ensures that transactions can only observe 
+a causally consistent state of the database, i.e. they can only run 
+only by threads with a causally consistent view of the history heap.
+
 \begin{definition}
-$(\hh, V, \_) \triangleright_{\mathsf{CC}}$ if and only if $V \in \mathsf{CCViews}(\hh)$.
+$(\hh, V, \mathcal{V}) \triangleright_{\mathsf{CC}} \mathcal{O}$ if and only if 
+$(\hh, V, \mathcal{O}) \triangleright_{\mathsf{RA}} \mathcal{O}$, 
+and $V \in \mathsf{CCViews}(\hh)$.
 \end{definition}
+
+Note that, if we execute the program $\prog_2$, illustrated previously in this section, under $\mathsf{CCViews}$,
+it is not possible anymore to have the transaction $\ptrans{\trans_3}$ return value ${\Large \frownie}$. 
+This is because, in order for $\ptrans{\trans_3}$ to return such a value, it must be executed in a 
+state where the view thread of $\tid_3$ observes the update to location $[\loc_y]$, but not the 
+update of $[\loc_x]$ from which the latter causally depends. 
 
 \ac{In theory, I can do better, and require that I see only the causal dependencies 
 of what I read. But at the end of the day, who cares?}
