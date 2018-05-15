@@ -1,6 +1,6 @@
 \subsection{Rules for Local}
 
-The proof rules are standard except \rl{TRDeref} and \rl{TRMutate}.
+The proof rules are standard except \rl{TRLookup} and \rl{TRMutate}.
 The \rl{TRDeref} rule add read fingerprint in finger-tracking set, only if there is no write finger-print.
 This is because once a location has been re-written, the rest read are considered as local operations, while the finger-print only records those operations might have effect on global state.
 
@@ -15,24 +15,25 @@ This is because once a location has been re-written, the rest read are considere
 \[
     \infer[\rl{TRAss}]{%
         \tripleL{\var \dot= \lexpr }{ \pass{\var}{\expr} }{\var \dot= \expr\sub{\var}{\lexpr} }
-    }{}
+    }{
+        \var \notin \func{fv}{\lexpr}
+    }
 \]
 
 \[
-    \infer[\rl{TRDeref}]{%
-        \tripleL{ \fp }{ \pderef{\var}{\expr} }{\var \dot= \lexpr \sep \fp' }
+    \infer[\rl{TRLookup}]{%
+        \tripleL{ \lpre }{ \plookup{\var}{\expr} }{\var \dot= \lexpr \sep \lpost\sub{\var}{\lexpr} }
     }{%
-        \var \notin \func{fv}{\expr}
-        && \var \notin \func{fv}{\lexpr}  
-        && \fp \toFP{\otR(\expr, \lexpr)} \fp'
+        \var \notin \func{fv}{\lexpr}  
+        && \lpre \toFP{\otR(\expr, \lexpr)} \lpost
     }
 \]
 
 \[
     \infer[\rl{TRMutate}]{%
-        \tripleL{ \fp }{ \pmutate{\expr_1}{\expr_2} }{ \fp' } 
+        \tripleL{ \lpre }{ \pmutate{\expr_1}{\expr_2} }{ \lpost } 
     }{
-        \fp \toFP{\otW(\expr_{1},\expr_{2})} \fp'
+        \lpre \toFP{\otW(\expr_{1},\expr_{2})} \lpost
     }
 \]
 
@@ -84,10 +85,10 @@ This is because once a location has been re-written, the rest read are considere
     \expr \fpR \lexpr & \toFP{\otR(\expr,\lexpr)} & \expr \fpR \lexpr \\
     \expr \fpW \lexpr & \toFP{\otR(\expr,\lexpr)} & \expr \fpW \lexpr \\
     \expr \fpRW (\lexpr', \lexpr) & \toFP{\otR(\expr,\lexpr)} & \expr \fpRW (\lexpr', \lexpr) \\
-    \expr \fpI \anyval & \toFP{\otW(\expr,\lexpr)} & \expr \fpW \lexpr \\
-    \expr \fpR \lexpr' & \toFP{\otW(\expr,\lexpr)} & \expr \fpRW (\lexpr',\lexpr) \\
-    \expr \fpW \lexpr' & \toFP{\otW(\expr,\lexpr)} & \expr \fpW \lexpr \\
-    \expr \fpRW (\lexpr', \lexpr'') & \toFP{\otW(\expr,\lexpr)} & \expr \fpRW (\lexpr', \lexpr) \\
+    \expr \fpI \lexpr & \toFP{\otW(\expr,\lexpr')} & \expr \fpW \lexpr' \\
+    \expr \fpR \lexpr & \toFP{\otW(\expr,\lexpr')} & \expr \fpRW (\lexpr,\lexpr') \\
+    \expr \fpW \lexpr & \toFP{\otW(\expr,\lexpr')} & \expr \fpW \lexpr' \\
+    \expr \fpRW (\lexpr'', \lexpr) & \toFP{\otW(\expr,\lexpr')} & \expr \fpRW (\lexpr'', \lexpr') \\
 \end{rclarray}
 \]
 \hrule\vspace{5pt}
@@ -213,12 +214,12 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
         \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
     }{%
         \begin{array}{c}
-        \gpre \snap \lpre
-        \quad \tripleL{\lpre \sep \fpE}{\trans}{\lpost \sep \fp} \\
-        \pred{noFingerprint}{\lpre} 
-        \quad \pred{noFingerprint}{\lpost} \\
-        \como \rpt{\gpre}{\gpost}{\fp}
-        \quad \stable{\gpre, \como} 
+        %\gpre \snap \lpre
+        \tripleL{\lpre}{\trans}{\lpost} 
+        \quad \repartition{\gpre}{\gpost}{\lpre}{\lpost} \\
+        %\pred{noFingerprint}{\lpre} 
+        %\quad \pred{noFingerprint}{\lpost} \\
+        \stable{\gpre, \como} 
         \quad \stable{\gpost, \como} 
         \end{array}
     }
@@ -286,7 +287,7 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
 \sx{type mismatch for interpretation of fingerprint in  repartition.}
 \[
 \begin{rclarray}
-    \gpre \snap \lpre & \defeq & 
+    \pred{unbox}{\gpre,\lpre} & \defeq & 
     \begin{array}[t]{@{}l}
         \for{ \w, \h, \hh, \cu, \lenv, \stk }
         \w \in \evalW{\gpre} 
@@ -294,17 +295,17 @@ The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the resul
         \land \h = \func{clps}{\hh, \cu} 
         \implies (\h, \unitO) \in \evalLS{\lpre}\\
     \end{array} \\
-    \como \rpt{\gpre}{\gpost}{\fp} & \defeq & 
+    \como \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \defeq & 
     \begin{array}[t]{@{}l@{}}
-        \for{\w, \hh, \vi, \ca, \lenv, \stk, \txid} 
+        \pred{unbox}{\gpre, \lpre} \land \for{\w, \hh, \vi, \ca, \lenv, \stk, \txid} 
         \exsts{\w', \hh', \vi', \ca',\extopset} \\
         \begin{B}
             \w \in \evalW{\gpre}
             \land (\hh, \vi, \ca) \in \eraseW{\w}  \\
             \quad {} \land \txid \in \func{fresh}{\hh} 
-            \land \extopset \in \evalF{\fp} \\
-            \quad {} \land \hh' = \func{updHisHp}{\hh, \vi, \txid, \func{getOps}{\extopset}} \\
-            \quad {} \land \cu' = \func{updView}{\hh, \vi, \func{getOps}{\extopset}} \\
+            \land \opset \in \evalF{\lpost} \\
+            \quad {} \land \hh' = \func{updHisHp}{\hh, \vi, \txid, \opset} \\
+            \quad {} \land \cu' = \func{updView}{\hh, \vi, \opset} \\
             \quad {} \land (\w, \w') \in \Guar  
             \land (\hh, \Set{\vi}) \toCO{\como} (\hh', \Set{\vi'})
         \end{B}
@@ -332,6 +333,12 @@ The \( \funcn{updHisHp}\) and \( \funcn{updView} \) in the repartition can be re
 \[
    \infer[\rl{FWrite}]{%
        \tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpW \lexpr' }{ \lexpr \pt \lexpr' }
+   }{}
+\]
+
+\[
+   \infer[\rl{FReWrt}]{%
+       \tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpRW (\lexpr,\lexpr') }{ \lexpr \pt \lexpr' }
    }{}
 \]
 
