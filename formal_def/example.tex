@@ -320,15 +320,33 @@
 
 
 \subsection{Litmus Test For SI}
+
+The case 1 is the old way to write assertions as a pair of the current state of the database and my view.
+The case 2 and 3 are the simplify way which includes only my view.
+Meanwhile the case 3 introduce some ghost resource transfer for maybe better presentation.
+
+The problem here is case 2 looks very cheating on how the commit rule works.
+While case 3 make it more explicit so look more syntactic make sense but rely on the ghost resource.
+The case 1 looks much more straightforward in term of working on syntax, yet there are much more syntax.
+
 \[
     \boxass{ \V{x} \pt \V{n} \sep \V{y} \pt \V{m} }{\lrid}{\intass} 
 \]
 
 \[
-\intass :
+P1, P2 : \intass :
 \begin{rclarray}[t]
     \C{R} & : & \V{x} \fpR 0 \sep \V{y} \fpW 1 \\
     \C{L} & : & \V{x} \fpW 1 \sep \V{y} \fpR 0 \\
+    \C{0} & : & \exsts{ \V{a} \in \Set{\V{x}, \V{y}} } \V{a} \fpR \V{n} \\
+\end{rclarray}
+\]
+
+\[
+P3 : \intass :
+\begin{rclarray}[t]
+    \C{R} & : & \V{x} \fpR 0 \sep \V{y} \fpW 1 \sep \cass{\C{R}}{\lrid} \fpA \\
+    \C{L} & : & \V{x} \fpW 1 \sep \V{y} \fpR 0 \sep \cass{\C{L}}{\lrid} \fpA \\
     \C{0} & : & \exsts{ \V{a} \in \Set{\V{x}, \V{y}} } \V{a} \fpR \V{n} \\
 \end{rclarray}
 \]
@@ -339,12 +357,15 @@
 \begin{parl}
 \begin{session}
     P1 : \specline{\cass{\C{L}}{\lrid} \sep 
-            \boxass{\vx \pt 0 \sep \vy \pt 0}{\lrid}{\intass} \lor
+            \sptboxass{\vx \pt 0 \sep \vy \pt 0}{\vx \pt 0 \sep \vy \pt 0}{\lrid}{\intass} \lor {} \\
             \sptboxass{\vx \pt 0 \sep \vy \pt 1}{\vx \pt 0 \sep \vy \pt \Set{0,1}}{\lrid}{\intass} 
     } \\
     P2 : \specline{\cass{\C{L}}{\lrid} \sep 
-            \boxass{\vx \pt 0 \sep \vy \pt 0}{\lrid}{\intass} \lor
-            \boxass{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} 
+            \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) }{\lrid}{\intass} 
+    } \\
+    P3 : \specline{\cass{\C{L}}{\lrid} \sep 
+            \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \lor {} \\
+            \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\C{R}}{\lrid}}{\lrid}{\intass} 
     } \\
     \begin{transaction}
         \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
@@ -354,32 +375,66 @@
         \pife \\
         \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
     \end{transaction} \\
-    \specline{\cass{\C{L}}{\lrid} \sep 
-            \boxass{\vx \pt 1 \sep \vy \pt 0}{\lrid}{\intass} \lor 
-            \sptboxass{\vx \pt 0 \sep \vy \pt 1}{\vx \pt 0 \sep \vy \pt \Set{0,1}}{\lrid}{\intass} \lor \\
-            \sptboxass{\vx \pt 1 \sep \vy \pt 1}{\vx \pt 1 \sep \vy \pt \Set{0,1}}{\lrid}{\intass} } \\
+    Q1: \specline{\cass{\C{L}}{\lrid} \sep 
+            \sptboxass{\vx \pt 1 \sep \vy \pt 0}{\vx \pt 1 \sep \vy \pt 0}{\lrid}{\intass} \\
+            {} \lor \sptboxass{\vx \pt 0 \sep \vy \pt 1}{\vx \pt 0 \sep \vy \pt \Set{0,1}}{\lrid}{\intass} \\
+            {} \lor \sptboxass{\vx \pt 1 \sep \vy \pt 1}{\vx \pt 1 \sep \vy \pt \Set{0,1}}{\lrid}{\intass} } \\
+    Q2: \specline{ \cass{\C{L}}{\lrid}  \sep 
+               \boxass{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} \lor {} \\
+               \boxass{\vx \pt 1 \sep \vy \pt 0}{\lrid}{\intass}
+               \lor \boxass{\vx \pt 1 \sep \vy \pt 1}{\lrid}{\intass} } \\
+    Q3 : \specline{ 
+            \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\C{R}}{\lrid} \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass} \lor {} \\
+            \boxass{\vx \pt 1 \sep \vy \pt 1 \sep \cass{\C{R}}{\lrid} \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass} \lor {} \\
+            \cass{\C{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\C{R}}{\lrid} }{\lrid}{\intass} \lor {} \\
+            \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass} }
 \end{session}
 &
 \begin{session}
-    \specline{\cass{\C{R}}{\lrid} \sep 
-            \boxass{\vx \pt 0 \sep \vy \pt 0}{\lrid}{\intass} \lor {} \\
-            \sptboxass{\vx \pt 1 \sep \vy \pt 0}{\vx \pt \Set{0,1} \sep \vy \pt 0}{\lrid}{\intass} } \\
+    P1 : \specline{\cass{\C{R}}{\lrid} \sep 
+            \sptboxass{\vx \pt 0 \sep \vy \pt 0}{\vx \pt 0 \sep \vy \pt 0}{\lrid}{\intass} \lor {} \\
+            \sptboxass{\vx \pt 1 \sep \vy \pt 0}{\vx \pt\Set{ 0,1} \sep \vy \pt 0}{\lrid}{\intass} 
+    } \\
+    P2 : \specline{\cass{\C{R}}{\lrid} \sep 
+            \boxass{ ( \vx \pt 0 \lor \vx \pt 1 ) \sep \vy \pt 0 }{\lrid}{\intass} 
+    } \\
+    P3 : \specline{\cass{\C{R}}{\lrid} \sep 
+            \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \lor {} \\
+            \boxass{ ( \vx \pt 0 \lor \vx \pt 1 ) \sep \vy \pt 0 \sep \cass{\C{L}}{\lrid}}{\lrid}{\intass} 
+    } \\
     \begin{transaction}
         \pderef{\pvar{a}}{\vx} ; 
         \quad \pifs{\pvar{a} = 0} 
         \pmutate{\vy}{1} ; 
         \pife 
     \end{transaction} \\
-    \specline{\cass{\C{R}}{\lrid} \sep 
-            \boxass{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} \lor {} \\
-            \sptboxass{\vx \pt 1 \sep \vy \pt 0}{\vx \pt \Set{0,1} \sep \vy \pt 0}{\lrid}{\intass} \lor {} \\
-            \sptboxass{\vx \pt 1 \sep \vy \pt 1}{\vx \pt \Set{0,1} \sep \vy \pt 1}{\lrid}{\intass}  } \\
+    Q1 : \specline{\cass{\C{R}}{\lrid} \sep 
+            \sptboxass{\vx \pt 0 \sep \vy \pt 1}{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} \\
+            {} \lor \sptboxass{\vx \pt 1 \sep \vy \pt 0}{\vx \pt \Set{0,1} \sep \vy \pt 0}{\lrid}{\intass} \\
+            {} \lor \sptboxass{\vx \pt 1 \sep \vy \pt 1}{\vx \pt \Set{0,1} \sep \vy \pt 1}{\lrid}{\intass}  } \\
+    Q2: \specline{ \cass{\C{R}}{\lrid}  \sep 
+               \boxass{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} \lor {} \\
+               \boxass{\vx \pt 1 \sep \vy \pt 0}{\lrid}{\intass}
+               \lor \boxass{\vx \pt 1 \sep \vy \pt 1}{\lrid}{\intass} } \\
+    Q3 : \specline{ 
+            \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\C{R}}{\lrid} \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass} \lor {} \\
+            \boxass{\vx \pt 1 \sep \vy \pt 1 \sep \cass{\C{R}}{\lrid} \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass} \lor {} \\
+            \cass{\C{R}}{\lrid} \sep \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass} \lor {} \\
+            \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\C{R}}{\lrid} }{\lrid}{\intass} }
 \end{session}
 \end{parl} \\
-\specline{ \boxass{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} \sep
+QQ1 : \specline{ \sptboxass{\vx \pt 0 \sep \vy \pt 1}{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} \sep
+           \sptboxass{\vx \pt 1 \sep \vy \pt 0}{\vx \pt 1 \sep \vy \pt 0}{\lrid}{\intass} \sep
+           \sptboxass{\vx \pt 1 \sep \vy \pt 1}{\vx \pt 1 \sep \vy \pt 1}{\lrid}{\intass} 
+           \sep \cass{\C{L}}{\lrid} \sep \cass{\C{R}}{\lrid} } \\
+QQ2 : \specline{ \boxass{\vx \pt 0 \sep \vy \pt 1}{\lrid}{\intass} \sep
            \boxass{\vx \pt 1 \sep \vy \pt 0}{\lrid}{\intass} \sep
            \boxass{\vx \pt 1 \sep \vy \pt 1}{\lrid}{\intass} 
            \sep \cass{\C{L}}{\lrid} \sep \cass{\C{R}}{\lrid} } \\
+QQ3 : \specline{ 
+        \boxass{\vx \pt 1 \sep \vy \pt 1 \sep \cass{\C{R}}{\lrid} \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass}
+        \lor \cass{\C{R}}{\lrid} \sep \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\C{L}}{\lrid} }{\lrid}{\intass}
+        \lor \cass{\C{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\C{R}}{\lrid} }{\lrid}{\intass} }
 \end{session}
 \]
 
