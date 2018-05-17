@@ -66,6 +66,21 @@ The $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by 
 
 \subsection{Local/Transaction Semantics}
 
+Each thread has it own stack, where local variables are stored.
+A thread can access the stack inside or outside transactions.
+When a transaction start, it determine a local heap from the current state of database and local view, which we will explain the process later.
+Yet this local heap does not affect outside world, instead we use \emph{operation} to connect a transaction to outside world.
+A operation could be read or write to a address with a value.
+Intuitively, when a transaction is about to commit, it will have \emph{a set of operations} containing the first read and last write for each address.
+Because a transaction is executed atomically, all the intermediate steps are not observable from the outside world.
+
+we introduce \emph{a well-formed set of operations} \( \opset \in \Opsets\) that is a subset of operations in which there are at most one read and one write for each address.
+The composition, then, is defined as set disjointed union as long as the result is well-formed.
+To help us write down the semantics, we assume a binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the set \( \opset \).
+If the new operation is a read, for example \(\otR, \addr, \val\) that \( \addr \) is the address and \( \val\) is the value, and there is no other operation related to the same address, this new read operation will be included in the set.
+Note that if there is already a write in the set, this mean the following reads are all local.
+Meanwhile, if the new operation is a write, it will overwrite all preview write operations to the same address.
+
 \sx{Single stack for simplicity. Design choice, total stack vs partial stack, make sure it is consistent.}
 
 \begin{defn}[Stacks]
@@ -101,12 +116,6 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{arithmetic 
     \end{rclarray}
 \]
 \end{defn}
-
-The operational semantics for transactions \(\trans\) with respect to a configuration of the form \((\stk, \h, \opset)\) comprising a stack, a (local) heap and a set of operations that might affect other transactions.
-The operations are the first read and the last write of each address.
-This means a valid set of operations contains at most one read and one write for each address.
-
-\sx{Maybe design choice: we constraint the composition for operations. If we allowed arbitrary composition of two operations, we will need some side conditions for the frame rule within the transactions.}
 
 
 \begin{defn}[Operation and valid operations]
@@ -157,8 +166,6 @@ For technical reason, if the right hand side is a special token \( \emptyop \), 
 The \( \addO \) operator preserves the well-form property.
 \end{lem}
 
-
-
 \azalea{
 \label{comm:operations}
 This can all be very simplified as follows. Each location is associated with a value and a set of tags in $\pset{\Set{\otR, \otW}}$, where $\emptyset$ means no finger print and the rest have the obvious meaning. 
@@ -207,9 +214,14 @@ For technical reason, if the right hand side is a special token \( \emptyop \), 
 }
 
 
+%We define a labelled transition system for primitive transaction commands where the labels are commands.
+The operational semantics for transactions \(\trans\) is defined with respect to a configuration of the form \((\stk, \h, \opset)\) comprising a stack, a (local) heap and a set of operations.
+The operations are those that might affect other transactions, meaning the first read and the last write for each address.
+We first define a transition between pairs of stacks and heaps for the primitive commands \( \trans_{p}\).
+We also define its operation by \( \funcn{op} \) function, which denotes the contribution of the primitive command that might observed by the external environment, \ie transactions from other threads.
+The \( \funcn{op} \) extracts the read or write operation from loop-up and mutation respectively, otherwise returns \( \emptyop \).
+The semantics for non-deterministic choices, sequential compositions, and loops have the expected behaviours.
 
-We define a labelled transition system for primitive transaction commands where the labels are commands.
-The \( \funcn{op} \) extracts the read or write operation from primitive transition commands, otherwise returns \( \emptyop \).
 
 \begin{defn}[Transaction operational semantics]
 Given the set of stacks \( \Stacks \) (\defref{def:stacks}), heaps \( \Heaps \) (\defin\ref{def:heaps}) and transactions \( \Transactions \) (\defin\ref{def:language}), the \emph{operational semantics of transactions}, 
