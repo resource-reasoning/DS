@@ -1032,19 +1032,21 @@ carries a new version for location $[n]$, and the view is within the boundaries 
 The last notion that we need to introduce, before giving the semantics of commands, 
 is the one of \textbf{Consistency Model Specification.} 
 A consistency model specification $CM$ consists of a set of quadruples 
-$(\hh, V, \mathcal{V}, \mathcal{O})$, where 
+$(\hh, V, \mathcal{O}, V')$, where 
 \begin{itemize}
 \item $\hh$ is a history heap, corresponding to a state of the database
 \item $V$ is the view of the history heap of the thread that wants to execute a 
 transaction, 
-\item $\mathcal{V}$ is the multi-set of views of the external environment (i.e. other 
-threads that may be interacting with the database), 
 \item $\mathcal{O}$ is the fingerprint of the transaction to be executed.
+\item $V'$ is the view of the thread immediately after executing the transaction, 
+and it is such that $\mathsf{UpdateView}(\hh, V, \mathcal{O}) \sqsubseteq V'$.
 \end{itemize}
-Therefore, tuples of the form $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$ describe 
-which operations a thread is allowed to execute in a single transaction, without conflicting 
-with other threads. We often write $(\hh, V, \mathcal{V}) \triangleright_{CM} \mathcal{O}$ 
-in lieu of $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$.
+We often write $(\hh, V) \triangleright_{CM} \mathcal{O} : V'$ in lieu 
+of $(\hh, V, \mathcal{O}, V') \in CM$.
+%Therefore, tuples of the form $(\hh, V, \mathcal{O}) \in CM$ describe 
+%which operations a thread is allowed to execute in a single transaction, without conflicting 
+%with other threads. We often write $(\hh, V, \mathcal{V}) \triangleright_{CM} \mathcal{O}$ 
+%in lieu of $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$.
 
 We are now ready to give the operational semantics for commands.
 The main rule for executing commands is the one that models the execution of one transaction. 
@@ -1765,15 +1767,158 @@ such that $\mathsf{UpdateVies}(\hh, V, \mathcal{O}) \sqsubseteq V'$.
    };
 \end{pgfonlayer}
 \end{tikzpicture}
-
 \\
 {\small (a) } & {\small (b)}\\
 \hline
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $T_0$ &{a} & $T_1$\\
+  {a} & $\emptyset$ & {a} & $\{T_2\}$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $T_0$ & {a} & $T_1$\\
+  {a} & $\{T_2\}$ & {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+% ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-2pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-3pt, yshift=-5pt]locy-v1.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_1$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+ ([xshift=-16pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-16pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east) node {};
+ 
+\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+
+%Stack for threads tid_1 and tid_2
+
+\draw[-, dashed] let 
+   \p1 = ([xshift=0pt]locy.west),
+   \p2 = ([yshift=-5pt]locycells.south),
+   \p3 = ([xshift=10pt]locycells.east) in
+   (\x1, \y2) -- (\x3, \y2);
+   
+\matrix(stacks) [
+   matrix of nodes,
+   anchor=north, 
+   text=blue, 
+   font=\normalsize, 
+   row 1/.style = {text = blue}, 
+   row 2/.style = {text = red}, 
+   text width= 13mm ] 
+   at ([xshift=-10pt,yshift=-8pt]locycells.south) {
+   $\tid_1:$ & $\retvar = 0$\\
+   $\tid_2:$ & $\retvar = 0$\\
+   };
+\end{pgfonlayer}
+\end{tikzpicture}
+&
+\begin{tikzpicture}[font=\large]
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+
+\matrix(locxcells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locx.east) {
+ {a} & $T_0$ &{a} & $T_1$\\
+  {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+
+%Location y
+\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\matrix(locycells) [version list, text width=7mm, anchor=west]
+   at ([xshift=10pt]locy.east) {
+ {a} & $T_0$ & {a} & $T_1$\\
+  {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+% ([xshift=-2pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-2pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-3pt, yshift=-5pt]locy-v1.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_1$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+ ([xshift=-16pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-16pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v0.south east) node {};
+ 
+\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\tid_2$};
+
+%Stack for threads tid_1 and tid_2
+
+\draw[-, dashed] let 
+   \p1 = ([xshift=0pt]locy.west),
+   \p2 = ([yshift=-5pt]locycells.south),
+   \p3 = ([xshift=10pt]locycells.east) in
+   (\x1, \y2) -- (\x3, \y2);
+   
+\matrix(stacks) [
+   matrix of nodes,
+   anchor=north, 
+   text=blue, 
+   font=\normalsize, 
+   row 1/.style = {text = blue}, 
+   row 2/.style = {text = red}, 
+   text width= 15mm ] 
+   at ([xshift=-10pt,yshift=-8pt]locycells.south) {
+   $\tid_1:$ & $\retvar = 0$\\
+   $\tid_2:$ & $\retvar = {\Large \frownie}$\\
+   };
+   \end{pgfonlayer}
+ \end{tikzpicture}
+\\
+{\small(c)} & {\small(d)}\\
+\hline
 \end{tabular}
 \end{center}
-\label{fig:opsem.example}
 \caption{Graphical Representation of configurations 
 obtained through the execution of $\prog_1$.}
+\label{fig:opsem.example}
 \end{figure}
 
 Before showing the computation of $\prog_1$ that leads to the transaction of 
@@ -1881,28 +2026,32 @@ In this case, we have that $h = [ [\loc_x \mapsto 0, \loc_y \mapsto 1]]$.
  Rule $(Tx-prim)$ twice, in which case we obtain
  \begin{equation}
 \label{eq:tx1}
-\begin{array}{llcll}
-&\left\langle h_0, \_, \emptyset, \begin{array}{l}
+\begin{array}{lcr}
+& \sigma_0 \vdash \left\langle h_0, \_, \emptyset, \begin{array}{l}
 \pmutate{\loc_x}{1};\\ \pmutate{\loc_y}{1} \end{array} \right\rangle 
-&\rightarrow& \left \langle h_0[ [\loc_x] \mapsto 1], \_, \emptyset \oplus \WR\; [\loc_x]: 1, 
+&\rightarrow \\
+\rightarrow & 
+\left \langle h_0[ [\loc_x] \mapsto 1], \_, \big( \emptyset \oplus \WR\; [\loc_x]: 1 \big), 
 \pmutate{\loc_y}{1} \right\rangle &= \\
 =&\left \langle h_0[[\loc_x] \mapsto 1], \_, \{\WR\; [\loc_x]: 1\}, 
 \pmutate{\loc_y}{1} \right\rangle 
-&\rightarrow& 
-\left\langle h_0[[\loc_x \mapsto_1, \loc_y \mapsto 1], \_, \begin{array}{c} \{\WR\;[\loc_x]:1\} \oplus\\  (\WR\;[\loc_y]: 1) \end{array}, 
+&\rightarrow\\ 
+\rightarrow & 
+\left\langle h_0[[\loc_x] \mapsto_1, [\loc_y] \mapsto 1], \_, \big( \{\WR\;[\loc_x]:1\} \oplus  (\WR\;[\loc_y]: 1) \big), 
 \nil \right\rangle & = \\
-=&\left \langle \_, \_, \{\WR\;[\loc_x]: 1, \WR\;[\loc_y]:1 \}, \nil \right\rangle
+=& \left \langle \_, \_, \{\WR\;[\loc_x]: 1, \WR\;[\loc_y]:1 \}, \nil \right\rangle
 \end{array}
 \end{equation}
 Therefore, we conclude $\mathcal{O} = \{\WR\; [\loc_x] : 1, \WR\;[\loc_y]:1\}$.
 \item Determine the history heap and view $\hh_1, V''$ obtained by applying the 
-functions $\mathsf{HHeapUpdate}(\hh_0, V', \mathcal{O})$ and  $\mathsf{ViewUpdate}(\hh_0, V', 
-mathcal{O})$, respectively. This result in the history heap $\hh_1$ and view $V_1$, depicted in 
+functions $\mathsf{HHeapUpdate}_{\tsid_1}(\hh_0, V', \mathcal{O})$ and  $\mathsf{ViewUpdate}(\hh_0, V', 
+mathcal{O})$, respectively. Here $\tsid_1$ is a fresh transaction identifier. 
+This result in the history heap $\hh_1$ and view $V_1$, depicted in 
 Figure \ref{fig:opsem.example}(b) - the view $V'$ is the one labelled with $\tid_1$.
 \item Shift  $V'''$ such that $V'' \sqsubseteq V'''$, and $(\hh_0, V') \triangleright_{CM} \mathcal{O} : V'''$. 
 The only possibility here is by choosing $V'' = V'''$,
-\item Combine all the steps above, and infer the transition $\mathcal{C}_0, \prog_0 \xrightarrow{CM} 
-\mathcal{C}_1, \prog_0' \rangle$, where $\mathcal{C}_1$ is depicted in Figure \ref{fig:cc.exec} 
+\item Combine all the steps above, and infer the transition $\langle \mathcal{C}_0, \prog_1 \rangle \xrightarrow{CM} 
+\langle \mathcal{C}_1, \prog_1' \rangle$, where $\mathcal{C}_1$ is depicted in Figure \ref{fig:cc.exec} 
 and 
 \[
 \prog_1' = 
@@ -2104,6 +2253,30 @@ and
 %        \end{array}
 %    \end{session}
 %\]
+
+Next, thread $\tid_2$ executes its own transaction using a similar pattern. 
+Note that in $\mathcal{C}_1$, the view of thread $\tid_2$ is $V_0$. Because 
+the history heap of this configuration contains two versions for each location, 
+there are exactly four views $V': V_0 \sqsubseteq V'$ that can be chosen 
+prior to executing the code of the transaction 
+\[
+              \begin{transaction}
+            		\pderef{\pvar{a}}{\loc_x};\\
+            		\pderef{\pvar{b}}{\loc_y};\\
+            		\pifs{\pvar{a}=1 \wedge \pvar{b}=0}\\
+            			\;\;\;\;\passign{\retvar}{\Large \frownie{}}
+             \end{transaction}
+\]
+
+In practice, for this example we choose the view $V' = [ [\loc_x] \mapsto 1, [\loc_y] \mapsto 0]$, 
+which points to the last version for location $\loc_x$, and to the initial version for $[\loc_y]$. 
+This view is represented in Figure \ref{fig:opsem.example}(c). Executing the transaction 
+results in the transition $\langle \mathcal{C}_1, \prog_1' \rangle \xrightarrow{CM} \langle \mathcal{C}_2, \nil \Par \nil \rangle$, 
+where $\mathcal{C}_2$ is the configuration depicted in Figure \ref{fig:opsem.example}(d). 
+Note that in $\mathcal{C}_2$ the transaction $\tsid_2$ executed by $\tid_2$ has 
+read both the initial version for location $[\loc_y]$, and the latest version for $[\loc_x]$. 
+This caused such a transaction to pass the check at its third line of code, so that the value $\retvar$ 
+for thread $\tid_2$ is updated to ${\Large \frownie{}}$ (see Figure \ref{fig:opsem.example}(d)).
 
 Next, we update the view of thread $\tid_2$, using rules $(C-View-update)$, 
 $(P-thd-exec)$ and $(P-par-R)$. 
