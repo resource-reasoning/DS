@@ -950,16 +950,19 @@ view $V$, we can construct a heap as follows:
 %the command $\cmd$. 
 Judgements in the semantics of commands take the form 
 \[ 
-\langle \hh, \sigma, V: C \rangle \xrightarrow{\mathcal{O}} \langle \hh', \thdstack', V': \cmd' \rangle
+\langle \hh, \sigma, V: C \rangle \xrightarrow{CM} \langle \hh', \thdstack', V': \cmd' \rangle
 \]
 
 %where $\alpha \in \{ \lambda, \delta \}$ identifies whether a transition performed within 
 %a command corresponds to a local computation ($\lambda$), such as executing a 
 %non-transactional primitive command or some housekeeping activity, or to an interaction with 
 %the database ($\delta$), that is executing a transaction. 
-Where $\mathcal{O}$ is a possibly empty set of operations.
-\ac{Introducing labelled transitions was necessary to remove complications later on when dealing 
-with the parallel composition of threads. More details when discussing the rule.}
+Where 
+%$\mathcal{O}$ is a possibly empty set of operations, and 
+$CM$ is an arbitrary consistency model specification; consistency model specifications 
+are introduced formally later in this Section.
+%\ac{Introducing labelled transitions was necessary to remove complications later on when dealing 
+%with the parallel composition of threads. More details when discussing the rule.}
 
 The main rule in the operational semantics of commands is the one corresponding 
 to the execution of a transaction, i.e. $\cmd = [\trans].\cmd'$. For this rule, we must specify the following: 
@@ -985,22 +988,22 @@ Formally:
 \[
 \begin{array}{lll}
 \mathsf{HHupdate}_{\tsid}(\hh, V, \{\RD\;[n]: m\}) &=& 
-\mathsf{let}\; (v, \tsid, RS) = \snapshot(\hh,V, [n]) \; \mathsf{in} \; \\
+\mathsf{let}\; (v, \tsid', RS) = \snapshot(\hh,V, [n]) \; \mathsf{in} \; \\
 &&
-\hh\Big[ [n] \mapsto  \Big( \hh([n])  [ V([n]) \mapsto (v, \tsid, RS \cup \{ \RD\;n: m\} ) ] \Big) \Big]
+\hh\Big[ [n] \mapsto  \Big( \hh([n])  [ V([n]) \mapsto (v, \tsid', RS \cup \{ \tsid \} ) ] \Big) \Big]
 %\lambda [k].\begin{cases}
 %\langle v_0, T_{0}, \T_{0} \rangle \cdots \langle v_i, T_{i}, \T_{i} \cup \{\tsid\} \rangle \cdots \langle v_{n_{k}}, T_{n_{k}}, \T_{n_{k}} \rangle\\
 %\hspace{5pt} \text{if } [k] = [n] \wedge V([k]) = i &\\
 %\hh([k]) \hspace{5pt} \text{otherwise}
 %\end{cases}
 \\
-\mathsf{HHupdate}_{T}(\hh, \_, \{\WR\; [n]: m\}) &=& 
-\hh\Big[ [n] \mapsto ( \hh([n]) \cdot \langle m, T, \emptyset \rangle) \Big]\\
+\mathsf{HHupdate}_{\tsid}(\hh, \_, \{\WR\; [n]: m\}) &=& 
+\hh\Big[ [n] \mapsto ( \hh([n]) \cdot \langle m, \tsid, \emptyset \rangle) \Big]\\
 \mathsf{HHupdate}_{T}(\hh, V, \mathcal{O}_1 \cup \mathcal{O}_2) &=& 
-\mathsf{HHupdate}_{T}(\mathsf{HHupdate}_{T}(\hh, V, \mathcal{O}_1), V, \mathcal{O}_2)
+\mathsf{HHupdate}_{T}(\mathsf{HHupdate}_{\tsid}(\hh, V, \mathcal{O}_1), V, \mathcal{O}_2)
 \end{array}
 \]
-
+\ac{The definition above should be well-formed, but we must prove this.}
 Next, we discuss how the view of a command is changed after executing 
 a transaction. In this case, we only update the view of the locations that 
 have been written by a transaction to be up-to-date with the version 
@@ -1009,7 +1012,7 @@ Formally, we define the function
 \[
 \begin{array}{lll}
 \mathsf{ViewUpdate}(\hh, V, \mathsf{RD}\;[n]: m) &=& V\\
-\mathsf{ViewUpdate}(\hh, V, \mathsf{WR}\;[n]: m) &=& V[ [n] \mapsto \lvert \hh([n])]\\
+\mathsf{ViewUpdate}(\hh, V, \mathsf{WR}\;[n]: m) &=& V[ [n] \mapsto ( \lvert \hh([n]) \rvert -1)]\\
 \mathsf{ViewUpdate}(\hh, V, \mathcal{O}_1 \cup \mathcal{O}_2) &=& \mathsf{update}(\hh, \mathsf{update}(\hh, V, \mathcal{O}_1), \mathcal{O}_2)
 \end{array}
 \]
@@ -1026,11 +1029,28 @@ carries a new version for location $[n]$, and the view is within the boundaries 
 %\[
 %\heap \vdash \langle \thdstack, \cmd \rangle \rightarrow \langle \thdstack', \mathcal{O}', \cmd' \rangle.
 %\] 
+The last notion that we need to introduce, before giving the semantics of commands, 
+is the one of \textbf{Consistency Model Specification.} 
+A consistency model specification $CM$ consists of a set of quadruples 
+$(\hh, V, \mathcal{V}, \mathcal{O})$, where 
+\begin{itemize}
+\item $\hh$ is a history heap, corresponding to a state of the database
+\item $V$ is the view of the history heap of the thread that wants to execute a 
+transaction, 
+\item $\mathcal{V}$ is the multi-set of views of the external environment (i.e. other 
+threads that may be interacting with the database), 
+\item $\mathcal{O}$ is the fingerprint of the transaction to be executed.
+\end{itemize}
+Therefore, tuples of the form $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$ describe 
+which operations a thread is allowed to execute in a single transaction, without conflicting 
+with other threads. We often write $(\hh, V, \mathcal{V}) \triangleright_{CM} \mathcal{O}$ 
+in lieu of $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$.
+
 We are now ready to give the operational semantics for commands.
 The main rule for executing commands is the one that models the execution of one transaction. 
-%In the rule below we compare views according to a partial order $\sqsubseteq$, which 
-%is defined to be the point-wise comparison of values of views at single addresses: 
-%$V_1 \sqsubseteq V_2 \triangleq \forall [n] \in \Addr. V_1([n]) \leq V_2([n])$.
+In the rule below we compare views according to a partial order $\sqsubseteq$, which 
+is defined to be the point-wise comparison of values of views at single locations: 
+$V_1 \sqsubseteq V_2 \triangleq \forall [n] \in \Addr. V_1([n]) \leq V_2([n])$.
 %In the rule below, ignore for the moment the side condition $\langle \hh, \{V\} \leadsto \langle \hh', \{V'\} \rangle$, 
 %which we will explain when we introduce consistency models in the next section.
 \ac{The side-condition concerning weak consistency models 
@@ -1043,19 +1063,20 @@ because we agreed to remove thread identifiers.}
 %\qquad \txstack(\retvar) = v}
 %\]
 \[
-\infer[{\scriptstyle(Tx-exec)}]{\langle \hh, \thdstack, V, [\trans].\cmd \rangle \xrightarrow{\mathcal{O}} \langle \hh', \thdstack', V', \cmd \rangle}
+\infer[{\scriptstyle(Tx-exec)}]{\langle \hh, \thdstack, V, [\trans].\cmd \rangle \xrightarrow{CM} \langle \hh', \thdstack', V', \cmd \rangle}
 {\begin{array}{c}
 V \sqsubseteq V' \qquad 
-h = \snapshot(\hh, V') \qquad 
-\thdstack \vdash \langle \txstack_{0}, \heap, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \txstack, \_, \mathcal{O}, \nil \rangle \qquad 
-\tsid \text{ fresh in } \hh
-\\
+h = \snapshot(\hh, V') \\
+\thdstack \vdash \langle \txstack_{0}, \heap, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \txstack, \_, \mathcal{O}, \nil \rangle 
+\qquad \mathsf{ViewUpdate}(\hh, V', \mathcal{O}) \sqsubseteq V'' \qquad (\hh, V) \triangleright_{CM} \mathcal{O} : V'' \\
+\tsid \text{ fresh in } \hh \qquad 
 %(\hh, V) \leadsto_{CM} (\hh', V') \qquad \hh\\
-\mathsf{HHupdate}_{\tsid}(\hh, V', \mathcal{O}) = \hh' \qquad \mathsf{ViewUpdate}(\hh, V', \mathcal{O}) \sqsubseteq V'' \qquad 
+\mathsf{HHupdate}_{\tsid}(\hh, V', \mathcal{O}) = \hh' \qquad 
 \thdstack[\retvar \mapsto \txstack(\retvar)] = \thdstack'
 \end{array}
 }
 \]
+\ac{Condition on thread stack should go away once the transaction stack is ditched.}
 \ac{Check that $V'$ is well-formed with respect to $\hh'$ is missing from the rule above. 
 Also, for the moment I am going with the possibility of having conflicts in views as long as 
 transactions cannot be executed. My catch here is that there are cases where whether 
@@ -1063,40 +1084,41 @@ a view is conflicting depends on the code of the transaction to be executed (i.e
 detection), so conflicting views cannot be avoided without losing completeness of the semantics). 
 The rule below allows for views to be pushed to the right, so as to resolve conflicts.}
 
-We also introduce a rule that allows to update the view of the thread executing a command. 
-We say that the view $V$ is dominated by $V'$, written $V \sqsubseteq V'$, if for any 
-location $[n]$ we have that $V([n]) \leq V'([n])$. Because updating a view of a thread 
-does not result in an interaction with the database (i.e. no locations are read or written), 
-the transition is labelled with the empty fingerprint $\emptyset$.
-\[
-\infer[{\scriptstyle{(C-View-Update)}}]
-{\langle \hh, \thdstack, V, \cmd \rangle \xrightarrow{\emptyset} \langle \hh, \thdstack, V', \cmd \rangle }
-{ V \sqsubseteq V'}
-\]
+%We also introduce a rule that allows to update the view of the thread executing a command. 
+%We say that the view $V$ is dominated by $V'$, written $V \sqsubseteq V'$, if for any 
+%location $[n]$ we have that $V([n]) \leq V'([n])$. Because updating a view of a thread 
+%does not result in an interaction with the database (i.e. no locations are read or written), 
+%the transition is labelled with the empty fingerprint $\emptyset$.
+%\[
+%\infer[{\scriptstyle{(C-View-Update)}}]
+%{\langle \hh, \thdstack, V, \cmd \rangle \xrightarrow{\emptyset} \langle \hh, \thdstack, V', \cmd \rangle }
+%{ V \sqsubseteq V'}
+%\]
+\ac{The rule for shifting views to the right is now gone, and embedded into the rule for executing transactions}
 
 The other rules of the operational semantics are standard: 
 
 \[
 \infer[{\scriptstyle{(prim-c)}}]
-{\langle \hh, \thdstack, V, \primc.\cmd \rangle \xrightarrow{\emptyset} \langle \hh, \thdstack', V, \cmd \rangle}
+{\langle \hh, \thdstack, V, \primc.\cmd \rangle \xrightarrow{CM} \langle \hh, \thdstack', V, \cmd \rangle}
 {\thdstack \rightsquigarrow_c \thdstack'} 
 \]
 
 \[
 \infer[{\scriptstyle{(C-Choice-L)}}]
-{\langle \hh, \thdstack, V, \cmd_1 + \cmd_2 \rangle \xrightarrow{\emptyset} \langle \hh, \thdstack, V, \cmd_1 \rangle}
+{\langle \hh, \thdstack, V, \cmd_1 + \cmd_2 \rangle \xrightarrow{CM} \langle \hh, \thdstack, V, \cmd_1 \rangle}
 {} 
 \]
 
 \[
-\infer[{\scriptstyle{(C-Choice-L)}}]
-{\langle \hh, \thdstack, V, \cmd_1 + \cmd_2 \rangle \xrightarrow{\emptyset} \langle \hh, \thdstack, V, \cmd_2 \rangle}
+\infer[{\scriptstyle{(C-Choice-R)}}]
+{\langle \hh, \thdstack, V, \cmd_1 + \cmd_2 \rangle \xrightarrow{CM} \langle \hh, \thdstack, V, \cmd_2 \rangle}
 {} 
 \]
 
 \[
-\infer[{\scriptstyle{(C-Choice-L)}}]
-{\langle \hh, \thdstack, V, \mu X.\cmd \rangle \xrightarrow{\emptyset} \langle \hh, \thdstack, V, \{\mu X.\cmd/X\}\cmd \rangle}
+\infer[{\scriptstyle{(C-Fix)}}]
+{\langle \hh, \thdstack, V, \mu X.\cmd \rangle \xrightarrow{CM} \langle \hh, \thdstack, V, \{\mu X.\cmd/X\}\cmd \rangle}
 {} 
 \]
 
@@ -1130,10 +1152,10 @@ The other rules of the operational semantics are standard:
 
 \subsection{Semantics of Programs}
 \label{sec:semantics.programs}
-We want a semantics of programs where transactions are 
-executed atomically, in an interleaving fashion, while still capturing non-serialisable 
-behaviours. We also want our operational semantics to be parametric in the definition of 
-a consistency model. 
+%We want a semantics of programs where transactions are 
+%executed atomically, in an interleaving fashion, while still capturing non-serialisable 
+%behaviours. We also want our operational semantics to be parametric in the definition of 
+%a consistency model. 
 
 %In this sense, a consistency model specification is the set of all the possible transitions that 
 %are allowed by the semantics. Formally, a consistency model specification $CM$ is 
@@ -1142,10 +1164,10 @@ a consistency model.
 %and we often write $(\hh, \mathcal{V}) \leadsto_{CM} (\hh, \mathcal{V}')$ 
 %in lieu of $(\hh, \mathcal{V}, \hh', \mathcal{V}') \in CM$. 
 \ac{
-I'm changing (again) the definition of consistency models. I'm leaving the old 
+I changed (again) the definition of consistency models. I'm leaving the old 
 version in the comment-box for future reference, though it is not clear 
 whether the definition below is expressive enough to capture some consistency models (among 
-others, snapshot isolation.)}
+others, snapshot isolation.)
 
 In this sense, a consistency model specification $CM$ consists of a set of quadruples 
 $(\hh, V, \mathcal{V}, \mathcal{O})$, where 
@@ -1157,43 +1179,48 @@ transaction,
 threads that may be interacting with the database), 
 \item $\mathcal{O}$ is the fingerprint of the transaction to be executed.
 \end{itemize}
-\ac{I start to believe that calling this \emph{consistency model specification} is 
-misleading. In fact, a consistency model should only concern the 
-history-heap, and it should be just a set of history heaps (as much as for dependency graphs, 
-consistency models are just sets of dependency graphs. Crooks and Alvisi call similar 
-structures in their paper \emph{commit tests}, and maybe I should follow the same terminology.)}
+
+%\ac{I start to believe that calling this \emph{consistency model specification} is 
+%misleading. In fact, a consistency model should only concern the 
+%history-heap, and it should be just a set of history heaps (as much as for dependency graphs, 
+%consistency models are just sets of dependency graphs. Crooks and Alvisi call similar 
+%structures in their paper \emph{commit tests}, and maybe I should follow the same terminology.)}
 Therefore, tuples of the form $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$ describe 
 which operations a thread is allowed to execute in a single transaction, without conflicting 
 with other threads. We often write $(\hh, V, \mathcal{V}) \triangleright_{CM} \mathcal{O}$ 
-in lieu of $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$. 
-\ac{One thing that was not clear from the discussion I had with Philippa and Azalea - 
-mainly because it was stuck in my head as an intuition, but I could not think of it during 
-the chat we had - is that whether a set of views is consistent, with respect to some history 
-heap $\hh$, may depend on the set of operations that may 
-be performed in a single transaction. Therefore, we cannot ensure at compile time 
-that a configuration is always going to be consistent. One example is write-conflict detection (see the formal definition 
-later on), where we require that a transaction may write to location $[n]$ only if the view for such a 
-location is up-to-date (i.e. it points to the last available version for $[n]$). This point should now be 
-more clear in the new style I adopted for specifying consistency models, where the fingerprint of a 
-transaction is explicit.}
-\ac{Following a second discussion with Azalea, I'm okay for removing Rule (C-view-update), 
-and to change rule (Tx-exec) to update the view of a thread before and after a transaction execution.
-Though even in this scenario, there may be cases in which a thread ends-up having an inconsistent 
-view, with respect to the set of operations to be executed next.}
-\ac{Had to switch to multi-sets, though I'm looking for alternatives.}
+in lieu of $(\hh, V, \mathcal{V}, \mathcal{O}) \in CM$. }
+%\ac{One thing that was not clear from the discussion I had with Philippa and Azalea - 
+%mainly because it was stuck in my head as an intuition, but I could not think of it during 
+%the chat we had - is that whether a set of views is consistent, with respect to some history 
+%heap $\hh$, may depend on the set of operations that may 
+%be performed in a single transaction. Therefore, we cannot ensure at compile time 
+%that a configuration is always going to be consistent. One example is write-conflict detection (see the formal definition 
+%later on), where we require that a transaction may write to location $[n]$ only if the view for such a 
+%location is up-to-date (i.e. it points to the last available version for $[n]$). This point should now be 
+%more clear in the new style I adopted for specifying consistency models, where the fingerprint of a 
+%transaction is explicit.}
+%\ac{Following a second discussion with Azalea, I'm okay for removing Rule (C-view-update), 
+%and to change rule (Tx-exec) to update the view of a thread before and after a transaction execution.
+%Though even in this scenario, there may be cases in which a thread ends-up having an inconsistent 
+%view, with respect to the set of operations to be executed next.}
+%\ac{Had to switch to multi-sets, though I'm looking for alternatives.}
 
-In this sense, a consistency model specification $CM$ consists of a set of quadruples 
-$(\hh, V, V', \mathcal{O})$, where 
-\begin{enumerate}
-\item $\hh$ is a history heap, corresponding to a state of the database
-\item $V$ is the view over the history heap of the thread that wants to 
-execute a transaction, 
-\item $V'$ is the view over the history heap of the thread, \textbf{immediately after} 
-executing a transaction, 
-\item $\mathcal{O}$ is the fingerprint of the transaction to be executed.
-\end{enumerate}
-\ac{This notion will require to change the rule for executing transactions in 
-the operational semantics.}
+%In this sense, a consistency model specification $CM$ consists of a set of quadruples 
+%$(\hh, V, \mathcal{O}, V')$, where 
+%\begin{enumerate}
+%\item $\hh$ is a history heap, corresponding to a state of the database
+%\item $V$ is the view over the history heap of the thread that wants to 
+%execute a transaction, 
+%\item $\mathcal{O}$ is the fingerprint of the transaction to be executed,
+%\item $V'$ is the view over the history heap of the thread, \textbf{immediately after} 
+%executing a transaction.
+%\end{enumerate}
+%\ac{This notion will require to change the rule for executing transactions in 
+%the operational semantics.}
+%Given a consistency model specification $CM$, we often write 
+%$(\hh, V) \triangleright_{CM} \mathcal{O} : V'$ in lieu of
+%$(\hh, V, \mathcal{O}, V') \in CM$.
+
 %We place the following well-formedness constraints on specifications 
 %of consistency models. We say that $CM$ is well-formed if: 
 %\begin{enumerate}
@@ -1246,10 +1273,10 @@ the operational semantics.}
 %\leadsto_{CM} (\hh', \mathcal{V}')$,  and set of views $\mathcal{V}''$, 
 %we write $(\hh, \mathcal{V}) \bowtie_{\mathcal{V}''} (\hh', \mathcal{V}')$ 
 %if $(\hh, \mathcal{V} \cup \mathcal{V}'') \leadsto_{CM} (\hh', \mathcal{V}' \cup \mathcal{V}'')$.
-
-In order to define the semantics of programs, we need to associate 
-a thread stack and view to each parallel component (or thread) of the program. 
-To this purpose, we define an environment $\mathsf{Env}$ to be 
+The last step we take is that of defining the operational semantics of 
+programs.
+To this end, we associate a thread stack and view to each parallel component (or thread) of the program. 
+In practice, we define an environment $\mathsf{Env}$ to be 
 a partial mapping $\mathsf{Env} : \tidset \rightharpoonup (\thdstackset \times \mathsf{Views})$ 
 \ac{Set of Views and thread identifiers never introduced before.} 
 Given two environments, $\mathsf{Env}_1, \mathsf{Env}_2$, we let 
@@ -1273,39 +1300,61 @@ in which case we have
 %\]
 
 Judgements in the operational semantics take the form 
-\[
-\infer{\langle \hh, \mathsf{Env}, \prog \rangle \xrightarrow{(V, \mathcal{V}, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}', \prog' \rangle}{}
-\]
+%\[
+%\infer{\langle \hh, \mathsf{Env}, \prog \rangle \xrightarrow{(V, \mathcal{V}, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}', \prog' \rangle}{}
+%\]
 
-We first define how to lift the semantics of commands to programs. This results 
-in the following rule: 
 \[
-\infer[{\scriptstyle(P-thd-exec)}]{\langle \hh, \mathsf{Env}, \tid: \cmd \rangle \xrightarrow{(V, \emptyset, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}', \tid: \cmd' \rangle}
+\infer{\langle \hh, \mathsf{Env}, \prog \rangle \xrightarrow{CM} \langle \hh', \mathsf{Env}', \prog' \rangle}{}
+\]
+\ac{The changes made to consistency model specifications simplify the semantics \textbf{a lot}. The rule of parallel 
+composition becomes standard, and the only rule that now needs to take the consistency model into account 
+should be the execution of a transaction in the semantics of commands.}
+
+The rules for the operational semantics of programs are standard. We have three rules. One rule lifts transitions
+ of commands to single-threaded programs.  The remaining two rules model the parallel composition of programs in 
+ a standard, interleaving fashion.
+\[
+\infer[{\scriptstyle(P-thd-exec)}]{\langle \hh, \mathsf{Env}, \tid: \cmd \rangle \xrightarrow{CM} \langle \hh', \mathsf{Env}', \tid: \cmd' \rangle}
 {
 \begin{array}{c}
-\mathsf{Env} = [\tid \mapsto (\sigma, V)] \qquad \langle \hh, \thdstack, V, \cmd \rangle \xrightarrow{\mathcal{O}} \langle \hh', \thdstack', V', \cmd' \rangle 
+\mathsf{Env} = [\tid \mapsto (\sigma, V)] \qquad \langle \hh, \thdstack, V, \cmd \rangle \xrightarrow{CM} \langle \hh', \thdstack', V', \cmd' \rangle 
 \qquad \mathsf{Env}' = [\tid \mapsto (\sigma', V')]\\
-\mathcal{O} \neq \emptyset \implies (\hh, V, \emptyset) \triangleright_{CM} \mathcal{O}
+%\mathcal{O} \neq \emptyset \implies (\hh, V, \emptyset) \triangleright_{CM} \mathcal{O}
 \end{array}
 }
 \]
-Note the side condition $\mathcal{O} \neq \emptyset \implies (\hh, V, \emptyset) \triangleright_{CM} \mathcal{O}$ in the rule above. 
-This is were consistency models come into play. This side condition states that if performing a computation 
-in a command resulted in an interaction with the database $(\mathcal{O} \neq \emptyset)$, then such a computation 
-should be performed only if it is consistent with the consistency model specification ($(\hh, V, \emptyset) \triangleright_{CM} \mathcal{O}$).
-\ac{An alternative would be that of placing a well-formedness condition on consistency models, 
-and require that $(\hh, V, \mathcal{V}) \triangleright_{CM} \emptyset$ for any $\hh, V, \mathcal{V}$. 
-I don't really have a preference.}
 
 
-Finally, we need to define how to compose programs together. 
-Here the main idea is that computations that are valid for a 
-program $\prog_1$ are not necessarily valid anymore in 
-a composite program of the form $\prog_1 \Par \prog_2$. 
-This is because the views of the threads that constitute $\prog_2$ 
-may be conflicting with the thread performing a computation step in 
-$\prog_1$. We will give some examples of consistency models 
-that exhibit this behaviour in the next section. 
+%We first define how to lift the semantics of commands to programs. This results 
+%in the following rule: 
+%\[
+%\infer[{\scriptstyle(P-thd-exec)}]{\langle \hh, \mathsf{Env}, \tid: \cmd \rangle \xrightarrow{(V, \emptyset, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}', \tid: \cmd' \rangle}
+%{
+%\begin{array}{c}
+%\mathsf{Env} = [\tid \mapsto (\sigma, V)] \qquad \langle \hh, \thdstack, V, \cmd \rangle \xrightarrow{\mathcal{O}} \langle \hh', \thdstack', V', \cmd' \rangle 
+%\qquad \mathsf{Env}' = [\tid \mapsto (\sigma', V')]\\
+%\mathcal{O} \neq \emptyset \implies (\hh, V, \emptyset) \triangleright_{CM} \mathcal{O}
+%\end{array}
+%}
+%\]
+%Note the side condition $\mathcal{O} \neq \emptyset \implies (\hh, V, \emptyset) \triangleright_{CM} \mathcal{O}$ in the rule above. 
+%This is were consistency models come into play. This side condition states that if performing a computation 
+%in a command resulted in an interaction with the database $(\mathcal{O} \neq \emptyset)$, then such a computation 
+%should be performed only if it is consistent with the consistency model specification ($(\hh, V, \emptyset) \triangleright_{CM} \mathcal{O}$).
+%\ac{An alternative would be that of placing a well-formedness condition on consistency models, 
+%and require that $(\hh, V, \mathcal{V}) \triangleright_{CM} \emptyset$ for any $\hh, V, \mathcal{V}$. 
+%I don't really have a preference.}
+%
+%
+%Finally, we need to define how to compose programs together. 
+%Here the main idea is that computations that are valid for a 
+%program $\prog_1$ are not necessarily valid anymore in 
+%a composite program of the form $\prog_1 \Par \prog_2$. 
+%This is because the views of the threads that constitute $\prog_2$ 
+%may be conflicting with the thread performing a computation step in 
+%$\prog_1$. We will give some examples of consistency models 
+%that exhibit this behaviour in the next section. 
 
 %Formally, given a transition of the form $(\hh, \mathcal{V}_1) 
 %\leadsto (\hh, \mathcal{V}_1')$, and a set of views $\mathcal{V}_2$, 
@@ -1316,22 +1365,51 @@ that exhibit this behaviour in the next section.
 %$(\hh, \mathcal{V}_1 \uplus \mathcal{V}_2) \leadsto_{CM} (\hh', \mathcal{V}_1' \uplus \mathcal{V}_2')$. 
 %\ac{I am pretty sure that for how the semantics is defined the premise of the implication 
 %is always going to be valid, so we may choose to ditch it.}
-The rule for the parallel composition of programs is defined below: 
+%The rule for the parallel composition of programs is defined below: 
+%\[
+%\infer[{\scriptstyle (P-par-L)}]
+%{\langle \hh, \mathsf{Env}_1 \uplus \mathsf{Env}_2, \prog_1 \Par \prog_2 \rangle 
+%\xrightarrow{(V, \mathcal{V}_1 \uplus \mathcal{V}_2, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}_1' \uplus \mathsf{Env}_2, 
+%\prog_1' \Par \prog_2 \rangle }
+%{ \begin{array}{c}
+%\langle \hh, \mathsf{Env}_1, \prog_1 \rangle \xrightarrow{(V, \mathcal{V}_1, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}_1', \prog_1' \rangle
+%\qquad (\mathsf{Env_1} \uplus \mathsf{Env}_2)\downarrow \\ 
+%\mathcal{V}_2 = \mathsf{Views}(\mathsf{Env}_2) \qquad 
+%\mathcal{O} \neq \emptyset \implies (\hh, V, \mathcal{V}_1 \uplus \mathcal{V}_2 \triangleright_{CM} \mathcal{O}) 
+%%\leadsto_{CM} (\hh', \mathsf{Views}(\mathsf{Env}_1')
+%\end{array}
+%}
+%\]
 \[
 \infer[{\scriptstyle (P-par-L)}]
 {\langle \hh, \mathsf{Env}_1 \uplus \mathsf{Env}_2, \prog_1 \Par \prog_2 \rangle 
-\xrightarrow{(V, \mathcal{V}_1 \uplus \mathcal{V}_2, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}_1' \uplus \mathsf{Env}_2, 
+\xrightarrow{CM} \langle \hh', \mathsf{Env}_1' \uplus \mathsf{Env}_2, 
 \prog_1' \Par \prog_2 \rangle }
 { \begin{array}{c}
-\langle \hh, \mathsf{Env}_1, \prog_1 \rangle \xrightarrow{(V, \mathcal{V}_1, \mathcal{O})}_{CM} \langle \hh', \mathsf{Env}_1', \prog_1' \rangle
-\qquad (\mathsf{Env_1} \uplus \mathsf{Env}_2)\downarrow \\ 
-\mathcal{V}_2 = \mathsf{Views}(\mathsf{Env}_2) \qquad 
-\mathcal{O} \neq \emptyset \implies (\hh, V, \mathcal{V}_1 \uplus \mathcal{V}_2 \triangleright_{CM} \mathcal{O}) 
+\langle \hh, \mathsf{Env}_1, \prog_1 \rangle \xrightarrow{CM} \langle \hh', \mathsf{Env}_1', \prog_1' \rangle
+\qquad (\mathsf{Env_1} \uplus \mathsf{Env}_2)\downarrow
+%\mathcal{V}_2 = \mathsf{Views}(\mathsf{Env}_2) \qquad 
+%\mathcal{O} \neq \emptyset \implies (\hh, V, \mathcal{V}_1 \uplus \mathcal{V}_2 \triangleright_{CM} \mathcal{O}) 
 %\leadsto_{CM} (\hh', \mathsf{Views}(\mathsf{Env}_1')
 \end{array}
 }
 \]
-
+\[
+\infer[{\scriptstyle (P-par-R)}]
+{\langle \hh, \mathsf{Env}_1 \uplus \mathsf{Env}_2, \prog_1 \Par \prog_2 \rangle 
+\xrightarrow{CM} \langle \hh', \mathsf{Env}_1' \uplus \mathsf{Env}_2, 
+\prog_1' \Par \prog_2 \rangle }
+{ \begin{array}{c}
+\langle \hh, \mathsf{Env}_2, \prog_2 \rangle \xrightarrow{CM} \langle \hh', \mathsf{Env}_2', \prog_2' \rangle
+\qquad (\mathsf{Env_1} \uplus \mathsf{Env}_2)\downarrow
+%\mathcal{V}_2 = \mathsf{Views}(\mathsf{Env}_2) \qquad 
+%\mathcal{O} \neq \emptyset \implies (\hh, V, \mathcal{V}_1 \uplus \mathcal{V}_2 \triangleright_{CM} \mathcal{O}) 
+%\leadsto_{CM} (\hh', \mathsf{Views}(\mathsf{Env}_1')
+\end{array}
+}
+\]
+\ac{Probably I need a check to require that $\dom(\mathsf{Env}_2) = \mathsf{threads}(\prog_2)$, 
+where $\mathsf{threads}(\cdot)$ is the function that maps a program into its set of thread identifiers?}
 %For programs, the main rule of the operational semantics is as follows: 
 %\[
 %\infer[{\scriptstyle{(C-Par)}}]
@@ -1520,7 +1598,7 @@ The program $\prog_1$ that we consider is illustrated below:
     \end{session}
  \]
 Note also that we omitted thread identifiers for commands in $\prog_1$. In general,  
-we often write $\cmd_1 \Par \cdots \cmd_n$ as a shorthand for $\tid_1: \cmd_1 \Par \cdots 
+we often write $\cmd_1 \Par \cdots \cmd_n$ as a shorthand for $\tid_1: \cmd_1 \Par \cdots \Par
 \tid_n: \cmd_n$. 
 
 The program $\prog_1$ contains a special symbol ${\Large \frownie{}}$ which can be 
