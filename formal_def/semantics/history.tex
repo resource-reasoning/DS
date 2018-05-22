@@ -31,9 +31,11 @@ For example \( \vi \orderVI \vi' \) could means a thread updates it view from \(
 \label{def:cuts}
 \label{def:views}
 \emph{A view of of a history heap}, short as \emph{a view}, is a partial function from addresses to indexes,
+%\sx{Need standard notation for multi set}
 \[
 \begin{rclarray}
-    \vi \in \viset \subseteq \Views & \defeq & \Addr \parfinfun \Nat
+    \vi \in \Views & \defeq & \Addr \parfinfun \Nat \\
+    %\viset & \in & \func{multiSet}{\Views} \\
 \end{rclarray}
 \]                                                                     
 The composition is \( \vi \composeVI \vi' \defeq \vi \uplus \vi'\) and the unit is \( \unitVI \defeq \emptyset\).
@@ -46,64 +48,84 @@ The order between two views if they have the same domain is the order of all the
 Assuming a set of thread identifiers \( \setthid \subseteq \ThreadID \), \emph{a view environment} is a function from thread identifiers to views, this is, \( \vienv \in \ViEnv \defeq \ThreadID \parfun \Views \).
 \end{defn}
 
-Consistency models are specified as relations over pairs of history heaps and cut environments, and it describes what transitions are allowed.
+A consistency model is specified as a set of quadruples in the form of \( ( \hh, \vi, \opset, \vi' ) \) that describes a thread who has view \( \vi \) is allowed to commit a single transaction that can be abstracted to the operation set \( \opset \), when the state of the database is \( \hh \) and after the commit the thread view must be updated to at least \( \vi' \).
+%The external environment \( \viset \) is a multi-set includes all the views of threads who may be interacting with the database.
 
 \begin{defn}[Consistency Models]
 \label{def:consistency-models}
-A \emph{Consistency model} \( \como \) is a \emph{reflexive and transitive relation} over pairs of history heaps and cut environments, written \( ((\hh,\viset),(\hh',\viset')) \in \como \) or \( (\hh, \viset) \toCO{\como} (\hh', \viset' )\), that the transition from the state \( (\hh,\viset)\) to the state \( (\hh',\viset') \) satisfies certain constraints.
-Each tuple in the set should satisfy a well-formed condition that the cut environment should contain no more address than the history heap,
-\[
-    \bigwedge\limits_{\vi \in \viset} \dom(\vi) \subseteq \dom(\hh)
-\]
-\sx{Might be useful constraint for soundness of logic, if never used, just delete this.}
-The specification of a certain consistency model should be local to the owned history heaps, so that the combination of two disjointed parts also satisfies the specification.
-\[
-    \begin{array}{@{}l}
-    \for{\hh,\hh',\hh'',\hh''', \viset, \viset', \viset'', \viset'''} \\
-        \quad ((\hh, \viset),(\hh',\viset')) \in \como 
-        \land ((\hh'', \viset''),(\hh''',\viset''')) \in\como 
-        \land ( \hh \composeHH \hh'' )\isdef
-        \land ( \hh' \composeHH \hh''' )\isdef \\
-        \qquad \implies  ((\hh \composeHH \hh'', \viset \uplus \viset''),(\hh' \composeHH \hh''',\viset' \uplus \viset''')) \in \como
-    \end{array}
-\]
-\sx{The following says the consistency model transfer from a valid state to another valid state. }
-A consistency model also requires to transfer from a \emph{valid} state to another \emph{valid} state where the validity is independent from the transition.
-\[
-    \for{\como} \exsts{\funcn{valid}} (\hh, \viset) \in \como \implies \func{valid}{\hh, \viset}
-\]
-where \( (\hh , \viset) \in \como\) means the state \((\hh, \viset)\) appears in the relation.
-\end{defn}
-
-\sx{Need Andrea for more clarify about defining consistency model}
-
-There are two ways to specify consistency models, one by converting the history heaps to dependant graphs and checking if the cycles satisfy certain property, while another by checking if the view environment satisfy certain property.
-We introduce \( \funcn{graph} : \HisHeaps \to \sort{DGraph} \) function for converting history heaps to dependant graphs.
-\[
-\begin{rclarray}
-    \DGraph & \defeq & \Setcon{(\txidset, \ww, \wrr, \rw)}{ \txidset \subseteq \TxID \land \ww, \wrr, \rw \subseteq (\txidset \times \txidset)} \\
-    \func{graph}{\hh} & \defeq & \left(
-    \begin{array}{@{}l}
-        \Setcon{\txid}{\exsts{\addr, i} \txid = \hhW(\addr)(i) \lor \txid \in \hhR(\addr)(i) }, \\
-        \Setcon{(\txid, \txid')}{\exsts{\addr, i, i'} \txid = \hhW(\addr)(i) \lor \txid' = \hhW(\addr)(i') \land i < i' }, \\
-        \Setcon{(\txid, \txid')}{\exsts{\addr, i} \txid = \hhW(\addr)(i) \lor \txid' \in \hhR(\addr)(i) }, \\
-        \Setcon{(\txid, \txid')}{\exsts{\addr, i, i'} \txid \in \hhR(\addr)(i) \lor \txid' = \hhW(\addr)(i') \land i < i' }, \\
-    \end{array}
-    \right)
-\end{rclarray}
-\]
-
-\begin{example}[Serialisibility]
-\end{example}
-
-\begin{example}[Snapshot]
-Any cycle in the corresponding dependant graph of the history heap after the transition must have adjacent anti-dependent edges (\( \rw \) edges).
+Given the set of history heaps \( \hh \in \HisHeaps \) (\defref{def:his_heap}), operation sets \( \opset \in \Opsets \) (\defref{def:ops}) and views \( \vi, \vi' \in \Views \) (\defref{def:views}), \emph{a consistency model} \( \como \in \Como \) is a set of quadruples in the form of \( ( \hh, \vi, \viset, \opset ) \),
 \[
     \begin{rclarray}
-    \SI & \defeq & \Setcon{((\hh, \thcu),(\hh', \thcu'))}{\exsts{\ww, \rw, \wrr} (\stub, \ww, \wrr, \rw)  = \func{graph}{\hh'} \land (\wrr \cup \ww) ; \rw? \text{ is acyclic}}
+        \como \in \Como & \defeq & \powerset{\HisHeaps \times \Views \times \Opsets \times \Views}
     \end{rclarray}
 \]
-\end{example}
+A well-formed consistency model, written \( \pred{wfC}{\como}\), requires the domain of pre- and post views are are the same as the domain of the history heap, and also the domain of the operation set, the projection for all the addresses, has no garbage address against the view.
+\sx{Maybe also some version of composition requirement.}
+\[
+    \begin{rclarray}
+        \pred{wfC}{\como} & \defeq & \for{\hh, \vi, \vi', \opset } (\hh, \vi, \opset, \vi') \in \como \implies \opset\projection{2} \subseteq \dom(\vi) = \dom(\vi') = \dom(\hh)
+    \end{rclarray}
+\]
+\end{defn}
+
+We often write \( (\hh, \vi) \csat \opset : \vi' \) in lieu of \( (\hh, \vi, \opset, \vi') \in \como \).
+
+%\begin{defn}[Consistency Models]
+%\label{def:consistency-models}
+%A \emph{Consistency model} \( \como \) is a \emph{reflexive and transitive relation} over pairs of history heaps and cut environments, written \( ((\hh,\viset),(\hh',\viset')) \in \como \) or \( (\hh, \viset) \toCO{\como} (\hh', \viset' )\), that the transition from the state \( (\hh,\viset)\) to the state \( (\hh',\viset') \) satisfies certain constraints.
+%Each tuple in the set should satisfy a well-formed condition that the cut environment should contain no more address than the history heap,
+%\[
+    %\bigwedge\limits_{\vi \in \viset} \dom(\vi) \subseteq \dom(\hh)
+%\]
+%\sx{Might be useful constraint for soundness of logic, if never used, just delete this.}
+%The specification of a certain consistency model should be local to the owned history heaps, so that the combination of two disjointed parts also satisfies the specification.
+%\[
+    %\begin{array}{@{}l}
+    %\for{\hh,\hh',\hh'',\hh''', \viset, \viset', \viset'', \viset'''} \\
+        %\quad ((\hh, \viset),(\hh',\viset')) \in \como 
+        %\land ((\hh'', \viset''),(\hh''',\viset''')) \in\como 
+        %\land ( \hh \composeHH \hh'' )\isdef
+        %\land ( \hh' \composeHH \hh''' )\isdef \\
+        %\qquad \implies  ((\hh \composeHH \hh'', \viset \uplus \viset''),(\hh' \composeHH \hh''',\viset' \uplus \viset''')) \in \como
+    %\end{array}
+%\]
+%\sx{The following says the consistency model transfer from a valid state to another valid state. }
+%A consistency model also requires to transfer from a \emph{valid} state to another \emph{valid} state where the validity is independent from the transition.
+%\[
+    %\for{\como} \exsts{\funcn{valid}} (\hh, \viset) \in \como \implies \func{valid}{\hh, \viset}
+%\]
+%where \( (\hh , \viset) \in \como\) means the state \((\hh, \viset)\) appears in the relation.
+%\end{defn}
+
+%\sx{Need Andrea for more clarify about defining consistency model}
+
+%There are two ways to specify consistency models, one by converting the history heaps to dependant graphs and checking if the cycles satisfy certain property, while another by checking if the view environment satisfy certain property.
+%We introduce \( \funcn{graph} : \HisHeaps \to \sort{DGraph} \) function for converting history heaps to dependant graphs.
+%\[
+%\begin{rclarray}
+    %\DGraph & \defeq & \Setcon{(\txidset, \ww, \wrr, \rw)}{ \txidset \subseteq \TxID \land \ww, \wrr, \rw \subseteq (\txidset \times \txidset)} \\
+    %\func{graph}{\hh} & \defeq & \left(
+    %\begin{array}{@{}l}
+        %\Setcon{\txid}{\exsts{\addr, i} \txid = \hhW(\addr)(i) \lor \txid \in \hhR(\addr)(i) }, \\
+        %\Setcon{(\txid, \txid')}{\exsts{\addr, i, i'} \txid = \hhW(\addr)(i) \lor \txid' = \hhW(\addr)(i') \land i < i' }, \\
+        %\Setcon{(\txid, \txid')}{\exsts{\addr, i} \txid = \hhW(\addr)(i) \lor \txid' \in \hhR(\addr)(i) }, \\
+        %\Setcon{(\txid, \txid')}{\exsts{\addr, i, i'} \txid \in \hhR(\addr)(i) \lor \txid' = \hhW(\addr)(i') \land i < i' }, \\
+    %\end{array}
+    %\right)
+%\end{rclarray}
+%\]
+
+%\begin{example}[Serialisibility]
+%\end{example}
+
+%\begin{example}[Snapshot]
+%Any cycle in the corresponding dependant graph of the history heap after the transition must have adjacent anti-dependent edges (\( \rw \) edges).
+%\[
+    %\begin{rclarray}
+    %\SI & \defeq & \Setcon{((\hh, \thcu),(\hh', \thcu'))}{\exsts{\ww, \rw, \wrr} (\stub, \ww, \wrr, \rw)  = \func{graph}{\hh'} \land (\wrr \cup \ww) ; \rw? \text{ is acyclic}}
+    %\end{rclarray}
+%\]
+%\end{example}
 
 %{ \color{gray}
 %\begin{defn}[Thread transition labels]
@@ -153,8 +175,10 @@ Given the set of consistency model \( \ConsisModels \) (\defref{def:consistency-
 \end{rclarray}
 \]
 is defined in \figref{fig:thread_semantics}.
+\sx{
 The labels are for technical reason because some steps need to satisfy certain constraints related other threads. 
 The labels includes commit \( \lbC{\txid} \), view shift \( \lbV \) and identify \( \lbID \).
+}
 \end{defn}
 
 \begin{figure}[!t]
@@ -166,13 +190,13 @@ The labels includes commit \( \lbC{\txid} \), view shift \( \lbV \) and identify
         \como \vdash ( \stk, \hh, \vi ), \ptrans{\trans} \ \toT{\lbC{\txid}} \ ( \stk', \hh', \vi' ) , \pskip
     }{%
         \begin{array}{c}
-            \txid \in \func{fresh}{\hh}  
-            \quad \h = \clpsHH{\hh,\vi}
+            \vi'' \geq \vi
+            \quad \txid \in \func{fresh}{\hh}  
+            \quad \h = \clpsHH{\hh,\vi''}
             \quad \vdash (\stk, \h, \unitO), \trans \ \toL^{*} \  (\stk', \h', \opset) , \pskip \\
             \hh' = \func{updHisHp}{\hh, \vi, \txid, \opset}  
-            \quad \func{updView}{\hh', \vi, \opset} \orderVI \vi 
-            \quad \pred{wfView}{\hh', \vi'}  \\
-            \hh,\Set{\vi} \toCO{\como} \hh',\Set{\vi}
+            \quad \vi' \geq \func{updView}{\hh', \vi, \opset}
+            \quad (\hh, \vi) \csat \opset : \vi'
         \end{array}
     }
 \]
@@ -247,7 +271,6 @@ The labels includes commit \( \lbC{\txid} \), view shift \( \lbV \) and identify
  
 \[
 \begin{rclarray}                                 
-    \pred{wfView}{\hh,\vi} & \defeq & \for{\addr} \vi(\addr) \leq \left|\hh(\addr) \right| \\
     \clpsHH{\hh, \cu} & \defeq & 
     \begin{cases}
         \lambda \addr \ldotp \hhV(\addr)(\cu(\addr)) & \text{if } \dom(\hh) = \dom(\cu) \land \for{\addr'} \cu(\addr') \leq \left|\hh(\addr')\right| \\
@@ -256,8 +279,8 @@ The labels includes commit \( \lbC{\txid} \), view shift \( \lbV \) and identify
     \func{updHisHp}{\hh, \vi, \txid, \opset} & \defeq & 
     \begin{cases}
         \hh & \text{if } \opset = \unitO \\
-        \func{updHisHp}{\hh', \vi, \txid, \opset'} & \text{if } \opset = \opset' \addO (\otR, \addr, \val) \\
-        \func{updHisHp}{\hh'', \vi, \txid, \opset'} & \text{if } \opset = \opset' \addO (\otW, \addr, \val) \\
+        \func{updHisHp}{\hh', \vi, \txid, \opset'} & \text{if } \opset = \opset' \uplus (\otR, \addr, \val) \\
+        \func{updHisHp}{\hh'', \vi, \txid, \opset'} & \text{if } \opset = \opset' \uplus (\otW, \addr, \val) \\
     \end{cases} \\
     \hh' & \equiv & \hh\rmto{\addr}{\hh(\addr)\rmto{\vi(\addr)}{\left(\hhV(\addr)(\vi(\addr)),\hhW(\addr)(\vi(\addr)),\hhR(\addr)(\vi(\addr)) \uplus \Set{\txid} \right)}} \\
     \hh'' & \equiv & \hh\rmto{\addr}{\hh(\addr) \lcat \List{(\val, \txid, \emptyset)} } \\
@@ -266,8 +289,8 @@ The labels includes commit \( \lbC{\txid} \), view shift \( \lbV \) and identify
     \func{updView}{\hh, \vi, \opset} & \defeq &
     \begin{cases}
         \vi & \text{if } \opset = \unitO \\
-        \func{updView}{\hh, \vi, \opset'} & \text{if } \opset = \opset' \addO (\otR, \addr, \val) \\
-        \func{updView}{\hh, \vi\rmto{\addr}{\left| \hh(\addr) \right|}, \opset'} & \text{if } \opset = \opset' \addO (\otW, \addr, \val) \\
+        \func{updView}{\hh, \vi, \opset'} & \text{if } \opset = \opset' \uplus (\otR, \addr, \val) \\
+        \func{updView}{\hh, \vi\rmto{\addr}{\left| \hh(\addr) \right|}, \opset'} & \text{if } \opset = \opset' \uplus (\otW, \addr, \val) \\
     \end{cases} \\
 %
 %              
@@ -291,10 +314,8 @@ Since we assume strong session, we set the lower bound for the new local view by
 This function shifts the view to the latest version if the version is written by the current transaction.
 This guarantees if there is no currency, the following transaction will read the write.
 Since it is a lower bound, the new local view \( \vi' \) can advance the view as long as it is not out-of-bound.
-Finally, the transition from \( (\hh, \vi) \) to \( (\hh', \vi') \) should be allowed by the consistency model \( \como \).
-
-To model synchronisation between sessions, the \rl{PViewLShift} rule allows to non-deterministically advance a view.
-Except \rl{PCommit} and \rl{PViewLShift}, the rest rules have the expected behaviours.
+Finally, the transaction is allowed by the consistency model.
+To model synchronisation between sessions, the \rl{PCommit} rule has a view shift before executing the transaction.
 
 \begin{lem}[Confluence of \funcn{updHisHp} and \funcn{updView}]
 Given a valid set of operations \( \opset \), all the computation paths for \( \funcn{updHisHp} \) function (\( \funcn{updView} \) function) yield the same result.
