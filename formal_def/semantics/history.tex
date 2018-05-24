@@ -5,14 +5,18 @@ Each version \( ( \val, \txid, \txidset ) \) contains a value \( \val \) and a t
 Let \( \hh(\addr)(i)\) denotes the \emph{i-th} version associated with address \( \addr \), and \( \hhV(\addr)(i) \), \( \hhW(\addr)(i) \) and \( \hhR(\addr)(i) \) denote the first (value), second (write) and third element (read) of the version.
 For better presentation, we assume the index starts from 1, so \( \hh(\addr)(1)\) and \( \hh(\addr)(\left|\hh(\addr)\right|)\) denote the first and the latest versions of the address \( \addr \).
 
+\ac{
+    Notation for version, \( \ver\) , history heap \( \hh\) vs \( h\!h \) (shrike the space between two h).
+}
+\sx{Need a well-formed condition here but not sure how strong it will be.}
 \begin{defn}[History Heaps]
 \label{def:his_heap}
 Assuming a set of \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \dots}\), a \emph{history heap}, \( \hh \in \HisHeaps \), is a partial function from addresses to lists of \emph{versions}.
 Each version a tuple contains a value, a transaction (identifier) and a set of transactions (identifiers).
 \[
 \begin{rclarray}
-    \Versions & \defeq &  \Val \times \TxID \times \powerset{\TxID} \\
-    \HisHeaps & \defeq & \Addr \parfinfun \Versions^{*}
+    \ver \in \Versions & \defeq &  \Val \times \TxID \times \powerset{\TxID} \\
+    \hh \in \HisHeaps & \defeq & \Addr \parfinfun \Versions^{*}
 \end{rclarray}
 \]
 The composition of two history heaps is \( \hh \composeHH \hh' \defeq \hh \uplus \hh' \) and the unit element is \( \unitHH \defeq \emptyset \), which together form \emph{the partial commutative monoid of history heap}.
@@ -45,13 +49,15 @@ The order between two views if they have the same domain is the order of all the
     \cu \orderCU \cu' & \defiff & \dom(\cu) = \dom(\cu') \land \for{\addr} \cu(\addr) \leq \cu'(\addr) \\
 \end{rclarray}
 \]
-Assuming a set of thread identifiers \( \setthid \subseteq \ThreadID \), \emph{a view environment} is a function from thread identifiers to views, this is, \( \vienv \in \ViEnv \defeq \ThreadID \parfun \Views \).
+%Assuming a set of thread identifiers \( \setthid \subseteq \ThreadID \), \emph{a view environment} is a function from thread identifiers to views, this is, \( \vienv \in \ViEnv \defeq \ThreadID \parfun \Views \).
 \end{defn}
 
 A consistency model is specified as a set of quadruples in the form of \( ( \hh, \vi, \opset, \vi' ) \) that describes a thread who has view \( \vi \) is allowed to commit a single transaction that can be abstracted to the operation set \( \opset \) when the state of the database is \( \hh \), and then after the commit the thread view must be updated to at least \( \vi' \).
 We often write \( (\hh, \vi) \csat \opset : \vi' \) in lieu of \( (\hh, \vi, \opset, \vi') \in \como \).
 
 %The external environment \( \viset \) is a multi-set includes all the views of threads who may be interacting with the database.
+
+\ac{Terminology: commit test instead of consistency model}
 
 \begin{defn}[Consistency Models]
 \label{def:consistency-models}
@@ -174,7 +180,7 @@ The operations are the first read and last write of each address, which are the 
 The \funcn{updHisHp} function updates the history heap.
 If there is a read operation, it includes the new identifier to the version relates to the address and the local view \( \vi \).
 If there is a write operation, it extends a new version to the end and puts the new identifier as the writer.
-Since we assume strong session, we set the lower bound for the new local view by \funcn{updView} function.
+Since we assume strong program order, we set the lower bound for the new local view by \funcn{updView} function.
 This function shifts the view to the latest version if the version is written by the current transaction.
 This guarantees strong program order, meaning the following transaction will at least read its own write.
 Since it is a lower bound, the new local view \( \vi' \) can advance the view as long as it is not out-of-bound.
@@ -191,17 +197,19 @@ Finally, the transaction is allowed by the consistency model.
 Given the set of consistency model \( \ConsisModels \) (\defref{def:consistency-models}), stacks \( \Stacks \) (\defref{def:stacks}), history heaps \( \HisHeaps \) (\defref{def:his_heap}) and views \( \Views \) (\defref{def:cuts}), the \emph{per-thread operational semantics} of programs,
 \[
 \begin{rclarray}
-	\toT{} & : &
-    \begin{array}[t]{@{}l@{}}
-    \Como 
-    \times {} \\
-	\quad \left( ( \Stacks \times \HisHeaps \times \Views ) \times \Commands \right) 
-	\times
+	(.)\toT{(.)} (.) & : &
+    %\begin{array}[t]{@{}l@{}}
 	\left( ( \Stacks \times \HisHeaps \times \Views ) \times \Commands \right) 
-    \end{array}
+	\times \Como \times 
+	\left( ( \Stacks \times \HisHeaps \times \Views ) \times \Commands \right) 
+    %\end{array}
 \end{rclarray}
 \]
 is defined in \figref{fig:thread_semantics}.
+The well-formed condition for the relation asserts the views and history heaps contains the same addresses.
+\[
+\for{\hh, \vi, \hh', \vi'} (\stub, \hh, \vi, \stub) \toT{\stub} (\stub, \hh', \vi', \stub)  \implies \dom(\hh) = \dom(\vi) \land \dom(\hh') = \dom(\vi')
+\]
 For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the result by replacing the \emph{i-th} element to \( k \), where the index starts from 1.
 %\sx{
 %The labels are for technical reason because some steps need to satisfy certain constraints related other threads. 
@@ -215,13 +223,13 @@ For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the resu
 %
 \[
     \infer[\rl{PCommit}]{%
-        \como \vdash ( \stk, \hh, \vi ), \ptrans{\trans} \ \toT \ ( \stk', \hh', \vi' ) , \pskip
+        ( \stk, \hh, \vi ), \ptrans{\trans} \ \toT{\como} \ ( \stk', \hh', \vi' ) , \pskip
     }{%
         \begin{array}{c}
             \vi'' \geq \vi
             \quad \txid \in \func{fresh}{\hh}  
             \quad \h = \clpsHH{\hh,\vi''}
-            \quad \vdash (\stk, \h, \unitO), \trans \ \toL^{*} \  (\stk', \h', \opset) , \pskip \\
+            \quad (\stk, \h, \unitO), \trans \ \toL^{*} \  (\stk', \h', \opset) , \pskip \\
             \hh' = \func{updHisHp}{\hh, \vi, \txid, \opset}  
             \quad \vi' \geq \func{updView}{\hh', \vi, \opset}
             \quad (\hh, \vi) \csat \opset : \vi'
@@ -231,7 +239,7 @@ For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the resu
 
 \[
     \infer[\rl{PAssign}]{%
-        \como \vdash ( \stk, \hh, \vi ) , \passign{\var}{\expr} \ \toT \  ( \stk\rmto{\var}{\val}, \hh, \vi ) , \pskip
+        ( \stk, \hh, \vi ) , \passign{\var}{\expr} \ \toT{\como} \  ( \stk\rmto{\var}{\val}, \hh, \vi ) , \pskip
     }{
         \val = \evalE{\expr}
     }
@@ -239,7 +247,7 @@ For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the resu
 
 \[
     \infer[\rl{PAssume}]{%
-        \como \vdash ( \stk, \hh, \vi ) , \passume{\expr} \ \toT \  ( \stk, \hh, \vi ) , \pskip
+        ( \stk, \hh, \vi ) , \passume{\expr} \ \toT{\como} \  ( \stk, \hh, \vi ) , \pskip
     }{%
         \evalE[\thstk]{\expr} = 0
     }
@@ -247,7 +255,7 @@ For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the resu
 
 %\[
     %\infer[\rl{PViewLShift}]{
-        %\como \vdash ( \stk, \hh, \vi ) , \cmd \ \toT \  ( \stk, \hh, \cu' ) , \cmd
+        %\como \vdash ( \stk, \hh, \vi ) , \cmd \ \toT{\como} \  ( \stk, \hh, \cu' ) , \cmd
     %}{
         %\vi \orderVI \vi'
     %}
@@ -255,7 +263,7 @@ For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the resu
 
 \[
     \infer[\rl{PChoice}]{%
-        \como \vdash ( \stk, \hh, \vi ) , \cmd_{1} \pchoice \cmd_{2} \ \toT \  ( \stk, \hh, \vi ) , \cmd'
+        ( \stk, \hh, \vi ) , \cmd_{1} \pchoice \cmd_{2} \ \toT{\como} \  ( \stk, \hh, \vi ) , \cmd'
     }{
         \cmd' \in \Set{\cmd_{1}, \cmd_{2}}
     }
@@ -263,21 +271,21 @@ For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the resu
 
 \[
     \infer[\rl{PLoop}]{%
-        \como \vdash ( \stk, \hh, \vi ) , \cmd\prepeat \ \toT \  ( \stk, \hh, \vi ) , \pskip \pchoice (\cmd \pseq \cmd\prepeat)
+        ( \stk, \hh, \vi ) , \cmd\prepeat \ \toT{\como} \  ( \stk, \hh, \vi ) , \pskip \pchoice (\cmd \pseq \cmd\prepeat)
     }{}
 \]
 
 \[
     \infer[\rl{PSeqSkip}]{%
-        \como \vdash ( \stk, \hh, \vi ) , \pskip \pseq \cmd \ \toT \  ( \stk, \hh, \vi ) , \cmd
+        ( \stk, \hh, \vi ) , \pskip \pseq \cmd \ \toT{\como} \  ( \stk, \hh, \vi ) , \cmd
     }{}
 \]
 
 \[
     \infer[\rl{PSeq}]{%
-        \como \vdash ( \stk, \hh, \vi ) , \cmd_{1} \pseq \cmd_{2} \ \toT{\lb} \ ( \stk', \hh, \vi' ) , {\cmd_{1}}' \pseq \cmd_{2}
+        ( \stk, \hh, \vi ) , \cmd_{1} \pseq \cmd_{2} \ \toT{\como} \ ( \stk', \hh, \vi' ) , {\cmd_{1}}' \pseq \cmd_{2}
     }{% 
-        \como \vdash ( \stk, \hh, \vi ) , \cmd_{1} \ \toT{\lb} \  ( \stk', \hh, \vi' ) , {\cmd_{1}}' 
+        ( \stk, \hh, \vi ) , \cmd_{1} \ \toT{\como} \  ( \stk', \hh, \vi' ) , {\cmd_{1}}' 
     }
 \]
 
@@ -330,12 +338,12 @@ For any lists and tuples \( l \), the notation \( l\rmto{i}{k} \) means the resu
 \]
 \hrule\vspace{5pt}
 \[
-    \infer[\rl{PSingle}]{%
-        \como \vdash ( \hh, Env, \prog ) \ \toG \  ( \hh', Env\rmto{\thid}{(\stk',\vi')} , \prog\rmto{\thid}{\cmd'} ) 
+    \infer[\rl{PSingleThread}]{%
+        ( \hh, \thdenv, \prog ) \ \toG{\como} \  ( \hh', \thdenv\rmto{\thid}{(\stk',\vi')} , \prog\rmto{\thid}{\cmd'} ) 
     }{%
-        (\stk,\vi) = Env(\thid)
+        (\stk,\vi) = \thdenv(\thid)
         && \cmd = \prog(\thid) 
-        && \como \vdash ( \stk, \hh, \vi ), \cmd, \ \toT{\lb} \  ( \stk', \hh', \vi' ) , \cmd'  \\
+        && ( \stk, \hh, \vi ), \cmd, \ \toT{\como} \  ( \stk', \hh', \vi' ) , \cmd'  \\
     }
 \]
 \hrule\vspace{5pt}
@@ -360,9 +368,15 @@ Given a valid operation set \( \opset \), all the computation paths for \( \func
 %\end{defn}
 %}
  
+\sx{Later, a better way to say the initial config. to cover history heap stacks.}
+
 The program has standard interleaving semantics by picking a thread and then progressing one step.
 To achieve that a thread environment holds the stacks and views associated with all running threads \( Env \in \sort{ThdEnv} \).
 We assume the thread identifiers in the thread environment match with those in the program \( \prog \).
+\sx{For the logic, we need at beginning all the stacks are the same and at the end stacks are compatible with each others. Need to find a way to say that here.}
+We also assume all the stacks initially are the same and when all threads finish, their stacks are compatible which means that the same variables have the same values.
+
+
 %If the step is commit \( \lbC{\txid} \), the overall transition of history heap and view environment should satisfy consistency model.
 %In anther words, the view that has been changed should be compatible with those has not been changed.
 %It is necessary to check the compatibility because some consistency models are specified as constraints among all views.
@@ -372,14 +386,15 @@ We assume the thread identifiers in the thread environment match with those in t
 \begin{defn}[Programs semantics] 
 \label{def:thread_pool_semantics}
 \label{def:program_semantics}
-Given the set of consistent models \( \ConsisModels \) (\defref{def:consistency-models}), history heaps \(\HisHeaps\) (\defref{def:his_heap}) and view environment \(\ViEnv \) (\defref{def:cuts}), the \emph{thread pool semantics}, 
+Given the set of consistent models \( \ConsisModels \) (\defref{def:consistency-models}) and history heaps \(\HisHeaps\) (\defref{def:his_heap}) , the \emph{thread pool semantics}, 
 \[
-	\toG{} : \Como 
-    \times ( \HisHeaps \times \sort{ThdEnv} \times \Programs) 
-    \times ( \HisHeaps \times \sort{ThdEnv} \times \Programs) 
+	(.) \toG{(.)} (.): 
+    \times ( \HisHeaps \times \ThdEnv \times \Programs) 
+    \times \Como 
+    \times ( \HisHeaps \times \ThdEnv \times \Programs) 
 \]
 is defined in \figref{fig:thread_pool_semantics}.
-The thread environment is a partial function from thread identifiers to pairs of stacks and views \( Env \in \sort{ThdEnv} \defeq \ThreadID \parfun \Stacks \times \Views \) .
+The thread environment is a partial function from thread identifiers to pairs of stacks and views \( \thdenv \in \ThdEnv \defeq \ThreadID \parfinfun \Stacks \times \Views \) .
 \end{defn}
  
 %The thread pool operational semantics is given in \figref{fig:thread_pool_semantics}, where an arbitrary thread in the pool \(\thpl\) is picked to run for one step.
