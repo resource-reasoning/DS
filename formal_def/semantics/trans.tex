@@ -1,6 +1,8 @@
 \subsection{Programming language}
 
-For simplify, \emph{a program} \( \prog \) contains fixed numbers of top level threads and there is no dynamic fork and join.
+\ac{For the reason \( \Nat \) is a set while \( \mathbb{C} \)  is a instance, change it to \( \cmd \) }
+
+\emph{A program} \( \prog \) contains fixed numbers of top level threads and there is no dynamic fork and join.
 Each thread has a unique thread identifier \( \thid \in \ThreadID \) and associated \emph{commands}.
 The \emph{commands}, ranged over by $\cmd$, are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\cmd; \cmd$), non-deterministic choice ($\cmd+\cmd$) and loops ($\cmd^*$).
 To simulate conditional branching and loops, we have primitive commands assume (\( \passume{\expr}\)) and assignment (\( \passign{\var}{\expr} \)), where \( \var \) denotes stack variable and \( \expr \) denotes arithmetic expressions which have no side effect.
@@ -64,6 +66,8 @@ The $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by 
 \]
 \end{defn}
 
+We write \( \cmd_{1} \ppar \cmd_{2} \ppar \dots \) as a syntactic sugar for a program \( \prog \) with implicit unique thread identifiers \( \prog = \Set{\thid_{1} \mapsto \cmd_{1}, \thid_{2} \mapsto \cmd_{2}, \dots }\).
+
 \subsection{Local/Transaction Semantics}
 
 Each thread has it own stack, where local variables are stored.
@@ -71,17 +75,17 @@ A thread can access the stack inside or outside transactions.
 When a transaction start, it determine a local heap from the current state of database and local view, which we will explain the process later.
 Yet this local heap does not affect outside world, instead we use \emph{operation} to connect a transaction to outside world.
 A operation could be read or write to a address with a value.
-Intuitively, when a transaction is about to commit, it will have \emph{a set of operations} containing the first read and last write for each address.
+Intuitively, when a transaction is about to commit, it will have \emph{a set of operations} or \emph{operation set} containing the \emph{first read} and \emph{last write} for each address.
+Note that \emph{first read} actually refers to \emph{first read before any other reads and writes}.
 Because a transaction is executed atomically, all the intermediate steps are not observable from the outside world.
 
-we introduce \emph{a well-formed set of operations} \( \opset \in \Opsets\) that is a subset of operations in which there are at most one read and one write for each address.
+We introduce \emph{a well-formed operation set} \( \opset \in \Opsets\) that is a set of operations in which there are at most one read and one write for each address.
 The composition, then, is defined as set disjointed union as long as the result is well-formed.
-To help us write down the semantics, we assume a binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the set \( \opset \).
-If the new operation is a read, for example \(\otR, \addr, \val\) that \( \addr \) is the address and \( \val\) is the value, and there is no other operation related to the same address, this new read operation will be included in the set.
-Note that if there is already a write in the set, this mean the following reads are all local.
+To help us write down the semantics, we define a binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the set \( \opset \).
+If the new operation is a read, for example \(\otR, \addr, \val\) where \( \addr \) is the address and \( \val\) is the associated value, and there is no other operation related to the same address, this new read operation will be included in the result.
 Meanwhile, if the new operation is a write, it will overwrite all preview write operations to the same address.
 
-\sx{Single stack for simplicity. Design choice, total stack vs partial stack, make sure it is consistent.}
+\sx{Design choice, total stack vs partial stack, we pick partial here but make sure it is consistent through the document.}
 
 \begin{defn}[Stacks]
 \label{def:stacks}
@@ -96,12 +100,14 @@ A \emph{stack} is a partial function from variables \( \Vars \) (\defref{def:lan
 %\end{defn}
 %}
 
-\begin{definition}[Heaps]
+\ac{Key-value stores vs Heaps}
+
+\begin{defn}[Heaps]
 \label{def:heaps}
 Given the sets of program values $\Val$  and addresses \( \Addr\)  (\defin\ref{def:program_values}), the set of \emph{heaps} is: $\h \in \Heaps \eqdef \Addr \parfinfun \Val$.
 The \emph{heap composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ heap unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
 The \emph{partial commutative monoid of  heaps} is $(\Heaps, \composeH, \{\unitH\})$.
-\end{definition}
+\end{defn}
 
 \begin{defn}[Evaluation of expression]
 Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{arithmetic expression evaluation} function, $\evalE[(.)]{.}:\Expressions \times \Stacks \parfun \Val$, is defined inductively over the structure of expressions as follows: 
@@ -117,6 +123,9 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{arithmetic 
 \]
 \end{defn}
 
+In the \( \defref{def:ops} \), the \( (.)\projection{(.)} \) denotes projection.
+For a tuple, for example \( \op\projection{1} \), it gives the \emph{i-th} element of the tuple.
+It is lifted to a set of tuples, for example \( \opset\projection{1}\), which gives a set of all the \emph{i-th} elements.
 
 \begin{defn}[Operation and operation set]
 \label{def:ops}
@@ -133,7 +142,7 @@ The \emph{operation tags} \( \etR \) and \( \etW \) correspond to read and write
 \[
     \begin{rclarray}
         \Opsets & \defeq & \Setcon{\opset}{\opset \subseteq \Events \land \wfO{\opset} } \\
-        \wfO{\opset} & \defeq & \for{\op, \op' \in \opset} \op\projection{1} \neq  \op'\projection{1} \lor \op\projection{2} \neq  \op'\projection{2}
+        \wfO{\opset} & \defeq & \fora{\op, \op' \in \opset} \op\projection{1} \neq  \op'\projection{1} \lor \op\projection{2} \neq  \op'\projection{2}
     \end{rclarray}
 \]
 The unit element is \( \unitE \defeq \emptyset\) and the composition of two set of operations is only defined when the two sets contain disjointed addresses,
@@ -219,13 +228,15 @@ For technical reason, if the right hand side is a special token \( \emptyop \), 
 \end{defn}
 }
 
+\sx{Re-assemble some words from Andrea}
 
 %We define a labelled transition system for primitive transaction commands where the labels are commands.
 The operational semantics for transactions \(\trans\) is defined with respect to a configuration of the form \((\stk, \h, \opset)\) comprising a stack, a (local) heap and a set of operations.
 The operations are those that might affect other transactions, meaning the first read and the last write for each address.
-We first define a transition between pairs of stacks and heaps for the primitive commands \( \trans_{p}\).
+We first define a state transformers between pairs of stacks and heaps for the primitive commands \(\trans_{p}\).
 We also define its operation by \( \funcn{op} \) function, which denotes the contribution of the primitive command that might observed by the external environment, \ie transactions from other threads.
-The \( \funcn{op} \) extracts the read or write operation from loop-up and mutation respectively, otherwise returns \( \emptyop \).
+The \( \funcn{op} \) extracts the read or write operation from loop-up and mutation respectively, otherwise \( \emptyop \).
+The semantics for primitive command updates the stack and heap by the transformers relation and updates the operation set by extracting the operation and adding it via \( \addO \) operator (\defref{def:ops}).
 The semantics for non-deterministic choices, sequential compositions, and loops have the expected behaviours.
 
 
@@ -238,7 +249,7 @@ Given the set of stacks \( \Stacks \) (\defref{def:stacks}), heaps \( \Heaps \) 
 \end{rclarray}
 \]
 is given in \fig\ref{fig:transaction_semantics}.
-Note that arithmetic expression evaluation \( \evalE{\expr} \) is defined in \defref{def:language} and the \( \addO \) operators is defined in \defref{def:transactions}.
+Note that arithmetic expression evaluation \( \evalE{\expr} \) is defined in \defref{def:language} and the \( \addO \) operator is defined in \defref{def:transactions}.
 \end{defn}
 
 \begin{figure}[!t]
@@ -255,7 +266,7 @@ Note that arithmetic expression evaluation \( \evalE{\expr} \) is defined in \de
 \hrule\vspace{5pt}
 \[	
     \infer[\rl{TPrimitive}]{%
-        \vdash (\stk, \h, \opset) , \transpri \ \toL \  (\stk', \h', \opset \addO \op) , \pskip
+        (\stk, \h, \opset) , \transpri \ \toL \  (\stk', \h', \opset \addO \op) , \pskip
     }{%
         (\stk, \h) \toLTS{\transpri} (\stk', \h')
         && \op = \func{op}{\stk, \h, \transpri}
@@ -264,31 +275,31 @@ Note that arithmetic expression evaluation \( \evalE{\expr} \) is defined in \de
 
 \[
     \infer[\rl{TChoice}]{%
-        \stk \vdash (\txstk, \h, \opset) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\stk, \h, \opset) , \trans'
+        (\stk, \h, \opset) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\stk, \h, \opset) , \trans_{i}
     }{
-        \trans' \in \Set{\trans_{1}, \trans_{2}}
+        i \in \Set{1,2}
     }
 \]
 
 \[
     \infer[\rl{TLoop}]{%
-        \stk \vdash (\txstk, \h, \opset),  \trans\prepeat \ \toL \  (\stk, \h, \opset), \pskip \pchoice (\trans \pseq \trans\prepeat)
+        (\stk, \h, \opset),  \trans\prepeat \ \toL \  (\stk, \h, \opset), \pskip \pchoice (\trans \pseq \trans\prepeat)
     }{}
 \]
 
 
 \[
     \infer[\rl{TSeqSkip}]{%
-        \stk \vdash (\txstk, \h, \opset), \pskip \pseq \trans \ \toL \  (\stk, \h, \opset), \trans
+        (\stk, \h, \opset), \pskip \pseq \trans \ \toL \  (\stk, \h, \opset), \trans
     }{%
     }
 \]
 
 \[
     \infer[\rl{TSeq}]{%
-        \stk \vdash (\txstk, \h, \opset), \trans_{1} \pseq \trans_{2} \ \toL \  (\stk', \h', \opset'), \trans_{1}' \pseq \trans_{2}
+        (\stk, \h, \opset), \trans_{1} \pseq \trans_{2} \ \toL \  (\stk', \h', \opset'), \trans_{1}' \pseq \trans_{2}
     }{%
-        \stk \vdash (\txstk, \h, \opset), \trans_{1} \ \toL \  (\stk', \h', \opset'), \trans_{1}'
+        (\stk, \h, \opset), \trans_{1} \ \toL \  (\stk', \h', \opset'), \trans_{1}'
     }
 \]
 
