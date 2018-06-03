@@ -63,22 +63,27 @@ I have changed it from $\stackrel{\perp}{\hookrightarrow}$ to $\fpI$, as $\perp$
 Default is no fingerprint so far and thus empty tag. 
 I have also dropped the $\backslash$ from $\fpA$ and $\fpD$ as it looks a little strange. 
 }
-If an address remains untouched, it will have the default fingerprint with the initial value \( \lexpr_{1} \fpI \lexpr_{2} \).
+The \( \lexpr_{1} \fpI \lexpr_{2} \) means the address \( \lexpr_{1} \) has no associated fingerprint and the initial value is \( \lexpr_{2} \).
+The \( \lexpr_{1} \fpR \lexpr_{2} \) means the address has been read before any other write and the current value is \( \lexpr_{2} \).
+The \( \lexpr_{1} \fpW \lexpr_{2} \) means the address has been written at least once, and the last written value is \( \lexpr_{2} \).
+Last, The \( \lexpr_{1} \fpRW (\lexpr_{2}, \lexpr_{3}) \) means the address has been read and then written, the first read value is \( \lexpr_{2} \) and the last written  value is \( \lexpr_{3} \).
+
 %For better presentation, we introduce \( \fpE \) which means ``untouched for the rest addresses''.
-We will use fingerprint assertions to specify local transition (shown later), therefore we also have fingerprint for transfer of capabilities, \ie adding to the shared state \( \fpA \cass{\kap}{\lrid} \), deleting from the shared state \( \fpD \cass{\kap}{\lrid} \) and updating the capabilities \( \cass{\kap(\vec{\lvar})}{\lrid} \fpU \cass{\kap(\vec{\lvar})}{\lrid} \).
+We will use fingerprint assertions to specify interference (shown later), therefore we also have special fingerprint for transferring of capabilities, \ie adding to the shared state \( \fpA \cass{\kap}{\lrid} \), deleting from the shared state \( \fpD \cass{\kap}{\lrid} \) and updating the capabilities \( \cass{\kap(\vec{\lvar})}{\lrid} \fpU \cass{\kap(\vec{\lvar})}{\lrid} \).
 The shared state, intuitively, is the state aware by all threads and we will explain the details later.
 
 \sx{ ALREADY: We might be able to eliminate all the heap assertions by combining them to fingerprints. }
 
 \begin{defn}[Fingerprint Assertions]
 \label{def:fingerprint}
-The \emph{fingerprint assertion} also \emph{fingerprint}, \( \fp \in \FAst \), is defined as the follows, 
+The \emph{fingerprint assertion}, \( \fp \in \FAst \), is defined as the follows, 
 \[
 \begin{rclarray}    
-    \fp, \fp' & ::= & \lexpr \fpR \lexpr 
+    \fp, \fp' & ::= & 
+    \lexpr \fpI \lexpr 
+    \mid \lexpr \fpR \lexpr 
     \mid \lexpr \fpW \lexpr 
     \mid \lexpr \fpRW (\lexpr, \lexpr) 
-    \mid \lexpr \fpI \lexpr 
     \mid \null \fpA \cass{\kap(\vec{\lvar})}{\lrid}  
     \mid \null \fpD \cass{\kap(\vec{\lvar})}{\lrid} 
     \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpU \cass{\kap(\vec{\lvar})}{\lrid} 
@@ -152,6 +157,7 @@ You will need to adjust the interpretation below.
 
 %\sx{ It should be fine for local assertion to include the capabilities, as it either becomes frame or (not sure) helps local reasoning}
 The local assertions have true, false, conjunction \( \land \), disjunction \( \lor \), existential quantification \( \exists \), implication \( \implies  \), empty \( \assemp \),  heap-related fingerprint assertions \( \bar{\fp}\) and separation conjunction \( \sep \).
+They describes the state of local heap used by a transaction and more importantly the fingerprint of the transaction.
 They are interpreted to pairs of heaps and operation sets.
 
 %The standard separation assertions describe the current local state, while the fingerprints are all the local effects that will be committed to the database.
@@ -281,7 +287,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
                     \end{B}
 	    		}{ 
 	    			\exsts{\txid, \opset} \\
-	    				\quad ( \opset, \ca_{a}, \ca_{r} ) \in \evalF[\lenv',\stk]{\fp}   \\
+	    				\quad ( \stub, \opset, \ca_{a}, \ca_{r} ) \in \evalF[\lenv',\stk]{\fp}   \\
 					\quad {} \land \txid \in \func{fresh}{\hh}  \\
 	       			\quad {} \land \hh' = \func{updHisHp}{\hh, \vi, \txid, \opset}  \\
 		        	\quad {} \land \vi' \geq \func{updView}{\hh', \vi, \opset} \\
@@ -429,36 +435,38 @@ The \emph{shared state composition function}, $\composeS: \SStates \times \SStat
 \end{rclarray}
 \]
 A \emph{world} \( \w \in \World \) is a pair of capabilities \( \ca \) (\defref{def:capabilities}) and a shared state \( \gs \) in which regions are well-formed, \ie (a) they are associated with disjointed part of history heaps; (b) the domain of the view in a region is the same as the domain of the history heap; and (c) the views should not be out of the range of history heaps.
-Separately capabilities from regions and the local are compatible.
-These constraints are derived by \(\eraseS{(\ca, \gs)} \neq \emptyset \).
-Finally, there is no garbage capability.
+Separately, capabilities from regions and local capabilities are compatible.
+These constraints are derived by the clap \(\eraseS{(\ca, \gs)} \neq \emptyset \).
+Finally, there is no garbage capability, a capability where the associated region identifier never appear in the shared state.
 \[
 \begin{rclarray}
 	\world \in \World  & \eqdef & 
     \Setcon{
         (\ca, \gs) 
     }{ 
-        \exsts{\ca'}
-        \ca \in \Caps 
-        \land \gs \in \SStates
-        \land (\stub, \stub, \ca') \in \eraseS{(\ca,\gs)}
-        \land \dom(\ca') \subseteq \dom(\gs) 
+        \ca \in \Caps \land \gs \in \SStates \\
+        \quad {} \land \exsts{ \ca' }
+        (\stub, \stub, \ca') \in \eraseS{(\ca,\gs)}
+        \land \dom(\ca') \subseteq \dom(\gs)  
+        \land \fora{\rid}
+        \exsts{\hh, \vi} \\
+        \qquad \gs(\rid) = (\hh, \vi, \stub) 
+        \land \dom(\hh) = \dom(\vi)
+        \land \fora{ \addr \in \dom(\vi) }
+        1 \leq \cu( \addr ) \leq \left| \hh(\addr) \right|
     }
 \end{rclarray}
 \]
-The function \( \eraseW{.} : \Caps \times \SStates \parfun \powerset{\HisHeaps \times \Views} \) erases the region identifiers from the shared state and them compose the states component-wise.
+The function \( \eraseW{.} : \Caps \times \SStates \parfun \powerset{\HisHeaps \times \Views \times \Caps} \) erases the region identifiers from the shared state and then composes the states component-wise.
 \[
 \begin{rclarray}
-    \eraseW{(\ca, \gs)} & \defeq & \Setcon{(\hh, \vi, \ca \composeC \ca')}{(\hh, \vi, \ca') \in \func{clpsSS}{\gs}} \\
-    \func{clpsSS}{\emptyset} & \defeq & \Set{(\unitHH, \unitVI, \unitC )} \\
-    \func{clpsSS}{\Set{\rid \mapsto (\hh, \vi, \ca, \intf)} \uplus \gs } & \defeq & 
+    \eraseW{(\ca, \gs)} & \defeq & \Setcon{(\hh, \vi, \ca \composeC \ca')}{(\hh, \vi, \ca') \in \func{collapse}{\gs}} \\
+    \func{collapse}{\emptyset} & \defeq & \Set{(\unitHH, \unitVI, \unitC )} \\
+    \func{collapse}{\Set{\rid \mapsto (\hh, \vi, \ca, \intf)} \uplus \gs } & \defeq & 
         \Setcon{ 
             (\hh \composeHH \hh', \vi \composeCU \vi', \ca \composeC \ca') 
         }{ 
-            \dom(\hh) = \dom(\vi)
-            \land \fora{\addr}
-            1 \leq \cu( \addr ) \leq \left| \hh(\addr) \right| \\ 
-            \quad {} \land (\hh', \vi', \ca') \in \func{clpsSS}{\gs} }\\
+            \land (\hh', \vi', \ca') \in \func{collapse}{\gs} }\\
 \end{rclarray}
 \] 
 % 
