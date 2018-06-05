@@ -1,6 +1,6 @@
 \subsection{Program Soundness}
 
-The soundness judgement says for any terminated trace, a trace reaching \( \pskip \), where every step in the trace is either a environment step that is allowed by the rely and consistency model, or the command get reduced one step, if the precondition satisfies the initial world of the trace \( \w \in \evalW{\gpre} \), then the postcondition should satisfy the final world \( \w' \in \evalW[\lenv,\stk']{\gpost} \).
+The soundness judgement says for any terminated trace, a trace reaching \( \pskip \), where every step in the trace is either a environment step that is allowed by the rely and consistency model, or the command get reduced one step, then if the precondition satisfies the initial world of the trace \( \w \in \evalW{\gpre} \) the postcondition should satisfy the final world \( \w' \in \evalW[\lenv,\stk']{\gpost} \).
 
 \begin{defn}[Soundness Judgement]
 \label{def:semantic-triple}
@@ -241,6 +241,7 @@ Because a transaction \( \ptrans{\trans} \) is reduced by one step in the semant
     \land \thid, (\stk, \hh, \vi), \ptrans{\trans} 
     \toT{\como} (\stk', \hh', \vi'), \pskip  \\
     \qquad {} \land \exsts{\w'}
+    (\w, \w') \in \Guar
     (\hh', \vi', \stub') \in \clpsW{\w'} 
     \land \w' \in \evalW[\lenv, \stk']{\gpost} 
     \end{array} \label{equ:commit-transaction} \tag{Commit} \\
@@ -373,31 +374,47 @@ Hence we prove \equref{equ:commit-transaction} by folding all the side condition
 %Now we can apply the \lemref{lem:locality-cut} which allows us to convert the existential quantification for \( \thcu, \thcu', \thid\) to global quantification, thus we have the proof for committing a new transaction, \ie \equref{equ:commit-transaction}. 
 \textbf{Stable post-condition.} 
 It can be proven for the similar reason as the proof for stable pre-condition.
+
+\caseI{\rl{TRFrame}}
+
+Given \( \tripleG{\gpre}{\cmd}{\gpost} \) and \( \stable{\gframe, \como}\), if \( \gpre \sep \gframe \) holds, we need to prove \( \tripleG{\gpre \sep \gframe }{\cmd}{\gpost \sep \gframe } \implies \tripleSemG{\gpre \sep \gframe }{\cmd}{\gpost \sep \gframe }\).
+By the \ih that  \( \tripleG{\gpre}{\cmd}{\gpost} \implies \tripleSemG{\gpre}{\cmd}{\gpost} \), we know that for any trace defined by the \( \predn{step} \) predicate with an initial world \( \w \) satisfying the precondition \( \gpre \), the finial world \( \w' \) satisfies the postcondition \( \gpost \).
+Now we need to prove the frame \( \gframe \)
+
 \end{proof}
 
-The program soundness is for the parallel rule.
+\sx{Need some help here to form the judgement}
 
+The program soundness is for the parallel rule.
+This is non-trivial as threads have the up-to-date history heap but not the views.
+\begin{defn}[Judgement]
+\[
+\]
+\end{defn}
+
+\sx{The judgement is not correct, should be a lift for the \(\predn{step} \).}
 \begin{thm}[Program soundness]
 For any program \( \prog \), if a precondition \( \gpre \) satisfies a history heap \( \hh \) and a thread environment \( \thdenv \), and if there exist a final history heap and thread environment \( \hh', \thdenv' \)  such that \( (\hh, \thdenv, \prog) \toG{\como} (\hh', \thdenv', (\lambda \thid \ldotp \pskip) ) \) holds, then the post-condition \( \gpost \) derived from the logic rules should satisfies the final configuration.
 This is,
 \[
 \begin{array}{@{}l}
-\fora{\gpre, \gpost, \prog, \lenv, \como, \stk, \stk', \w, \hh, \hh', \vi, \vi', \thdenv, \thdenv'}\\
+\fora{\gpre, \gpost, \prog, \lenv, \como, \stk, \w, \hh, \hh', \vi, \thdenv, \thdenv'}\\
     \quad \tripleG{\gpre}{\prog}{\gpost}
     \land \w \in \evalW{\gpre}
     \land (\hh, \vi, \stub) \in \clpsW{\w}
     \land \dom(\thdenv) = \dom(\prog)  \\
     \quad {} \land \fora{\thid} \thdenv(\thid) = (\stk, \vi)
     \land (\hh, \thdenv, \prog) \toG{\como} (\hh', \thdenv', (\lambda \thid \ldotp \pskip) ) \\
-    \qquad {} \land 
-    \begin{B}
+    \qquad \implies  
+    \exsts{\stk', \vi', \w'} \\
+    \qqquad \begin{B}
         \fora{\addr, \thid',\var, \val} 
-        \thdenv(\thid')\projection{1}(\var) = \val \implies \stk'(\var) = \val 
+        \thdenv(\thid')\projection{1}(\var) = \val 
+        \implies {} \\
+        \quad \stk'(\var) = \val  
         \land \vi'(\addr) = \max\Setcon{n}{\exsts{\thid''} \thdenv(\thid'')\projection{2}(\addr) = n} 
     \end{B} \\
-    \qqquad \implies  
-    \exsts{\w'} 
-    (\hh', \vi', \stub) \in \clpsW{\w'}
+    \qqquad {} \land (\hh', \vi', \stub) \in \clpsW{\w'}
     \land \w' \in \evalW[\lenv, \stk']{\gpost}
 \end{array}
 \] 
@@ -412,30 +429,48 @@ If there is only one thread, it is proved by the \thmref{thm:per-thread-soundnes
 \caseB{\( \dom(\prog) \equiv \Set{\txid, \txid'} \)}
 
 We have \( \tripleG{\gpre_{1} \sep \gpre_{2}}{\cmd_{1} \ppar \cmd_{2}}{ \gpost_{1} \sep \gpost_{2} } \) and \( \tripleG{\gpre_{i}}{\cmd_{i}}{ \gpost_{i} } \) for \( i \in \Set{1,2} \).
-Give the \ih and the soundness result per thread, we need to prove for any possible traces from the first thread, there exist a trace from the second thread ending up with the same state for history heap, and vice versa.
+Give the \ih and the soundness result per thread, we need to prove for any possible traces for the entire program \( \theta \), there exists traces \( \tau_{1} \) and \( \tau_{2} \) from the first thread and second thread with the same state for history heap in each step.
+For brevity, we use numbers \( 1\)  and \(2\) both as subscript for two traces and the thread identifiers.
+The following also proves the local capabilities from the two local traces always compatible.
 \[
 \begin{array}{@{}l}
-    \fora{\tau_{1}} \exsts{\tau_{2}} \\
+    \fora{\theta} \exsts{\tau_{1}, \tau_{2}} \\
     \quad 
     \begin{B}
-        \fora{\w_{1}, \w_{1}', \w_{2}} 
-        \w_{1} \toLTS{\tau_{1}} \w_{1}'
-        \land \clps{\w_{1}}\projection{1} = \clps{\w_{2}}\projection{1} 
+        \fora{\hh, \hh', \thdenv, \thdenv'} 
+        ((\hh,\thdenv), (\hh', \thdenv')) \in \theta \\
+        \quad {} \land \dom(\thdenv) = \dom(\thdenv') = \Set{1,2} 
+        \land \exsts{\w_{1}, \w_{2}, \w_{1}', \w_{2}, i \in \Set{1,2}} \\
+        \qquad (\w_{i}, \w_{i}') \in \tau_{i}
+        \land \hh = \clps{\w_{i}}\projection{1} 
+        \land \hh' = \clps{\w_{i}'}\projection{1} 
         \land (\w_{1}\projection{1} \composeC \w_{2}\projection{1})\isdef
-        \land \w_{2} \in \tau_{2} \\
-        \quad \implies \exsts{\w_{2}'} \w_{2} \toLTS{\tau_{2}}^{*} \w_{2}'
-        \land \clps{\w_{1}'}\projection{1} = \clps{\w_{2}'}\projection{1} 
-        \land (\w_{1}'\projection{1} \composeC \w_{2}'\projection{1})\isdef
+        \land (\w_{1}'\projection{1} \composeC \w_{2}'\projection{1})\isdef  \\
+        \qquad {} \land \thdenv(i)\projection{2} = \clpsW{\w_{i}}\projection{2}
+        \land \thdenv'(i)\projection{2} = \clpsW{\w_{i}'}\projection{2}
     \end{B}
 \end{array}
 \]
-We fix a trace, says from the first thread, and construct another trace.
-Initially, because \( \gpre_{1} \sep \gpre_{2} \) is defined, we pick any states \( \w_{1}^{0} \)  and \( \w_{2}^{0} \) such that \( \w_{1}^{0} \in \evalW{\gpre_{1}}\), \( \w_{2}^{0} \in \evalW{\gpre_{2}}\) and \( (\w_{1}^{0} \composeW \w_{2}^{0})\isdef\) so that \( \clps{\w_{1}^{0}}\projection{1} = \clps{\w_{2}^{0}}\projection{1} \) and \( (\w_{1}^{0}\projection{1} \composeC \w_{2}^{0}\projection{1})\isdef \).
-Now assume \( \w_{1}^{i} \) and \( \w_{2}^{j} \) such that \( \clps{\w_{1}^{i}}\projection{1} = \clps{\w_{2}^{j}}\projection{1} \) and \( (\w_{1}^{i}\projection{1} \composeC \w_{2}^{j}\projection{1})\isdef \).
-There are three possibilities for the first thread: (a) it commits a transaction; (b) it updates the view; or (c) it take a rely step which updates the history heap and shared capabilities.
-If the first thread commits a transaction.
-This means it is allowed by the guarantee \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Guar \).
-By the \lemref{lem:locality-update}, there exists \( \w_{2}^{j+1} \) satisfying the conditions.
+We prove by constructing the traces \( tau_{1}\) and \( \tau_{2} \) inductively.
+Initially, because \( \gpre_{1} \sep \gpre_{2} \) is defined, we pick any states \( \w_{1}^{0} \)  and \( \w_{2}^{0} \) such that \( \w_{1}^{0} \in \evalW{\gpre_{1}}\), \( \w_{2}^{0} \in \evalW{\gpre_{2}}\) and \( (\w_{1}^{0} \composeW \w_{2}^{0})\isdef\).
+This means the initial history heaps and views match, \ie 
+\[ 
+    \fora{i \in \Set{1,2}} 
+    \hh^{0} = \clps{\w_{1}^{0} \composeW \w_{2}^{0}}\projection{1} = \clps{\w_{i}^{0}}\projection{1}
+    \land \thdenv^{0}(i)\projection{2} = \clps{\w_{i}^{0}}\projection{2}
+\]
+and the local capabilities are compatible,
+\[ 
+    (\w_{1}^{0}\projection{1} \composeC \w_{2}^{0}\projection{1})\isdef 
+\]
+Assume there exists two traces \( \tau_{1}, \tau_{2}\) after \( i \) steps, let consider the next step for the entire program.
+Now two traces \( \tau_{1}\) and \( \tau_{2} \) where the current finial states are \( \w_{1}^{i} \) and \( \w_{2}^{j} \) such that \( \clps{\w_{1}^{i}}\projection{1} = \clps{\w_{2}^{j}}\projection{1} \) and \( (\w_{1}^{i}\projection{1} \composeC \w_{2}^{j}\projection{1})\isdef \).
+There are two possibilities for the first thread: (a) it commits a transaction; or (b) it take a rely step which updates the history heap and shared capabilities.
+If the first thread commits a transaction, which means the last step of the new trace \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) it is allowed by the guarantee \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Guar \).
+By the \lemref{lem:locality-update}, there exists \( \w_{2}^{j+1} \) satisfying the conditions, therefore we can construct the new trace for the second thread as \( \tau_{2}' = \tau_{2} \cup \Set{(\w_{2}^{j},\w_{2}^{j+1})} \).
+If the first thread take a rely step, \ie \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) such that \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Rely \), there are two possibilities, this transfer is triggered by a capability is either included in the second thread or not.
+
+
 \end{proof}
 
 \begin{lem}[Locality of update]
