@@ -100,7 +100,7 @@ Given a stack $\stk \in \Stacks$ (\defin\ref{def:stacks}), the \emph{arithmetic 
 
 When a transaction starts, it determines a local snapshot from the current state of the system and a view, which we will explain the process in \secref{sec:prog-semantics}.
 The transaction also installed with \emph{a operation set} which is initially empty.
-Then time the transaction executes a primitive command \( \transpri\), the operation set get updated to trace the effect of the command.
+Each time the transaction executes a primitive command \( \transpri\) internal, the operation set get updated to trace the effect of the command.
 At the end, the transaction throw away the local snapshot, but commit the operation set to the system.
 
 The operation set, intuitively, contains a transaction's contribution when the transaction is about to commit.
@@ -147,42 +147,60 @@ The \( \addO \) operator preserves the well-formedness property.
 \end{lem}
 
 The operational semantics for transactions \(\trans\) (\figref{fig:transaction_semantics}) is defined with respect to a transactional state of the form \((\stk, \sn, \opset)\) comprising a stack, a snapshot and a \emph{operation set}.
-We first define a state transformers between pairs of stacks and heaps for the primitive commands \(\trans_{p}\).
+We first define a state transformers on pairs of stacks and snapshots for the primitive commands \(\trans_{p}\).
 We also define its operation by \( \funcn{op} \) function, which denotes the contribution of the primitive command that might observed by the external environment, \ie transactions from other threads.
 The \( \funcn{op} \) extracts the read or write operation from loop-up and mutation respectively, otherwise \( \emptyop \).
 We also define a binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the set \( \opset \).
 If the new operation is a read, for example \((\otR, \addr, \val)\) where \( \addr \) is the key and \( \val\) is the associated value, and there is no other operation related to the same key, this new read operation will be included in the result.
 Meanwhile, if the new operation is a write, it will overwrite all preview write operations to the same key.
-This ensures the set contains the first read and last write.
+This ensures the set contains only the first read preceding a write, and only the last write for each key.
+This choice is motivated by the fact that we only focus on atomically visible transactions: keys are read from a snapshot of the database, and new version are written only at the moment the transaction commits.
 For technical reasons, if the right hand side is a special token \( \emptyop \), which represents \emph{no operation}, the operation set remains the same.
 Therefore, the semantics for primitive command \(\rl{TPrimitive}\) updates the stack and heap by the transformers relation and updates the operation set by first extracting the operation and adding it via \( \addO \) operator.
 The semantics for non-deterministic choices \(\rl{TChoice}\), sequential compositions \(\rl{TSeqSkip}\) and \(\rl{TSeq}\), and iteration \(\rl{TIter}\) have the expected behaviours.
 
 \begin{figure}[!t]
 \hrule\vspace{5pt}
-\sx{design choice: assume zero or non-zero? }
+The state transformers on pairs of stacks and snapshots for the primitive commands \(\trans_{p}\) (left), and the \( \funcn{op} \) for extracting the operation from the primitive commands (right):
 \[
-\begin{array}{@{} r c l r  c l @{}}
-    (\stk, \h) & \toLTS{\passign{\var}{\expr}} & (\stk\rmto{\var}{\evalE{\expr}}, \h) & \func{fp}{\stk, \h, \passign{\var}{\expr}} & \defeq & \emptyop \\
-    (\stk, \h) & \toLTS{\pderef{\var}{\expr}} & (\stk\rmto{\var}{\h(\evalE{\expr})}, \h) & \func{fp}{\stk, \h, \pderef{\var}{\expr}} & \defeq & (\etR, \evalE{\expr}, \h(\evalE{\expr})) \\
-    (\stk, \h) & \toLTS{\pmutate{\expr_{1}}{\expr_{2}}} & (\stk, \h\rmto{\evalE{\expr_{1}}}{\evalE{\expr_{2}}}) & \func{fp}{\stk, \h, \pmutate{\expr_{1}}{\expr_{2}}} & \defeq & (\etW, \evalE{\expr_{1}}, \evalE{\expr_{2}}) \\
-    (\stk, \h) & \toLTS{\passume{\expr}} & (\stk, \h) \text{ where } \evalE{\expr} = 0 & \func{fp}{\stk, \h, \passume{\expr}} & \defeq & \emptyop \\
-    %(\stk, \h) & \toLTS{\preturn{\expr}} & (\stk\rmto{\ret}{\evalE{\expr}}, \h) & \func{fp}{\stk, \h, \preturn{\expr}} & \defeq & \emptyop \\
+\begin{array}{c @{\qquad} c}
+\begin{rclarray}
+(\stk, \h)  & \toLTS{\passign{\var}{\expr}}          & (\stk\rmto{\var}{\evalE{\expr}}, \h)                  \\
+(\stk, \h)  & \toLTS{\pderef{\var}{\expr}}           & (\stk\rmto{\var}{\h(\evalE{\expr})}, \h)              \\
+(\stk, \h)  & \toLTS{\pmutate{\expr_{1}}{\expr_{2}}} & (\stk, \h\rmto{\evalE{\expr_{1}}}{\evalE{\expr_{2}}}) \\
+(\stk, \h)  & \toLTS{\passume{\expr}}                & (\stk, \h) \text{ where } \evalE{\expr} = 0           \\
+%(\stk, \h) & \toLTS{\preturn{\expr}}                & (\stk\rmto{\ret}{\evalE{\expr}}, \h)                  \\
+\end{rclarray}                                                                                               
+&
+\begin{rclarray}
+\end{rclarray}
+\begin{array}{@{} r c l @{\qquad} r  c l @{}}
+\func{fp}{\stk, \h, \passign{\var}{\expr}}          & \defeq & \emptyop                                     \\
+\func{fp}{\stk, \h, \pderef{\var}{\expr}}           & \defeq & (\etR, \evalE{\expr}, \h(\evalE{\expr}))     \\
+\func{fp}{\stk, \h, \pmutate{\expr_{1}}{\expr_{2}}} & \defeq & (\etW, \evalE{\expr_{1}}, \evalE{\expr_{2}}) \\
+\func{fp}{\stk, \h, \passume{\expr}}                & \defeq & \emptyop                                     \\
+\func{fp}{\stk, \h, \preturn{\expr}}                & \defeq & \emptyop                                     \\
+\end{array}
 \end{array}
 \]
 
 \hrule\vspace{5pt}
-
+The binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the set \( \opset \):
 \[
+\begin{array}{c @{\qquad} c}
 \begin{rclarray}
     \opset \addO (\etR, \addr, \val) & \defeq & 
     \begin{cases}
         \opset \uplus \Set{(\etR, \addr, \val)} & (\stub, \addr, \stub) \notin \opset \\
         \opset &  \text{otherwise} \\
     \end{cases} \\
+\end{rclarray}
+&
+\begin{rclarray}
     \opset \addO (\etW, \addr, \val) & \defeq & \left( \opset \setminus \Set{(\etW, \addr, \stub)} \right) \uplus \Set{(\etW, \addr, \val)} \\
     \opset \addO \emptyop & \defeq & \opset \\
 \end{rclarray}
+\end{array}
 \]
 
 \hrule\vspace{5pt}
@@ -193,47 +211,38 @@ Given the set of stacks \( \Stacks \) (\defref{def:stacks}), heaps \( \Heaps \) 
 \end{rclarray}
 \]
 
-\[	
-    \infer[\rl{TPrimitive}]{%
-        (\stk, \h, \opset) , \transpri \ \toL \  (\stk', \h', \opset \addO \op) , \pskip
-    }{%
-        (\stk, \h) \toLTS{\transpri} (\stk', \h')
-        && \op = \func{fp}{\stk, \h, \transpri}
-    }
-\]
-
 \[
+\begin{array}{@{} c @{\quad} c @{}}
+    \multicolumn{2}{c}{%
+        \infer[\rl{TPrimitive}]{%
+            \langle (\stk, \h, \opset) , \transpri \rangle \toL  \langle (\stk', \h', \opset \addO \op) , \pskip \rangle
+        }{%
+            (\stk, \h) \toLTS{\transpri} (\stk', \h')
+            && \op = \func{fp}{\stk, \h, \transpri}
+        }%
+    } 
+    \\[1em]
     \infer[\rl{TChoice}]{%
         (\stk, \h, \opset) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\stk, \h, \opset) , \trans_{i}
     }{
         i \in \Set{1,2}
     }
-\]
-
-\[
+    &
     \infer[\rl{TIter}]{%
         (\stk, \h, \opset),  \trans\prepeat \ \toL \  (\stk, \h, \opset), \pskip \pchoice (\trans \pseq \trans\prepeat)
-    }{}
-\]
-
-
-\[
+    }{} 
+    \\[1em]
     \infer[\rl{TSeqSkip}]{%
         (\stk, \h, \opset), \pskip \pseq \trans \ \toL \  (\stk, \h, \opset), \trans
-    }{%
-    }
-\]
-
-\[
+    }{}
+    &
     \infer[\rl{TSeq}]{%
         (\stk, \h, \opset), \trans_{1} \pseq \trans_{2} \ \toL \  (\stk', \h', \opset'), \trans_{1}' \pseq \trans_{2}
     }{%
         (\stk, \h, \opset), \trans_{1} \ \toL \  (\stk', \h', \opset'), \trans_{1}'
     }
+\end{array}
 \]
-
-.
-
 \hrule\vspace{5pt}
 \caption{Operational semantics for transactions}
 \label{fig:transaction_semantics}
