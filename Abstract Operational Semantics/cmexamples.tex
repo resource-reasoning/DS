@@ -187,9 +187,9 @@ to it as $V'$;
 \item then, execute the transaction $\ptrans{\trans}$ in $\tid_2$. 
 \end{itemize}
 
-However, this second step cannot be performed under the consistency model specification $\mathsf{RA}$. 
+However, this second step cannot be performed if the execution test $\ET_{\RA}$ is used. 
 In fact, the view $V'$ is not atomic, according to Definition \ref{def:readatomic}, and therefore, 
-client $\tid_2$ cannot execute transaction $\ptrans{\trans}$ using the heap extracted from view 
+client $\tid_2$ cannot execute transaction $\ptrans{\trans}$ using the snapshot extracted from view 
 $V'$. A consequence of this fact is that, under the execution test $\ET_{\RA}$ there exists no execution 
 of $\prog_1$ in which the transaction $\ptrans{\trans}$ returns value ${\Large \frownie}$. 
 
@@ -750,7 +750,7 @@ view that points to the most recent version of each object. It is immediate to n
 {\small (e)} & {\small (f)} \\
 \hline
 \end{tabular}
-\caption{History heaps obtained in a execution of $\prog_2$.}
+\caption{Configurations obtained in a execution of $\prog_2$.}
 \label{fig:cc.exec}
 \end{figure}
 The next consistency model that we consider is \emph{transactional causal consistency} 
@@ -1182,13 +1182,18 @@ state where its view observes the update to location $\key{k}_2$, but
 not the update to location $\key{k}_1$. However, latter directly depends on the 
 former, in the sense of Definition \ref{def:ddep}. 
 %performed in  $\ptrans{\trans_2}$, consisted in copying the value of the update 
-of $[\loc_y]$: that is, the update of $[\loc_y]$ \textbf{depends} from the update of $[\loc_x]$. 
+%of $[\loc_y]$: that is, the update of $[\loc_y]$ \textbf{depends} from the update of $[\loc_x]$. 
 In other words, the execution of transaction $\ptrans{\trans_3}$ resulted in a violation of 
 causality: the update of $\key{k}_2$ is observed, but not the update of $\key{k}_1$ on which 
 it depends.
 
 To specify formally transactional causal consistency, we define inductively the 
-set of views that are consistent with respect to a history heap $\hh$. 
+set of views that are consistent with respect to a history heap $\hh$.
+\ac{Note to self: why not going for a coinductive definition? The set of 
+causally consistent views is the largest set such that whenever $V$ is 
+causally consistent w.r.t. $\hh$, then for each version $\nu, \nu' \in \hh$, 
+such that $\nu'$ depends on $\nu$, then if $\nu'$ is included in $V$ also 
+$\nu$ is included in $V$.}
 Intuitively, the definition below models the fact that, if we start from a 
 causally consistent view, and we wish to update the view for some location $\tid_2$ 
 to include a newer version $\nu$, then we must ensure that all the versions on 
@@ -1448,7 +1453,7 @@ Then $V' \in \mathsf{CCViews}(\hh)$.
 \ac{Note to self: I got this example and the definition wrong several times before getting them
 right. Which means that inductive definition of causally dependent views is not really that 
 intuitive after all...}
-Consider the history heap $\hh$, depicted in Figure \ref{fig:cc.view}(a) 
+Consider the MKVS $\hh$, depicted in Figure \ref{fig:cc.view}(a) 
 - ignore for the moment the view in the Figure.
 %\begin{center}
 %\begin{tikzpicture}[font=\large]
@@ -1509,18 +1514,17 @@ Note that for the MKVS $\hh$, we have that
 $\hh(\key{k}_3, 2) \xrightarrow{\mathsf{ddep}} \hh(key{k}_2, 2)$, 
 and $\hh(\key{k}_2, 2) \xrightarrow{\mathsf{ddep}} \hh(\key{k}_1, 2)$.
 
-\ac{June 05 - stop here.}
-We start from the initial view $V_0$, $V_0([\loc_{\_}]) = 0$. This view is 
+We start from the initial view $V_0$, $V_0(\key{k}_{\_}) = 0$. This view is 
 depicted in Figure \ref{fig:cc.view}(a), and it is 
-causally consistent by definition. However, it does not include the update to location $[\loc_z]$: in
- fact, $V_0([\loc_z]) = 0$. As a first try, one could immediately consider a view $V'$ 
-where the value for location $[\loc_z]$ is updated to $1$, 
-that is $V' = V_0[ [\loc_z] \mapsto 1]$. However, in this case 
+causally consistent by definition. However, it does not point to the last version for $\key{k}_3$: in
+ fact, $V_0(\key{k}_3) = 1$. As a first try, one could immediately consider a view $V'$ 
+where the value for location $\key{k}_3$ is updated to $1$, 
+that is $V' = V_0[ \key{k}_3 \mapsto 2]$. However, in this case 
 the view $V'$ is not causally consistent. In fact, 
-we have that $\hh([\loc_z])(V'([\loc_z])) = (1, \tsid_3, \emptyset) \xrightarrow{\mathsf{ddep}} 
-(1, \tsid_2, \{\tsid_3\}) = \hh([\loc_y])(1)$, but $V'([\loc_y]) = 0 < 1$. 
-That is, the version of $[\loc_z]$ observed by $V'$ directly depends on a version 
-of $\loc_y$ that is not observed by $V'$.
+we have that $\version(\hh, \key{k}_3, V') = (1, \tsid_3, \emptyset) \xrightarrow{\mathsf{ddep}} 
+(1, \tsid_2, \{\tsid_3\}) = \version(\hh,\key{k}_2, V')$, but $V'(\key{k}_2) = 1 < 2$. 
+That is, the version of $\key{k}_2$ observed by $V'$ directly depends on a version 
+of $\key{k}_2$ that is not observed by $V'$.
 %
 %the version observed 
 %by $V'$ for location $[\loc_z]$ is $\hh([\loc_z])(V'([\loc_z]) = 
@@ -1532,15 +1536,15 @@ of $\loc_y$ that is not observed by $V'$.
 %is not observed by $V'$; in fact, $V'([\loc_y]) = 1$. 
 
 As a second attempt, one could then try to update the the view of location 
-$[\loc_y]$ to value $1$, resulting in the value $V'' = V_0[ [\loc_y] \mapsto 1]$, 
+$\key{k}_2$ to value $1$, resulting in the value $V'' = V_0[ \key{k}_2 \mapsto 2]$, 
 but similarly we would find that the version 
-$\hh([\loc_y])(1) = (\_, \tsid_2, \_)$ directly depends from the version 
-$\hh([\loc_x])(1) = (\_, \_, \{\tsid_2\})$, and $V''([\loc_x]) = 0 < 1$. 
+$\hh(\key{k}_2, 2) = (\_, \tsid_2, \_)$ directly depends from the version 
+$\hh(\key{k}_1, 2) = (\_, \_, \{\tsid_2\})$, and $V''(\key{k}_1) = 1 < 2$. 
 
-Finally, we can update the view $V_0$ to include the update of $[\loc_x]$: 
-this results in the view $V_1 = V_0[ [\loc_x] \mapsto 1$. Because $\hh([\loc_x])(1) 
+Finally, we can update the view $V_0$ to include the update of $\key{k}_1$: 
+this results in the view $V_1 = V_0[ \key{k}_1 \mapsto 2]$. Because $\hh(\key{k}_1, 2) 
 = (\_, \tsid_1, \_)$, and there is no version $\nu$ in $\hh$ on which 
-$\hh([\loc_x])(1)$ directly depends - i.e. such that  
+$\hh(\key{k}_1, 1)$ directly depends - i.e. such that  
 $\nu = (\_, \_, \_ \cup \{\tsid_1\})$ - we can conclude that $V_1$ is causally 
 consistent. The view $V_1$ is depicted in Figure \ref{fig:cc.view}(b).
 %We can now proceed to update the view of location $[\loc_y]$ in $T_1$. 
@@ -1599,13 +1603,14 @@ consistent. The view $V_1$ is depicted in Figure \ref{fig:cc.view}(b).
 %\end{pgfonlayer}
 %\end{tikzpicture}
 %\end{center}
-We can now update the view $V_1$ to include the version $\hh([\loc_y])(1)$, 
-resulting in the view $V_2 := V_1[ [\loc_y] \mapsto 1]$, depicted in Figure \ref{fig:cc.view}(c). 
-Because the view $V_1$ is 
-causally consistent, and because all the versions on which $\hh([\loc_y])(V_2([\loc_y]))$ directly depends
+We can now update the view $V_1$ to include the version $\hh(\key{k}_2, 2)$, 
+resulting in the view $V_2 := V_1[\key{k}_2 \mapsto 2]$, depicted in Figure \ref{fig:cc.view}(c). 
+Because the view $V_2$ is 
+causally consistent, and because all the versions on which $\version(\hh, \key{k}_2, V_2)$ directly depends
 are observed by $V_1$, then $V_2$ is also causally consistent. Similarly, we can define 
-the view $V_3 := V_2[[\loc_z] \mapsto 1]$, depicted in Figure \ref{fig:cc.view}(d), 
-and prove that it casually consistent. 
+the view $V_3 := V_2[\key{k}_2 \mapsto 2]$, depicted in Figure \ref{fig:cc.view}(d), 
+and prove that it casually consistent.  Because $V_3$ points to $\hh(\key{k}_3, 2)$, there is nothing 
+left to do.
 
 %\begin{center}
 %\begin{tikzpicture}[font=\large]
@@ -1714,16 +1719,60 @@ and prove that it casually consistent.
 %\end{center}
 \end{example}
 
+\ac{Note: It appears to be that causal consistency is broken (and so is PSI). 
+The problem is that causalities between program dependencies are not tracked down, 
+nor they can be tracked down in the MKVS model as it is now. For example, if we execute 
+the program 
+\[
+\begin{session}
+	\begin{array}{c||c}
+		\begin{session}
+			\begin{transaction}
+				\pmutate{\key{k}_1}{1};
+			\end{transaction};\\
+			\begin{transaction}
+				\pmutate{\key{k}_2}{1};
+			\end{transaction}
+		\end{session}
+		&
+		\begin{session}
+			\begin{transaction}
+				\pderef{\pvar{x}}{\key{k}_1};\\
+				\pderef{\pvar{y}}{\key{k}_2};\\
+				\pifs{ \pvar{x} = 0 \wedge \pvar{y} = 1}\\
+					\;\;\;\;\passign{\retvar}{{\Large\frownie{}}} \;:
+		 	\end{transaction}
+		\end{session}
+	\end{array}
+\end{session}
+\]
+under causal consistency, we can still obtain an execution where the value ${\Large \frownie{}}$ 
+is assigned to $\retvar$. The reason why this happened is a violation of the \emph{monotonic writes} 
+session guarantee (assuming clients are wrapped within sessions.)\\
+I finally managed to get hold to the session guaranteee paper, and it looks that the MKVS semantics 
+only ensures monotonic reads and read my writes. Monotonic writes and write follows reads are 
+not ensured by default. It also appear that we cannot model these last two session guarantees 
+without recording the program order in clients. Note that if we change the model so that 
+MKVSs keep track of the program order of clients, then the isomorphism with dependency graphs 
+is back, and we should point out that any dependency graph specification can be converted into 
+an execution test easily.
+}
+
 Causal consistency ensures that transactions can only observe 
 a causally consistent state of the database, i.e. they can only run 
-only by threads with a causally consistent view of the history heap.
+only by threads with a causally consistent view of the history heap. 
+We model causal consistency by introducing the execution test $\ET_{\CC}$, 
+defined below.
 
 \begin{definition}
-$(\hh, V) \triangleright_{\mathsf{CC}} \mathcal{O} : V'$ if and only if 
-$(\hh, V) \triangleright_{\mathsf{RA}} \mathcal{O}: V'$, 
+$\ET_{\CC} \vdash (\hh, V) \triangleright \mathcal{O} : V'$ if and only if 
+$\ET_{\RA} \vdash (\hh, V) \triangleright \mathcal{O}: V'$, 
 and $V \in \mathsf{CCViews}(\hh)$.
 \end{definition}
-\ac{Note to self: here there is something subtle going on. We also need to ensure that dependencies 
+\ac{
+Update to note to self: we do need to track down the program order of clients, and introduce 
+strong sessions (maybe just monotonic writes could be enough). See previous note.\\
+Note to self: here there is something subtle going on. We also need to ensure that dependencies 
 caused by the information flow of the program are tracked down. For example, we could have a 
 transaction returning the value of a location $[\loc_x]$, and then another transaction copy such a value 
 into another location $[\loc_y]$. There is a notion of dependency between $[\loc_x], [\loc_y]$ that 
@@ -1733,22 +1782,18 @@ dependencies are preserved. A definitive proof that $\mathsf{CC}$ is equivalent 
 specified either in terms of abstract executions or dependency graphs, would settle the argument.}
 
 Note that, the view $V$ of $\tid_3$ in Figure \ref{fig:cc.view}(e) is not causally consistent. This is 
-because $V([\loc_y]) = 1$, and $V([\loc_x]) = 0$. However, $\hh([\loc_y])(1)$ directly depends 
-in $\hh([\loc_x])(1)$, which is not included in the view. 
+because $V(\key{k}_2) = 1$, and $V(\key{k}_1) = 0$. However, $\hh(\key{k}_2, 2)$ directly depends 
+in $\hh(\key{k}_1,2)$, which is not included in the view. 
 In general, the only case in which an execution of $\prog_2$ causes transaction $\ptrans{\trans_3}$ 
 to return value ${\Large \frownie{}}$ is when such a transaction is executed using a snapshot determined 
-by a non-causally consistent view. There exists no execution of $\prog_2$ under $\mathsf{CC}$ that 
-causes $\ptrans{\trans_3}$ to return value ${\Large \frownie{}}$.
+by a non-causally consistent view. There exists no execution of $\prog_2$ using the execution test $\ET_\mathsf{CC}$ 
+that causes $\ptrans{\trans_3}$ to return value ${\Large \frownie{}}$.
 %if we execute the program $\prog_2$, illustrated previously in this section, under $\mathsf{CCViews}$,
 %it is not possible any more to have the transaction $\ptrans{\trans_3}$ return value ${\Large \frownie}$. 
 %This is because, in order for $\ptrans{\trans_3}$ to return such a value, it must be executed in a 
 %configuration such as the one of Figure \ref{fig:cc.view}(e) (only the view of $\tid_3$ is relevant here), 
 %%state where the view thread of $\tid_3$ observes the update to location $[\loc_y]$, but not the 
 %%update of $[\loc_x]$ from which the latter causally depends. 
-
-\ac{In theory, I can do better, and require that I see only the causal dependencies 
-of what I read. But at the end of the day, who cares?}
-
 %\begin{definition}
 %Let $\hh, V$ and $[\loc_x]$ be a history heap, a view, and a location, respectively. 
 %Given two transactions $\tsid_1, \tsid_2$, we say that $\tsid_2$ write-read depends 
@@ -1778,29 +1823,29 @@ of what I read. But at the end of the day, who cares?}
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k} \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locf1) {$[\loc_{f_1}] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locf1) {$\key{f}_1 \mapsto$};
 \matrix(locf1cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf1.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locf1cells-1-1) (locf1cells-2-1), fill=white, inner sep= 0cm, font=\Large] (locf1-v0) {$0$};
 
 %Location y
-\path (locf1.south) + (0,-1.5) node (locf2) {$[\loc_{f_2}] \mapsto$};
+\path (locf1.south) + (0,-1.5) node (locf2) {$\key{f}_2 \mapsto$};
 \matrix(locf2cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf2.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locf2cells-1-1) (locf2cells-2-1), fill=white, inner sep= 0cm, font=\Large] (locf2-v0) {$0$};
@@ -1853,7 +1898,7 @@ of what I read. But at the end of the day, who cares?}
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k} \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -1864,7 +1909,7 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep= 0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locf1) {$[\loc_{f_1}] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locf1) {$\key{f}_1 \mapsto$};
 \matrix(locf1cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf1.east) {
  {a} & $\tsid_0$ & {a} & $\tsid_1$\\
@@ -1874,10 +1919,10 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locf1cells-1-3) (locf1cells-2-3), fill=white, inner sep= 0cm, font=\Large] (locf1-v1) {$1$};
 
 %Location y
-\path (locf1.south) + (0,-1.5) node (locf2) {$[\loc_{f_2}] \mapsto$};
+\path (locf1.south) + (0,-1.5) node (locf2) {$\key{f}_2 \mapsto$};
 \matrix(locf2cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf2.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locf2cells-1-1) (locf2cells-2-1), fill=white, inner sep= 0cm, font=\Large] (locf2-v0) {$0$};
@@ -1930,7 +1975,7 @@ of what I read. But at the end of the day, who cares?}
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k} \mapsto$};
 
 \matrix(locxcells) [version list, column 2/.style = {text width=14mm}, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -1942,7 +1987,7 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locxcells-1-5) (locxcells-2-5), fill=white, inner sep= 0cm, font=\Large] (locx-v2) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locf1) {$[\loc_{f_1}] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locf1) {$\key{f}_1 \mapsto$};
 \matrix(locf1cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf1.east) {
  {a} & $\tsid_0$ & {a} & $\tsid_1$\\
@@ -1952,7 +1997,7 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locf1cells-1-3) (locf1cells-2-3), fill=white, inner sep= 0cm, font=\Large] (locf1-v1) {$1$};
 
 %Location y
-\path (locf1.south) + (0,-1.5) node (locf2) {$[\loc_{f_2}] \mapsto$};
+\path (locf1.south) + (0,-1.5) node (locf2) {$\key{f}_2 \mapsto$};
 \matrix(locf2cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf2.east) {
  {a} & $\tsid_0$ & {a} & $\tsid_2$\\
@@ -2009,7 +2054,7 @@ of what I read. But at the end of the day, who cares?}
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k} \mapsto$};
 
 \matrix(locxcells) [version list, column 2/.style = {text width=14mm}, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -2021,7 +2066,7 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locxcells-1-5) (locxcells-2-5), fill=white, inner sep= 0cm, font=\Large] (locx-v2) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locf1) {$[\loc_{f_1}] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locf1) {$\key{f}_1 \mapsto$};
 \matrix(locf1cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf1.east) {
  {a} & $\tsid_0$ & {a} & $\tsid_1$\\
@@ -2031,7 +2076,7 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locf1cells-1-3) (locf1cells-2-3), fill=white, inner sep= 0cm, font=\Large] (locf1-v1) {$1$};
 
 %Location y
-\path (locf1.south) + (0,-1.5) node (locf2) {$[\loc_{f_2}] \mapsto$};
+\path (locf1.south) + (0,-1.5) node (locf2) {$\key{f}_2 \mapsto$};
 \matrix(locf2cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf2.east) {
  {a} & $\tsid_0$ & {a} & $\tsid_2$\\
@@ -2087,7 +2132,7 @@ of what I read. But at the end of the day, who cares?}
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k} \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -2098,7 +2143,7 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep= 0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locf1) {$[\loc_{f_1}] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locf1) {$\key{f}_1 \mapsto$};
 \matrix(locf1cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf1.east) {
  {a} & $\tsid_0$ & {a} & $\tsid_1$\\
@@ -2108,10 +2153,10 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locf1cells-1-3) (locf1cells-2-3), fill=white, inner sep= 0cm, font=\Large] (locf1-v1) {$1$};
 
 %Location y
-\path (locf1.south) + (0,-1.5) node (locf2) {$[\loc_{f_2}] \mapsto$};
+\path (locf1.south) + (0,-1.5) node (locf2) {$\key{f}_2 \mapsto$};
 \matrix(locf2cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf2.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locf2cells-1-1) (locf2cells-2-1), fill=white, inner sep= 0cm, font=\Large] (locf2-v0) {$0$};
@@ -2162,7 +2207,7 @@ of what I read. But at the end of the day, who cares?}
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k} \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -2174,7 +2219,7 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locxcells-1-5) (locxcells-2-5), fill=white, inner sep= 0cm, font=\Large] (locx-v2) {$2$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locf1) {$[\loc_{f_1}] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locf1) {$\key{f}_1 \mapsto$};
 \matrix(locf1cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf1.east) {
  {a} & $\tsid_0$ & {a} & $\tsid_1$\\
@@ -2184,10 +2229,10 @@ of what I read. But at the end of the day, who cares?}
 \node[version node, fit=(locf1cells-1-3) (locf1cells-2-3), fill=white, inner sep= 0cm, font=\Large] (locf1-v1) {$1$};
 
 %Location y
-\path (locf1.south) + (0,-1.5) node (locf2) {$[\loc_{f_2}] \mapsto$};
+\path (locf1.south) + (0,-1.5) node (locf2) {$[\key{f}_2 \mapsto$};
 \matrix(locf2cells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locf2.east) {
- {a} & $T_0$ & {a} & $\tsid_2$\\
+ {a} & $\tsid_0$ & {a} & $\tsid_2$\\
   {a} & $\emptyset$ & {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locf2cells-1-1) (locf2cells-2-1), fill=white, inner sep= 0cm, font=\Large] (locf2-v0) {$0$};
@@ -2243,7 +2288,7 @@ depend on the set of operations that need to be executed.}
 The next consistency model that we consider is \emph{Update Atomic}. 
 Although this model has not been implemented, it has been proposed in 
 \cite{framework-concur} as a strengthening to Read Atomic to avoid 
-conflicts. The informal specification of Consistent Update states that 
+conflicts. The informal specification of Update Atomic states that 
 \textbf{(i)} transactions enjoy atomic visibility, and \textbf{(ii)} 
 transactions writing to one same location cannot execute concurrently.
 Update Atomic is also needed to specify more sophisticated consistency models, 
@@ -2262,19 +2307,19 @@ consider the following program:
     \prog_3 := \begin{session}
         \begin{array}{@{}c || c || c@{}}
             \begin{transaction}
-               \pmutate{\loc_{f_1}}{1};\\
-                  \pderef{\pvar{a}}{\loc_x};\\
-            		  \pmutate{\loc_x}{a + 1};\\
+               \pmutate{\key{f}_{1}}{1};\\
+                  \pderef{\pvar{a}}{\key{k}};\\
+            		  \pmutate{\key{k}}{a + 1};\\
               \end{transaction} & 
               \begin{transaction}
-                  \pmutate{\loc_{f_2}}{1};\\
-            		  \pderef{\pvar{a}}{\loc_x};\\
-            		  \pmutate{\loc_x}{a + 1};\\
+                  \pmutate{\key{f}_{2}}{1};\\
+            		  \pderef{\pvar{a}}{\key{k}};\\
+            		  \pmutate{\key{k}}{a + 1};\\
             	  \end{transaction} &
               \begin{transaction}
-            		   \pderef{\pvar{a}}{\loc_{f_1}};\\
-            		   \pderef{\pvar{b}}{\loc_{f_2}};\\
-            		   \pderef{\pvar{c}}{\loc_{x}};\\
+            		   \pderef{\pvar{a}}{\key{f}_{1}};\\
+            		   \pderef{\pvar{b}}{\key{f}_{1}};\\
+            		   \pderef{\pvar{c}}{\key{k}};\\
             		   \pifs{\pvar{a}=1 \wedge \pvar{b}=1 \wedge \pvar{c} = 1}\\
             				\;\;\;\;\passign{\retvar}{\Large \frownie{}}
             			\}
@@ -2282,46 +2327,53 @@ consider the following program:
         \end{array}
     \end{session}
  \]
-\ac{Intuitive behaviour of the litmus test: two transactions concurrently increment $[\loc_x]$. 
+\ac{Intuitive behaviour of the litmus test: two transactions concurrently increment $\key{k}$. 
  A third transaction observes that the first two transactions have been executed. 
  However, it only observes one of the two increments taking place.
  }
-We consider an execution in which the transactions contained in the code of threads 
+We consider an execution in which the transactions contained in the code of clients 
 $\tid_1, \tid_2$ both execute w.r.t. the snapshot determined by the initial view. 
 Initially, the configuration of the program coincides with the one given in 
 Figure \ref{fig:cu.exec}(a). After executing the transaction of $\tid_1$, the resulting 
 configuration is the one depicted in Figure \ref{fig:cu.exec}(b). Next, after $\tid_2$ executed 
 its own transaction, we obtain the configuration in \ref{fig:cu.exec}(c). Note that 
 in this configuration, both transactions $\tsid_1, \tsid_2$ read the initial version 
-for location $[\loc_x]$. Finally, thread $\tid_3$ updates its view to include the most recent 
-version for all the locations $[\loc_x], [\loc_{f_1}], [\loc_{f_2}]$. When executing the 
+for key $\key{k}$. Finally, thread $\tid_3$ updates its view to include the most recent 
+version for all the keys $\key{k}, \key{f}_1, \key{f}_2$. When executing the 
 transaction in its code, all the locations will be found to have value $1$, and 
 the return variable will be set to ${\Large \frownie{}}$.
 
-The reason why the program $\prog_3$ exhibited the lost-update anomaly is 
+The reason why the program $\prog_3$ exhibited the lost update anomaly is 
 that the transaction of $\tid_2$ executed using a snapshot obtained from 
-a view which did not include the most up-to-date version for location $[\loc_x]$. 
-However, the same transaction installed a new version for $[\loc_x]$. That is, 
+a view which did not include the most up-to-date version for location $\key{k}$. 
+However, the same transaction installed a new version for $\key{k}$. That is, 
 it \emph{lost the update} of the version installed by the transaction executed 
 by $\tid_1$. To forbid this anomaly, we require that if a transaction 
-writes to some location $[\loc_x]$, then it must have been executed 
-in a snapshot obtained from a view including the most recent version of 
-$[\loc_x]$.
+writes to some key $\key{k}$, then it must have been executed 
+in a snapshot obtained from a view pointing to the most recent version of 
+$\key{k}$.
 
 \begin{definition}
-$(\hh, V) \triangleright_{\mathsf{UA}} \mathcal{O}: V'$ iff 
-$(\hh, V) \triangleright_{\mathsf{RA}} \mathcal{O}: V'$, and 
-for all locations $[\loc_x]$ such that $(\WR\; [\loc_x] : \_ \in \mathcal{O})$ 
-then $V([\loc_{x}]) = \lvert \hh([\loc_x]) \rvert - 1$. 
+$\ET_\UA \vdash (\hh, V) \triangleright \mathcal{O}: V'$ iff 
+$\ET_\RA \vdash (\hh, V) \triangleright \mathcal{O}: V'$, and 
+for all locations $\key{k}$ such that $(\WR\; \key{k} : \_ \in \mathcal{O})$ 
+then $V(\key{k}) = \lvert \hh(\key{k}) \rvert$. 
 \end{definition}
 
-Note that in $prog_3$, under $\mathsf{UA}$, 
+\begin{proposition}
+The execution test $\ET_{\UA}$ does not hinder progress. 
+For any $\hh, V, \mathcal{O}$, there exist $V' : V \sqsubseteq V'$ 
+and $V'': \Vupdate(\hh, V', \mathcal{O}). \sqsubseteq V''$ such that 
+$\ET_{\UA} : (\hh, V') \triangleright \mathcal{O}, V''$.
+\end{proposition}
+
+Note that in $prog_3$, under $\UA$, 
 we cannot execute the transaction of $\tid_2$ starting from 
 the configuration depicted in Figure \ref{fig:cu.exec}(b). This 
 is because the view of $\tid_2$, in such a configuration, does 
-not include the most recent version for location $[\loc_x]$. 
+not include the most recent version for location $\key{k}$. 
 Instead, before executing its transaction $\tid_2$ must update 
-its view to include the most recent version of $[\loc_x]$. The 
+its view to include the most recent version of $\key{k}$. The 
 resulting configuration is depicted in Figure \ref{fig:cu.exec}(e). 
 After executing its transaction using the snapshot obtained 
 from the view of $\tid_2$ in this configuration, the resulting 
@@ -2330,17 +2382,17 @@ There are now three different possible configurations in which
 $\tid_3$ can execute its transaction: 
 \begin{itemize}
 \item the initial one, in which case the value $0$ will be observed 
-for the three locations $[\loc_x], [\loc_{f1}]$ and $[\loc_{f_2}]$. 
+for the three keys $\key{k}, \key{f}_1$ and $\key{f}_2$. 
 In this case the transaction will not return value ${\Large \frownie{}}$, 
-\item one in which the view of $\tid_3$ for $[\loc_x]$ points to the 
+\item one in which the view of $\tid_3$ for $\key{k}$ points to the 
 version $(1, \tsid_1, \{\tsid_2\})$. Because of atomic visibility, 
-it must also be the case that the same view for location $[\loc_{f_2}]$ 
+it must also be the case that the same view for key $\key{k}_2$ 
 does not include the update performed by $\tsid_2$ (otherwise, 
-the view for $[\loc_x]$ should point to its most recent version, which 
+the view for $\key{k}$ should point to its most recent version, which 
 was also installed by $\tsid_2$. Thus in this case the transaction executes 
-w.r.t a snapshot where $\loc_{f_2} = 0$, and the value ${\Large \frownie{}}$ 
+w.r.t a snapshot where $\key{f}_2 = 0$, and the value ${\Large \frownie{}}$ 
 will not be returned, 
-\item one in which the view of $\tid_3$ for $[\loc_x]$ points to 
+\item one in which the view of $\tid_3$ for $\key{k}$ points to 
 its most recent version $(2, \tsid_2, \emptyset)$; also in this case, 
 the value ${\Large \frownie{}}$ will not be returned from the transaction.
 \end{itemize}
@@ -2358,21 +2410,21 @@ the value ${\Large \frownie{}}$ will not be returned from the transaction.
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 %\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -2431,21 +2483,21 @@ the value ${\Large \frownie{}}$ will not be returned from the transaction.
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ & {a} & $\tsid_1$\\
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
   {a} & $\emptyset$ & {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -2504,21 +2556,21 @@ the value ${\Large \frownie{}}$ will not be returned from the transaction.
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ & {a} & $\tsid_1$\\
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
   {a} & $\emptyset$ & {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ & {a} & $\tsid_2$ \\
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
   {a} & $\emptyset$ & {a} & $\emptyset$\\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -2577,21 +2629,21 @@ the value ${\Large \frownie{}}$ will not be returned from the transaction.
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ & {a} & $\tsid_1$\\
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
   {a} & $\{\tsid_4\}$ & {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ & {a} & $\tsid_2$ \\
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
   {a} & $\{\tsid_3\}$ & {a} & $\emptyset$\\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -2650,21 +2702,21 @@ the value ${\Large \frownie{}}$ will not be returned from the transaction.
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ & {a} & $\tsid_1$\\
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
   {a} & $\emptyset$ & {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ & {a} & $\tsid_2$ \\
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
   {a} & $\emptyset$ & {a} & $\emptyset$\\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -2721,7 +2773,7 @@ the value ${\Large \frownie{}}$ will not be returned from the transaction.
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -2732,7 +2784,7 @@ the value ${\Large \frownie{}}$ will not be returned from the transaction.
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
  {a} & $T_0$ & {a} & $\tsid_2$ \\
@@ -2808,11 +2860,11 @@ Consider, for example, the program $\prog_4$ below.
         \begin{array}{@{}c || c @{}}
             \begin{session}
             \begin{transaction}
-                \pmutate{\loc_{x}}{1};\\
+                \pmutate{\key{k}_1}{1};\\
             \end{transaction}\\ \; \\
             
             \begin{transaction}
-              	\pderef{\pvar{a}}{\loc_{y}};\\
+              	\pderef{\pvar{a}}{\key{k}_2};\\
               	\pifs{\pvar{a}=0}\\
               		\;\;\;\;\passign{\retvar}{\Large \frownie{}} \};
             \end{transaction}
@@ -2820,11 +2872,11 @@ Consider, for example, the program $\prog_4$ below.
               &
               \begin{session}
            \begin{transaction}
-                \pmutate{\loc_{y}}{1};\\
+                \pmutate{\key{k}_2}{1};\\
             \end{transaction} \\ \;\\
             
             \begin{transaction}
-              	\pderef{\pvar{a}}{\loc_{x}};\\
+              	\pderef{\pvar{a}}{\key{k}_1};\\
               	\pifs{\pvar{a}=0}\\
               		\;\;\;\;\passign{\retvar}{\Large \frownie{}} \};
             \end{transaction}
@@ -2836,23 +2888,23 @@ Consider, for example, the program $\prog_4$ below.
 In this program, we let 
 \[
 \begin{array}{cc}
-\ptrans{\trans_1} = \ptrans{\pmutate{\loc_x}{1}} & 
+\ptrans{\trans_1} = \ptrans{\pmutate{\key{k}_1}{1}} & 
 \ptrans{\trans_2} = \begin{transaction} 
-                                    \pderef{\pvar{a}}{\loc_y};\\
+                                    \pderef{\pvar{a}}{\key{k}_2};\\
                                     \pifs{\pvar{a}=0}\\
                                     			\;\;\;\;\passign{\retvar}{\Large \frownie{}} \};
                                 \end{transaction}
                              \\
-\ptrans{\trans_3} = \ptrans{\pmutate{\loc_y}{1}} & 
+\ptrans{\trans_3} = \ptrans{\pmutate{\key{k}_2}{1}} & 
 \ptrans{\trans_4} = \begin{transaction} 
-                                    \pderef{\pvar{a}}{\loc_x};\\
+                                    \pderef{\pvar{a}}{\key{k}_1};\\
                                     \pifs{\pvar{a}=0}\\
                                     			\;\;\;\;\passign{\retvar}{\Large \frownie{}} \};
                                 \end{transaction}
 \end{array}                    
 \]
 
-We argue that, under $\mathsf{RA}$, it is possible to obtain an execution 
+We argue that, using either the execution tests $\ET_\RA$ or $\ET_{\CC}$, it is possible to obtain an execution 
 of program $\prog_4$ where both $\ptrans{\trans_2}$ and $\ptrans{\trans_4}$ 
 return value ${\Large \frownie{}}$.
 Such an execution can be summarised as follows: 
@@ -2866,7 +2918,7 @@ executed,
 to the configuration of Figure \ref{fig:cp.exec}(c); the remaining 
 program to be executed is $\ptrans{\trans_3} \Par \ptrans{\trans_4}$, 
 \item without changing its view, $\tid_1$ executes transaction $\ptrans{\trans_2}$. 
-The code $\trans_2$ is executed using the heap $[ [\loc_x] \mapsto 1, [\loc_y] \mapsto 0]$ 
+The code $\trans_2$ is executed using  $[\key{k}_1 \mapsto 1, \key{k}_2 \mapsto 0]$ 
 as a snapshot; this means that, by executing $\trans_2$, the variable $\retvar$ of the thread-local 
 stack of $\tid_1$ is set to ${\Large \frownie{}}$. Next, the thread $\tid_2$ executes $\ptrans{\trans_4}$ 
 without altering its view. Similarly to the execution of $\ptrans{\trans_2}$ in $\tid_1$, this causes the 
@@ -2881,40 +2933,40 @@ transactions have a start and a commit point,
 this constraint can be formalised as follows: 
 \emph{If a transaction $\tsid_1$ observes the effects of another transaction $\tsid_2$, then it must 
 observe the effects of any transaction that committed before $\tsid_2$.}
-In the history heaps framework, transactions are executed in a single step; 
+In the MKVS framework, transactions are executed in a single step; 
 however, one may think of the order in which transactions execute in our 
 operational semantics to be consistent with the order in which 
 transactions commit (this correspondence will be made precise later in 
 the document, when we will relate executions in our operational semantics 
 to abstract executions used in the declarative style for specifications of 
-consistency models). By requiring that, after a thread $\tid$ executes 
+consistency models). By requiring that, after a client $\tid$ executes 
 a transaction $\tsid$, it pushes its own view to be up-to-date with the state of 
 the system, we model the fact that any future transaction executed 
 by $\tid$ will observe the effects of anything that committed before 
 $\tsid$ (included).
 
 \begin{definition}
-We say that $(hh, V) \triangleright_{\mathsf{CP}} \mathcal{O}: V'$ 
-if and only if $(\hh, V) \triangleright_{\mathsf{RA}} \mathcal{O}: V'$, 
-and for any location $[\loc_x]$, $V'([\loc_x]) = \lvert \mathsf{HHeapUpdate}(\hh, V, \mathcal{O}) \rvert -1$. 
+We say that $\CP \vdash (hh, V) \triangleright \mathcal{O}: V'$ 
+if and only if $\RA \vdash (\hh, V) \triangleright \mathcal{O}: V'$, 
+and for any location $\key{k}$, $V'(\key{k}) = \lvert \HHupdate(\hh, V, \mathcal{O})(k) \rvert $. 
 \end{definition}
 
-Consider again th program $\prog_4$, ths time to be executed 
+Consider again the program $\prog_4$, this time to be executed 
 under $\mathsf{CP}$. We argue that in this case it is not possible to have both 
 threads $\tid_1$ and $\tid_2$ to set the value of $\retvar$ to ${\Large \frownie{}}$. 
 The initial configuration in which the program $\prog_4$ is executed is 
-the one depicted in Figure \ref{fig:cp.exec}(a). Initially, either thread $\tid_1$ executes 
-the code $\ptrans{\trans_1}$, or thread $\tid_2$ executes transaction $\ptrans{\trans_3}$; without 
+the one depicted in Figure \ref{fig:cp.exec}(a). Initially, either client $\tid_1$ executes 
+the code $\ptrans{\trans_1}$, or client $\tid_2$ executes transaction $\ptrans{\trans_3}$; without 
 loss of generality, we consider the former option (the case in which $\tid_2$ executes 
 first is symmetric). Upon executing the code $\ptrans{\trans_1}$, we obtain the 
 configuration of Figure \ref{fig:cp.exec}(b), with the program $\ptrans{\trans_2} \Par (\ptrans{\trans_3} ; \ptrans{\trans_4})$ 
 to be executed next.
-At this point, note that under $\mathsf{CP}$ it is not possible for $\tid_2$ to execute $\ptrans{\trans_3}$ and obtain 
-the configuration of Figure \ref{fig:cp.exec}(c) as a result. This is because, in $\mathsf{CP}$, we require the view of $\tid_2$ 
-\textbf{after} executing $\ptrans{\trans_3}$ to be up-to-date, i.e. to point to the last location of each version. That is, 
+At this point, note that if we use the execution test $\ET_\CP$ it is not possible for $\tid_2$ to execute $\ptrans{\trans_3}$ and obtain 
+the configuration of Figure \ref{fig:cp.exec}(c) as a result. This is because, $\ET_{\CP}$ require the view of $\tid_2$ 
+\textbf{after} executing $\ptrans{\trans_3}$ to be up-to-date, i.e. to point to the last version of each key. That is, 
 assuming that $\tid_2$ executes $\ptrans{\trans_3}$ next, we obtain the configuration of Figure \ref{fig:cp.exec}(e). 
 From this point on, whenever $\tid_2$ will execute transaction $\ptrans{\trans_4}$, it will read value $1$ for 
-location $[\loc_x]$, hence it won't be able to set the value of $\retvar$ to ${\Large \frownie{}}$. One possible 
+location $\key{k}$, hence it won't be able to set the value of $\retvar$ to ${\Large \frownie{}}$. One possible 
 final configuration for the program is given in Figure \ref{fig:cp.exec}(f).
 
 %\begin{definition}
@@ -2944,22 +2996,22 @@ final configuration for the program is given in Figure \ref{fig:cp.exec}(f).
 \emph{Snapshot Isolation} (SI) is a consistency model that has been 
 widely employed in both centralised and distributed databases. 
 Because snapshot isolation does not scale well to 
-geo-replicated and distributed systems, a weakening of this model 
-called \emph{Parallel Snapshot Isolation} (PSI) has been recently proposed. 
+geo-replicated and distributed systems \cite{NMSI}, a weakening of this model 
+called \emph{Parallel Snapshot Isolation} (PSI) \cite{PSI} has been recently proposed. 
 
 Both SI and PSI can be specified in the history heap framework by combining 
 the specification of other consistency models that we have already introduced. 
 In short, SI combines atomic visibility, the snapshot monotonicity property from 
-consistent prefix property (if a transaction $\tsid_1$ 
+consistent prefix (if a transaction $\tsid_1$ 
 observes the effects of another transaction $\tsid_2$, then it also observes 
 the effects of any transaction that committed before), and the write-conflict 
-detection from Update Atomic (two committing transactions do not write 
+detection from update atomic (two committing transactions do not write 
 concurrently to the same location). In contrast, PSI only requires atomic 
 visibility, causal consistency and write-conflict detection. Formally, we have 
 the following:
 \begin{definition}
-$\mathsf{PSI} = \mathsf{CC} \cap \mathsf{UA}$. \\
-$\mathsf{SI} = \mathsf{CP} \cap \mathsf{UA}$.
+$\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$. \\
+$\ET_{\SI} = \ET_{\CP} \cap \ET_{\UA}$.
 \end{definition}
 
 \subsection{Serialisability}
@@ -2971,17 +3023,17 @@ Consider for example the program
 \begin{session}
 \begin{array}{@{}c || c@{}}
 \begin{transaction}
-\pderef{\pvar{a}}{\loc_y};\\
+\pderef{\pvar{a}}{\key{k}_2};\\
 \pifs{\pvar{a} = 0};\\
-\;\;\; \pmutate{\loc_x}{1};\\
+\;\;\; \pmutate{\key{k}_1}{1};\\
 \;\;\; \passign{\retvar}{\Large \frownie{}};
 \}
 \end{transaction}
 &
 \begin{transaction}
-\pderef{\pvar{a}}{\loc_x};\\
+\pderef{\pvar{a}}{\key{k}_1};\\
 \pifs{\pvar{a} = 0};\\
-\;\;\; \pmutate{\loc_y}{1};\\
+\;\;\; \pmutate{\key{k}_2}{1};\\
 \;\;\; \passign{\retvar}{\Large \frownie{}};
 \}
 \end{transaction}
@@ -2999,21 +3051,21 @@ Consider for example the program
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 %\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -3029,7 +3081,7 @@ Consider for example the program
 % ([xshift=-2pt, yshift=5pt]locy-v0.north east) -- 
  ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
  
- \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tid_1$};
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\tsid_1$};
 
 %red view
 \draw[-, red, very thick, rounded corners = 10pt]
@@ -3072,7 +3124,7 @@ Consider for example the program
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -3083,10 +3135,10 @@ Consider for example the program
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\{\tsid_1\}$ \\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -3145,21 +3197,21 @@ Consider for example the program
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
- {a} & $T_0$ & {a} & $\tsid_1$\\
+ {a} & $\tsid_0$ & {a} & $\tsid_1$\\
   {a} & $\{\tsid_2\}$ & {a} & $\emptyset$ \\
 };
 \node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ & {a} & $\tsid_2$ \\
+ {a} & $\tsid_0$ & {a} & $\tsid_2$ \\
   {a} & $\{\tsid_1\}$ & {a} & $\emptyset$\\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -3218,7 +3270,7 @@ Consider for example the program
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -3229,10 +3281,10 @@ Consider for example the program
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
- {a} & $T_0$ \\
+ {a} & $\tsid_0$ \\
   {a} & $\{\tsid_1\}$ \\
 };
 \node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
@@ -3292,7 +3344,7 @@ Consider for example the program
 %\draw[help lines] grid(5,4);
 
 %Location x
-\node(locx) at (1,3) {$[\loc_x] \mapsto$};
+\node(locx) at (1,3) {$\key{k}_1 \mapsto$};
 
 \matrix(locxcells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locx.east) {
@@ -3303,7 +3355,7 @@ Consider for example the program
 \node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
 
 %Location y
-\path (locx.south) + (0,-1.5) node (locy) {$[\loc_y] \mapsto$};
+\path (locx.south) + (0,-1.5) node (locy) {$\key{k}_2 \mapsto$};
 \matrix(locycells) [version list, text width=7mm, anchor=west]
    at ([xshift=10pt]locy.east) {
  {a} \pgfmatrixnextcell $\tsid_0$ \\
@@ -3366,46 +3418,45 @@ executing $\prog_5$.}
 \label{fig:ser.exec}
 \end{figure}
 
-If we execute the program $\prog_5$ under any of the consistency model 
-specifications presented so far, we find out that it is possible to infer 
-an execution in which both threads $\tid_1$ and $\tid_2$ set the 
-thread-local variable $\retvar$ to value ${\Large \frownie{}}$.
+If we execute the program $\prog_5$ using any of the execution tests
+ presented so far, we find out that it is possible to infer 
+an execution in which both clients $\tid_1$ and $\tid_2$ set their 
+local variable $\retvar$ to value ${\Large \frownie{}}$.
 For example, under $\mathsf{SI}$, this can happen as follows: 
 \begin{itemize}
-\item first, thread $\tid_1$ executes its transactions in the 
+\item first, client $\tid_1$ executes its transactions in the 
 configuration of Figure \ref{fig:ser.exec}(a). The snapshot 
-under which the transaction is executed is given by $[[\loc_x] \mapsto 0, [\loc_y] \mapsto 0]$, 
+under which the transaction is executed is given by $[\key{k}_1] \mapsto 0, \key{k}_2 \mapsto 0]$, 
 hence the execution of the transaction results in the thread-local variable $\retvar$ of $\tid_1$ 
 to be set to ${\Large \frownie{}}$, and in the configuration of Figure \ref{fig:ser.exec}(b).
 \item Next, thread $\tid_2$ executes its transaction in the initial 
-view $[ [\loc_x] \mapsto 0, [\loc_y] \mapsto 0]$. The snapshot under which 
-the transaction is executed is again $[[\loc_x \mapsto 0, [\loc_y] \mapsto 0]$. After 
-thetransaction has been executed, the thread-local variable $\retvar$ of $\tid_2$ is 
+view $[\key{k}_1 \mapsto 0, \key{k}_2 \mapsto 0]$. The snapshot under which 
+the transaction is executed is again $[\key{k}_1 \mapsto 0, \key{k}_2 \mapsto 0]$. After 
+the transaction has been executed, the local variable $\retvar$ of $\tid_2$ is 
 set to ${\Large \frownie{}}$, and the final configuration is the one of Figure \ref{fig:ser.exec}(c). 
-Note that, because we are assuming SI as our consistency model, in this configuration 
+Note that, because we are assuming snapshot isolation as our consistency model, in this configuration 
 we require that the view of thread $\tid_2$ points to the last version of each location.
 \end{itemize}
 
 To avoid the scenario above, known as the \emph{write skew} anomaly, it suffices to 
 ensure that, prior to executing a transaction, the view of a thread is always up-to-date for each location. 
 
-
 \begin{definition}
-$(\hh, V) \triangleright_{\mathsf{SER}} \mathcal{O} : V'$ iff, for any location $[\loc_x]$, 
-$V([\loc_x]) = \lvert \hh([\loc_x]) \rvert -1$. 
+$\ET_{\SER} \vdash (\hh, V) \triangleright \mathcal{O} : V'$ iff, for any location $\key{k}$, 
+$V(\key{k}) = \lvert \hh(\key{k}) \rvert$. 
 \end{definition}
 
-Consider again the program $\prog_5$, this time to be executed under $\mathsf{SER}$. 
-Similar as for $\mathsf{SI}$, after thread $\tid_1$ has executed its transaction, 
+Consider again the program $\prog_5$, this time to be executed using the execution test $\ET_\SER$. 
+Similar as for the execution test $\ET_\SI$, after client $\tid_1$ has executed its transaction, 
 we end up with the variable $\retvar$ of such a thread to be set to value ${\Large \frownie{}}$, 
 and with the configuration of Figure \ref{fig:ser.exec}(b). However, at this point we can 
-not execute the transaction of thread $\tid_2$ without updating his view beforehand. 
-This is because such a view does not point to the most up-to-date version for location 
-$[\loc_x]$. Instead, before executing its transaction $\tid_2$, updates its view to 
+not execute the transaction of client $\tid_2$ without updating his view beforehand. 
+This is because such a view does not point to the most up-to-date version for key  
+$\key{k}_1$. Instead, before executing its transaction $\tid_2$, updates its view to 
 point to the most up-to-date version of each location, Figure \ref{fig:ser.exec}(d). 
-Thus, thread $\tid_2$ will execute its transaction using the snapshot $[[\loc_x] \mapsto 1, [\loc_y] \mapsto 0]$. 
+Thus, client $\tid_2$ will execute its transaction using the snapshot $[\key{k}_1 \mapsto 1, [\key{k}_2] \mapsto 0]$. 
 A consequence of this fact is that the thread-local variable $\retvar$ of $\tid_2$ will not be 
-set to ${\Large \frownie{}}$, and no new version for location $[\loc_y]$ will be created 
+set to ${\Large \frownie{}}$, and no new version for location $\key{k}_2$ will be created 
 by the execution of the transaction. The final configuration is given in Figure \ref{fig:ser.exec}(e).
 
 \ac{Contents: Read Atomic, Causal Consistency, Update Atomic, Consistent Prefix, Parallel Snapshot Isolation, Snapshot Isolation, 
