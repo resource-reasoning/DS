@@ -1,0 +1,520 @@
+\subsection{History Heaps and Views}
+\label{sec:mkvs-view}
+
+%\ac{
+%We focus on a computational model where multiple client programs can access and update 
+%locations in a key-value store using atomic transactions. Transactions in our model execute atomically, 
+%though the consistency guarantees that they provide do not necessarily correspond to \emph{serialisability}. 
+%This means that, at the moment of executing, a transaction may not observe the most up-to-date value 
+%of a location. 
+
+%To overcome this issue, we model the state of the system using \emph{multi-version key-value stores} 
+%(MKVSs) and \emph{views}. A 
+%MKVS keeps track of all the versions written for any key, as well as the information 
+%about the transactions that read and wrote such versions.  Views keep track of the version observed 
+%for each key by clients. 
+%}
+
+%\sx{ Value as natural number or natural number + key index? Is partial mkvs is a problem here??}
+
+
+%We often depict MKVSs graphically. 
+%One example is given by the MKVS $\hh_0$ of Figure \ref{fig:hheap}(a) (ignore for the moment 
+%the straight lines labelled $\txid_1$ and $\txid_2$).
+\ac{\sx{Partial is better for logic}Maybe it's better to keep $\ke$ fixed and say that we look at only a 
+fragment of the key value store. Alternatively, we can go for partial mappings to 
+represent MKVSs, but still avoiding allocation and deallocation of keys.}.
+
+
+
+%\ac{
+%We often depict MKVSs graphically. 
+%One example is given by the MKVS $\hh_0$ of Figure \ref{fig:hheap}(a) (ignore for the moment 
+%the straight lines labelled $\txid_1$ and $\txid_2$).
+
+%To the left 
+%we have the set of keys stored y $\hh_0$, in this case $\key{k}_1$ and 
+%$\key{k}_2$. To the right, on the same line of a key, a matrix containing the
+ %list of versions stored by such a key in $\hh_0$. Starting from the first column, 
+ %each version is represented by two adjacent columns in the matrix: the 
+ %column to the left gives the value of the version, while the column to the 
+ %right contains the identifier of the transaction that wrote the version to the 
+ %top, and the identifiers of the transactions that read such a version to the bottom.
+%In the case of $\hh_0$, there are two versions stored for $\key{k}_1$: 
+%the first one with value $0$, written by $\txid_0$ and read by $\txid_2$; 
+%and the second one with value $1$, written by $\txid_2$ and read by no 
+%transaction. 
+%}
+
+We model the state of system using \emph{multi-version key-value stores (MKVSs)}, where each key is associated with a list \emph{versions} from the initial one to the latest one (\defref{def:mkvs}).
+Each version \( ( \nat, \txid, \txidset ) \) contains a natural number as the value \( \nat \) and a transaction identifier \( \txid \) who writes it and a set of transaction identifiers \( \txidset \) who read it (\defref{def:mkvs}).
+One example of MKVS is given in \figref{fig:hheap-a} (ignore the lines labelled $\client_1$ and $\client_2$).
+There are two keys \( \ke_1\) and \( \ke_2 \) and each of them has two versions respectively.
+We use a box to represent a version where the left is the value and the top right corner is the write and bottom right corner is the read set.
+The versions are listed from the left to right where the latter is the later version.
+
+Given a version $\ver = (n, \txid, \txidset)$, let $\valueOf(\ver) = \nat$, $\WTx(\ver) = \txid$, $\RTx(\ver) = \txidset$. 
+%A \emph{Multi-version Key-value Store (MKVS)} is a mapping $\hh : \Keys \parfinfun \Versions^{\ast}$ from keys to lists of versions. 
+Given a list of versions $\List{\ver_0, \cdots, \ver_{n-1}}$, let $\lvert \ver_0 \cdots \ver_{n-1} \rvert = n$ be its length.
+Given a MKVS $\hh$ and a key $\ke$, let $\hh(\ke)$ be the list of versions associated with the key and \(\hh(\ke,i) \) denotes the \emph{i-th} version associated with key \( \ke \).
+We assume the index starts from 0, so \( \hh(\ke)(\left|\hh(\ke)\right| - 1)\) denote the latest versions of the key \( \ke \).
+
+
+\begin{definition}[History Heaps]
+\label{def:his_heap}
+\label{def:mkvs}
+Assuming a countably infinite set of keys $\Keys = \Set{\ke_1, \cdots}$, \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \cdots}\) and natural numbers \(\nat \in \Nat \), a \emph{multi-version key-value store (MKVS)}, \( \mkvs \in \MKVSs \), is a partial finite function from keys to lists of \emph{versions}.
+Each \emph{version} is a tuple containing a value, a transaction (identifier) and a set of transactions (identifiers).
+\[
+\begin{rclarray}
+    \ver \in \Versions & \defeq &  \Setcon{(\nat, \txid, \txidset)}{\nat \in \Nat \land \txid \in \TxID \land \txidset \subseteq \TxID \land \txid \notin \txidset} \\
+    \hh \in \HisHeaps & \defeq & \Keys \parfinfun \Versions^{*}
+\end{rclarray}
+\]
+The well-formed condition for a history heap asserts a transaction identifier appears in all the versions from an key at most twice, one as a writer and one as a reader.
+Also there are no circular dependencies in versions. 
+Given two versions $\ver_1, \ver_2$, one \emph{direct depends} from another, says $\ver_1 \xrightarrow{\ddep} \ver_2$, if $\WTx(\ver_2) \in \RTx(\ver_1)$; that is, some transaction $\txid$ wrote the version $\ver_2$ after reading $\ver_1$.
+The $\ver_1 \xrightarrow{\ddep(\hh)} \ver_2$ denotes that $\ver_1, \ver_2$ appear as versions from the some KVMS $\hh$ and \( \ver_1\) depends on \(\ver_2 \).
+The second well-formedness condition for KVMS is the \emph{transitive relation} $\left(\xrightarrow{\ddep(\hh)}\right)^{+}$ is acyclic.
+%in $\hh$, i.e. $\left(\xrightarrow{\ddep(\hh)} \right)^{+} \cap \text{Id} = \emptyset$ (where $\text{Id}$ is 
+%the identity relation).
+\[
+\begin{rclarray}
+    \pred{wfHH}{\hh} & \defeq &
+    \begin{array}[t]{@{}l}
+        \pred{acyclic}{\left(\xrightarrow{\ddep(\hh)}\right)^{+}}
+        \land \fora{\ke, \txid, i, j}
+        \begin{B}
+        \WTx(\hh(\ke, i)) = \WTx(\hh(\ke, j)) \lor {} \\ (\txid \in \RTx(\hh(\ke, i)) \land \txid \in \RTx(\hh(\ke, j))
+        \end{B} 
+        \implies i = j 
+    \end{array}
+\end{rclarray}
+\]
+The composition of two MSKV is disjointed union when the domains are disjointed \( \hh \composeHH \hh' \defeq \hh \uplus \hh' \) and the unit element is \( \unitHH \defeq \emptyset \), which together form \emph{the partial commutative monoid of MSKVs}.
+\end{definition}
+
+\ac{A point that this does not ensure a real causal dependency between the two versions, yet it is consistent with the notion of causality employed in databases, should be made}. 
+
+\begin{figure}
+\begin{center}
+\hrule\vspace{5pt}
+\begin{tabular}{@{}c c@{}}
+\begin{halfsubfig}
+\begin{centertikz}
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_1$\\
+    {a} & $\{\txid_2\}$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{0};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{1};
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid_2$ \\
+  {a} & $\{\txid_1\}$ & {a} & $\emptyset$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{0};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{1};
+%\node[version node, fit=(locycells-1-1) (locycells-2-1), fill=white, inner sep= 0cm, font=\Large] (locy-v0) {$0$};
+%\node[version node, fit=(locycells-1-3) (locycells-2-3), fill=white, inner sep=0cm, font=\Large] (locy-v1) {$1$};
+
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+\draw[-, blue, very thick, rounded corners=10pt]
+ ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+ ([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
+ ([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
+ ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
+ 
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client_1$};
+
+%red view
+\draw[-, red, very thick, rounded corners = 10pt]
+ ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+% ([xshift=-16pt, yshift=-5pt]locx-v0.south east) --
+% ([xshift=-16pt, yshift=5pt]locy-v1.north east) -- 
+ ([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
+ 
+\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client_2$};
+
+%%Stack for threads tid_1 and tid_2
+%
+%\draw[-, dashed] let 
+%   \p1 = ([xshift=0pt]locy.west),
+%   \p2 = ([yshift=-5pt]locycells.south),
+%   \p3 = ([xshift=10pt]locycells.east) in
+%   (\x1, \y2) -- (\x3, \y2);
+%   
+%\matrix(stacks) [
+%   matrix of nodes,
+%   anchor=north, 
+%   text=blue, 
+%   font=\normalsize, 
+%   row 1/.style = {text = blue}, 
+%   row 2/.style = {text = red}, 
+%   text width= 13mm ] 
+%   at ([xshift=-10pt,yshift=-8pt]locycells.south) {
+%   $\txid_1:$ & $\retvar = 0$\\
+%   $\txid_2:$ & $\retvar = 0$\\
+%   };
+\end{pgfonlayer}
+\end{centertikz}
+\caption{A configuration with a well-formed MSKV and two views}
+\label{fig:hheap-a}
+\end{halfsubfig}
+&
+
+\begin{halfsubfig} 
+\begin{centertikz}
+
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list, text width=7mm, anchor=west]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_1$\\
+    {a} & $\emptyset$ & {a} & $\{\txid_2\}$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{0};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{1};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list, text width=7mm, anchor=west]
+    at ([xshift=\tikzkvspace]locy.east) {
+    {a} & $\txid_0$ & {a} & $\txid_2$ \\
+    {a} & $\emptyset$ & {a} & $\{\txid_1\}$\\
+};
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{0};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locu-v1}{1};
+
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+%\draw[-, blue, very thick, rounded corners=10pt]
+% ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+% ([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
+% ([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
+% ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
+% 
+% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\txid_1$};
+%
+%%red view
+%\draw[-, red, very thick, rounded corners = 10pt]
+% ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+%% ([xshift=-16pt, yshift=-5pt]locx-v0.south east) --
+%% ([xshift=-16pt, yshift=5pt]locy-v1.north east) -- 
+% ([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
+% 
+%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\txid_2$};
+
+%%Stack for threads tid_1 and tid_2
+%
+%\draw[-, dashed] let 
+%   \p1 = ([xshift=0pt]locy.west),
+%   \p2 = ([yshift=-5pt]locycells.south),
+%   \p3 = ([xshift=10pt]locycells.east) in
+%   (\x1, \y2) -- (\x3, \y2);
+%   
+%\matrix(stacks) [
+%   matrix of nodes,
+%   anchor=north, 
+%   text=blue, 
+%   font=\normalsize, 
+%   row 1/.style = {text = blue}, 
+%   row 2/.style = {text = red}, 
+%   text width= 13mm ] 
+%   at ([xshift=-10pt,yshift=-8pt]locycells.south) {
+%   $\txid_1:$ & $\retvar = 0$\\
+%   $\txid_2:$ & $\retvar = 0$\\
+%   };
+\end{pgfonlayer}
+\end{centertikz}
+\caption{A ill-formed MKVS}
+\label{fig:hheap-b}
+\end{halfsubfig} \\
+\end{tabular}
+\end{center}
+\hrule\vspace{5pt}
+\caption{Multi-version key-value stores}
+\label{fig:hheap}
+\end{figure}
+
+%Formally speaking, we assume a countably infinite set of keys $\ke = \{\key{k}_1, \cdots\}$, a set of transaction identifiers $\TxID = 
+%\{ \txid_1, \cdots \}$, 
+%a set of clients $\txidset = \{\txid_1, \cdots \}$.
+%We also assume values to be natural numbers from the set $\nat$. 
+%\ac{from now on, the sort font is used for sets.}
+%\begin{definition}
+%\label{def:hheap}
+%A \emph{version} is a triple $\ver = ( n, \txid, \T)$, where, 
+%$n$ is the value of the version, $\txid$ is the identifier of the transaction 
+%that wrote the version, and $\T$ is a (possibly empty) set of identifiers of 
+%the transactions that read the version.
+%Given a version $\ver = (n, \txid, \T)$, 
+%we let $\valueOf(\ver) = n$, $\WTx(\ver) = \txid$, $\RTx(\ver) = \T$. 
+%The set of versions is denoted as $\Versions$.
+
+%A \emph{Multi-version Key-value Store}, or MKVS, is a mapping  
+%$\hh : \ke \rightarrow \Versions^{\ast}$ from keys to lists of versions. 
+%\end{definition}
+%Given a list of versions $\ver_1 \cdots \ver_{n}$, 
+%we let $\lvert \ver_1 \cdots \ver_{n} \rvert = n$ be 
+%its length. Also, let $\hh$ be a MKVS, $\key{k}$ be a key 
+%such that $\hh(\key{k}) = \ver_1 \cdots \ver_n$, and 
+%$i \leq n$ be a strictly positive natural number; then we let 
+%$\hh(\key{k}, i) = \ver_i$. 
+
+%\ac{Maybe it's better to keep $\ke$ fixed and say that we look at only a 
+%fragment of the key value store. Alternatively, we can go for partial mappings to 
+%represent MKVSs, but still avoiding allocation and deallocation of keys.}. To the left 
+%we have the set of keys stored y $\hh_0$, in this case $\key{k}_1$ and 
+%$\key{k}_2$. To the right, on the same line of a key, a matrix containing the
+ %list of versions stored by such a key in $\hh_0$. Starting from the first column, 
+ %each version is represented by two adjacent columns in the matrix: the 
+ %column to the left gives the value of the version, while the column to the 
+ %right contains the identifier of the transaction that wrote the version to the 
+ %top, and the identifiers of the transactions that read such a version to the bottom.
+%In the case of $\hh_0$, there are two versions stored for $\key{k}_1$: 
+%the first one with value $0$, written by $\txid_0$ and read by $\txid_2$; 
+%and the second one with value $1$, written by $\txid_2$ and read by no 
+%transaction. 
+
+%\ac{
+%Throughout this paper, we focus on MKVSs that can be obtained in 
+%databases whose consistency guarantees enjoy atomic visibility 
+%\cite{framework-concur,SIanalysis,laws}. To this end, we impose 
+%some well-formedness constraints on the MKVSs.
+
+%\begin{definition}
+%\label{def:hh.wellformed}
+%\label{def:ddep}
+%A MKVS $\hh$ is \emph{well-formed} if and only if 
+%\begin{itemize}
+%\item a transaction does not write two different versions for the same key: 
+%$\forall \key{k} \in \ke.\;\forall i, j = 1,\cdots, \lvert \hh(\key{k}) \rvert. 
+%\WTx(\hh(\key{k}, i)) = \WTx(\hh(\key{k}, j)) \implies i = j$, 
+%\item a transaction does not read two different versions for the same key:  
+%$\forall \key{k} \in \ke.\;\forall i, j = 1,\cdots, \lvert \hh(\key{k}) \rvert. 
+%(\RTx(\hh(\key{k},i) \cap \RTx(\hh(\key{k}, j)) \neq \emptyset) \implies i = j$.
+%\item There are no circular dependencies in versions. Given two versions 
+%$\ver_1, \ver_2$, we say that $\ver_2$ \emph{direct dependency} from 
+%$\ver_1$, written $\ver_1 \xrightarrow{\ddep} \ver_2$, if $\WTx(nu_2) \in \RTx(\ver_1)$; 
+%that is, some transaction $\txid$ wrote the version $\ver_2$ after reading $\ver_1$ 
+%\ac{A point that this does not ensure a real causal dependency between the 
+%two versions, yet it is consistent with the notion of causality employed in databases, 
+%should be made}. If $\ver_1, \ver_2$ appear as versions of some object in 
+%$\hh$, then we write $\ver_1 \xrightarrow{\ddep(\hh)} \ver_2$. Then the relation $\left(\xrightarrow{\ddep(\hh)}\right)^{+}$ is acyclic in $\hh$, 
+%i.e. $\left(\xrightarrow{\ddep(\hh)} \right)^{+} \cap \text{Id} = \emptyset$ (where $\text{Id}$ is 
+%the identity relation).
+%\end{itemize}
+%\end{definition}
+%}
+
+\sx{Snapshot has not be explained yet}
+Let us discuss the last well-formedness constraint for a MKVS \( \mkvs \) in \defref{def:mkvs}, which states that there is no circularity in dependencies relation.
+This ensures that no versions are created \emph{out of thin-air}.
+An example of the out of thin-air anomaly is given by \figref{fig:hheap-b}: 
+T transaction $\txid_2$ that read the value of $\ke_1$ written by $\txid_1$;
+conversely, $\txid_1$ read the value of $\ke_2$ written by $\txid_2$. 
+Because we assume that transactions read a state of the key-value store from an atomic snapshot fixed at the moment they execute, this situation cannot happen. 
+For $\txid_2$ to read the version installed by $\txid_1$, transaction $\txid_2$ must start after $\txid_1$, \ie \( \hh_1(\key{k}_2, 2) \xrightarrow{\ddep(\hh_1)} \hh(\key{k}_1, 2) \).
+Similarly, $\txid_1$ must starts after $\txid_2$, \ie \( \hh_1(\key{k}_1, 2) \xrightarrow{\ddep(hh_1)} \hh_1(\key{k}_2, 2) \).
+The desired dependent relation violates the well-formedness of MKVSs that $\xrightarrow{\ddep(\hh_1)}$ is acyclic. 
+%When introducing our semantics of clients in \S \ref{sec:semantics}, we show that (under reasonable conditions) it generates only well-formed MKVSs.
+
+%\ac{
+%A view $V$ defines the particular version of each key that a client 
+%will observe when executing a transaction. A configuration consists 
+%of a MKVS, and the views that a set of clients have each on the state 
+%of the MKVS. An example of configuration is given in Figure \ref{fig:hheap}(a). 
+%There are two clients, $\txid_1$ and $\txid_2$, each with their own view 
+%(represented in the Figure by labelled lines crossing the MKVS at each location). 
+%According to the view of $\txid_1$, formally defined as $V_1 = [\key{k}_1 \mapsto 2], 
+%\key{k}_2 \mapsto 1]$, this client observes in $\hh$ the second version of key $\key{k}_1$, carrying 
+%value $1$, and 
+%the first version of $\key{k}_2$, carrying value $0$. Similarly, according to its view 
+%$V_2 = [\key{k}_1 \mapsto 2, \key{k}_2 \mapsto 2]$, the client $\txid_2$ observes 
+%in $\hh$the second and most up-to-date version for both $\key{k}_1$ and $\key{k}_2$.
+%}
+
+\sx{configuration is bad term? as we often use a configuration of the semantics}
+MKVSs is the overall state of the system, but different \emph{clients} may observe different versions of the same key. 
+To model this, we introduce the notion of \emph{views} and \emph{configurations} (\defref{def:views}). 
+A view $V$ defines the particular version of each key that a client will observe when executing a transaction. 
+A configuration consists of a MKVS, and the views associated with clients.
+An example of configuration is given in \figref{fig:hheap-a}. 
+There are two clients, $\client_1$ (in red) and $\client_2$ (in blue) with their own views.
+%(represented in the Figure by labelled lines crossing the MKVS at each location). 
+Given the figure, formally the view for \( \client_1 \) is $\vi_1 = \Set{\key{k}_1 \mapsto 1, \key{k}_2 \mapsto 0}$.
+%, and 
+%the first version of $\key{k}_2$, carrying value $0$. Similarly, according to its view 
+%$V_2 = [\key{k}_1 \mapsto 2, \key{k}_2 \mapsto 2]$, the client $\txid_2$ observes 
+%in $\hh$the second and most up-to-date version for both $\key{k}_1$ and $\key{k}_2$.
+
+\begin{definition}
+\label{def:view}
+\label{def:cuts}
+\label{def:views}
+\emph{A view} is a partial finite function from keys to indexes,
+\[
+\begin{rclarray}
+    \vi \in \Views & \defeq & \Addr \parfinfun \Nat \\
+\end{rclarray}
+\]                                                                     
+The composition is disjointed union \( \vi \composeVI \vi' \defeq \vi \uplus \vi'\) and the unit is \( \unitVI \defeq \emptyset\).
+The order between two views with the same domain is defined by the order of the indexes, 
+\[
+\begin{rclarray}
+    \vi \orderVI \vi' & \defiff & \dom(\vi) = \dom(\vi') \land \fora{\ke} \cu(\ke) \leq \cu'(\ke) \\
+\end{rclarray}
+\]
+A \emph{configuration} is a pair $\conf = (\hh, \viewFun)$, where $\viewFun: \txidset \rightharpoonup \viewSet$ is a partial mapping from clients to views. 
+%Assuming a set of thread identifiers \( \setthid \subseteq \ThreadID \), \emph{a view environment} is a function from thread identifiers to views, this is, \( \vienv \in \ViEnv \defeq \ThreadID \parfun \Views \).
+\end{definition}
+
+When a client executes a transaction, it extracts \emph{a snapshot} \( \sn \in \Heaps \) via \( \func{snapshot}{\mkvs, \vi} \) function which extracts the values corresponding to the versions indexed by  the view \( \vi \) (\defref{def:snapshot}).
+For example, in \figref{fig:hheap-a}, the client \( \client_1 \) will observes a state where first key $\ke_0$ carries value 1 and second key \( \ke_2 \) carries value $0$ if it takes a snapshot.
+%The concrete state extracted in this way takes the name of the \emph{snapshot} of the transaction.
+%In general, the process of determining the view of a client, hence the snapshot in which such a client executes transactions, is non-deterministic.
+
+\begin{definition}[Snapshots]
+\label{def:heaps}
+\label{def:snapshot}
+Given the sets of program values $\Val$  and keys \( \Addr\)  (\defin\ref{def:mkvs}), the set of \emph{snapshots} is:
+\[
+\begin{rclarray}
+    \h \in \Heaps & \eqdef & \Addr \parfinfun \Val
+\end{rclarray}
+\]
+The \emph{snapshot composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ snapshot unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
+The \emph{partial commutative monoid of snapshots} is $(\Heaps, \composeH, \{\unitH\})$.
+Then given a MKVS $\hh$, and a view $V\vi$, the snapshot of $\vi$ in $\hh$ is defined as:
+\[
+\begin{rclarray}
+    \snapshot(\hh, \vi) & \defeq & \lambda \ke \ldotp \valueOf(\hh, \ke, \vi).
+\end{rclarray}
+\]
+\end{definition}
+
+\ac{
+A view $V$ is well-formed with respect to a MKVS $\hh$ iff, 
+for any $\key{k} \in \ke.\; 0 < V(\key{k}) \leq \lvert \hh(\key{k}) \rvert$. 
+A configuration $\conf = (\hh, \viewFun)$ is well-formed if, for any 
+$\txid \in \dom(\viewFun)$, the view $\viewFun(\txid)$ is well-formed with respect 
+to $\hh$. Henceforth, we always assume that MKVSs, views and configurations are well-formed, 
+unless otherwise stated.
+%We say that a view $V$ is well-defined with respect to the 
+%MKVS $\hh$ if, $\forall \key{k} \in \ke. 0 < V(\key{k}) \leq 
+%\lvert \hh(\key{k}) \rvert$. 
+%Given a view $V$ that is well-defined 
+%with respect to a 
+and a MKVS $\hh$, we let $\version(\hh, \key{k}, V) = 
+\hh(\key{k}, V(\key{k}))$; we commit an abuse of notation and 
+often write $\valueOf(\hh, \key{k}, V)$ in lieu of $
+\valueOf(\version(\hh, \key{k}, V))$, and similarly for $\WTx, \RTx$.
+if $\ver = \version(\hh, \key{k}, V)$,  
+we say that $V$ $\key{k}$-points to $\ver$ in $\hh$. If $\ver = \hh(\key{k}, i)$ 
+for some $i \leq V(\key{k})$, we say that $V$ $\key{k}$-includes $\ver$ in $\hh$.
+
+%\begin{definition}
+%\label{def:configuration}
+%A \emph{configuration} is a pair $\conf = (\hh, \viewFun)$, where 
+%$\viewFun: \txidset \rightharpoonup \viewSet$ is a partial mapping 
+%from clients to views such that whenever $\txid \in \dom(\viewFun), 
+%\viewFun(\txidset)$ is well-defined with respect to $\hh$. 
+%\end{definition}
+
+%
+%History heaps and views are defined formally in Section \ref{sec:historyheaps}. 
+
+
+%In general ,the process of determining 
+%a snapshot for a transaction is non-deterministic.
+%Formally speaking, we assume a countably infinite set of keys $\ke = \{\key{k}_1, \cdots\}$. 
+%\ac{from now on, the mathrm is used for addresses/keys.}
+A snapshot 
+%consists of a mapping from 
+%A heap 
+$\h \in \Heaps$ consists of a function 
+$\h: \ke \rightarrow \Nat$. 
+Given a MKVS $\hh$ and a view $V$, we can always determine a snapshot in 
+the obvious way. 
+
+
+
+
+\ac{General Comment on this Section: it is too abstract. We 
+should give either here or in the introduction an example of computation - 
+the write skew program should be okay that helps the reader understanding 
+what's going on. Also, it could be also good to illustrate the notions 
+of execution tests and consistency models.}
+%from a set of addresses $\ke \defeq \Setcon{ [\nat] }{\nat \in \Nat }$ to values in $ \val \in \Val \defeq \Nat \cup \ke$. 
+%The set of all heaps is denoted by $\Heaps$.
+We assume that each client has its own stack, 
+where data for performing local computations is stored. 
+%Transactions also 
+%have a transaction-local stack. 
+The set of thread-local stack variables is denoted by $\ThreadVars \defeq \{\pvar{x}, \pvar{y}, \cdots\}$, 
+while the set of transaction local variables is denoted by $\TxVars \defeq \{\pvar{a}, \pvar{b}, \cdots\}$. 
+We use $\ThdStacks$ to range over thread-local stacks in the set $\ThdStacks \defeq \ThreadVars \to \Val$, 
+and $\TxStacks$ to range over transaction-local stacks in the set $\TxStacks \defeq \TxVars \to \Val$.
+}
+%\ac{We had some discussion on whether separating the thread-local and transaction-local stack made sense. 
+%If you see tranaction code the same as method invocations, this assumption reflects what happens 
+%in standard imperative programming languages (i.e. C): transaction-local variables are the local variables 
+%of a method, thread-local variables are global variables. A method can read from the global variables. 
+%The local variables of a method cannot be accessed outxide of the method execution.
+%From the technical point of view, having a single thread-local stack won't make too much of a difference, 
+%as concurrent access to stack locations can never happen. So we can change it, if needed.}
+%\ac{I am wondering whether it makes sense to allow threads to communicate using shared 
+%variables outxide of the database. In The context of concurrent data structures, this affects 
+%the characterisation of contextual refinement (from sequential consistency to linearisability). 
+%But in this case transactions are meant to execute atomically, whereas in concurrent 
+%library semantics interleavings of method executions are possible.}
+
+%The transaction-local stack is created at the moment a transaction starts, 
+%and is destroyed at the moment it commits. 
+%Transactions can read from, but cannot 
+%write to, the thread-local stack. This assumption makes it possible to abstract from 
+%aborting transactions, as these would have no side-effects in the computational model described. 
+%We assume that each transaction-local 
+%stack has a special variable that is used to store the value returned by the transaction 
+%upon commit. Each thread-local stack also comes equipped with a special return variable, 
+%where the contents of the value returned by transactions are stored. We use the symbol 
+%$\retvar$ to denote the special return variable, both in transaction-local and thread-local 
+%stacks.
+%%\sx{
+%%    Not sure about the ret var, 
+%%    how to transfer the ret var from tx stack to thread stack as 
+%%    we cannot modify the thread stack.
+%%}
+%%\ac{That can be done as part of the program semantics, executing 
+%%a transaction modifies the ret value of the semantics. This is 
+%%also what happens in real program executions, by pushing/popping the return value into 
+%%the execution stack.}
+%We leave the consistency model of the transactional memory unspecified. The rules 
+%of our operational semantics will be parametric in the specification of a consistency 
+%model, using a novel style of specification that we will present later in the paper. 
