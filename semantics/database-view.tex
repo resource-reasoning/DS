@@ -1,4 +1,4 @@
-\subsection{History Heaps and Views}
+\subsection{Multi-version Key-value Stores and Views}
 \label{sec:mkvs-view}
 
 %\ac{
@@ -46,36 +46,37 @@ represent MKVSs, but still avoiding allocation and deallocation of keys.}.
 %transaction. 
 %}
 
-We model the state of system using \emph{multi-version key-value stores (MKVSs)}, where each key is associated with a list \emph{versions} from the initial one to the latest one (\defref{def:mkvs}).
+We model the state of system using \emph{multi-version key-value stores (MKVSs)}, is a mapping from keys to lists of versions.
+%where each key is associated with a list \emph{versions} from the initial one to the latest one (\defref{def:mkvs}).
 Each version \( ( \nat, \txid, \txidset ) \) contains a natural number as the value \( \nat \) and a transaction identifier \( \txid \) who writes it and a set of transaction identifiers \( \txidset \) who read it (\defref{def:mkvs}).
 One example of MKVS is given in \figref{fig:hheap-a} (ignore the lines labelled $\client_1$ and $\client_2$).
-There are two keys \( \ke_1\) and \( \ke_2 \) and each of them has two versions respectively.
-We use a box to represent a version where the left is the value and the top right corner is the write and bottom right corner is the read set.
-The versions are listed from the left to right where the latter is the later version.
+There are two keys \( \ke_1\) and \( \ke_2 \) and each of them has two versions with value 0 and value 1 respectively.
+We use a box to represent a version where the left is the value and the top right corner is the transaction that wrote the version and bottom right corner is the set of transaction that read such a version.
+The versions are listed from the left, the earlier version,  to right, the later version.
 
 Given a version $\ver = (n, \txid, \txidset)$, let $\valueOf(\ver) = \nat$, $\WTx(\ver) = \txid$, $\RTx(\ver) = \txidset$. 
 %A \emph{Multi-version Key-value Store (MKVS)} is a mapping $\hh : \Keys \parfinfun \Versions^{\ast}$ from keys to lists of versions. 
 Given a list of versions $\List{\ver_0, \cdots, \ver_{n-1}}$, let $\lvert \ver_0 \cdots \ver_{n-1} \rvert = n$ be its length.
 Given a MKVS $\hh$ and a key $\ke$, let $\hh(\ke)$ be the list of versions associated with the key and \(\hh(\ke,i) \) denotes the \emph{i-th} version associated with key \( \ke \).
-We assume the index starts from 0, so \( \hh(\ke)(\left|\hh(\ke)\right| - 1)\) denote the latest versions of the key \( \ke \).
+We assume the index starts from 0, so \( \hh(\ke)(\left|\hh(\ke)\right| - 1)\) is the latest versions of the key \( \ke \).
 
 
-\begin{definition}[History Heaps]
+\begin{definition}[Multi-version key-value stores]
 \label{def:his_heap}
 \label{def:mkvs}
-Assuming a countably infinite set of keys $\Keys = \Set{\ke_1, \cdots}$, \emph{transactions identifiers} \( \TxID \defeq \Set{\txid, \cdots}\) and natural numbers \(\nat \in \Nat \), a \emph{multi-version key-value store (MKVS)}, \( \mkvs \in \MKVSs \), is a partial finite function from keys to lists of \emph{versions}.
-Each \emph{version} is a tuple containing a value, a transaction (identifier) and a set of transactions (identifiers).
+Assuming a countably infinite set of keys $\Keys = \Set{\ke_1, \cdots}$, \emph{transactions identifiers} \( \TxID \defeq \Set{\txid_{1}, \cdots}\) and natural numbers \(\nat \in \Nat \), a \emph{multi-version key-value store (MKVS)}, \( \mkvs \in \MKVSs \), is a partial finite function from keys to lists of \emph{versions}.
+Each \emph{version} is a triple containing a natural number \( \nat \), a transaction identifier \( \txid \) and a set of transactions identifiers \( \txidset \):
 \[
 \begin{rclarray}
     \ver \in \Versions & \defeq &  \Setcon{(\nat, \txid, \txidset)}{\nat \in \Nat \land \txid \in \TxID \land \txidset \subseteq \TxID \land \txid \notin \txidset} \\
     \hh \in \HisHeaps & \defeq & \Keys \parfinfun \Versions^{*}
 \end{rclarray}
 \]
-The well-formed condition for a history heap asserts a transaction identifier appears in all the versions from an key at most twice, one as a writer and one as a reader.
+The well-formed condition for a key-value store asserts a transaction identifier appears in all the versions for an key at most twice, one as the writer and one as a reader.
 Also there are no circular dependencies in versions. 
-Given two versions $\ver_1, \ver_2$, one \emph{direct depends} from another, says $\ver_1 \xrightarrow{\ddep} \ver_2$, if $\WTx(\ver_2) \in \RTx(\ver_1)$; that is, some transaction $\txid$ wrote the version $\ver_2$ after reading $\ver_1$.
+Given two versions $\ver_1, \ver_2$, the former \emph{direct depends} on later, written $\ver_1 \xrightarrow{\ddep} \ver_2$, if $\WTx(\ver_2) \in \RTx(\ver_1)$; that is, some transaction $\txid$ wrote the version $\ver_2$ after reading $\ver_1$.
 The $\ver_1 \xrightarrow{\ddep(\hh)} \ver_2$ denotes that $\ver_1, \ver_2$ appear as versions from the some KVMS $\hh$ and \( \ver_1\) depends on \(\ver_2 \).
-The second well-formedness condition for KVMS is the \emph{transitive relation} $\left(\xrightarrow{\ddep(\hh)}\right)^{+}$ is acyclic.
+Thus, the second well-formedness condition for KVMS is the \emph{transitive relation of direct dependency} $\left(\xrightarrow{\ddep(\hh)}\right)^{+}$ is acyclic:
 %in $\hh$, i.e. $\left(\xrightarrow{\ddep(\hh)} \right)^{+} \cap \text{Id} = \emptyset$ (where $\text{Id}$ is 
 %the identity relation).
 \[
@@ -91,7 +92,7 @@ The second well-formedness condition for KVMS is the \emph{transitive relation} 
     \end{array}
 \end{rclarray}
 \]
-The composition of two MSKV is disjointed union when the domains are disjointed \( \hh \composeHH \hh' \defeq \hh \uplus \hh' \) and the unit element is \( \unitHH \defeq \emptyset \), which together form \emph{the partial commutative monoid of MSKVs}.
+The composition of two MSKVs is disjointed union when the domains are disjointed \( \hh \composeHH \hh' \defeq \hh \uplus \hh' \) and the unit element is \( \unitHH \defeq \emptyset \), which together form \emph{the partial commutative monoid of MSKVs}.
 \end{definition}
 
 \ac{A point that this does not ensure a real causal dependency between the two versions, yet it is consistent with the notion of causality employed in databases, should be made}. 
@@ -340,8 +341,8 @@ An example of the out of thin-air anomaly is given by \figref{fig:hheap-b}:
 T transaction $\txid_2$ that read the value of $\ke_1$ written by $\txid_1$;
 conversely, $\txid_1$ read the value of $\ke_2$ written by $\txid_2$. 
 Because we assume that transactions read a state of the key-value store from an atomic snapshot fixed at the moment they execute, this situation cannot happen. 
-For $\txid_2$ to read the version installed by $\txid_1$, transaction $\txid_2$ must start after $\txid_1$, \ie \( \hh_1(\key{k}_2, 2) \xrightarrow{\ddep(\hh_1)} \hh(\key{k}_1, 2) \).
-Similarly, $\txid_1$ must starts after $\txid_2$, \ie \( \hh_1(\key{k}_1, 2) \xrightarrow{\ddep(hh_1)} \hh_1(\key{k}_2, 2) \).
+For $\txid_2$ to read the version installed by $\txid_1$, transaction $\txid_2$ must start after $\txid_1$, \ie \( \hh_1(\ke_2, 2) \xrightarrow{\ddep(\hh_1)} \hh(\ke_1, 2) \).
+Similarly, $\txid_1$ must starts after $\txid_2$, \ie \( \hh_1(\ke_1, 2) \xrightarrow{\ddep(hh_1)} \hh_1(\ke_2, 2) \).
 The desired dependent relation violates the well-formedness of MKVSs that $\xrightarrow{\ddep(\hh_1)}$ is acyclic. 
 %When introducing our semantics of clients in \S \ref{sec:semantics}, we show that (under reasonable conditions) it generates only well-formed MKVSs.
 
@@ -364,17 +365,16 @@ The desired dependent relation violates the well-formedness of MKVSs that $\xrig
 MKVSs is the overall state of the system, but different \emph{clients} may observe different versions of the same key. 
 To model this, we introduce the notion of \emph{views} and \emph{configurations} (\defref{def:views}). 
 A view $V$ defines the particular version of each key that a client will observe when executing a transaction. 
-A configuration consists of a MKVS, and the views associated with clients.
-An example of configuration is given in \figref{fig:hheap-a}. 
-There are two clients, $\client_1$ (in red) and $\client_2$ (in blue) with their own views.
-%(represented in the Figure by labelled lines crossing the MKVS at each location). 
+An example of views is given in \figref{fig:hheap-a}. 
+There are two views, $\client_1$ in red and $\client_2$ in blue.
 Given the figure, formally the view for \( \client_1 \) is $\vi_1 = \Set{\key{k}_1 \mapsto 1, \key{k}_2 \mapsto 0}$.
+This means the client observes the second version of key \( \ke_{1} \), carrying value 1 and the first version of key \( \ke_2 \) carrying value 0.
 %, and 
 %the first version of $\key{k}_2$, carrying value $0$. Similarly, according to its view 
 %$V_2 = [\key{k}_1 \mapsto 2, \key{k}_2 \mapsto 2]$, the client $\txid_2$ observes 
 %in $\hh$the second and most up-to-date version for both $\key{k}_1$ and $\key{k}_2$.
 
-\begin{definition}
+\begin{definition}[views]
 \label{def:view}
 \label{def:cuts}
 \label{def:views}
@@ -391,11 +391,33 @@ The order between two views with the same domain is defined by the order of the 
     \vi \orderVI \vi' & \defiff & \dom(\vi) = \dom(\vi') \land \fora{\ke} \cu(\ke) \leq \cu'(\ke) \\
 \end{rclarray}
 \]
-A \emph{configuration} is a pair $\conf = (\hh, \viewFun)$, where $\viewFun: \txidset \rightharpoonup \viewSet$ is a partial mapping from clients to views. 
-%Assuming a set of thread identifiers \( \setthid \subseteq \ThreadID \), \emph{a view environment} is a function from thread identifiers to views, this is, \( \vienv \in \ViEnv \defeq \ThreadID \parfun \Views \).
 \end{definition}
 
-When a client executes a transaction, it extracts \emph{a snapshot} \( \sn \in \Heaps \) via \( \func{snapshot}{\mkvs, \vi} \) function which extracts the values corresponding to the versions indexed by  the view \( \vi \) (\defref{def:snapshot}).
+\emph{A configuration} consists of a MKVS, and the views associated with clients.
+An example of configuration is given in \figref{fig:hheap-a} including the key-value store and two clients associated with their own views.
+For brevity, let $\version(\hh, \ke, \vi) = \hh(\ke, \vi(\ke))$; 
+we commit an abuse of notation and often write $\valueOf(\hh, \ke, \vi)$ in lieu of $ \valueOf(\version(\hh, \key{k}, V))$, and similarly for $\WTx, \RTx$.
+If $\ver = \version(\hh, \ke, \vi)$, we say that \emph{$\vi$ $\ke$-points to $\ver$ in $\hh$}. 
+If $\ver = \hh(\ke, i)$ for some $0 \leq i \le \vi(\ke)$, we say that \emph{$\vi$ $\ke$-includes $\ver$ in $\hh$}.
+Last, we always assume that key-value stores, views, and configurations are well-formed, unless otherwise stated.
+
+
+\begin{definition}[configurations]
+A view $\vi$ is well-formed with respect to a key-value store $\mkvs$ if the have the same domain and every index from the view is within the range of the length of the corresponding version:
+\[
+    \dom(\mkvs) = \dom(\vi) \land \fora{\ke \in \dom(\vi)} 0 \leq \vi(\ke) \le \lvert \mkvs(\ke) \rvert
+\]
+A \emph{configuration} is a pair $\conf = (\hh, \viewFun)$, where $\viewFun: \Clients \parfinfun \Views$ is a partial finite function from clients to views. 
+A configuration $\conf = (\hh, \viewFun)$ is well-formed if for any client any $\cl \in \dom(\viewFun)$, the view $\viewFun(\txid)$ is well-formed with respect to the key-value store $\hh$. 
+%We say that a view $V$ is well-defined with respect to the 
+%MKVS $\hh$ if, $\forall \key{k} \in \ke. 0 < V(\key{k}) \leq 
+%\lvert \hh(\key{k}) \rvert$. 
+%Given a view $V$ that is well-defined 
+%with respect to a 
+
+\end{definition}
+
+Intuitive, when a client executes a transaction, it extracts \emph{a snapshot} \( \sn \in \Heaps \) via \( \func{snapshot}{\mkvs, \vi} \) function which extracts the values corresponding to the versions indexed by  the view \( \vi \) (\defref{def:snapshot}).
 For example, in \figref{fig:hheap-a}, the client \( \client_1 \) will observes a state where first key $\ke_0$ carries value 1 and second key \( \ke_2 \) carries value $0$ if it takes a snapshot.
 %The concrete state extracted in this way takes the name of the \emph{snapshot} of the transaction.
 %In general, the process of determining the view of a client, hence the snapshot in which such a client executes transactions, is non-deterministic.
@@ -419,102 +441,84 @@ Then given a MKVS $\hh$, and a view $V\vi$, the snapshot of $\vi$ in $\hh$ is de
 \]
 \end{definition}
 
-\ac{
-A view $V$ is well-formed with respect to a MKVS $\hh$ iff, 
-for any $\key{k} \in \ke.\; 0 < V(\key{k}) \leq \lvert \hh(\key{k}) \rvert$. 
-A configuration $\conf = (\hh, \viewFun)$ is well-formed if, for any 
-$\txid \in \dom(\viewFun)$, the view $\viewFun(\txid)$ is well-formed with respect 
-to $\hh$. Henceforth, we always assume that MKVSs, views and configurations are well-formed, 
-unless otherwise stated.
-%We say that a view $V$ is well-defined with respect to the 
-%MKVS $\hh$ if, $\forall \key{k} \in \ke. 0 < V(\key{k}) \leq 
-%\lvert \hh(\key{k}) \rvert$. 
-%Given a view $V$ that is well-defined 
-%with respect to a 
-and a MKVS $\hh$, we let $\version(\hh, \key{k}, V) = 
-\hh(\key{k}, V(\key{k}))$; we commit an abuse of notation and 
-often write $\valueOf(\hh, \key{k}, V)$ in lieu of $
-\valueOf(\version(\hh, \key{k}, V))$, and similarly for $\WTx, \RTx$.
-if $\ver = \version(\hh, \key{k}, V)$,  
-we say that $V$ $\key{k}$-points to $\ver$ in $\hh$. If $\ver = \hh(\key{k}, i)$ 
-for some $i \leq V(\key{k})$, we say that $V$ $\key{k}$-includes $\ver$ in $\hh$.
-
-%\begin{definition}
-%\label{def:configuration}
-%A \emph{configuration} is a pair $\conf = (\hh, \viewFun)$, where 
-%$\viewFun: \txidset \rightharpoonup \viewSet$ is a partial mapping 
-%from clients to views such that whenever $\txid \in \dom(\viewFun), 
-%\viewFun(\txidset)$ is well-defined with respect to $\hh$. 
-%\end{definition}
-
-%
-%History heaps and views are defined formally in Section \ref{sec:historyheaps}. 
-
-
-%In general ,the process of determining 
-%a snapshot for a transaction is non-deterministic.
-%Formally speaking, we assume a countably infinite set of keys $\ke = \{\key{k}_1, \cdots\}$. 
-%\ac{from now on, the mathrm is used for addresses/keys.}
-A snapshot 
-%consists of a mapping from 
-%A heap 
-$\h \in \Heaps$ consists of a function 
-$\h: \ke \rightarrow \Nat$. 
-Given a MKVS $\hh$ and a view $V$, we can always determine a snapshot in 
-the obvious way. 
-
-
-
-
 \ac{General Comment on this Section: it is too abstract. We 
 should give either here or in the introduction an example of computation - 
 the write skew program should be okay that helps the reader understanding 
 what's going on. Also, it could be also good to illustrate the notions 
 of execution tests and consistency models.}
-%from a set of addresses $\ke \defeq \Setcon{ [\nat] }{\nat \in \Nat }$ to values in $ \val \in \Val \defeq \Nat \cup \ke$. 
-%The set of all heaps is denoted by $\Heaps$.
-We assume that each client has its own stack, 
-where data for performing local computations is stored. 
-%Transactions also 
-%have a transaction-local stack. 
-The set of thread-local stack variables is denoted by $\ThreadVars \defeq \{\pvar{x}, \pvar{y}, \cdots\}$, 
-while the set of transaction local variables is denoted by $\TxVars \defeq \{\pvar{a}, \pvar{b}, \cdots\}$. 
-We use $\ThdStacks$ to range over thread-local stacks in the set $\ThdStacks \defeq \ThreadVars \to \Val$, 
-and $\TxStacks$ to range over transaction-local stacks in the set $\TxStacks \defeq \TxVars \to \Val$.
-}
-%\ac{We had some discussion on whether separating the thread-local and transaction-local stack made sense. 
-%If you see tranaction code the same as method invocations, this assumption reflects what happens 
-%in standard imperative programming languages (i.e. C): transaction-local variables are the local variables 
-%of a method, thread-local variables are global variables. A method can read from the global variables. 
-%The local variables of a method cannot be accessed outxide of the method execution.
-%From the technical point of view, having a single thread-local stack won't make too much of a difference, 
-%as concurrent access to stack locations can never happen. So we can change it, if needed.}
-%\ac{I am wondering whether it makes sense to allow threads to communicate using shared 
-%variables outxide of the database. In The context of concurrent data structures, this affects 
-%the characterisation of contextual refinement (from sequential consistency to linearisability). 
-%But in this case transactions are meant to execute atomically, whereas in concurrent 
-%library semantics interleavings of method executions are possible.}
 
-%The transaction-local stack is created at the moment a transaction starts, 
-%and is destroyed at the moment it commits. 
-%Transactions can read from, but cannot 
-%write to, the thread-local stack. This assumption makes it possible to abstract from 
-%aborting transactions, as these would have no side-effects in the computational model described. 
-%We assume that each transaction-local 
-%stack has a special variable that is used to store the value returned by the transaction 
-%upon commit. Each thread-local stack also comes equipped with a special return variable, 
-%where the contents of the value returned by transactions are stored. We use the symbol 
-%$\retvar$ to denote the special return variable, both in transaction-local and thread-local 
-%stacks.
-%%\sx{
-%%    Not sure about the ret var, 
-%%    how to transfer the ret var from tx stack to thread stack as 
-%%    we cannot modify the thread stack.
-%%}
-%%\ac{That can be done as part of the program semantics, executing 
-%%a transaction modifies the ret value of the semantics. This is 
-%%also what happens in real program executions, by pushing/popping the return value into 
-%%the execution stack.}
-%We leave the consistency model of the transactional memory unspecified. The rules 
-%of our operational semantics will be parametric in the specification of a consistency 
-%model, using a novel style of specification that we will present later in the paper. 
+%\ac{
+%%\begin{definition}
+%%\label{def:configuration}
+%%A \emph{configuration} is a pair $\conf = (\hh, \viewFun)$, where 
+%%$\viewFun: \txidset \rightharpoonup \viewSet$ is a partial mapping 
+%%from clients to views such that whenever $\txid \in \dom(\viewFun), 
+%%\viewFun(\txidset)$ is well-defined with respect to $\hh$. 
+%%\end{definition}
+
+%%
+%%History heaps and views are defined formally in Section \ref{sec:historyheaps}. 
+
+
+%%In general ,the process of determining 
+%%a snapshot for a transaction is non-deterministic.
+%%Formally speaking, we assume a countably infinite set of keys $\ke = \{\key{k}_1, \cdots\}$. 
+%%\ac{from now on, the mathrm is used for addresses/keys.}
+%A snapshot 
+%%consists of a mapping from 
+%%A heap 
+%$\h \in \Heaps$ consists of a function 
+%$\h: \ke \rightarrow \Nat$. 
+%Given a MKVS $\hh$ and a view $V$, we can always determine a snapshot in 
+%the obvious way. 
+
+
+
+
+%%from a set of addresses $\ke \defeq \Setcon{ [\nat] }{\nat \in \Nat }$ to values in $ \val \in \Val \defeq \Nat \cup \ke$. 
+%%The set of all heaps is denoted by $\Heaps$.
+%We assume that each client has its own stack, 
+%where data for performing local computations is stored. 
+%%Transactions also 
+%%have a transaction-local stack. 
+%The set of thread-local stack variables is denoted by $\ThreadVars \defeq \{\pvar{x}, \pvar{y}, \cdots\}$, 
+%while the set of transaction local variables is denoted by $\TxVars \defeq \{\pvar{a}, \pvar{b}, \cdots\}$. 
+%We use $\ThdStacks$ to range over thread-local stacks in the set $\ThdStacks \defeq \ThreadVars \to \Val$, 
+%and $\TxStacks$ to range over transaction-local stacks in the set $\TxStacks \defeq \TxVars \to \Val$.
+%}
+%%\ac{We had some discussion on whether separating the thread-local and transaction-local stack made sense. 
+%%If you see tranaction code the same as method invocations, this assumption reflects what happens 
+%%in standard imperative programming languages (i.e. C): transaction-local variables are the local variables 
+%%of a method, thread-local variables are global variables. A method can read from the global variables. 
+%%The local variables of a method cannot be accessed outxide of the method execution.
+%%From the technical point of view, having a single thread-local stack won't make too much of a difference, 
+%%as concurrent access to stack locations can never happen. So we can change it, if needed.}
+%%\ac{I am wondering whether it makes sense to allow threads to communicate using shared 
+%%variables outxide of the database. In The context of concurrent data structures, this affects 
+%%the characterisation of contextual refinement (from sequential consistency to linearisability). 
+%%But in this case transactions are meant to execute atomically, whereas in concurrent 
+%%library semantics interleavings of method executions are possible.}
+
+%%The transaction-local stack is created at the moment a transaction starts, 
+%%and is destroyed at the moment it commits. 
+%%Transactions can read from, but cannot 
+%%write to, the thread-local stack. This assumption makes it possible to abstract from 
+%%aborting transactions, as these would have no side-effects in the computational model described. 
+%%We assume that each transaction-local 
+%%stack has a special variable that is used to store the value returned by the transaction 
+%%upon commit. Each thread-local stack also comes equipped with a special return variable, 
+%%where the contents of the value returned by transactions are stored. We use the symbol 
+%%$\retvar$ to denote the special return variable, both in transaction-local and thread-local 
+%%stacks.
+%%%\sx{
+%%%    Not sure about the ret var, 
+%%%    how to transfer the ret var from tx stack to thread stack as 
+%%%    we cannot modify the thread stack.
+%%%}
+%%%\ac{That can be done as part of the program semantics, executing 
+%%%a transaction modifies the ret value of the semantics. This is 
+%%%also what happens in real program executions, by pushing/popping the return value into 
+%%%the execution stack.}
+%%We leave the consistency model of the transactional memory unspecified. The rules 
+%%of our operational semantics will be parametric in the specification of a consistency 
+%%model, using a novel style of specification that we will present later in the paper. 
