@@ -1,28 +1,25 @@
 \subsubsection{Program Semantics}
-\sx{
-For weak consistency models, or weak isolation levels as a common term used in database community, a thread is not necessary to work on the up-to-date version of a database in exchange for better performance. 
-Even in a single machine database, a thread running under weak consistency model can make less synchronisation with the hard drivers and other running threads, which means the thread could observe out-of-date state.
-Therefore, we introduce \emph{views} to model threads of a database.
-A \emph{view} is a cut in a history heap that corresponds the indexes of versions that a thread work with.
-We also define a order between two views, if they contain the same addresses and the indexes are ordered point-wise.
-This is to model the synchronisation between threads.
-For example \( \vi \orderVI \vi' \) could mean that a thread updates it view from \( \vi \) to \( \vi' \) by synchronisation with others.
-}
-
 \label{sec:prog-semantics}
-The semantics for commands is in \figref{fig:thread_semantics}, taking the form
+%\sx{
+%For weak consistency models, or weak isolation levels as a common term used in database community, a thread is not necessary to work on the up-to-date version of a database in exchange for better performance. 
+%Even in a single machine database, a thread running under weak consistency model can make less synchronisation with the hard drivers and other running threads, which means the thread could observe out-of-date state.
+%Therefore, we introduce \emph{views} to model threads of a database.
+%A \emph{view} is a cut in a history heap that corresponds the indexes of versions that a thread work with.
+%We also define a order between two views, if they contain the same addresses and the indexes are ordered point-wise.
+%This is to model the synchronisation between threads.
+%For example \( \vi \orderVI \vi' \) could mean that a thread updates it view from \( \vi \) to \( \vi' \) by synchronisation with others.
+%}
+
+The semantics for commands is in \figref{fig:thread_semantics}, taking the form:
 \[
     ( \hh, \stk, \vi ), \cmd \ \toT{\et} \ ( \hh', \stk', \vi' ) , \cmd'
 \]
-Where \( \hh, \hh' \) are multi-version key-value stores (\defref{def:mkvs}), \( \stk, \stk'\) are the stacks (\defref{def:stacks}), \( \vi, \vi'\) are views (\defref{def:view}), and $\ET$ is \emph{an execution test} (\defref{def:consistency-models}), i.e. a condition that must be satisfied in order for a client to execute a transaction safely. 
-The well-formed condition for the thread states asserts the views and history heaps contains the same keys:
-\[
-\fora{\hh, \vi, \hh', \vi'} (\stub, \hh, \vi, \stub) \toT{\stub} (\stub, \hh', \vi', \stub)  \implies \dom(\hh) = \dom(\vi) \land \dom(\hh') = \dom(\vi')
-\]
+where \( \hh, \hh' \) are multi-version key-value stores (\defref{def:mkvs}), \( \stk, \stk'\) are the stacks (\defref{def:stacks}), \( \vi, \vi'\) are views (\defref{def:view}), and $\ET$ is \emph{an execution test} (\defref{def:consistency-models}), i.e. a condition that must be satisfied in order for a client to execute a transaction safely. 
+We parametrise the execution test in the operational semantics of commands (\figref{fig:thread_semantics}), while we will give examples of different execution tests in \secref{sec:cmexamples}. 
+
 Execution tests is a set of quadruples \( (\mkvs, \vi, \opset, \vi') \) consisting of a key-value store, a view before execution, a operation set and a view after committing of the operation set. 
 We often write \( (\mkvs, \vi) \etto \opset : \vi'\) in lieu of \( (\mkvs, \vi, \opset, \vi') \in \et\).
-The quadruple describes that when the state of the key-value store is \( \hh \), a client who has view \( \vi \) is allowed to commit a single transaction that can be abstracted to the operation set \( \opset \), and then after the commit the thread view must be updated to at least \( \vi' \)
-We parametrise the execution test in the operational semantics of commands (\figref{fig:thread_semantics}), while we will give examples of execution tests in \secref{sec:cmexamples}. 
+The quadruple describes that when the state of the key-value store is \( \hh \), a client who has view \( \vi \) is allowed to execute a single transaction that has  the fingerprints \( \opset \), and then after the commit the thread view must be updated to at least \( \vi' \).
 
 \ac{
 There we also note that by tweaking the execution test used by the 
@@ -30,19 +27,19 @@ semantics, we capture different consistency models of
 key-value stores.
 }
 
-\begin{defn}[Execution Tests]
+\begin{definition}[Execution Tests]
 \label{def:consistency-models}
 \label{def:executiontests}
-Given the set of history heaps \( \hh \in \HisHeaps \) (\defref{def:his_heap}), operation sets \( \opset \in \Opsets \) (\defref{def:ops}) and views \( \vi, \vi' \in \Views \) (\defref{def:views}), \emph{a consistency model} \( \como \in \Como \) is a set of quadruples in the form of \( ( \hh, \vi, \opset, \vi' ) \),
+Given the set of key-value stores \( \hh \in \HisHeaps \) (\defref{def:his_heap}), fingerprints \( \opset \in \Opsets \) (\defref{def:ops}) and views \( \vi, \vi' \in \Views \) (\defref{def:views}), \emph{execution tests} \( \como \in \Como \) is a set of quadruples in the form of \( ( \hh, \vi, \opset, \vi' ) \):
 \[
     \begin{rclarray}
         \et \in \ETS & \defeq & \powerset{\HisHeaps \times \Views \times \Opsets \times \Views}
     \end{rclarray}
 \]
-A well-formed consistency model, written \( \pred{wfC}{\como}\), requires the domain of pre- and post views are the same as the domain of the history heap, and the operation set only has keys included in the previous domain.
+Well-formed  execution tests \( \et \) require the domain of views and the key-value store are the same, and the fingerprints only have keys included in the previous domain:
 \[
     \begin{rclarray}
-        \pred{wfC}{\como} & \defeq & \fora{\hh, \vi, \vi', \opset } (\hh, \vi, \opset, \vi') \in \como \implies \opset\projection{2} \subseteq \dom(\vi) = \dom(\vi') = \dom(\hh)
+         &&\fora{\hh, \vi, \vi', \opset } (\hh, \vi, \opset, \vi') \in \como \implies \opset\projection{2} \subseteq \dom(\vi) = \dom(\vi') = \dom(\hh)
     \end{rclarray}
 \]
 \sx{
@@ -53,30 +50,30 @@ A well-formed consistency model, written \( \pred{wfC}{\como}\), requires the do
     \]
     where \( \compose{} \defeq (\composeHH, \composeVI,\composeO, \composeVI)\).
 }
-\end{defn}
-
-
-\sx{Re-assemble some words from Andrea. Need more work on the words }
+\end{definition}
 
 The main rule in the operational semantics for commands is the one corresponding to the execution of a transaction \rl{PCommit}.
 %A new transaction is committed through the  rule.
-First, the view can shift to later versions before executing the transaction to model the clients might gain more information about the system since its last commit.
-To recall The order between two views  with the same domain, for example \( \vi'' \geq \vi \) in \rl{PCommit}, is defined by the order of the indexes (\defref{def:views}).
-This new local view \( \vi'' \) should also be consistent with the key-value stores, \ie it leads to a situation where the current client is allowed to commit the effect of the immediate next transaction.
-The transaction code \( \trans \) is executed locally given an initial snapshot \( \sn = \clpsHH{\hh, \vi''}\) (\defref{def:snapshot}) that is decided by the current state of key-value store \( \mkvs \) and the local view \( \vi'' \).
+First, the view can shift to later versions before executing the transaction to model the client might gain more information about the key-value store since its last commit.
+To recall The order between two views with the same domain, for example \( \vi'' \geq \vi \) in \rl{PCommit}, is defined by the order of the indexes (\defref{def:views}).
+This new local view \( \vi'' \) should also be consistent with the key-value stores, \ie it leads to a situation where the current client is allowed to execute the transaction.
+The transaction code \( \trans \) is executed locally given an initial snapshot \( \sn = \clpsHH{\hh, \vi''}\) (\defref{def:snapshot}) decided by the current state of key-value store \( \mkvs \) and the local view \( \vi'' \).
 %The \( \funcn{localHeap} \) function uniquely determined a (local) heap from a history heap and a view by picking the versions of addresses indexed by the view.
-After local execution through semantics for transactions (\figref{fig:transaction_semantics}), we propagate the stack \( \stk' \) and more importantly obtain the operation set \( \opset \), while the snapshot \( \sn' \) will be throw away.
-Then the transaction picks a fresh identifier \( \txid \) and commits the operation set \( \opset \), which will update the key-value store and local view.
-The operation set includes the first read and last write of each key, which are the operations might affect the key-value store, because of the atomicity of transactions.
-The \funcn{updateMKVS} function updates the history heap using the operation set, \( \mkvs' = \func{updateMKVS}{\mkvs,\vi'',\txid, \opset}\).
-For read operations, it includes the new identifier to the read set of the version related to the corresponding key and the local view \( \vi \).
-For write operations, it extends a new version to the tail and puts the new identifier as the writer.
-Since we assume strong program order, we set a lower bound for the new local view by \funcn{updateView} function.
-This function shifts the view to the latest version if the version is written by the current transaction.
+After local execution via the semantics for transactions (\figref{fig:transaction_semantics}), we propagate the stack \( \stk' \) and more importantly obtain the fingerprints \( \opset \), while the snapshot \( \sn' \) will be throw away.
+Then the transaction picks a fresh identifier \( \txid \), \ie one that does not appear in the key-value store, and commits the fingerprint \( \opset \), which will update the key-value store and local view.
+%The operation set includes the first read and last write of each key, which are the operations might affect the key-value store, because of the atomicity of transactions.
+The \funcn{updateMKVS} function updates the history heap using the fingerprint, \( \mkvs' = \func{updateMKVS}{\mkvs,\vi'',\txid, \opset}\).
+For read operations, it includes the new identifier to the read set of the version the is pointed by the local view \( \vi''\).
+For write operations of the form \( (\otW, \ke, \nat) \), it extends a new version written by the new transaction \( (\nat, \txid, \emptyset) \) to the tail of \( \mkvs(\ke) \).
+For updating the view, we set a lower bound for the new local view by \funcn{updateView} function.
+Assuming the commands executed by clients are wrapped with in a single session, the lower bound of the view corresponds to the strong session guarantees introduced by \cite{.........}.
+This function shifts the view to the up-to-date version in the new key-value store if the version is installed by the current transaction.
 This guarantees strong program order, meaning the following transaction will at least read its own write.
-Finally, the actual new local view \( \vi' \) is any view greater than the lower bound \( \vi' \geq \func{updateView}{\mkvs', \vi'', \opset}\) and the overall satisfied the execution tests, \ie \( (\mkvs, \vi'') \etto \opset : \vi'\).
+Finally, the actual new local view \( \vi' \) is any view greater than the lower bound \( \vi' \geq \func{updateView}{\mkvs', \vi'', \opset}\).
+The overall execution satisfied the execution tests, \ie \( (\mkvs, \vi'') \etto \opset : \vi'\).
 
-\ac{The paragraph below should probably go when discussing the rules of the semantics
+\ac{The paragraph below should probably go when discussing the rules of the semantics:
+
 Note that the way in which MKVSs and views are updated ensure the following: 
 $\bullet$ a client always reads its own preceding writes; 
 $\bullet$ clients always read from an increasingly up-to-date state of the database; 
@@ -87,39 +84,44 @@ $\bullet$ writes take place after reads on which they depend.
 
 \begin{figure}[!t]
 \hrule\vspace{5pt}
+\begin{flushleft}
 For any functions \( f \), the notation \( f\rmto{k}{v} \) means the result by replacing or extending the element associated with \( k \) to \( v \).
 For any lists or tuples \( l \), the notation \( l\rmto{i}{k} \) means the result by replacing the \emph{i-th} element to \( k \).
 To record the index of list starts from 0.
 The \( \lcat \) denotes list concatenation.
+\end{flushleft}
 \[
 \begin{rclarray}                                 
-    \func{updateMKVS}{\hh, \vi, \txid, \opset} & \defeq & 
-    \left\{ \begin{array}{@{} l l}
-        \hh & \text{if } \opset = \unitO \\
-        \func{updateMKVS}{\hh', \vi, \txid, \opset'} & \text{if } \opset = \opset' \uplus (\otR, \addr, \val) \\
-        \multicolumn{2}{@{}l}{\qqquad \text{and } \hh' \equiv \hh\rmto{\addr}{\hh(\addr)\rmto{\vi(\addr)}{ \ver\rmto{3}{\RTx(\ver) \uplus \Set{\txid}} }}}\\
-        \multicolumn{2}{@{}l}{\qqquad \text{and } \ver = \hh(\addr)(\vi(\addr)}\\
-        \func{updateMKVS}{\hh'', \vi, \txid, \opset'} & \text{if } \opset = \opset' \uplus (\otW, \addr, \val) \\
-        \multicolumn{2}{@{}l}{\qqquad \text{and } \hh'' \equiv \hh\rmto{\addr}{\hh(\addr) \lcat \List{(\val, \txid, \emptyset)} } }\\
-    \end{array} 
-    \right. \\
+    \func{updateMKVS}{\hh, \vi, \txid, \unitO} & \defeq & \hh \\
+    \func{updateMKVS}{\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \stub)}} & \defeq &  
+    \begin{array}[t]{@{}l}
+        \texttt{let } (\nat, \txid', \txidset) = \hh(\ke, \vi(\ke)) \\
+        \texttt{and } \hh' = \hh\rmto{\ke}{%
+            \hh(\ke)\rmto{\vi(\addr)}{%
+                (\nat, \txid', \txidset \uplus \Set{\txid}) } } \\
+        \texttt{ in } \func{updateMKVS}{\hh', \vi, \txid, \opset}
+    \end{array} \\
+    \func{updateMKVS}{\hh, \vi, \txid, \opset \uplus \Set{(\otW, \ke, \nat)}} & \defeq &  
+    \begin{array}[t]{@{}l}
+        \texttt{let } \hh' = \hh\rmto{\ke}{ ( \hh(\ke) \lcat \List{(\nat, \txid, \emptyset)} ) } \\
+        \texttt{ in } \func{updateMKVS}{\hh', \vi, \txid, \opset}
+    \end{array} \\
 %
 %
-    \func{updateView}{\hh, \vi, \opset} & \defeq &
-    \begin{cases}
-        \vi & \text{if } \opset = \unitO \\
-        \func{updateView}{\hh, \vi, \opset'} & \text{if } \opset = \opset' \uplus (\otR, \addr, \val) \\
-        \func{updateView}{\hh, \vi\rmto{\addr}{(\left| \hh(\addr) \right| - 1)}, \opset'} & \text{if } \opset = \opset' \uplus (\otW, \addr, \val) \\
-    \end{cases} \\
+    \func{updateView}{\hh, \vi, \unitO} & \defeq & \vi \\
+    \func{updateView}{\hh, \vi, \opset \uplus \Set{(\otR, \ke, \stub)}} & \defeq & \func{updateView}{\hh, \vi, \opset}\\
+    \func{updateView}{\hh, \vi, \opset \uplus \Set{(\otW, \ke, \stub)}} & \defeq & \func{updateView}{\hh, \vi\rmto{\addr}{(\left| \hh(\addr) \right| - 1)}, \opset}\\
 %
 %              
-	\func{fresh}{\hh}  & \defeq & \Setcon{ \txid }{ \txid \in \TxID \land \fora{\addr, i} \txid \neq \hh(\addr)(i).\texttt{write} \land \txid \notin \hhR(\addr)(i).\texttt{read}} \\
+	\func{fresh}{\hh}  & \defeq & \Setcon{ \txid }{ \txid \in \TxID \land \fora{\addr, i} \txid \neq \WTx(\hh(\addr,i)) \land \txid \notin \RTx(\hhR(\addr,i))} \\
 \end{rclarray}
 \]
 \hrule\vspace{5pt}
 %
+\begin{flushleft}
 The function \( \snapshot \) is defined in \defref{def:snapshot} and operational semantics for transactions \( \toL{} \) in \figref{fig:transaction_semantics}.
 Given the set of executions tests \( \ConsisModels \) (\defref{def:consistency-models}), stacks \( \Stacks \) (\defref{def:stacks}), multi-version key-value stores \( \HisHeaps \) (\defref{def:his_heap}) and views \( \Views \) (\defref{def:cuts}), the \emph{operational semantics for commands}:
+\end{flushleft}
 \[
 \begin{rclarray}
 	\toT{}  & : &
@@ -157,7 +159,7 @@ Given the set of executions tests \( \ConsisModels \) (\defref{def:consistency-m
     \infer[\rl{PAssume}]{%
         ( \hh, \stk, \vi ) , \passume{\expr} \ \toT{\como} \  ( \hh, \stk, \vi ) , \pskip
     }{%
-        \evalE[\thstk]{\expr} = 0
+        \evalE[\thstk]{\expr} \neq 0
     }
     \\[1em]
     \infer[\rl{PChoice}]{%
@@ -183,8 +185,10 @@ Given the set of executions tests \( \ConsisModels \) (\defref{def:consistency-m
 \end{array}
 \]
 \hrule\vspace{5pt}
+\begin{flushleft}
 The thread environment is a partial function from thread identifiers to pairs of stacks and views \( \thdenv \in \ThdEnv \defeq \ThreadID \parfinfun \Stacks \times \Views \).
 Given the set of execution tests \( \ConsisModels \) (\defref{def:consistency-models}) and key-value stores \(\HisHeaps\) (\defref{def:mkvs}), the \emph{semantics for programs}:
+\end{flushleft}
 \[
 	. \toG{.} . : 
     ( \HisHeaps \times \ThdEnv \times \Programs) 
@@ -212,23 +216,18 @@ Given the set of execution tests \( \ConsisModels \) (\defref{def:consistency-mo
 
 \begin{lemma}
 \label{lem:hhupdate.welldefined}
-The function $\HHupdate_{\tsid}$ is well-defined over well-formed MKVS, sets of operations and 
-views. If $\hh$ is a well-formed history heap, $V$ is a well-formed view with respect 
-to $\hh$, $\mathcal{O}$ is a well-formed set of operations and $\tsid$ does not 
-appear in $\hh$, then $\HHupdate_{\tsid}(\hh, \mathcal{O}, V)$ is uniquely determined 
-and equivalent to a well-formed MKVS.
+The function $\HHupdate$ is well-defined over well-formed MKVS, fingerprints and views. 
+Given a well-formed MKVS $\hh$, a view $\vi$ that is well-formed with \( \mkvs \), well-formed fingerprints \( \opset \), and a $\txid$ that does not appear in $\hh$, then $\HHupdate(\hh, \opset, \tsid, \vi)$ is uniquely determined and yields a well-formed MKVS.
 \end{lemma}
 
 \begin{lemma}
-The function $\Vupdate$ is well-defined. Furthermore, let $\hh, V, \mathcal{O}$ and $\tsid$ 
-be a well-formed MKVS, view, set of operations, and a transction identifier that does not appear 
-in $\hh$, respectively. Then $\Vupdate(\hh, V, \mathcal{O})$ is well-formed with respect 
-to $\HHupdate_{\tsid}(\hh, V, \mathcal{O})$.
+The function $\Vupdate$ is well-defined.
+Given a well-formed MKVS $\hh$, a view $\vi$ that is well-formed with \( \mkvs \), well-formed fingerprints \( \opset \), then $\Vupdate(\hh, \opset, \vi)$ is uniquely determined a view and the view is well-formed with the MKVS.
 \end{lemma}
 
-\begin{lem}[Confluence of \funcn{updateMKVS} and \funcn{updateView}]
-Given a valid operation set \( \opset \), the order of applying \( \funcn{updateMKVS} \) function (\( \funcn{updateView} \) function) to the elements from operation set does not affect the final result.
-\end{lem}
+%\begin{lem}[Confluence of \funcn{updateMKVS} and \funcn{updateView}]
+%Given a valid operation set \( \opset \), the order of applying \( \funcn{updateMKVS} \) function (\( \funcn{updateView} \) function) to the elements from operation set does not affect the final result.
+%\end{lem}
                                                                                                          
 Last, the program has standard interleaving semantics by picking a client and then progressing one step (\figref{fig:thread_pool_semantics}).
 To achieve that a thread environment holds the stacks and views associated with all active clients \( Env \in \sort{ThdEnv} \).
