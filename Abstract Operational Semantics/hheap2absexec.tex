@@ -1,70 +1,287 @@
+\newcommand{\TtoOp}[1]{\ensuremath{\mathscr{#1}}}
+\newcommand{\ClSet}{\ensuremath{\Gamma}}
+\newcommand{\progOrd}{\ensuremath{\pi}}
+\newcommand{\RP}{\ensuremath{\mathsf{RP}}}
+\newcommand{\LWW}{\ensuremath{\mathsf{LWW}}}
+\newcommand{\F}{\ensuremath{\mathcal{F}}}
+\newcommand{\calA}{\ensuremath{\mathcal{A}}}
+\newcommand{\appendTx}{\ensuremath{\mathsf{appendTx}}}
+\newcommand{\thdstackFun}{\ensuremath{\mathsf{\Sigma}}}
+
 In this Section we propose an alternative 
 semantics of programs. In this semantics, states 
 correspond to \emph{abstract executions} \cite{framework-concur}, 
 overloaded with information regarding the transactions that are made 
-visible to individual threads. 
+visible to individual clients. 
 The abstract execution semantics provides a bridge between specification 
-of consistency models given in terms of history heaps, and the declarative 
-specification of consistency models, which have been already proved 
-to be equivalent to the operational definitions of such consistency models 
-given in the literature. This section makes the following contributions: 
+of consistency models given in terms of MKVSs and views, and the already 
+existing axiomatic ones. This section makes the following contributions: 
 \begin{itemize}
-\item a definition of (overloaded) abstract executions, and an encoding 
-into history heaps and views,
-\item an operational semantics based on (overloaded) abstract executions, 
-which is parametric in the specification of a consistency model given using 
-the declarative style of \cite{framework-concur,SIanalysis,laws},
-\item a proof that the semantics is \emph{thorough}: for any program $\prog$ and consistency model specification $\mathsf{x-CM}$, 
+\item \textbf{Done!} a definition of abstract executions, 
+\item \textbf{Done!} the axiomatic specification of consistency models borrowed from cite{framework-concur},
+\item \textbf{Done!} an encoding of abstract executions into MKVSs, 
+\item an encoding of executions in the MKVS semantics into abstract 
+executions, 
+\item an operational semantics based on abstract executions, 
+which is parametric in the axiomatic specification of a consistency model given using 
+the declarative style of \cite{framework-concur,SIanalysis,laws}, 
+\item a proof that, the semantics is \emph{faithful} with respect to any consistency model $\CM$: 
+for any program $\prog$ and consistency model specification $\CM$, 
 the abstract execution semantics captures all the potential behaviours that $\prog$ can 
-exhibit under $\mathsf{x-CM}$. Thoroughness is necessary to validate the soundness of 
-any program analysis techniques, such as program logics, with respect to arbitrary consistency model 
+exhibit under $\CM$. Faithfulness is necessary to validate the soundness of 
+program analysis techniques, such as program logics, with respect to arbitrary consistency model 
 specifications,
-\ac{Before I ws referring to what I call thoroughness as completeness. I am now changing this, because 
+\ac{Before I was referring to what I call faithfulness as completeness. I am now changing this, because 
 it looks like it only created confusion. In short words, this result requires defining the anarchic model 
 of transactions - one in which the database actually reads and writes non-deterministic values 
 despite the client requests, and prove that any abstract execution which is 
-valid w.r.t. $\mathsf{x-CM}$ and can be obtained in the anarchic semantics, can also be obtained 
-in the $\mathsf{x-CM}$ semantics. More details on this later.} 
-\item a proof that the specifications of consistency models in terms of history heaps 
-are sound and complete with respect to the specifications of history heaps given 
-in terms of abstract execution: 
+valid w.r.t. $\CM$ and can be obtained in the anarchic semantics, can also be obtained 
+in the $\CM$ semantics. More details on this later.} 
+\item a proof that each of the execution tests of Section \ref{sec:cmexamples}
+captures precisely the corresponding consistency model. Specifically,
 \begin{description}
 \item[Soundness - ] for any program $\prog$, any execution of 
-$\prog$ under the history heap semantics and consistency model 
-specification $\mathsf{CM}$ can be simulated by an execution 
-of $\prog$ under the abstract execution semantics and the 
-declarative specification of $\mathsf{CM}$, 
+$\prog$ under the MKVSs semantics using the execution 
+test $\aexec_{\CM}$ $\CM$, is encoded into an abstract execution 
+that satisfies the axioms of $\CM$,
 \item[Completeness - ] for any program $\prog$, any 
-execution of $\prog$ under the abstract execution semantics 
-and the declarative specification of $\mathsf{CM}$ 
-can be simulated by an execution of $\prog$ under the history 
-heap semantics and consistency model specification $\mathsf{CM}$.
+execution of $\prog$ under the abstract execution semantics of 
+$\CM$, can be projected to an execution of $\prog$ under the history 
+heap semantics using the execution test $\ET_{\CM}$. An immediate 
+consequence of this completeness result, and of the faithfulness 
+of the abstract execution semantic with respect to $\CM$, is that the MKVS semantics 
+of $\CM$ is also faithful.
 \end{description}
 \end{itemize}
 
-\subsection{Overloaded Abstract Executions}
-
-\ac{Note to self - Stop Here! I reaaally need to put everything into a consistent state before proceeding. 
-Inconsistency of the document was fine up to now, but now that I am going into theorems 
-and proofs I cannot be inconsistent anymore. Go back to square one, fix everything, then repeat 
-another time.} 
-
+\paragraph{Abstract Executions}
 
 \begin{definition}
-An overloaded abstract execution (OAE) is a tuple $\hat{\aexec} = (\mathscr{T}, \I, \PO, \VIS, \AR)$ where: 
+A runtime abstract execution is a tuple $\aexec = (\TtoOp{T}, \PO, \VIS, \AR)$ where: 
 \begin{enumerate}
-\item $\mathscr{T} : \TransID \rightharpoonup 2^{\Op}$ is a set of transactions, each of which is equipped with a set of 
-operations.
-\item $\I \subseteq \tidset$ is a set of thread identifiers.
-\item $\PO \subseteq (\dom(\mathscr{T}) \times \dom(\mathscr{T}) \cup \I$ is the program order, and it corresponds 
-to the union of total orders defined over a partition of $\dom(\mathscr{T}) \cup \I$ that also partitions 
-$\I$ into singletons. That is, for any $\tid \in \I$ there exists a subset $\T_{\tid}$ of $\dom(\mathscr{T})$ 
-such that for any $\tid,\tid' \in \I$, $\T_{\tid} \cap \T_{\tid'} \neq \emptyset \implies \tid = \tid'$; 
-$\bigcup_{\tid \in \I} \T_{\tid} = \dom(\mathscr{T})$; 
-for each $\tid \in \I$ there exists a strict, total order $\PO_{i} \subseteq \T_{\tid} \times (\T_{\tid} \cup \{\tid\})$, 
-and $\PO = \left( \bigcup_{\tid \in \I} \PO_{\tid} \right)$.
-\item $\VIS \subseteq \dom(\mathscr{T}) \times \dom(\mathscr{T})$ is a partial order, 
-\item $\AR \subseteq \dom(\mathscr{T}) \times \dom(\mathscr{T})$ is a total order such that $\VIS \subseteq \AR$.
+\item $\TtoOp{T} : \TransID \rightharpoonup \powerset{\Op}$ is a partial function mapping transaction 
+identifiers into sets of operations; if $\tsid \in \dom(\TtoOp{T})$, then the transaction $\tsid$ happened 
+at some point in the abstract execution ${\aexec}$, by performing operations $\TtoOp{T}(\T)$, 
+%\item $\ClSet \subseteq \tidset$ is a set of client identifiers, 
+\item $\PO: \tidset \rightharpoonup (\dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is a function modelling the 
+program order of clients: that is, there exists a $\dom(\PO)$-indexed partition $\{\T_{\tid}\}_{\tid \in \dom(\PO)}$ of 
+$\dom(\TtoOp{\T})$ such that, for any $\tid \in \ClSet$ $\PO(\tid)$ is a strict, total order over $\T_{\tid}$.
+\item $\VIS \subseteq \dom(\TtoOp{T}) \times (\dom(\TtoOp{T}))$ is a strict, irreflexive relation, 
+\item $\AR \subseteq \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is a strict, total order such that $\VIS \subseteq \AR$.
 \end{enumerate}
 \end{definition}
+In general, given an abstract execution ${\aexec} = (\TtoOp{T}, \ClSet, \PO, \VIS, \AR)$, we let ${\TtoOp{T}}_{\aexec} = \TtoOp{T}, 
+ \PO_{\aexec} = \PO, {\VIS}_{\aexec} = \VIS, \AR_{\aexec} = \AR$. We also let $\T_{\aexec} = \dom(\TtoOp{T}_{\aexec})$, 
+ $\ClSet_{\aexec} = \dom(\PO_{\aexec})$, and $\T_{\aexec}(\tid) = \{\tsid \in \T_{\aexec} \mid (\tsid \xrightarrow{\PO_{\aexec}(\tid)} \_) 
+ \vee (\_ \xrightarrow{\PO_{\aexec}} \tsid \}$. For $o \in \Op$, we also write $o \in_{{\aexec}} \tsid$ in lieu of $o \in \TtoOp{T}_{\aexec}(\tsid)$.
+We often write $\tsid \xrightarrow{\VIS_{{\aexec}}} \tsid'$ in lieu of $(\tsid, \tsid') \in \xrightarrow{\VIS_{{\aexec}}}$, 
+and similarly for other relations. We also commit an abuse of notation, and let $\PO_{{\aexec}} = 
+\bigcup_{\tid \in \ClSet_{\aexec}} \PO(\tid)$. Henceforth, it will always be clear from the context 
+whether the symbol $\PO_{\aexec}$ refers to a function from client identifiers to a relation between transaction, or to a relation
+between transactions.
+
+Given an abstract execution $\aexec$, a key $\key{k}$ and a transaction identifier $\tsid \in \dom(\T_{\aexec})$, we 
+define $\visibleWrites_{{\aexec}}(\key{k}, \tsid) = \{ \tsid' \mid \tsid' \xrightarrow{\VIS_{{\aexec}}} \tsid \wedge (\WR\;\key{k}:\_) 
+\in_{\aexec} \tsid' \}$.
+
+\begin{definition}
+A \emph{resolution policy} \RP is a function $\RP: \aexec \times \powerset{\TxID} \rightarrow \powerset{\Snapshots}$. 
+\end{definition}
+
+intuitively, $\RP(\aexec, \T)$ denotes the set of possible snapshot that a client would observe when executing a transaction 
+in a state of the system corresponding to the abstract execution $\aexec$, when observing only the subset 
+of transactions in $\T$, and when using the resolution policy $\RP$. We will mainly work with two different 
+resolution policies, which are illustrated below. 
+
+\begin{example}
+The \emph{Last Write Wins} execution policy $\RP_{\LWW}$ is defined by letting, for a given abstract execution 
+$\aexec$ and a set $\T \subseteq \T_{\aexec}$, 
+\[
+\RP_{\LWW}(\aexec, \T) = \left \{ \lambda \key{k}.
+\begin{cases}
+n & \text{if } \T_{\key{k}} \neq \emptyset \wedge (\WR\; \key{k}: n) \in_{\aexec} \max_{\AR_{\aexec}}(\T_{\key{k}}), \text{where } 
+\T_{\key{k}} (\T \cap \{\tsid \mid \tsid \in_{\aexec} \WR k: \_ \})\\
+0 & \text{otherwise} 
+\end{cases}
+\right\}
+\]
+
+The \emph{demonic} execution policy $\RP_{\bot}$ is defined by letting $\RP_{\bot}(\aexec, \T) = \Snapshots$ for any $\aexec, \T$.
+\end{example}
+
+\begin{definition}
+An abstract execution $\aexec$ satisfies an execution policy $\RP$ if and only if, 
+\[
+\forall \tsid \in \T_{\aexec}. \exists \h \in \RP(\aexec, \VIS^{-1}(\tsid).\;
+\forall \key{k} \in \Addr, n \in \nat.\; (\RD\;\key{k}: n) \in_{\aexec} \tsid \implies 
+h(\key{k}) = n.
+\]
+\end{definition}
+
+\paragraph{Axiomatic Specification of Consistency Models}
+\ac{This will go in a Figure. We never encoded session guarantees into abstract 
+executions, sot that they will need to be checked. Guarantees that have never been 
+proved to be sound are marked with (?)}
+
+A consistency model consist of a set of abstract executions. 
+To specify consistency models, we fix a resolution policy and 
+a set of axioms that pose conditions on the relations $\PO_{\aexec}, \VIS_{\aexec}, \AR_{\aexec}$. 
+Axioms in this framework take either the form $\F(\PO_{\aexec}, \VIS_{\aexec}, \AR_{\aexec}) \subseteq \VIS_{\aexec}$, 
+or $\F(\aexec) \subseteq \AR_{\aexec}$. In the following, we illustrate well 
+known axiomatic specifications of consistency models, each of which uses the 
+last write wins resolution policy. We use the notation 
+$[\WR(\key{k})]_{\aexec} = \{ (\tsid, \tsid) \mid (\RD\; \key{k}: n) \in_{\aexec} \tsid \}$, and 
+similarly for other operations. 
+We leave the language used for specifying axioms of consistency models unspecified, though 
+we remark that all our examples can be captured using the style of specification previously 
+proposed in \cite{laws}.
+
+\begin{itemize}
+\item Read Your Writes (?): read operations reflect previous writes. $[\WR(\key{k})] ; \PO ; [\RD(\key{k})] \subseteq \VIS$, 
+\item Monotonic Reads (?): successive reads reflect a non-decreasing set of writes. $\VIS; [\RD] \PO ; [\RD] \subseteq \VIS$, 
+\item Write Follows Reads (?): writes are propagated after reads on which they depend. $\VIS; [\RD]; \PO; [\WR] \subseteq \VIS$, 
+\item Monotonic Writes (?): writes are propagated after writes that logically precede them. $[\WR]; \PO; [\WR]; \VIS \subseteq \VIS$, 
+\item Strong sessions: sessions appear to be sequentially consistent: $\PO \subseteq \VIS$, 
+\item Causal Consistency: strong sessions + visibility is transitive, $\VIS ; \VIS \subseteq \VIS$, 
+\item Consistent Prefix: strong sessions + if transaction $\tsid_1$ observes transaction $\tsid_2$, it also observes 
+anything that precedes $\tsid_2$ in the arbitration order: $\AR ; \VIS \subseteq \VIS$, 
+\item Update Atomic: transactions that update one same object, do not execute concurrently: 
+\item PSI: update atomic + causal consistency, SI: update atomic + prefix consistency, 
+\item Serialisability: visibility is a total order, $\AR \subseteq \VIS$.
+\end{itemize}
+
+
+\subsection{Operational Semantics using Abstract Executions}
+We give an alternative operational semantics of transactions, that uses abstract executions as states. 
+In this semantics judgements take the form 
+\[
+\langle \aexec, \thdstackFun, \prog \rangle \rightarrowtriangle_{\CM} \langle \aexec', \thdstackfun', \prog'
+\]
+where $\CM = (\RP, \calA)$ is an axiomatic specification of a consistency model
+consisting of a resolution policy and a set of axioms, and $\thdstackfun: \tidset \rightharpoonup \ThdStacks$ 
+is a partial mapping from client identifiers to stacks.
+
+\begin{figure}
+\begin{center}
+\begin{tabular}{|@{}cc@{}|}
+\multicolumn{2}{|@{}c@{}|}{
+$
+\infer[{\scriptstyle(A-Tx)}]{\langle \aexec, \thdstackfun, \tid: [\trans] \rangle \rightarrow_{\CM} \langle \aexec', \thdstackfun', \nil \rangle}
+{\begin{array}{c}
+\CM = (\RP, \calA) \qquad \T \subseteq \T_{\aexec} \qquad
+\h \in \RP(\aexec, \T) \\
+\langle \h, \thdstack, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle\\
+\aexec' = \appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O}) \qquad \aexec' \models \calA
+\end{array}
+}
+$
+}
+\end{tabular}
+\end{center}
+\caption{Rules of the Operational Semantics of Abstract Executions.}
+\end{figure}
+
+The rules of the semantics for executing transactional code are the same of Figure \ref{fig:opsem.tx}.
+Selected rules of the semantics of commands and programs are given in Figure \ref{fig:opsem.absexec}. 
+\ac{Going to type down only the rule for tranactions, as all the other rules are analogous 
+to the rules of Figure \ref{fig:opsem.cmd} and \ref{fig:opsem.prog}.
+
+As for the MKVS semantics,  the only non-trivial rule in the semantics of commands and programs 
+is the one modelling a client executing a transaction, Rule $(A-Tx)$.
+The function $\appendTx_{\tsid}$ in the premiss of this rule takes in input an abstract execution 
+$\aexec$, a client $\tid$, a subset $\T \subseteq \T_{\aexec}$, and a set of operations $\mathcal{O}$. 
+It then returns a new abstract execution, corresponding to the result of client $\tid$, observing the
+transactions included in $\T$, executing a transaction with set of operations 
+are $\mathcal{O}$. The set of transactions $\T$ is used, together with the resolution policy 
+$\RP$ of the consistency model, to determine one snapshot under which the transactional 
+code $\ptrans{\trans}$ is executed. Upon executing this code, we obtain a set of operations 
+$\mathcal{O}$, which is then associated to the transaction identifier $\tsid$
+The transaction is obtained from $\aexec$ by appending the novel transaction $\tsid$
+in $\PO_{\aexec}(\tid)$; the arbitration order of $\aexec$ is also obtained by extending 
+$\AR_{\aexec}$ so that $\tsid$ is the last transaction in such an order; finally, the visibility 
+relation is obtained by extending $\VIS_{\aexec}$ with the set $\{(\tsid', \tsid) \mid \tsid' \in \T\}$, 
+as to reflect the fact that the transactions in $\T$ have been observed by $\tsid'$. 
+\begin{definition}
+Let $\aexec$ be an abstract execution, $\tsid$ be a transaction identifier such 
+that $\tsid \notin \T_{\aexec}$,  $\tid$ be a client $\in \I_{\aexec}$, $\T$ be a set of transactions, 
+and $\mathcal{O}$ be a set of operations. Then we let 
+$\appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O})$ be the abstract execution $\aexec'$ defined as 
+follows: 
+\[
+\begin{array}{lcl}
+\TtoOp{\T}_{\aexec'} &=& \TtoOp_{\aexec}[\tid \mapsto \mathcal{O}]\\
+\PO_{\aexec'} &=& \PO_{\aexec}\left[\tid \mapsto \left( \PO_{\aexec}(\tid) \cup \{(\tsid', \tsid) \mid \tsid' \in \T_{\aexec}(\tid)\} \right) \right]\\
+\VIS_{\aexec'} &=& \VIS_{\aexec} \cup \left(\{(\tsid', \tsid) \mid \tsid' \in \T\}\right)\\
+\AR_{\aexec'} &=& \AR_{\aexec}' \cup \left(\{(\tsid', \tsid) \mid \tsid' \in \T_{\aexec}\}\right)
+\end{array}
+\]
+\end{definition}
+
+\subsection{Encoding of Abstract Executions into configurations}
+\ac{IMPORTANT: This definition assumes that the definition of configurations in the MKVS framework has changed as to include, besides 
+the mapping $\kappa: \Keys \rightarrow \Versions^{\ast}$ and the mapping from clients to views, 
+also a partial function $\pi: \tidset \rightharpoonup \TransID^{\ast}$ corresponding to the order 
+in which transactions have been executed by clients.}
+
+In the following, we assume a special transaction identifier $\tsid_0$ that is not used 
+in abstract executions. This can be thought as an initial transaction that initialises the value of all 
+keys in the key-value store to the default value $0$.
+\begin{definition}[Transaction Dependencies]
+\ac{This is basically the definition of Adya's/Jade's dependencies.}
+Let $\hat{\aexec}$ be an abstract execution. For each $\key{k} \in \Addr$, 
+we define the relations $\RF(\key{k}), \VO(\key{k}) \subseteq (\T_{\hat{\aexec}} \uplus \{\tsid_0\}) \times 
+\T_{\hat{\aexec}}$ as follows: 
+\begin{itemize}
+\item $\tsid \xrightarrow{\RF(\key{k})} \tsid'$ if and only if either $\tsid = \tsid_0$ and 
+$\visibleWrites_{\hat{\aexec}}(\key{k}, \tsid) = \emptyset$, or 
+$\tsid = \max_{\AR_{\hat{\aexec}}}(\visibleWrites_{\hat{\aexec}}(\key{k}, \tsid))$, 
+\item $\tsid \xrightarrow{\VO(\key{k}} \tsid'$ if and only if either $\tsid = \tsid_0$ 
+and $\WR\;\key{k}: \_ \in_{\hat{\aexec}} \tsid'$, or $\tsid, \tsid' \in_{\hat{\aexec}} (\WR\;\key{k}: \_)$ 
+and $\tsid \xrightarrow{\AR_{\aexec}} \tsid'$.
+\end{itemize}
+\end{definition}
+
+Given a set $X$, an element $x \in X$ and a list $l \in X^{\ast}$, we write 
+$x \in l$ as a shorthand for $\exists l_1, l_2. \; l = l_1 \cdot x \cdot \l_2$. 
+Here $\cdot$ is the list concatenation operator. Given $x_1, x_2 \in X$ and 
+$l \in L$, we let $x_1 <_{l} x_2$ if $l = \_ \cdot x_1 \cdot \_ \cdot x_2 \cdot \_$.
+\ac{The sentence above should appear much before.}
+
+\begin{definition}
+Let $\hat{\aexec}$ be an abstract execution. 
+%Let $\tsid_0$ be a transaction identifier 
+%that is not included in $\dom(\TtoOp)$. 
+We define the MKVS $(\hh_{\hat{\aexec}}, \progOrd_{\hat{\aexec}})$ as follows: 
+\begin{itemize}
+\item For each transaction $\tsid \in \T_{\hat{\aexec}}$ and key $\key{k}$, 
+we define the set $\Versions_{\hat{\aexec}}(\key{k}) \subseteq \Versions$ to be the smallest set such that 
+\begin{enumerate}
+\item for any $\tsid \in \T_{\hat{\aexec}}$ such that $\WR\;\key{k}: n \in_{\aexec} \TtoOp(\tsid)$,
+then
+$(n, \tsid, \mathcal{R}(\tsid, \key{k})) \in \Versions_{\hat{\aexec}}(\key{k})$, 
+where $\mathcal{R}(\tsid, \key{k}) = \{\tsid' \mid \tsid \xrightarrow{\RF(\key{k})} \tsid'\}$ 
+\item $(0, \tsid_0, \mathcal{R}(\tsid_{0}, \key{k}) \in \Versions_{\hat{\aexec}}(\key{k})$, 
+where $\mathcal{R}(\tsid_{0}, \key{k}) = \{\tsid' \mid \tsid_0 \xrightarrow{\RF(\key{k})} \tsid'\}$.
+\end{enumerate}
+\item The MKVS $\hh_{\hat{\aexec}}$ is defined to be the unique MKVS such that 
+for any key $\key{k} \in \Addr$, $\nu \in \hh_{\hat{\aexec}}(\key{k})$ if and only if 
+$\nu \in \Versions_{\hat{\aexec}}(\key{k})$; furthermore, for any $\nu, \nu' \in \hh_{\hat{\aexec}}(\key{k})$, 
+we have that $\nu <_{\hh_{\hat{\aexec}(\key{k})}} \nu'$ if and only if $\nu = (\_, \tsid, \_)$, 
+$\nu' = (\_, \tsid', \_)$, and $\tsid \xrightarrow{\VO_{\hat{\aexec}}(\key{k})} \tsid'$.
+\item $\progOrd_{\hat{\aexec}}$ is the function that maps each $\tid \in \dom(\I_{\aexec})$ into a list of transaction 
+identifiers which is consistent with the program order of $\tid$ in $\hat{\aexec}$, and which 
+contains $\tid_0$ as its initial element : $\tsid \in \progOrd_{\hat{\aexec}}(\tid)$ 
+if and only if either $\tsid = \tsid_0$, or $\tsid \xrightarrow{\PO_{\hat{\aexec}}} \tid$. 
+Furthermore, whenever $\tsid <_{\progOrd_{\hat{\aexec}(\tid)}} \tsid'$, then either 
+$tsid = \tsid_0$, or $\tsid \xrightarrow{\PO_{\hat{\aexec}}} \tsid'$. 
+\ac{This automatically implies that $\tsid_0$ is the first element in the program order 
+of each client.}
+\end{itemize}
+\end{definition}
+
+\begin{proposition}
+Let $\hat{\aexec}$ be an abstract execution that satisfies the last write wins policy. 
+Then $(\hh_{\hat{\aexec}}, \pi_{\hat{\aexec}})$ is well-formed.
+\end{proposition}
+
 
