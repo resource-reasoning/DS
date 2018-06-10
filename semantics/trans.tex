@@ -1,11 +1,10 @@
-\subsection{Programming Language and Operational Semantics}
+\subsection{Programming Language}
 
 We define a simple programming language for client programs interacting with an MKVS where clients may only interact with the MKVS via transactions. 
 For simplicity, we abstract away from aborting transactions: rather than assuming that a transaction may abort due to a violation of the consistency guarantees given by the MKVS, we only allow the execution of a transaction when its effects are guaranteed to not violate the consistency model. This emulates the setting in which clients always restart a transaction if it aborts.
 \sx{The sentence is too long. I think before the ``:'' is enough}
  
-\subsubsection{Programming Language}
-
+%\mypar{Programming Language}
 \emph{A program} \( \prog \) contains a fixed number of clients, where each client is associated with a unique identifier \( \thid \in \ThreadID \), and executes a sequential \emph{command}.
 We thus model a program $\prog$ as a function from client identifiers  to commands (\cref{def:language}).
 For clarity, we often write \( \cmd_{1}\ppar \dots \ppar \cmd_{n}\) as a syntactic sugar for a program \( \prog \) with $n$ implicit clients associated with identifiers, $\thid_1 \dots \thid_n$, where each client $\thid_i$ executes the command $\cmd_i$:  \( \prog = \Set{\thid_{1} \mapsto \cmd_{1}, \dots, \thid_{n} \mapsto \cmd_{n}  }\).
@@ -13,9 +12,9 @@ Sequential \emph{commands}, ranged over by $\cmd$, are defined by an inductive g
 To simulate conditional branching and loops, commands include the standard constructs of assume (\( \passume{\expr}\)), and assignment (\( \passign{\var}{\expr} \)), where \( \var \) denotes a local variable (on the stack), and \( \expr \) denotes an arithmetic expression with no side effect.  
 evaluated with respect to a stack  with no side effect.
 Arithmetic expressions are evaluated with respect to a local stack (variable store) -- see  \cref{def:stacks,def:eval-expr} below.
-We assume a countably infinite set of local variables, $\Vars $, and use the \texttt{typewriter} font for its meta variables, \eg $\var$. 
-
-Commands additionally include the \emph{transaction} construct, $\ptrans{\trans}$, denoting the \emph{atomic} execution of the transaction $\trans$. 
+We assume a countably infinite set of local variables, $\Vars $, and use the \texttt{typewriter} font for its meta variables, \eg $\var$.\\
+%
+\indent Commands additionally include the \emph{transaction} construct, $\ptrans{\trans}$, denoting the \emph{atomic} execution of the transaction $\trans$. 
 The atomicity guarantees the execution are dictated by the underlying consistency model.
 \emph{Transactions}, ranged over by $\trans$, are similarly defined by an inductive grammar comprising $\pskip$, \emph{primitive commands} \( \transpri \), non-deterministic choice, loops and sequential composition.
 Primitive commands include assignment (\( \passign{\var}{\expr}\)), lookup (\( \pderef{\expr}{\expr}\)), mutation (\( \pmutate{\expr}{\expr}\)) and assume (\( \passume{\expr}\)). 
@@ -153,10 +152,9 @@ the \emph{arithmetic expression evaluation} function, $\evalE[(.)]{.}:\Expressio
 %%\]
 %\end{definition}
 
-\subsubsection{Semantics for transactions}
+\subsection{Operational Semantics of Transactions}
 \label{sec:trans-semantics}
 
-\paragraph{Operations and Fingerprints}
 Recall that when a transaction starts, it extracts a local snapshot $\ss$ of the MKVS via its view. 
 The execution of the transaction is then carried out \emph{locally} on $\ss$:  
 read operations inspect $\ss$ and write operations update $\ss$. 
@@ -165,20 +163,23 @@ To track the effect of a transaction while executing, each transaction is associ
 The fingerprint of a transaction records its interactions (read or write operations) with the MKVS.
 Each time a transaction executes a primitive command \( \transpri\) (locally on its snapshot), its fingerprint is accordingly updated to track the effect of $\transpri$.
 %More concretely, every time the transaction performs a write operation, 
-Once the local execution of a transaction is complete, its local snapshot is discarded, and the transaction is committed by propagating the effects in its fingerprint to the MKVS.\\
+Once the local execution of a transaction is complete, its local snapshot is discarded, and the transaction is committed by propagating the effects in its fingerprint to the MKVS.
 %
-\indent The fingerprint of a transaction, $\opset$, is modelled as a set of \emph{operations}. 
+
+The fingerprint of a transaction, $\opset$, is modelled as a set of \emph{operations}. 
 Each operation $\op$ is a tuple of the form $(\mathit{tag}, \ke, \val)$, where $\mathit{tag}$ denotes the operation type and may be one of $\otW$ for \emph{write} operations, or $\otR$ for \emph{read} operations; 
 the $\ke$ denotes the operation key, and  $\val$ denotes the operation value. 
 For instance, $(\otW, \ke, \val)$ denotes the execution of an operation where value $\val$ is written to key $\ke$; and
-$(\otR, \ke, \val)$ denotes the execution of an operation where value $\val$ is read from key $\ke$.\\
-%
-\indent When tracking the write operations (with tag $\otW$) in a fingerprint $\opset$, for each key $\ke$, only the effect of the \emph{last} write to $\ke$ is recorded in $\opset$. 
+$(\otR, \ke, \val)$ denotes the execution of an operation where value $\val$ is read from key $\ke$.
+
+
+When tracking the write operations (with tag $\otW$) in a fingerprint $\opset$, for each key $\ke$, only the effect of the \emph{last} write to $\ke$ is recorded in $\opset$. 
 This is because while executing, a transaction may write to $\ke$ multiple times. Upon committing however, only the last value written to $\ke$ is propagated to the MKVS. 
 As such, $\opset$ need not include duplicate writes operations for  $\ke$ and thus only records its latest write. 
-This choice is motivated by the atomic visibility of transactions: the intermediate writes to a key are not visible from outside a transaction.\\
-%
-\indent Analogously, when tracking the read operations (with tag $\otR$), for each key $\ke$, the fingerprint $\opset$ includes a read operation for $\ke$ \emph{only if} the transaction reads from $\ke$ \emph{before} subsequently writing to it.
+This choice is motivated by the atomic visibility of transactions: the intermediate writes to a key are not visible from outside a transaction.
+
+
+Analogously, when tracking the read operations (with tag $\otR$), for each key $\ke$, the fingerprint $\opset$ includes a read operation for $\ke$ \emph{only if} the transaction reads from $\ke$ \emph{before} subsequently writing to it.
 More concretely, a read $\op$ operation from $\ke$ is recorded in $\opset$ if $\op$ reads from the initial value recorded in the snapshot. % $\ss$. 
 That is, read operations track those operations that read from the MKVS and not those that read internally from the updated snapshot.
 These two principles, \emph{last-write} and \emph{read-before-write}, are formalised in the definition of {fingerprint update}, $\opset \addO \op$,  in \cref{def:ops} below. 
@@ -260,7 +261,7 @@ the \emph{fingerprint composition}, $\composeO: \Opsets \times \Opsets \righthar
 %\end{lemma}
 %\azalea{What is $\addO$?? You have not defined this yet.}
 
-\paragraph{Operational Semantics of Transactions}
+\mypar{Operational Semantics of Transactions}
 The \emph{operational semantics of transactions} (\cref{def:language}) is given at the bottom of  \cref{fig:transaction_semantics},
 described with respect to a transactional state of the form \((\stk, \sn, \opset)\), where $\stk$ denotes a local variable stack (\cref{def:stacks}), $\sn$ denotes an MKVS snapshot (\cref{def:snapshot}), and $\opset$ denotes a fingerprint (\cref{def:ops}).\\
 %
