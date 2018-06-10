@@ -1,4 +1,147 @@
 \section{Logic}
+
+\sx{small intro for why a logic}
+
+
+This example distinguishes serialisibility from snapshot isolation.
+To understand better, we associate unique capabilities for addresses, which indicates the latest values.
+Under serialisibility, a thread always observes be the latest values.
+While under snapshot isolation, it is sufficient to only see the latest values for addresses before the next transaction, if those addresses will be overwrite by the next transaction.
+After transaction a thread updates its view to the latest, yet it does not need to be always the latest while other threads interfere with the database which change the history heap.
+
+Since the capabilities always remember the latest values, therefore in the interference \( \intass \), if a transaction writes to an address, it also updates the capabilities to the value written, for example \( \cass{\CB{x}(\V n)}{\lrid} \fpU \cass{\CB{x}(1)}{\lrid} \).
+This capabilities also helps to understand the repartition especially under snapshot isolation, in a way that after committing a transaction, the view should be updated to the latest for all addresses.
+
+\begin{figure}[!t]
+\hrule\vspace{5pt}
+\[
+\intass :
+\begin{rclarray}[t]
+    \CB{R} & : & \vx \fpR 0 \sep \vy \fpW 1  \\
+    \CB{L} & : & \vx \fpW 1 \sep \vy \fpR 0  \\
+    \CB{0} & : & \exsts{ \V{a} \in \Set{\vx, \vy} , \V{n}} \V{a} \fpR \V{n} \\
+\end{rclarray}
+\]
+\hrule\vspace{5pt}
+\[
+\begin{session}
+\specline{\boxass{\vx \pt \Set{0} \sep \vy \pt \Set{0} }{\lrid}{\intass} \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} } \\
+\begin{parl}
+\begin{session}
+    \specline{\cass{\CB{L}}{\lrid} \sep 
+            \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{0}  }{\lrid}{\intass} \lor {} \\
+            \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{0,1} }{\lrid}{\intass} 
+    } \\
+    \begin{transaction}
+        \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
+        \pderef{\pvar{b}}{\vy} ; \\
+        \pifs{\pvar{b} = 0} 
+        \pmutate{\vx}{1} ;
+        \pife \\
+        \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
+    \end{transaction} \\
+    QL : \specline{\cass{\CB{L}}{\lrid} \sep 
+            \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0}  }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+    } \\
+    stable-QL : \specline{\cass{\CB{L}}{\lrid} \sep 
+            { \color{purple} {} \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0,1}  }{\lrid}{\intass} } \\
+            {} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+    } \\
+\end{session}
+&
+\begin{session}
+    \specline{\cass{\CB{R}}{\lrid} \sep 
+            \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{0} }{\lrid}{\intass} \lor {} \\
+            \boxass{ ( \vx \pt \Set{0,1} \sep \vy \pt \Set{0} }{\lrid}{\intass} 
+    } \\
+    \begin{transaction}
+        \pderef{\pvar{a}}{\vx} ; 
+        \quad \pifs{\pvar{a} = 0} 
+        \pmutate{\vy}{1} ; 
+        \pife 
+    \end{transaction} \\
+    QR : \specline{\cass{\CB{R}}{\lrid} \sep 
+            \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0} }{\lrid}{\intass} \\
+    } \\
+    stable-QR : \specline{\cass{\CB{R}}{\lrid} \sep 
+            { \color{purple} \boxass{\vx \pt \Set{0,1} \sep \vy \pt \Set{1} }{\lrid}{\intass} } \\
+            {} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0} }{\lrid}{\intass} \\
+    } \\
+\end{session}
+\end{parl} \\
+QL \sep QR : \specline{\cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep 
+        \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{1}  }{\lrid}{\intass} \\
+        {} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{1} }{\lrid}{\intass} 
+        \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0} }{\lrid}{\intass} \\
+} \\
+\end{session}
+\]
+\hrule\vspace{5pt}
+\caption{write skew under snapshot isolation}
+\label{fig:write-skew-si-proof}
+\end{figure}
+
+%For serialisibility, the stable PL and PR rules out those views that cannot progress via any possible transactions.
+%This mean the view must at the end of the history heap.
+%The post conditions QL and QR is stronger because the consistency model check in the repartition 
+
+%\[
+%\begin{session}
+%\specline{\boxass{\vx \pt 0 \sep \vy \pt 0}{\lrid}{\intass} \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} } \\
+%\begin{parl}
+%\begin{session}
+    %stable-PL : \specline{\cass{\CB{L}}{\lrid} \sep 
+            %\boxass{\vx \pt \Set{0} \sep  \begin{B} \vy \pt \Set{0} \lor \vy \pt \Set{1} \end{B} }{\lrid}{\intass} 
+    %} \\
+    %%PL2 : \specline{\cass{\CB{L}}{\lrid} \sep 
+            %%\boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \lor {} \\
+            %%\boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid}}{\lrid}{\intass} 
+    %%} \\
+    %\begin{transaction}
+        %\specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
+        %\pderef{\pvar{b}}{\vy} ; \\
+        %\pifs{\pvar{b} = 0} 
+        %\pmutate{\vx}{1} ;
+        %\pife \\
+        %\specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
+    %\end{transaction} \\
+    %QL : \specline{\cass{\CB{L}}{\lrid} \sep 
+            %\boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0} }{\lrid}{\intass} \\
+            %{} \lor \boxass{\vx \pt \Set{0} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+    %} \\
+%\end{session}
+%&
+%\begin{session}
+    %PR : \specline{\cass{\CB{R}}{\lrid} \sep 
+            %\boxass{ \begin{B} \vx \pt \Set{0} \lor \vx \pt \Set{1} \end{B} {} \sep \vy \pt \Set{0} }{\lrid}{\intass} 
+    %} \\
+    %\begin{transaction}
+        %\pderef{\pvar{a}}{\vx} ; 
+        %\quad \pifs{\pvar{a} = 0} 
+        %\pmutate{\vy}{1} ; 
+        %\pife 
+    %\end{transaction} \\
+    %QR : \specline{\cass{\CB{R}}{\lrid} \sep 
+            %\boxass{\vx \pt \Set{0} \sep \vy \pt \Set{1} }{\lrid}{\intass} \\
+            %{} \lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0} }{\lrid}{\intass} \\
+    %} \\
+%\end{session}
+%\end{parl} \\
+%QL \sep QR : \specline{\cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep 
+            %\boxass{\vx \pt \Set{0} \sep \vy \pt \Set{1} }{\lrid}{\intass} 
+            %\lor \boxass{\vx \pt \Set{1} \sep \vy \pt \Set{0} }{\lrid}{\intass} \\
+%}
+%\end{session}
+%\]
+
+
+
 \input{\RootPath/logic/assertion.tex}
 \input{\RootPath/logic/rule.tex}
 
