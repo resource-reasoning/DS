@@ -5,10 +5,10 @@ The \rl{TRLookup} rule adds read fingerprint only if there is no write fingerpri
 This is because once an address has been re-written, the rest reads are local.
 The\rl{TRMutate} rule adds write fingerprint if there no write fingerprint and keeps the last written value.
 
-\sx{Font for E}
 
 \begin{figure}[!t]
-\hrule\vspace{5pt}
+\sx{Font for E}
+\hrule
 \begin{mathpar}
     \inferrule[\rl{TRLookup}]{%
         \var \notin \func{fv}{\lexpr}  
@@ -30,7 +30,7 @@ The\rl{TRMutate} rule adds write fingerprint if there no write fingerprint and k
     }
     \and
     \inferrule[\rl{TRAssume}]{ }{%
-        \tripleL{ \expr \doteq 0 }{ \passume{\expr} }{ \expr \doteq 0 } 
+        \tripleL{ \expr \dot\neq 0 }{ \passume{\expr} }{ \expr \dot\neq 0 } 
     }
     \and
     \inferrule[\rl{TRChoice}]{%
@@ -67,7 +67,7 @@ The\rl{TRMutate} rule adds write fingerprint if there no write fingerprint and k
 \end{mathpar}
 
 
-\hrule\vspace{5pt}
+\hrule
 %\sx{The% font is a bit overwhelming}
 \[
 \begin{array}{@{} c c @{}}
@@ -86,14 +86,25 @@ The\rl{TRMutate} rule adds write fingerprint if there no write fingerprint and k
 \end{rclarray}
 \end{array}
 \]
-\hrule\vspace{5pt}
+\hrule
 \caption{The rules for transactions}
 \label{fig:rule-trans}
  \end{figure}
 
-\subsection{Rely, Guarantee and Consistency Model}
+\subsubsection{Rely and Guarantee}
 
-%\sx{To allow a transaction update multiple regions but a region multiple times.}
+The \emph{rely} and \emph{guarantee} describes the world transformation for the environment and for the current client (\defref{def:rely-guarantee}).
+To recall, a world includes local capabilities and a shared state, and a shared state is a client's view for the key-value store.
+The \emph{rely} \( \Rely \) is a set of pairs on worlds, describing how the environment can change the state of the key-value store.
+Given the local capabilities \( \ca_l \), the environment might own any capabilities \( \ca_e\) that is compatible, \ie \( (\ca_l \composeC \ca_e)\isdef \).
+Therefore, the environment can perform actions associated with the their capabilities \( \ca_e \) with their own view \( \vi_e \) to update the key-value store and shared capabilities.
+For technical reasons, even though the environment cannot change the view of the current client \( \vi_r\), but it is allowed to arbitrarily shift to the later versions due to the fact that for certain execution tests, the old view might be valid under the new key-value store.
+
+The \emph{guarantee} \( \Guar \) describes the allowed actions for the current client.
+The current client can perform actions associated with the local capabilities \( \ca_l \) to update the shared state and the local capabilities.
+Yet it should ensure no resource created or deleted by requiring the \emph{orthogonal} of local capabilities and shared capabilities together remains unchanged.
+The orthogonal of capabilities \( \ca \) is a set of capabilities that is compatible with the capabilities \( \ca \).
+This constraint disallow any creation and deletion for capabilities, but it allows to update capabilities.
 
 We allow a transaction to update several regions together, but each region can be updated at most once.
 Given that, the guarantee is a set of pairs of worlds that are allowed by the local capabilities.
@@ -124,79 +135,54 @@ Note that the rely does not change the view, because this corresponds a thread f
 %}
 
 
+
 \begin{defn}[Rely and guarantee]
 \label{def:rely-guarantee}
-%The \( \predn{updWorlds} \) predicate asserts that the world transfers from \( \w \) to \( \w' \) which is allowed by the capabilities \(\ca\).
-%\[
-%\begin{rclarray}
-    %\pred{updWorlds}{\ca, \w, \w'} & \defeq & \w = \w' \\
-    %\pred{updWorlds}{\ca, (\ca',\gs) ,(\ca'',\gs')} & \defeq & 
-    %\begin{array}[t]{@{}l}
-    %\exsts{\kap, \hh, \hh', \vi, \vi', \ca''', \ca''''}
-    %\kap \sqsubseteq \ca(\rid) 
-    %\land \pred{updW}{\kap, (\ca',\gs),(\ca'',\gs'')} \\
-    %\quad {} \land \pred{updWorlds}{\ca, (\ca''',\gs),(\ca'',\gs'')}
-
-    %\end{array} \\
-    %\pred{updW}{\kap, (\ca, \gs), (\ca' ,\gs')} & \defeq &  
-    %\begin{array}[t]{@{}l}
-        %\exsts{\rid, \hh, \hh', \vi, \vi', \ca'', \ca''', \intf } \\
-        %\quad \gs = \Set{\rid \mapsto (\hh, \vi, \ca'', \intf)} 
-        %\land \gs' = \Set{\rid \mapsto (\hh', \vi', \ca''', \intf)}  \\
-        %\quad {} \land (\hh, \vi, \ca'') \toLTS{\kap} (\hh', \vi', \ca''') \in \func{inv}{\rid, \intf} 
-        %\land \ca \composeC \ca'' = \ca' \composeC \ca'''
-    %\end{array}
-%\end{rclarray}
-%\]
-Given the set of worlds $\World$ (\defref{def:world}), the \emph{rely} relation, $\Rely \subseteq \World \times \World$, is defined as follows,
+Given the set of worlds $\World$ (\defref{def:world}), the \emph{rely} relation, $\Rely \subseteq \World \times \World$, is defined as follows:
 \sx{In case I get confused again, it is world to world so the shared and local capabilities should always make sense.}
 \[	
     \begin{rclarray}
 	\Rely & \eqdef &
 	\Setcon{
-		((\ca,\gs), (\ca, \gs'))	
+		((\ca_l,\gs), (\ca_l, \gs'))	
 	}{
-        \fora{\rid}
-        \gs(\rid) = \gs'(\rid) \lor {}
-        \exsts{\kap, \hh, \hh', \vi, \vi', \vi'', \vi''', \ca', \ca'', \ca''', \intf}   \\
-        \quad \gs(\rid) = (\hh, \vi, \ca'',\intf)
-        \land \gs'(\rid) = (\hh', \vi', \ca''',\intf) \\
-        \quad {} \land \vi' \geq \vi
-        \land (\ca' \composeC \ca) \isdef
-        \land \kap \sqsubseteq \ca'(\rid) \\
-        \quad {} \land ( (\hh, \vi'', \ca''), (\hh', \vi''', \ca''') )  \in \intf(\kap)
+        \exsts{\ca_e}
+        (\ca_e \composeC \ca_l) \isdef
+        \land \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor 
+        \exsts{\kap, \hh, \hh', \vi_\rid, \vi_{\rid}', \vi_{e}, \vi_{e}', \ca_\rid, \ca_{\rid}', \intf}   \\
+        \quad \gs(\rid) = (\hh, \vi_\rid, \ca_\rid, \intf)
+        \land \gs'(\rid) = (\hh', \vi_{\rid}', \ca_{\rid}',\intf) \\
+        \quad {} \land \kap \sqsubseteq \ca_{e}(\rid) 
+        \land ( (\hh, \vi_e, \ca_e), (\hh', \vi_{e}', \ca_{e}') )  \in \intf(\kap)
+        \land \vi_{\rid}' \geq \vi_\rid
 	} \\
     \end{rclarray}
 \]
-%\azalea{\sx{The view cannot be out of the range of the history heap. Put the constraint in the type of world.}What is $\pred{wfView}{\vi',\hh}$?}
-%Thus the \emph{rely} relation is the union of updates and shifts \( \Rely = \relyU \cup \relyV \).
-%The invariant of a shared state is a lift of the invariants of interferences of regions.
-%The \emph{rely} relation, $\RelyI \eqdef \World \times \World$, is defined as follows:
-%\[
-    %\begin{rclarray}
-         %\RelyI &\eqdef & \closure{\left(\relyU\right)} \\
-    %\end{rclarray}
-%\]
-%\sx{ALREADY: \( \ca \composeC \ca'' = \ca' \composeC \ca''' \) might strengthen to the residual remains the same, to cope with updating ghost resources (capabilities) within the regions \eg \( \ca = \ca' = \assemp \land \ca'' = \cass{\kap(1)}{\rid} \land \ca''' = \cass{\kap(2)}{\rid}\). }
-The \emph{guarantee} relation, $\Guar: \World \times \World$, is defined as follows,
+The \emph{guarantee} relation, $\Guar: \World \times \World$, is defined as follows:
 \[	
     \begin{rclarray}
 	\Guar & \eqdef &
 	\Setcon{
-		((\ca,\gs), (\ca', \gs'))	
+		((\ca_l,\gs), (\ca_{l}', \gs'))	
 	}{
         \fora{\rid}
         \gs(\rid) = \gs'(\rid) \lor {}
-        \exsts{\kap, \hh, \hh', \vi, \vi', \ca', \ca'', \ca''', \intf}   \\
-        \quad \gs(\rid) = (\hh, \vi, \ca'',\intf)
-        \land \gs'(\rid) = (\hh', \vi', \ca''',\intf) \\
-        \quad {} \land \kap \sqsubseteq \ca(\rid) 
-        \land (\ca \composeC \ca'')^{\perp} = (\ca' \composeC \ca''')^{\perp}  \\
-        \quad {} \land ( (\hh, \vi, \ca''), (\hh', \vi', \ca''') )  \in \intf(\kap)
+        \exsts{\kap, \hh, \hh', \vi_\rid, \vi_{\rid}', \ca_\rid, \ca_{\rid}', \intf}   \\
+        \quad \gs(\rid) = (\hh, \vi_\rid, \ca_\rid,\intf)
+        \land \gs'(\rid) = (\hh', \vi_{\rid}', \ca_{\rid}',\intf) 
+        \land \kap \sqsubseteq \ca_{l}(\rid)  \\
+        \quad {} \land ( (\hh, \vi_\rid, \ca_\rid), (\hh', \vi_{\rid}', \ca_{\rid}') )  \in \intf(\kap)
+        \land (\ca_{l} \composeC \ca_\rid)^{\perp} = (\ca_{l}' \composeC \ca_{\rid}')^{\perp}
 	} \\
     \end{rclarray}
 \]
-where for any element \( m \) from its domain \( \sort{M} \), the  \emph{orthogonal} is defined as, \( m^{\perp} \defeq \Setcon{m'}{(m \compose{} m')\isdef \land m' \in \sort{M}} \).
+where for any element \( m \) from its domain \( \sort{M} \), the  \emph{orthogonal} is defined as:
+\[
+\begin{rclarray}
+m^{\perp} & \defeq & \Setcon{m'}{(m \compose{} m')\isdef \land m' \in \sort{M}} 
+\end{rclarray}
+\]
 %The \emph{guarantee} relation, $\GuarI \subseteq \World \times \World$, is defined as follows:
 %\sx{take away of the closure}
 %\[
@@ -204,24 +190,29 @@ where for any element \( m \) from its domain \( \sort{M} \), the  \emph{orthogo
 %\]
 \end{defn}
 
+The stabilisation says assertions remain true against the environment.
+Formally a set of worlds \( \setworld \) is stable under certain execution tests \( \et \) if the set is closed under rely relation under the side conditions: (a) the key-value store transfer is allowed by the execution tests \( (\mkvs, \mkvs') \in \et \); and (b) the new view under the new key-value store is able to progress.
+The first condition says there is at least one view from the environment that can trigger the transformation on the key-value store, and it is allowed by the execution tests.
+The second condition is more subtle, as it requires to also update the view to a new view \( \vi' \) so that there exists some non-empty fingerprints that is allowed to execute under the new view.
+It is especially useful when the execution tests are for serialisibility, which means that the view always shift to the end when the key-value store has been updated by the environment.
+
 \begin{defn}[Stable]
 A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld, \como}$, if and only if it is closed under the rely relation: 
 \[
     \begin{rclarray}
         \stable{\setworld, \como} & \eqdef & 
         \begin{array}[t]{@{}l}
-            \fora{\w, \w'} \\
-            \begin{B}
+            \fora{\w, \w'} 
             \w \in \setworld 
             \land (\w, \w') \in \Rely  
             \land \exsts{\hh, \hh', \vi, \vi', \opset} \\
-            \quad (\hh, \stub) \in \eraseW{\w}
-            \land (\hh', \vi) \in \eraseW{\w'} \\
+            \quad (\hh, \vi) \in \eraseW{\w}
+            \land (\hh', \vi') \in \eraseW{\w'} 
+            \land (\hh, \hh') \in \como \\
             \quad {} \land \opset \neq \unitO 
-            \land (\hh', \vi) \csat \opset : \vi'
-            \land (\hh, \hh') \in \como
-            \end{B}
-            \implies \w' \in \setworld
+            \land \vi' \geq \vi
+            \land (\hh', \vi) \csat \opset : \stub \\
+            \qqquad \implies \w' \in \setworld
         \end{array}
     \end{rclarray}
 \]
@@ -275,8 +266,8 @@ The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to glo
         \tripleG{\thvar \dot= \lexpr }{ \pass{\thvar}{\expr} }{\thvar \dot= \expr\sub{\thvar}{\lexpr} }
     }
     \and
-    \inferrule[\rl{PRAssume}]{}{%
-        \tripleG{ \expr \doteq 0 }{ \passume{\expr} }{ \expr \doteq 0 } 
+    \inferrule[\rl{PRAssume}]{ }{%
+        \tripleG{ \expr \dot\neq 0 }{ \passume{\expr} }{ \expr \dot\neq 0 } 
     }
     \and
     \inferrule[\rl{PRChoice}]{%
