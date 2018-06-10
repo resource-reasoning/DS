@@ -156,31 +156,64 @@ the \emph{arithmetic expression evaluation} function, $\evalE[(.)]{.}:\Expressio
 \subsubsection{Semantics for transactions}
 \label{sec:trans-semantics}
 
-When a transaction starts, it determines a local snapshot from the current state of the system and a view, which we will explain the process in \cref{sec:prog-semantics}.
-The transaction also installed with \emph{fingerprints} which is initially empty.
-The fingerprints of a transaction corresponds to the set of all its interaction with the key-value store.
-Each time the transaction executes a primitive command \( \transpri\) internal, the fingerprints get updated to trace the effect of the command.
-At the end, the transaction throw away the local snapshot, but commit the fingerprints to the system.
+\paragraph{Operations and Fingerprints}
+Recall that when a transaction starts, it extracts a local snapshot $\ss$ of the MKVS via its view. 
+The execution of the transaction is then carried out \emph{locally} on $\ss$:  
+read operations inspect $\ss$ and write operations update $\ss$. 
+%, as we discuss in \cref{sec:prog-semantics}.
+To track the effect of a transaction while executing, each transaction is associated with a \emph{fingerprint}, initially set to empty. 
+The fingerprint of a transaction records its interactions (read or write operations) with the MKVS.
+Each time a transaction executes a primitive command \( \transpri\) (locally on its snapshot), its fingerprint is accordingly updated to track the effect of $\transpri$.
+%More concretely, every time the transaction performs a write operation, 
+Once the local execution of a transaction is complete, its local snapshot is discarded, and the transaction is committed by propagating the effects in its fingerprint to the MKVS.\\
+%
+\indent The fingerprint of a transaction, $\opset$, is modelled as a set of \emph{operations}. 
+Each operation $\op$ is a tuple of the form $(\mathit{tag}, \ke, \val)$, where $\mathit{tag}$ denotes the operation type and may be one of $\otW$ for \emph{write} operations, or $\otR$ for \emph{read} operations; 
+the $\ke$ denotes the operation key, and  $\val$ denotes the operation value. 
+For instance, $(\otW, \ke, \val)$ denotes the execution of an operation where value $\val$ is written to key $\ke$; and
+$(\otR, \ke, \val)$ denotes the execution of an operation where value $\val$ is read from key $\ke$.\\
+%
+\indent When tracking the write operations (with tag $\otW$) in a fingerprint $\opset$, for each key $\ke$, only the effect of the \emph{last} write to $\ke$ is recorded in $\opset$. 
+This is because while executing, a transaction may write to $\ke$ multiple times. Upon committing however, only the last value written to $\ke$ is propagated to the MKVS. 
+As such, $\opset$ need not include duplicate writes operations for  $\ke$ and thus only records its latest write. 
+This choice is motivated by the atomic visibility of transactions: the intermediate writes to a key are not visible from outside a transaction.\\
+%
+\indent Analogously, when tracking the read operations (with tag $\otR$), for each key $\ke$, the fingerprint $\opset$ includes a read operation for $\ke$ \emph{only if} the transaction reads from $\ke$ \emph{before} subsequently writing to it.
+More concretely, a read $\op$ operation from $\ke$ is recorded in $\opset$ if $\op$ reads from the initial value recorded in the snapshot. % $\ss$. 
+That is, read operations track those operations that read from the MKVS and not those that read internally from the updated snapshot.
+These two principles, \emph{last-write} and \emph{read-before-write}, are formalised in the definition of {fingerprint update}, $\opset \addO \op$,  in \cref{def:ops} below. 
+For convenience, we define $\opset \addO \emptyop \eqdef \opset$, to denote fingerprint update with respect to an operation with no effect.
 
-The fingerprints include the \emph{first read preceding a write} and \emph{last write} for each key.
-This is because a transaction is executed atomically, all the intermediate steps are not observable from the outside world.
-The \emph{fingerprints} formally is a set of \emph{operations} \( \Ops \) which are either read \( (\etR, \addr, \val)\) from the \( \ke \) with the value \( \val \), or write \( (\etW, \addr, \val) \) to the key \( \ke \) with the value \( \val \) (\cref{def:ops}).
-Note that In the \cref{def:ops}, the \( (.)\projection{(.)} \) denotes projection.
-For a tuple, for example \( \op\projection{i} \), it gives the \emph{i-th} element of the tuple.
-It is lifted to a set of tuples, for example \( \opset\projection{i}\), which gives a set of all the \emph{i-th} elements.
-The well-formedness condition for fingerprints asserts it is a set of operations in which there are at most one read and one write for each key.
-The composition, then, is defined as set disjointed union as long as the result is well-formed.
+
+In what follows we write $\op \projection{i}$ to denote the $i$\textsuperscript{th} projection of $\op$. 
+We lift this notation to sets and write \eg $\{\op_1 \cdots \op_n\}\projection{i}$ for the set comprising the $i$\textsuperscript{th} projection of $\op_1 \cdots \op_n$. 
+
+
+
+
+%The fingerprints include the \emph{first read preceding a write} and \emph{last write} for each key.
+%This is because a transaction is executed atomically, all the intermediate steps are not observable from the outside world.
+%The \emph{fingerprints} formally is a set of \emph{operations} \( \Ops \) which are either read \( (\etR, \addr, \val)\) from the \( \ke \) with the value \( \val \), or write \( (\etW, \addr, \val) \) to the key \( \ke \) with the value \( \val \) (\cref{def:ops}).
+
+
+%
+%Note that In the \cref{def:ops}, the \( (.)\projection{(.)} \) denotes projection.
+%For a tuple, for example \( \op\projection{i} \), it gives the \emph{i-th} element of the tuple.
+%It is lifted to a set of tuples, for example \( \opset\projection{i}\), which gives a set of all the \emph{i-th} elements.
+%The well-formedness condition for fingerprints asserts it is a set of operations in which there are at most one read and one write for each key.
+%The composition, then, is defined as set disjointed union as long as the result is well-formed.
  
 
-\begin{definition}[operation and fingerprints]
+\begin{definition}[Operations and fingerprints]
 \label{def:ops}
-A \emph{transaction operation} \( \op \in \Ops \) is a tuple of \emph{an operation tag} that is either read or write, an key and a value.
-\[
-\begin{rclarray}
-\op \in \Ops & \defeq  & \powerset{\Set{\otR, \otW}} \times \Addr \times \Val
-\end{rclarray}
-\]
-\emph{A well-formed fingerprint}, \( \opset \in \Opsets \), is a subset of \( \Ops \) in which any two elements contain either different tags or different key.
+The set of \emph{operations} is \( \op \in \Ops \eqdef \powerset{\Set{\otR, \otW}} \times \Addr \times \Val\).
+%A \emph{transaction operation} is a tuple of \emph{an operation tag} that is either read or write, an key and a value.
+%\[
+%\begin{rclarray}
+%\op \in \Ops & \defeq  & \powerset{\Set{\otR, \otW}} \times \Addr \times \Val
+%\end{rclarray}
+%\]
+\emph{A fingerprint}, \( \opset \in \Opsets \), is a subset of \( \Ops \) in which any two elements contain either different tags or different keys:
 \[
     \begin{rclarray}
         \Opsets & \defeq & \Setcon{\opset}{%
@@ -188,69 +221,10 @@ A \emph{transaction operation} \( \op \in \Ops \) is a tuple of \emph{an operati
             \op\projection{1} \neq  \op'\projection{1} \lor \op\projection{2} \neq  \op'\projection{2}  } \\
     \end{rclarray}
 \]
-The unit element is \( \unitE \defeq \emptyset\) and the composition of two fingerprints is the disjointed union when the two sets contain disjointed keyes,
-\[ 
-\begin{rclarray}
-    \opset \composeO \opset' & \defeq & 
-    \begin{cases}
-        \opset \uplus \opset' & \text{if } \opset\projection{2} \cap \opset'\projection{2} = \emptyset \\
-        \text{undefined} & \text{otherwise}
-    \end{cases}
-\end{rclarray}
-\]
-\end{definition}
-\pg{ \(\opset \addO \opset'\)?. \sx{We can define this but not sure it is useful}}
-
-\begin{lemma}
-The well-formedness of fingerprints is closed under \( \addO \).
-\end{lemma}
-
-The operational semantics for transactions \(\trans\) (\cref{fig:transaction_semantics}) is defined with respect to a transactional state of the form \((\stk, \sn, \opset)\) comprising a stack, a snapshot and \emph{fingerprints}.
-We first define a state transformers on pairs of stacks and snapshots for the primitive commands \(\trans_{p}\).
-We also define its fingerprint by \( \funcn{fp} \) function, which denotes the contribution of the primitive command that might observed by the external environment, \ie transactions from other threads.
-The \( \funcn{fp} \) extracts the read or write operation from loop-up and mutation respectively, otherwise \( \emptyop \).
-We also define a binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the fingerprints \( \opset \).
-If the new operation is a read, for example \((\otR, \addr, \val)\) where \( \addr \) is the key and \( \val\) is the associated value, and there is no other operation related to the same key, this new read operation will be included in the result.
-Meanwhile, if the new operation is a write, it will overwrite all preview write operations to the same key.
-This ensures the fingerprints contains only the first read preceding a write, and only the last write for each key.
-This choice is motivated by the fact that we only focus on atomically visible transactions: keys are read from a snapshot of the database, and new version are written only at the moment the transaction commits.
-For technical reasons, if the right hand side is a special token \( \emptyop \) corresponding to a command does not result in an interaction with key-value store.
-Therefore, the semantics for primitive command \(\rl{TPrimitive}\) updates the stack and heap by the transformers relation and updates the operation set by first extracting the operation and adding it via \( \addO \) operator.
-The semantics for non-deterministic choices \(\rl{TChoice}\), sequential compositions \(\rl{TSeqSkip}\) and \(\rl{TSeq}\), and iteration \(\rl{TIter}\) have the expected behaviours.
-
-\begin{figure}[!t]
-\hrule\vspace{5pt}
-\begin{flushleft}
-The state transformers on pairs of stacks and snapshots for the primitive commands \(\trans_{p}\) (left), and the \( \funcn{op} \) for extracting the operation from the primitive commands (right):
-\end{flushleft}
+%
+The \emph{fingerprint update function}, $\addO: \Opsets \times \Ops \cup \{\emptyop\} \rightarrow \Opsets$, is defined as follows: 
 \[
-\begin{array}{c @{\qquad} c}
-\begin{rclarray}
-(\stk, \h)  & \toLTS{\passign{\var}{\expr}}          & (\stk\rmto{\var}{\evalE{\expr}}, \h)                  \\
-(\stk, \h)  & \toLTS{\pderef{\var}{\expr}}           & (\stk\rmto{\var}{\h(\evalE{\expr})}, \h)              \\
-(\stk, \h)  & \toLTS{\pmutate{\expr_{1}}{\expr_{2}}} & (\stk, \h\rmto{\evalE{\expr_{1}}}{\evalE{\expr_{2}}}) \\
-(\stk, \h)  & \toLTS{\passume{\expr}}                & (\stk, \h) \text{ where } \evalE{\expr} \neq 0           \\
-%(\stk, \h) & \toLTS{\preturn{\expr}}                & (\stk\rmto{\ret}{\evalE{\expr}}, \h)                  \\
-\end{rclarray}                                                                                               
-&
-\begin{rclarray}
-\end{rclarray}
-\begin{array}{@{} r c l @{\qquad} r  c l @{}}
-\func{fp}{\stk, \h, \passign{\var}{\expr}}          & \defeq & \emptyop                                     \\
-\func{fp}{\stk, \h, \pderef{\var}{\expr}}           & \defeq & (\etR, \evalE{\expr}, \h(\evalE{\expr}))     \\
-\func{fp}{\stk, \h, \pmutate{\expr_{1}}{\expr_{2}}} & \defeq & (\etW, \evalE{\expr_{1}}, \evalE{\expr_{2}}) \\
-\func{fp}{\stk, \h, \passume{\expr}}                & \defeq & \emptyop                                     \\
-\func{fp}{\stk, \h, \preturn{\expr}}                & \defeq & \emptyop                                     \\
-\end{array}
-\end{array}
-\]
-
-\hrule\vspace{5pt}
-\begin{flushleft}
-The binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the set \( \opset \):
-\end{flushleft}
-\[
-\begin{array}{c @{\qquad} c}
+\begin{array}{c @{\qqqquad} c}
 \begin{rclarray}
     \opset \addO (\etR, \addr, \val) & \defeq & 
     \begin{cases}
@@ -266,10 +240,103 @@ The binary operator \( \opset \addO \op \) that specifies the effects of adding 
 \end{array}
 \]
 
-\hrule\vspace{5pt}
-\begin{flushleft}
-Given the set of stacks \( \Stacks \) (\cref{def:stacks}), heaps \( \Heaps \) (\cref{def:heaps}) and transactions \( \Transactions \) (\cref{def:language}) and the arithmetic expression evaluation \( \evalE{\expr} \) (\cref{def:language}), the \emph{operational semantics of transactions}:
-\end{flushleft}
+
+The \emph{fingerprint unit element} is \( \unitE \defeq \emptyset\); 
+the \emph{fingerprint composition}, $\composeO: \Opsets \times \Opsets \rightharpoonup \Opsets$,  is defined when two fingerprints contain operations with distinct keys: 
+\[ 
+\begin{rclarray}
+    \opset \composeO \opset' & \defeq & 
+    \begin{cases}
+        \opset \uplus \opset' & \text{if } \opset\projection{2} \cap \opset'\projection{2} = \emptyset \\
+        \text{undefined} & \text{otherwise}
+    \end{cases}
+\end{rclarray}
+\]
+\end{definition}
+%\pg{ \(\opset \addO \opset'\)?. \sx{We can define this but not sure it is useful}}
+%
+%\begin{lemma}
+%The well-formedness of fingerprints is closed under \( \addO \).
+%\end{lemma}
+%\azalea{What is $\addO$?? You have not defined this yet.}
+
+\paragraph{Operational Semantics of Transactions}
+The \emph{operational semantics of transactions} (\cref{def:language}) is given at the bottom of  \cref{fig:transaction_semantics},
+described with respect to a transactional state of the form \((\stk, \sn, \opset)\), where $\stk$ denotes a local variable stack (\cref{def:stacks}), $\sn$ denotes an MKVS snapshot (\cref{def:snapshot}), and $\opset$ denotes a fingerprint (\cref{def:ops}).\\
+%
+\indent To this end, we first define a \emph{local state transformer} on pairs of stacks and snapshots for primitive commands \(\trans_{p}\) (top of  \cref{fig:transaction_semantics}).
+More concretely, we write $(\stk, \h)  \toLTS{\trans_{p}} (\stk', \h')$ to denote that executing $\trans_p$ updates the stack $\stk$ and snapshot $\h$, to $\stk'$ and $\h'$, respectively.
+Additionally, we compute the fingerprint (effect) of a primitive command via the $\funcFont{fp}$ function and write $\func{fp}{\stk, \h, \trans_p}$ to denote the effect of $\trans_p$ on stack $\stk$ and snapshot $\h$.\\
+%
+%We also define its fingerprint by \( \funcn{fp} \) function, which denotes the contribution of the primitive command that might observed by the external environment, \ie transactions from other threads.
+%The \( \funcn{fp} \) extracts the read or write operation from loop-up and mutation respectively, otherwise \( \emptyop \).
+%We also define a binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the fingerprints \( \opset \).
+%If the new operation is a read, for example \((\otR, \addr, \val)\) where \( \addr \) is the key and \( \val\) is the associated value, and there is no other operation related to the same key, this new read operation will be included in the result.
+%Meanwhile, if the new operation is a write, it will overwrite all preview write operations to the same key.
+%This ensures the fingerprints contains only the first read preceding a write, and only the last write for each key.
+%This choice is motivated by the fact that we only focus on atomically visible transactions: keys are read from a snapshot of the database, and new version are written only at the moment the transaction commits.
+%For technical reasons, if the right hand side is a special token \( \emptyop \) corresponding to a command does not result in an interaction with key-value store.
+%Therefore, the semantics for primitive command \(\rl{TPrimitive}\) updates the stack and heap by the transformers relation and updates the operation set by first extracting the operation and adding it via \( \addO \) operator.
+%The semantics for non-deterministic choices \(\rl{TChoice}\), sequential compositions \(\rl{TSeqSkip}\) and \(\rl{TSeq}\), and iteration \(\rl{TIter}\) have the expected behaviours.
+%
+\indent Each step of the operational semantics updates the stack and snapshot using the local state transformer, and updates the fingerprint via the \( \addO \) function.
+The behaviour of all transitions in \cref{fig:transaction_semantics} is standard.
+
+
+\begin{figure}[!t]
+\hrule%\vspace{5pt}
+%\begin{flushleft}
+%The state transformers on pairs of stacks and snapshots for the primitive commands \(\trans_{p}\) (left), and the \( \funcn{op} \) for extracting the operation from the primitive commands (right):
+%\end{flushleft}
+\[
+\begin{array}{c @{\qqqquad} c}
+\begin{rclarray}
+(\Stacks \times \Heaps) & \toLTS{\trans_p} &   (\Stacks \times \Heaps)  \vspace{5pt}\\
+(\stk, \h)  & \toLTS{\passign{\var}{\expr}}          & (\stk\rmto{\var}{\evalE{\expr}}, \h)                  \\
+(\stk, \h)  & \toLTS{\pderef{\var}{\expr}}           & (\stk\rmto{\var}{\h(\evalE{\expr})}, \h)              \\
+(\stk, \h)  & \toLTS{\pmutate{\expr_{1}}{\expr_{2}}} & (\stk, \h\rmto{\evalE{\expr_{1}}}{\evalE{\expr_{2}}}) \\
+(\stk, \h)  & \toLTS{\passume{\expr}}                & (\stk, \h) \text{ where } \evalE{\expr} \neq 0          
+%(\stk, \h) & \toLTS{\preturn{\expr}}                & (\stk\rmto{\ret}{\evalE{\expr}}, \h)                 
+\end{rclarray}                                                                                               
+&
+\begin{array}{@{} l @{}}
+\funcFont{fp}: \Stacks \times \Heaps \times \trans_p \rightarrow \Ops \cup \{\emptyop\} \vspace{5pt} \\
+\begin{rclarray}
+\func{fp}{\stk, \h, \passign{\var}{\expr}}          & \defeq & \emptyop                                     \\
+\func{fp}{\stk, \h, \pderef{\var}{\expr}}           & \defeq & (\etR, \evalE{\expr}, \h(\evalE{\expr}))     \\
+\func{fp}{\stk, \h, \pmutate{\expr_{1}}{\expr_{2}}} & \defeq & (\etW, \evalE{\expr_{1}}, \evalE{\expr_{2}}) \\
+\func{fp}{\stk, \h, \passume{\expr}}                & \defeq & \emptyop                                     \\
+\func{fp}{\stk, \h, \preturn{\expr}}                & \defeq & \emptyop                                     
+\end{rclarray}
+\end{array}
+\end{array}
+\]
+
+%\hrule\vspace{5pt}
+%\begin{flushleft}
+%The binary operator \( \opset \addO \op \) that specifies the effects of adding a new operation \( \op \) to the set \( \opset \):
+%\end{flushleft}
+%\[
+%\begin{array}{c @{\qquad} c}
+%\begin{rclarray}
+%    \opset \addO (\etR, \addr, \val) & \defeq & 
+%    \begin{cases}
+%        \opset \uplus \Set{(\etR, \addr, \val)} & (\stub, \addr, \stub) \notin \opset \\
+%        \opset &  \text{otherwise} \\
+%    \end{cases} \\
+%\end{rclarray}
+%&
+%\begin{rclarray}
+%    \opset \addO (\etW, \addr, \val) & \defeq & \left( \opset \setminus \Set{(\etW, \addr, \stub)} \right) \uplus \Set{(\etW, \addr, \val)} \\
+%    \opset \addO \emptyop & \defeq & \opset \\
+%\end{rclarray}
+%\end{array}
+%\]
+
+\hrule%\vspace{5pt}
+%\begin{flushleft}
+%Given the set of stacks \( \Stacks \) (\cref{def:stacks}), heaps \( \Heaps \) (\cref{def:heaps}) and transactions \( \Transactions \) (\cref{def:language}) and the arithmetic expression evaluation \( \evalE{\expr} \) (\cref{def:language}), the \emph{operational semantics of transactions}:
+%\end{flushleft}
 \[
 \begin{rclarray}
 \toL & : & ((\Stacks \times \Heaps \times \Opsets) \times \Transactions) \times ((\Stacks \times \Heaps \times \Opsets) \times \Transactions)
@@ -296,6 +363,7 @@ Given the set of stacks \( \Stacks \) (\cref{def:stacks}), heaps \( \Heaps \) (\
     \infer[\rl{TIter}]{%
         (\stk, \h, \opset),  \trans\prepeat \ \toL \  (\stk, \h, \opset), \pskip \pchoice (\trans \pseq \trans\prepeat)
     }{} 
+    \vspace{5pt}
     \\[1em]
     \infer[\rl{TSeqSkip}]{%
         (\stk, \h, \opset), \pskip \pseq \trans \ \toL \  (\stk, \h, \opset), \trans
@@ -309,7 +377,7 @@ Given the set of stacks \( \Stacks \) (\cref{def:stacks}), heaps \( \Heaps \) (\
 \end{array}
 \]
 \hrule\vspace{5pt}
-\caption{Operational semantics for transactions}
+\caption{Operational semantics of transactions}
 \label{fig:transaction_semantics}
 \end{figure}
 
