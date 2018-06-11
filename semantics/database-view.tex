@@ -50,8 +50,8 @@ represent MKVSs, but still avoiding allocation and deallocation of keys.}.
 I have also paraphrased, please double check.  }
 We model the state of a system using \emph{multi-version key-value stores} (MKVSs). An MKVS is a map from keys to lists of versions (values).
 %where each key is associated with a list \emph{versions} from the initial one to the latest one (\defref{def:mkvs}).
-More concretely, each version associated with a key $\ke$ is a tuple of the form \( \ver =( \nat, \txid, \txidset ) \), where  $\nat$ is a natural number denoting the \emph{current value} of $\ke$, 
-the $\txid$ is a transaction identifier \( \txid \), identifying its \emph{writer}, i.e.\ the transaction responsible for writing value $\nat$, and 
+More concretely, each version associated with a key $\ke$ is a tuple of the form \( \ver =( \val, \txid, \txidset ) \), where $\val$ denoting the \emph{current value} of $\ke$, 
+the $\txid$ is a transaction identifier \( \txid \), identifying its \emph{writer}, i.e.\ the transaction responsible for writing value $\val$, and 
 $\txidset$ is a set of transaction identifiers, denoting its \emph{readers}, i.e.\ those transactions who read from $\ke$ (see \cref{def:mkvs}).
 \cref{fig:hheap-a} depicts an example of an MKVS. 
 Ignoring the lines labelled $\client_1$ and $\client_2$, the depicted MKVS contains two keys \( \ke_1\) and \( \ke_2 \), each of which associated with two versions (with values $v_0$ and $v_1$ for $\ke_1$, and values $v'_0$ and $v'_1$ for $\ke_2$).
@@ -68,7 +68,8 @@ Given an MKVS $\hh$ and a key $\ke$, we write $\hh(\ke)$ for the list of version
 \azalea{I think $\hh$ is too close to $\ke$ and we should use a different symbol. Maybe $H$? }
 
 We assume a countably infinite set of \emph{keys}, $\Keys $,
-and a countably infinite set of \emph{transactions identifiers}, $\TxID$. 
+a countably infinite set of \emph{transactions identifiers}, $\TxID$,
+and a set of countably infinite set of \emph{program values}, \( \Val \).
 We use $\ke$ and its variants (e.g.\ $\ke_1$, $\ke'$ and so forth) as meta-variables for keys in $\Keys$;
 and use $\txid$ and its variants as meta-variables for transaction identifiers in $\TxID$. 
 \begin{definition}[Multi-version key-value stores]
@@ -76,10 +77,10 @@ and use $\txid$ and its variants as meta-variables for transaction identifiers i
 \label{def:mkvs}
 %Assuming a countably infinite set of keys $\Keys = \Set{\ke_1, \cdots}$, \emph{transactions identifiers} \( \TxID \defeq \Set{\txid_{1}, \cdots}\) and natural numbers \(\nat \in \Nat \), 
 A\emph{multi-version key-value store (MKVS)}, \( \mkvs \in \MKVSs \), is a partial finite function from keys to lists of \emph{versions}.
-A \emph{version} is a triple containing a natural number \( \nat \), a transaction identifier \( \txid \) and a set of transactions identifiers \( \txidset \):
+A \emph{version} is a triple containing a program value \( \val \), a transaction identifier \( \txid \) and a set of transactions identifiers \( \txidset \):
 \[
 \begin{rclarray}
-    \ver \in \Versions & \defeq &  \Setcon{(\nat, \txid, \txidset)}{\nat \in \Nat \land \txid \in \TxID \land \txidset \subseteq \TxID \land \txid \notin \txidset} \\
+    \ver \in \Versions & \defeq &  \Setcon{(\val, \txid, \txidset)}{\val \in \Val \land \txid \in \TxID \land \txidset \subseteq \TxID \land \txid \notin \txidset} \\
     \hh \in \HisHeaps & \defeq & \Keys \parfinfun \Versions^{*}
 \end{rclarray}
 \]
@@ -363,11 +364,11 @@ An example of the out of thin-air anomaly is given in \cref{fig:hheap-b}, where
 transaction $\txid_2$ reads the value of $\ke_1$ written by $\txid_1$;
 conversely, transaction $\txid_1$ reads the value of $\ke_2$ written by $\txid_2$. 
 As we assume transactions read a state of the key-value store from an atomic snapshot fixed at the moment they execute, this situation cannot arise. 
-For $\txid_2$ to read the version written by $\txid_1$, transaction $\txid_2$ must start after $\txid_1$, \ie \( \hh_1(\ke_2, 2) \xrightarrow{\ddep(\hh_1)} \hh(\ke_1, 2) \).
-Similarly, $\txid_1$ must starts after $\txid_2$, \ie \( \hh_1(\ke_1, 2) \xrightarrow{\ddep(\hh_1)} \hh_1(\ke_2, 2) \).
+For $\txid_2$ to read the version written by $\txid_1$, transaction $\txid_2$ must start after $\txid_1$, \ie \( \hh(\ke_2, 1) \xrightarrow{\ddep(\hh_1)} \hh(\ke_1, 1) \).
+Similarly, $\txid_1$ must starts after $\txid_2$, \ie \( \hh(\ke_1, 1) \xrightarrow{\ddep(\hh_1)} \hh_1(\ke_2, 1) \).
 This however violates the well-formedness of MKVSs that $\xrightarrow{\ddep(\hh_1)}$ is acyclic. 
 
-\azalea{Why $\hh_1$ for the store and not $\hh$? Also I thought the versions are indexed from $0$ in which case index $2$ does not make sense here?}
+\azalea{Why $\hh_1$ for the store and not $\hh$? Also I thought the versions are indexed from $0$ in which case index $2$ does not make sense here? \sx{\( \mkvs \) and index starts from 0.}}
 
 \azalea{common Latin abbreviations such as \ie, \eg, and et al. do not need to be italicised. I have adjusted the macros. I have also rephrased the definitions quite a bit. Make sure you're happy with this.}
 %When introducing our semantics of clients in \S \ref{sec:semantics}, we show that (under reasonable conditions) it generates only well-formed MKVSs.
@@ -434,14 +435,16 @@ Lastly, we always assume that MKVSs, views, and configurations are well-formed, 
 
 
 \begin{definition}[Configurations]
-A view $\vi$ is \emph{well-formed with respect to an MKVS} $\mkvs$, written ????,  iff they have the same domain and every index from $\vi$ is within the range of the corresponding entry in $\mkvs$: 
+A view $\vi$ is \emph{well-formed with respect to an MKVS} $\mkvs$, written \( \wfV{\mkvs, \vi} \),  iff they have the same domain and every index from $\vi$ is within the range of the corresponding entry in $\mkvs$: 
 \[
-   ???? \iffdef  \dom(\mkvs) = \dom(\vi) \land \fora{\ke \in \dom(\vi)} 0 \leq \vi(\ke) \le \lvert \mkvs(\ke) \rvert
+\begin{rclarray}
+    \wfV{\mkvs, \vi} & \defeq & \dom(\mkvs) = \dom(\vi) \land \fora{\ke \in \dom(\vi)} 0 \leq \vi(\ke) < \lvert \mkvs(\ke) \rvert
+\end{rclarray}
 \]
 %
-\azalea{We need a symbol for this to fill the ???? above. Also ???? below.}
+\azalea{We need a symbol for this to fill the ???? above. Also ???? below. \sx{Done}}
 A \emph{configuration} $\conf$ is a pair of the form $(\hh, \viewFun)$, where $\hh$ denotes an MKVS, and $\viewFun: \Clients \parfinfun \Views$ is a partial finite function from clients to views. 
-A configuration $\conf = (\hh, \viewFun)$ is \emph{well-formed}, written ????, iff for all clients $\cl \in \dom(\viewFun)$, the view $\viewFun(\txid)$ is well-formed with respect to $\hh$. 
+A configuration $\conf = (\hh, \viewFun)$ is \emph{well-formed}, written \( \wfC{\conf}\), iff for all clients $\cl \in \dom(\viewFun)$, the view $\viewFun(\txid)$ is well-formed with respect to $\hh$. 
 %We say that a view $V$ is well-defined with respect to the 
 %MKVS $\hh$ if, $\forall \key{k} \in \ke. 0 < V(\key{k}) \leq 
 %\lvert \hh(\key{k}) \rvert$. 
@@ -455,7 +458,7 @@ For instance, for client \( \client_1 \) in \cref{fig:hheap-a}, the $\func{snaps
 %The concrete state extracted in this way takes the name of the \emph{snapshot} of the transaction.
 %In general, the process of determining the view of a client, hence the snapshot in which such a client executes transactions, is non-deterministic.
 
-\azalea{Before in MKVSs we had values drawn from $\Nat$ in \cref{def:mkvs}. Now we use $\Val$. I think you mean to use $\Val$ in both places? }
+\azalea{Before in MKVSs we had values drawn from $\Nat$ in \cref{def:mkvs}. Now we use $\Val$. I think you mean to use $\Val$ in both places? \sx{I would say so} }
 \begin{definition}[Snapshots]
 \label{def:heaps}
 \label{def:snapshot}
