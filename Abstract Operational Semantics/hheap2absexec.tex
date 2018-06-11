@@ -10,7 +10,11 @@
 \newcommand{\absrightarrow}{\ensuremath{\rightarrowtail}}
 \newcommand{\allExec}{\ensuremath{\mathsf{allExecs}}}
 \newcommand{\anarchic}{\raisebox{-1.5pt}{{\Large \text{\CircledA}}}}
+\newcommand{\anarchicsmall}{\raisebox{-1.5pt}{{\small \text{\CircledA}}}}
 \newcommand{\Ax}{\ensuremath{\mathsf{Ax}}}
+
+\newcommand{\ruleATX}{\ensuremath{\mathit(A-Tx)}}
+%\newcommand{\Clients}{\ensuremath{\mathsf{Clients}}}
 
 In this Section we propose an alternative 
 semantics of programs. In this semantics, states 
@@ -71,8 +75,10 @@ at some point in the abstract execution ${\aexec}$, by performing operations $\T
 program order of clients: that is, there exists a $\dom(\PO)$-indexed partition $\{\T_{\tid}\}_{\tid \in \dom(\PO)}$ of 
 $\dom(\TtoOp{\T})$ such that, for any $\tid \in \ClSet$ $\PO(\tid)$ is a strict, total order over $\T_{\tid}$.
 \item $\VIS \subseteq \dom(\TtoOp{T}) \times (\dom(\TtoOp{T}))$ is a strict, irreflexive relation, 
-\item $\AR \subseteq \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is a strict, total order such that $\VIS \subseteq \AR$.
+\item $\AR \subseteq \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is a strict, total order such that $\PO \cup \VIS \subseteq \AR$.
 \end{enumerate}
+
+The set of all abstract executions is denoted by $\aeset$.
 \end{definition}
 In general, given an abstract execution ${\aexec} = (\TtoOp{T}, \ClSet, \PO, \VIS, \AR)$, we let ${\TtoOp{T}}_{\aexec} = \TtoOp{T}, 
  \PO_{\aexec} = \PO, {\VIS}_{\aexec} = \VIS, \AR_{\aexec} = \AR$. We also let $\T_{\aexec} = \dom(\TtoOp{T}_{\aexec})$, 
@@ -82,41 +88,48 @@ We often write $\tsid \xrightarrow{\VIS_{{\aexec}}} \tsid'$ in lieu of $(\tsid, 
 and similarly for other relations. We also commit an abuse of notation, and let $\PO_{{\aexec}} = 
 \bigcup_{\tid \in \ClSet_{\aexec}} \PO(\tid)$. Henceforth, it will always be clear from the context 
 whether the symbol $\PO_{\aexec}$ refers to a function from client identifiers to a relation between transaction, or to a relation
-between transactions.
+between transactions. 
+Given two abstract executions $\aexec_1, \aexec_2$ and a subset $\T \subseteq \T_{\aexec_1} \cap \T_{\aexec_2}$, 
+we say that $\aexec_1$ and $\aexec_2$ agree on $\T$ if, and only if, $\forall \tsid,\tsid' \in \T. \TtoOp{T}_{\aexec_1}(\tsid) = 
+\TtoOp{T}_{\aexec_2}(\tsid)$, $\tsid \xrightarrow{\PO_{\aexec_1(\tid)}} \tsid'$ if and only if $\tsid \xrightarrow{\PO_{\aexec_2}(\tid)} 
+\tsid'$, and similarly for $\VIS_{\_}$ and $\AR_{\_}$.
 
 Given an abstract execution $\aexec$, a key $\key{k}$ and a transaction identifier $\tsid \in \dom(\T_{\aexec})$, we 
 define $\visibleWrites_{{\aexec}}(\key{k}, \tsid) = \{ \tsid' \mid \tsid' \xrightarrow{\VIS_{{\aexec}}} \tsid \wedge (\WR\;\key{k}:\_) 
 \in_{\aexec} \tsid' \}$.
 
 \begin{definition}
-A \emph{resolution policy} \RP is a function $\RP: \aexec \times \powerset{\TxID} \rightarrow \powerset{\Snapshots}$. 
+A \emph{resolution policy} \RP is a function $\RP: \aexec \times \powerset{\TxID} \rightarrow \powerset{\Snapshots}$ 
+such that, for any $\aexec_1, \aexec_2$ that agree on a subset of transactions $\T$, then $\RP(\aexec_1, \T) = 
+\RP(\aexec_2, \T)$.
 \end{definition}
-
-intuitively, $\RP(\aexec, \T)$ denotes the set of possible snapshot that a client would observe when executing a transaction 
+Intuitively, $\RP(\aexec, \T)$ denotes the set of possible snapshot that a client would observe when executing a transaction 
 in a state of the system corresponding to the abstract execution $\aexec$, when observing only the subset 
-of transactions in $\T$, and when using the resolution policy $\RP$. We will mainly work with two different 
+of transactions in $\T$, and when using the resolution policy $\RP$. The first condition on resolution policies 
+states that the possible snapshots observed do not depend on the behaviour of any other transaction other 
+than $\T$.
+We will mainly work with two different 
 resolution policies, which are illustrated below. 
 
 \begin{example}
 The \emph{Last Write Wins} execution policy $\RP_{\LWW}$ is defined by letting, for a given abstract execution 
-$\aexec$ and a set $\T \subseteq \T_{\aexec}$, 
+$\aexec$ and a set $\T \subseteq \T_{\aexec}$, $\RP_{\LWW}(\aexec, \T) = \h_{\aexec, \T}$, where
 \[
-\RP_{\LWW}(\aexec, \T) = \left \{ \lambda \key{k}.
+\h_{\aexec, \T} = \lambda \key{k}.
 \begin{cases}
 n & \text{if } \T_{\key{k}} \neq \emptyset \wedge (\WR\; \key{k}: n) \in_{\aexec} \max_{\AR_{\aexec}}(\T_{\key{k}}), \text{where } 
 \T_{\key{k}} (\T \cap \{\tsid \mid \tsid \in_{\aexec} \WR k: \_ \})\\
 0 & \text{otherwise} 
 \end{cases}
-\right\}
 \]
 
-The \emph{demonic} execution policy $\RP_{\bot}$ is defined by letting $\RP_{\bot}(\aexec, \T) = \Snapshots$ for any $\aexec, \T$.
+The \emph{anarchic} execution policy $\RP_{\bot}$ is defined by letting $\RP_{\bot}(\aexec, \T) = \Snapshots$ for any $\aexec, \T$.
 \end{example}
 
 \begin{definition}
 An abstract execution $\aexec$ satisfies an execution policy $\RP$, written $\aexec \models \RP$, if and only if, 
 \[
-\forall \tsid \in \T_{\aexec}. \exists \h \in \RP(\aexec, \VIS^{-1}(\tsid).\;
+\forall \tsid \in \T_{\aexec}. \exists \h \in \RP(\aexec, \VIS_{\aexec}^{-1}(\tsid)).\;
 \forall \key{k} \in \Addr, n \in \nat.\; (\RD\;\key{k}: n) \in_{\aexec} \tsid \implies 
 h(\key{k}) = n.
 \]
@@ -130,13 +143,32 @@ proved to be sound are marked with (?)}
 A consistency model consist of a set of abstract executions. 
 To specify consistency models, we fix a resolution policy and 
 a set of axioms $\calA$ that pose conditions on the relations $\PO_{\aexec}, \VIS_{\aexec}, \AR_{\aexec}$. 
-Specifically, each axiom $\Ax \in \calA$  have either the form $\F(\PO_{\aexec}, \VIS_{\aexec}, \AR_{\aexec}) \subseteq \VIS_{\aexec}$, 
-or $\F(\aexec) \subseteq \AR_{\aexec}$. For a given axiom $\Ax$ and abstract execution $\aexec$, 
-we write $\aexec \models \Ax$ if $\aexec$ satisfies the constraint specified by $\Ax$. 
+\begin{definition}
+Formally speaking, we define an axiom $\Ax$ is a function from abstract executions to relations between transactions: 
+$\Ax: \aeset \rightarrow \powerset{\TxID \times \TxID}$, such that whenever 
+$\aexec_1, \aexec_2$ agree on a set of transactions $\T$, then whenever $(\tsid, \tsid') \in \Ax(\aexec_1)$ 
+for some $\tsid, \tsid' \in \T$, then $(\tsid, \tsid') \in \Ax(\aexec_2)$.
+
+For a given axiom $\Ax$ and abstract execution $\aexec$, 
+we say that $\aexec$ satisfies $\Ax$, written $\aexec \models \Ax$ if $\Ax(\aexec) \subseteq \VIS_{\aexec}$. 
 For a set of axioms $\calA$ and an abstract execution $\aexec$, we write $\aexec \models \calA$ if 
-and only if $\aexec \models \Ax$ for any $\Ax \in \calA$. For a consistency model specification 
+and only if $\aexec \models \Ax$ for any $\Ax \in \calA$. 
+\end{definition}
+
+For a consistency model specification 
 $\CM = (\RP, \calA)$, we write $\aexec \models \CM$ if and only if $\aexec \models \RP$, 
-and $\aexec \models \calA$.
+and $\aexec \models \calA$. We also let $\aeset(\CM) = \{ \aexec \mid \aexec \models \CM \}$.
+
+\begin{proposition}
+\label{prop:ax2ar}
+Let be an $\Ax$ axiom, and let $\aexec$ be an abstract execution $\aexec \models \Ax$. 
+Whenever $(\tsid, \tsid') \in \Ax(\aexec)$, then $\tsid \xrightarrow{\AR_{\aexec}} \tsid'$.
+\end{proposition}
+
+\begin{proof}
+Because $\aexec \models \Ax$, $(\tsid, \tsid') \in \Ax(\aexec)$ implies that 
+$\tsid \xrightarrow{\VIS_{\aexec}} \tsid'$, and therefore $\tsid \xrightarrow{\AR_{\aexec}} \tsid'$.
+\end{proof}
 
 We leave the language used for specifying the function $\F$ in axioms of consistency models unspecified, though 
 we remark that all our examples can be captured using the style of specification previously 
@@ -202,13 +234,16 @@ is a partial mapping from client identifiers to stacks.
 \hline
 \multicolumn{2}{|@{}c@{}|}{
 $
-\infer[{\scriptstyle(A-Tx)}]{\langle \aexec, \thdstackFun, \tid: [\trans] \rangle \absrightarrow_{\CM} \langle \aexec', \thdstackFun', \nil \rangle}
+\infer[{\scriptstyle \ruleATX}]{\langle \aexec, \thdstackFun, \tid: [\trans] \rangle \absrightarrow_{\CM} \langle \aexec', \thdstackFun', \tid: \nil \rangle}
 {\begin{array}{c}
 \CM = (\RP, \calA) \qquad \T \subseteq \T_{\aexec} \qquad
 \h \in \RP(\aexec, \T) \\
-\langle \h, \thdstack, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle\\
-\aexec' = \appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O}) \qquad \aexec' \models \calA \qquad \thdstackFun' = 
-\thdstackFun[\tid \mapsto \thdstack']
+\langle \h, \thdstack, \emptyset, \trans \rangle \rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle \qquad \thdstackFun(\tid) = \sigma 
+\qquad \thdstackFun' = \thdstackFun[\tid \mapsto \thdstack']\\
+%\aexec' = \appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O}) \qquad \aexec' \models \calA \qquad \thdstackFun' = 
+%\thdstackFun[\tid \mapsto \thdstack'] 
+\aexec' = \appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O}) \qquad 
+\forall \Ax \in \calA. \; \{\tsid' \mid (\tsid', \tsid) \in \Ax(\aexec') \} \subseteq \T 
 \end{array}
 }
 $
@@ -216,8 +251,6 @@ $
 \hline
 \end{tabular}
 \end{center}
-\ac{It is useless to check the constraints on the consistency models for all transactions in $\T_{\aexec}'$, 
-only the edges of the form $\_\xrightarrow{\VIS_{\aexec}'} \tsid$ and $\_ \xrightarrow{\AR_{\aexec'}} \tsid$ that end in $\tsid$ should be checked.}
 \caption{Rules of the Operational Semantics of Abstract Executions.}
 \end{figure}
 
@@ -227,7 +260,7 @@ Selected rules of the semantics of commands and programs are given in Figure \re
 to the rules of Figure \ref{fig:opsem.cmd} and \ref{fig:opsem.prog}.}
 
 As for the MKVS semantics,  the only non-trivial rule in the semantics of commands and programs 
-is the one modelling a client executing a transaction, Rule $(A-Tx)$.
+is the one modelling a client executing a transaction, Rule \ruleATX.
 The function $\appendTx_{\tsid}$ in the premiss of this rule takes in input an abstract execution 
 $\aexec$, a client $\tid$, a subset $\T \subseteq \T_{\aexec}$, and a set of operations $\mathcal{O}$. 
 It then returns a new abstract execution, corresponding to the result of client $\tid$, observing the
@@ -243,7 +276,7 @@ relation is obtained by extending $\VIS_{\aexec}$ with the set $\{(\tsid', \tsid
 as to reflect the fact that the transactions in $\T$ have been observed by $\tsid'$. 
 \begin{definition}
 Let $\aexec$ be an abstract execution, $\tsid$ be a transaction identifier such 
-that $\tsid \notin \T_{\aexec}$,  $\tid$ be a client $\in \I_{\aexec}$, $\T$ be a set of transactions, 
+that $\tsid \notin \T_{\aexec}$,  $\tid$ be a client in $\I_{\aexec}$, $\T$ be a set of transactions, 
 and $\mathcal{O}$ be a set of operations. Then we let 
 $\appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O})$ be the abstract execution $\aexec'$ defined as 
 follows: 
@@ -257,6 +290,20 @@ follows:
 \]
 \end{definition}
 
+\begin{proposition}
+\label{prop:txappend.wellformed}
+Let $\aexec$ be an abstract execution, $\tid$ be a client, $\tsid \notin \T_{\aexec}$, $\T \subseteq \T_{\aexec}$ and 
+$\mathcal{O}$ be a set of operations. Then $\appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O})$ is an abstract 
+execution.
+\end{proposition}
+
+\begin{proposition}
+\label{prop:appendTx.RPpreserved}
+Let $\aexec$ be an abstract execution, $\tsid \notin \T_{\aexec}$, $\T \subseteq \T_{\aexec}$ 
+and $\mathcal{O}$ be a set of operations. Let also $\aexec' = \appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O})$. 
+Then $\aexec$ and $\aexec'$ agree on $\T$. 
+\end{proposition}
+
 \paragraph{Faithfulness of the Semantics.}
 Next, we prove that the operational semantics of weak consistency models 
 is \emph{faithful} with respect to the axiomatic specification of any consistency 
@@ -267,23 +314,276 @@ if it captures, for any program $\prog$, all the abstract executions that $\prog
 under $\CM$. By definition, consistency models are sets of abstract executions, 
 each corresponding to the behaviour that could be obtained by the MKVS when interacting 
 with one or more clients. To formalise the notion of all possible behaviours 
-allowed by a client, it suffices then to define the set $\anarchic(\prog)$ of abstract executions 
+allowed by a client, it suffices then to define the set $\interpr{\prog}_{\anarchicsmall}$ of abstract executions 
 produced by program $\prog$ under the most permissive (or anarchic) 
 consistency model, that is one in which 
-the results of reads issued  by clients to the data-store are non-deterministic. Then 
-the set of all executions of $\prog$ under $\CM$ is defined as
+the results of reads issued  by clients to the data-store are non-deterministic. 
+\ac{I know that the $\anarchic$ symbol will be replaced by something else, this 
+is just a note to say that when it will happen, I will be very sad.}
+Then the set of all possible executions of $\prog$ under $\CM$ is defined as
 \[
-\allExec(\prog, CM) = \anarchic (\prog) \cap \CM.
+\interpr{\prog}_{\CM} = 
+\interpr{\prog}_{\CM_{\anarchicsmall}} \cap \aeset(\CM).
 \]
 
-Given a program $\prog$, the set of abstract executions $\anarchic(\prog)$
-is defined via the consistency model specification $\CM_{\anarchic} = (\RP_{\bot}, \emptyset)$, 
-where we recall that $\RP_{\bot}$ is the demonic resolution policy. The following result 
-states that this is really the most permissive consistency model specification which is 
+Given a program $\prog$, the set of abstract executions $\interpr{\prog}_{\anarchicsmall}$
+is defined via the consistency model specification $\CM_{\anarchicsmall} = (\RP_{\bot}, \emptyset)$, 
+where we recall that $\RP_{\bot}$ is the demonic resolution policy. 
+\begin{definition}
+Let $\prog$ be a program, and $\CM$ be a consistency model specification. Then 
+\[ 
+\interpr{\prog}_{\CM} = \{ \aexec \mid \langle \aexec_0, \thdstackFun_0 \rangle \absrightarrow_{\CM} 
+\cdots \absrightarrow_{\CM} 
+\langle \aexec, \thdstackFun, \prod_{i=1}^{n} \nil \wedge n \geq 0 \rangle \}
+\]
+where $\aexec_0$ is the only abstract execution for which $\T_{\aexec_{0}} = \emptyset$, 
+and $\thdstackFun_0$ is the function that associates to each client in $\prog$, the function 
+that maps local variables to $0$.
+\end{definition}
+
+The following result states that this is really the most permissive consistency model specification which is 
 possible in our setting. 
 \begin{proposition}
-Let $\aexec$ be an abstract execution. Then $\aexec \models \CM_{\anarchic}$.
+Let $\aexec$ be an abstract execution. Then $\aexec \models \CM_{\anarchicsmall}$.
 \end{proposition}
+
+Note that abstract executions capture interactions of clients with a database where 
+transactions satisfy the
+internal consistency guarantee: a client never observes different values for subsequent 
+reads of the same key in the same transaction. In theory, transactions in an anarchic database 
+would not enjoy internal consistency. On the other hand, internal consistency is often implemented 
+on the client side of transactional libraries, by letting a transaction read each key from the database 
+at most once, storing the value read locally and re-using it as a return value for subsequent reads 
+\cite{jessy,physicsNMSI}. Therefore we can safely assume that transactions provide at least internal 
+consistency, despite the database being anarchic. \ac{and the results would still apply even if 
+internal consistency were dropped from the anarchic model, but we would have so many more 
+complications.}
+
+The next two lemmas are crucial to proving both correctness and faithfulness of the operational 
+semantics based on abstract executions.
+
+\begin{lemma}[Subject Reduction]
+\label{lem:subj.red}
+Suppose that $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} \langle \aexec', \thdstackFun', \prog' \rangle$. 
+If $\aexec \in \aeset(\CM)$, then $\aexec' \in \aeset(\CM)$.
+\end{lemma}
+
+\begin{proof}
+Let $\CM = (\RP, \calA)$ for some $\RP, \calA$.
+If the transition 
+\[ 
+\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} 
+\langle \aexec', \thdstackFun', \prog' \rangle
+\] 
+is derived by any rule other than \ruleATX, then $\aexec = \aexec'$, and there is nothing 
+left to prove. 
+Otherwise, if the transition above has been derived using Rule \ruleATX, 
+then $\aexec' = \appendTx_{\tsid}(\aexec, \tid, \T)$ for some $\tid \notin \T_{\aexec}$, 
+and $\T$ such that, for any axiom $\Ax \in calA$, $\Ax(\aexec') \cap \{(\tsid', \tsid) \mid \tsid' \in \T\} 
+\subseteq \VIS_{\aexec'}$. 
+Suppose that $\aexec \in \aeset(\CM)$. We prove that $\aexec' \in \CM$. 
+By definition, we need to prove that $\aexec' \models \RP$ and $\aexec' \models \calA$.
+	\begin{itemize}
+		\item  $\aexec' \models \RP$: we need to show that, 
+		\begin{equation}
+		\label{eq:correctness.RP1}
+		\forall \tsid' \in \T_{\aexec'}.\; \exists h_{\tsid'} \in \RP(\aexec, \VIS^{-1}_{\aexec'}(\tsid')).
+		\forall \key{k},n.\; (\RD\;\key{k}:n) \in_{\aexec'} \tsid' \implies h_{\tsid'}(\key{k}) = n.
+		\end{equation}
+		Let then $\tsid' \in \T_{\aexec'}$. 
+		By definition, $\T_{\aexec'} = \T_{\aexec} \cup \{ \tsid \}$, hence either 
+		$\tsid' \in \T_{\aexec}$ or $\tsid' = \tsid$. 
+		\begin{itemize}
+			\item Suppose first that $\tsid' \in \T_{\aexec}$, 
+			and observe that $\aexec \models \RP$: that is, there exists a snapshot 
+			$\h_{\tsid'} \in \RP(\aexec, \VIS^{-1}(\tsid'))$ such that whenever $(\RD\;\key{k}:n) \in_{\aexec} \tsid'$, then 
+			$h_{\tsid'}(\key{k}) = n$. By definition of $\appendTx_{\tsid}$, because of the fact that 
+			$\tsid' \neq \tsid$, and because $\aexec, \aexec'$ agree on $\T_{\aexec}$ 
+			(Proposition \ref{prop:appendTx.RPpreserved}, 
+			then  $\TtoOp{T}_{\aexec}(\tsid') = \TtoOp{T}_{\aexec'}(\tsid')$ and 
+			$\VIS_{\aexec}^{-1}(\tsid') = \VIS_{\aexec'}^{-1}(\tsid)$. 
+			Furthermore, $\aexec$ and $\aexec'$ agree on $\VIS^{-1}_{\aexec}(\tsid')$, 
+			hence the snapshot $h_{\tsid'}$ is also included in $\RP(\aexec', \VIS_{\aexec}^{-1}(\tsid))$. 
+			Combining all the facts above we get Equation \eqref{eq:correctness.RP1}, which is what we 
+			wanted to prove.
+%			\[
+%			\exists h_{\tsid'} \in \RP(\aexec', \VIS_{\aexec'}^{-1}(\tsid)).\; \forall \key{k}. (\RD\;\key{k}: n) \in_{\aexec'} \tsid' 
+%			\implies h_{\tsid}(\key{k}) = n.
+%			\]
+			\item Next, suppose that $\tsid' = \tsid$.
+			By the premises of the Rule \ruleATX and the definition of $\appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O})$, we 
+			have that $\VIS_{\aexec'}^{-1}(\tsid) = \T$, and $\TtoOp{T}_{\aexec'}(\tsid) = \mathcal{O}$. 
+			Also, there exists a snapshot $\h_{\tsid} \in \RP(\aexec, \T)$ such that $(\h,\thdstackFun(\tid), \emptyset, \_) \rightarrow^{\ast}  
+			(\_, \_, \mathcal{O}, \nil)$. It is easy to prove by induction on the number of transitions in such a derivation, that 
+			whenever $(\RD\;\key{k} : n) \in \mathcal{O}$, then $h(\key{k}) = n$. Combining all these facts, 
+			we obtain that 
+			\[
+			\exists \h_{\tsid} \in \RP(\aexec, \VIS^{-1}_{\aexec'}(\tsid)).\; \forall \key{k},n.\RD\;\key{k}:n \in_{\aexec'} \tsid 
+			\implies h_{\tsid}(\key{k}) = n.
+			\]
+		\end{itemize}
+		\item $\aexec' \models \calA$. We need to show, that for any $\Ax \in \calA$, then 
+		$\Ax(\aexec') \subseteq \VIS_{\aexec'}$. 
+		First, note that by Proposition \ref{prop:appendTx.RPpreserved}, $\aexec$ and $\aexec'$ 
+		agree on $\T_{\aexec}$. Also, $\T_{\aexec'} = (\T_{\aexec} \cup \{\tsid\})$. 
+		By definition of $\appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O})$, 
+		Suppose then that  $(\tsid', \tsid'') \in \Ax(\aexec)$ for some $\tsid', \tsid''$; we have four possible cases:
+		\begin{itemize}
+			\item $\tsid' \in \T_{\aexec}$, $\tsid'' \in \T_{\aexec}$. Because $\aexec, \aexec'$ agree on $\T_{\aexec}$ 
+			(Proposition \ref{prop:appendTx.RPpreserved}), 
+			it follows that $(\tsid', \tsid'') \in \Ax(\aexec') \implies (\tsid', \tsid'') \in \Ax(\aexec)$. Because 
+			Because $\aexec \models \Ax$, we have that $\tsid' \xrightarrow{\VIS_{\aexec}} \tsid''$. Finally, 
+			because $\aexec$ and $\aexec'$ agree on $\T_{\aexec}$, we obtain that $\tsid' \xrightarrow{\VIS_{\aexec'}} \tsid''$. 
+			\item $\tsid' \in \T_{\aexec}$, $\tsid'' = \tsid$. The premise of Rule \ruleATX explicitly requires that 
+			because $(\tsid', \tsid) \in \Ax(\aexec')$, then $\tsid' \in \T$, and by definition $\tsid' \xrightarrow{\VIS_{\aexec'}} \tsid$.
+			\item $\tsid' = \tsid, \tsid'' \in \T_{\aexec}$. This case cannot happen: because $(\tsid, \tsid') \in \Ax(\aexec')$, 
+			then by Proposition \ref{prop:ax2ar} it follows that $\tsid \xrightarrow{\AR_{\aexec'}} \tsid'$. By definition of 
+			$\appendTx_{\aexec}$, it follows that $\tsid' \xrightarrow{\AR_{\aexec'}} \tsid$; this contradicts the 
+			fact that $\aexec'$ is a well-defined abstract execution (Proposition \ref{prop:txappend.wellformed},
+			\item $\tsid' = \tsid'' = \tsid$; this case is also not possible, because it would violate the fact 
+			that $\aexec'$ is a well-defined abstract execution.
+		\end{itemize}
+	\end{itemize}
+\end{proof}
+
+\begin{lemma}[Subject Expansion]
+\label{lem:subj.exp}
+\ac{Thanks Wikipedia for telling me what's the opposite of subject reduction.}
+Suppose that $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM_{\anarchicsmall}} \langle \aexec', \thdstackFun', \prog' \rangle$. 
+If $\aexec' \in \aeset(\CM)$, then $\aexec \in \aexec(\CM)$.
+\end{lemma}
+
+%\begin{lemma}
+%\label{lem:transition.cm}
+%Suppose that $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM_{\anarchicsmall}}\langle \aexec', \thdstackFun', 
+%\prog' \rangle$, $\aexec' \in \aeset(\CM)$. Then $\aexec \in \aeset(\CM)$ if and only if $\aexec' \in \aeset(\CM)$.
+%\ac{Wrong Statement. Split into two lemmas: subject reduction - $\absrightarrow_{\CM}$ preserves abstract executions in 
+%$\CM$, and subject regression $\absrightarrow_{\CM_{\anarchic}}$ leads to executions in $\CM$ only if it started from executions 
+%in $\CM$.}
+%\end{lemma}
+
+\begin{proof}
+Suppose that $\aexec' \in \aeset(\CM)$. We need to prove that $\aexec \in \aeset(\CM)$. 
+	This amounts to proving that $\aexec' \models \RP$, and $\aexec' \models \calA$. 
+	\begin{itemize}
+		\item $\aexec \models \RP$. That is, 
+		\begin{equation}
+		\label{eq:aexec1.rp}
+		\forall \tsid' \in \aexec. \exists \h_{\tsid'} \in \RP(\aexec, \VIS^{-1}_{\aexec}(\tsid')). \forall \key{k},n,\; (\RD\;\key{k}:n) \in_{\aexec} \tsid' \implies \h(\key{k}) = n.
+		\end{equation}
+		Because $\aexec' \models \RP$ by hypothesis, we have that 
+		\begin{equation}
+		\label{eq:exec2.rp}
+		\forall \tsid'' \in \aexec'. \exists \h_{\tsid} \in \RP(\aexec, \VIS^{-1}_{\aexec}(\tsid'')).\forall \key{k},n\; (\RD\;\key{k}: n) \in_{\aexec'} \tsid'' \implies \h(\key{k}) = n.
+		\end{equation}
+		Now note that:
+		\begin{enumerate}
+			\item\label{item:rp1} the definition of $\appendTx$ ensures that $\T_{\aexec} \subseteq \T_{\aexec'}$
+			\item\label{item:rp2} By Proposition \ref{prop:appendTx.RPpreserved}, $\aexec'$ and $\aexec$ agree on all subsets of $\T_{\aexec}$. 
+			\item\label{item:rp3} In particular, a consequence of \eqref{item:rp2} is that $\TtoOp{T}_{\aexec}(\tsid') = \TtoOp{T}_{\aexec'}(\tsid')$. 
+			\item\label{item:rp4} Another consequence of \eqref{item:rp2} and the definition of resolution policy, is that 
+			$\RP(\aexec, \T) = \RP(\aexec', \T)$ for any $\T \subseteq \T_{\aexec}$, 
+			\item\label{item:rp5} Because $\tsid' \in \T_{\aexec}$ and $\aexec', \aexec$ agree on $\T_{\aexec}$, we have that 
+		$\VIS^{-1}_{\aexec}(\tsid') = \VIS^{-1}_{\aexec'}(\tsid')$; together with \eqref{item:rp4}, and the fact that clearly 
+		$\VIS^{-1}_{\aexec}(\tsid) \subseteq \T_{\aexec}$, is that $\RP(\aexec, \VIS_{\aexec}^{-1}(\tsid')) = \RP(\aexec', \VIS_{\aexec'}^{-1}(\tsid')$.
+		\end{enumerate}
+		Combining Equation \eqref{eq:exec2.rp} with items \eqref{item:rp1}, \eqref{item:rp3} and \eqref{item:rp5}, 
+		we obtain exactly Equation \eqref{eq:aexec1.rp}.
+		\item $\aexec \models \calA$. Fix an axiom $\Ax \in calA$. We need to prove that, whenever $(\tsid', \tsid'') \in Ax(\aexec)$ for 
+		some $\tsid, \tsid' \in \T_{\aexec}$, then $\tsid' \xrightarrow{\VIS_{\aexec}} \tsid''$. Let then $(\tsid', \tsid'') \in \Ax(\aexec)$. 
+		Because $\aexec$ and $\aexec'$ agree on $\T_{\aexec}$, and $\tsid', \tsid'' \in \T_{\aexec}$, 
+		then $(\tsid', \tsid'') \in \Ax(\aexec')$, and therefore $\tsid' \xrightarrow{\VIS_{\aexec'}} \tsid''$ because of the assumption 
+		that $\aexec' \models \Ax$. It remains to note that $\aexec, \aexec'$ agree on $\T_{\aexec}$ to infer 
+		that $\tsid' \xrightarrow{\VIS_{\aexec}} \tsid''$.
+\end{itemize}
+\end{proof}
+
+\begin{lemma}[Predicate Conversion (?)]
+\label{lem:pred.conv}
+If $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM_{\anarchicsmall}} \langle \aexec', \thdstackFun, \prog' \rangle$ 
+and $\aexec' \in \aeset(\CM)$, then $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} \langle \aexec', \thdstackFun', \prog' \rangle$. 
+\end{lemma}
+
+\begin{proof}
+We only consider the case where the transition $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM_{\anarchicsmall}} 
+\langle \aexec', \thdstackFun', \prog' \rangle$ is inferred using Rule \ruleATX.
+In this case, the premiss of the rule ensures that there exist $\h, \tsid \notin \T_{\aexec}, \tid, \T \subseteq \T_{\aexec}, \mathcal{O}$ such that:
+\begin{enumerate}
+\item \label{item:pconv.1} $\aexec' = \appendTx_{\tsid}(\aexec, \tid, \T, \mathcal{O})$, 
+\item \label{item:pconv.2} $\T = \VIS_{\aexec'}^{-1}(\tsid)$,
+\item \label{item:pconv.4} $\TtoOp{T}_{\aexec'}(\tsid) = \mathcal{O}$,
+\item \label{item:pconv.3} $\prog = \tid: \ptrans{\trans}$ for some $\trans$, and $\langle \h, \thdstackFun(\tid), \emptyset, \trans \rangle 
+\rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle$, and $\thdstackFun' = \thdstackFun[\tid \mapsto \thdstack']$, 
+\end{enumerate}
+We prove that, under the hypothesis that $\aexec' \in \aeset(\CM)$, all the premiss required to infer 
+the transition $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} \langle \aexec, thdstackFun', \prog' \rangle$ 
+are also satisfied. To this end, let $\CM = (\RP, \aexec)$. Recall that $\prog = \ptrans{\trans}$ for some $\trans$.
+\begin{itemize}
+\item there exists a snapshot $\h' \in \RP(\aexec, \T)$ such that $\langle \h', \thdstackFun(\tid), \emptyset, \trans 
+\rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle$. 
+Because $\T = \VIS^{-1}_{\aexec'}(\tsid)$, and $\aexec' \models \RP$,  we know that there exists a 
+snapshot $\h' \in \RP(\aexec, \T)$ such that whenever $(\RD\;\key{k}: n) \in \mathcal{O}$, then 
+$\h(\key{k}) = n$.
+
+By Item \eqref{item:pconv.3}, 
+we also have that $\langle \h, \thdstackFun(\tid), \emptyset, \trans \rangle 
+\rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle$, so that it suffices 
+to show that $\h \in \RP(\aexec, \T)$;  Items \eqref{item:pconv.4} and \eqref{item:pconv.3} imply that whenever $(\RD\; \key{k}: n) \in_{\aexec'} \tsid'$, 
+then  $\h(\key{k}) = n$. In particular, we have that whenever $(\RD\;\key{k}: n) \in_{\aexec'} \tsid'$, then
+$h'(\key{k}) = h(\key{k}) = n$. We can perform a simple induction on the length of the derivation 
+\[
+\langle \h, \thdstackFun(\tid), \emptyset, \trans 
+\rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle
+\]
+using the assumption that $\h(\key{k}) = h'(\key{k})$ for any $(\RD\;\key{k}: n) \in \mathcal{O}$, to 
+prove that
+\[
+\langle \h', \thdstackFun(\tid), \emptyset, \trans 
+\rightarrow^{\ast} \langle \_, \thdstack', \mathcal{O}, \nil \rangle.
+\]
+
+\item let $\Ax \in \calA$. Let also $\tsid'$ be such that $(\tsid', \tsid) \in \Ax(\aexec')$. Because 
+we are assuming that $\aexec' \models \calA$, then it must be $\tsid' \xrightarrow{\VIS_{\aexec'}} \tsid$. 
+By Item \eqref{item:pconv.2}, this implies that $\tsid' \in \T$.
+\end{itemize}
+\end{proof}
+
+\begin{theorem}
+For any program $\prog$ and consistency model specification 
+$\CM$: 
+\begin{description}
+\item[Correctness: ] $\interpr{\prog}_{\CM} \subseteq \aeset(\CM)$, 
+\item[Faithfulness: ] $\interpr{\prog}_{\CM_{\anarchicsmall}} \cap \aeset(\CM) \subseteq \interpr{\prog}_{\CM}$. 
+\end{description}
+\end{theorem}
+
+\begin{proof}
+\begin{description}
+Let $\prog$ be a program, and $\CM$ be a consistency model specification.
+\item[Correctness:] Let $\aexec \in \interpr{\prog}_{\CM}$. By definition, we have that 
+\[ 
+\langle \aexec_0, \thdstackFun_{0}, \prog \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} \langle \aexec_{n}, \thdstackFun_{n}, 
+\prog_{n} \rangle 
+\]
+for some $n \geq 0$, where $\T_{\aexec_0} = \emptyset$, $\thdstackFun_{0}$ maps every client of $\prog$ into the initial stack, 
+$\aexec_n = \aexec$
+and $\prog_{n} = \prod_{\tid \in \Clients(\prog)} \tid: \nil$. It is immediate to observe that 
+$\aexec_0 \in \aeset(\CM)$. Now a simple induction on $n$, using Lemma \ref{lem:subj.red} 
+in the inductive step, shows that $\aexec_n \in \aeset(\CM)$.
+\item[Faithfulness:] let $\aexec \in \interpr{\prog}_{\CM_{\anarchicsmall}} \cap \aeset(\CM)$. 
+That is, there exists a sequence of transitions 
+\[
+\langle \aexec_0, \thdstackFun_{0}, \prog \rangle \absrightarrow_{\CM_{\anarchicsmall}} \cdots \absrightarrow_{\CM_{\anarchicsmall}} \langle \aexec_{n}, \prog_n, 
+\]
+where $\prod_{\tid \in \Clients(\prog)} \tid: \nil \rangle$.
+Using lemmas \ref{lem:subj.exp} and \ref{lem:pred.conv}, we can infer from the above a sequence of transitions
+\[
+\langle \aexec_0, \thdstackFun_{0}, \prog \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} \langle \aexec_{n}, \thdstackFun_{n}, 
+\prog_{n} \rangle,
+\]
+from which it follows that $\aexec \in \interpr{\prog}_{\CM}$.
+\end{description}
+\end{proof}
 
 \subsection{Encoding of Abstract Executions into configurations}
 \ac{IMPORTANT: This definition assumes that the definition of configurations in the MKVS framework has changed as to include, besides 
@@ -324,7 +624,7 @@ We define the MKVS $(\hh_{\hat{\aexec}}, \progOrd_{\hat{\aexec}})$ as follows:
 \item For each transaction $\tsid \in \T_{\hat{\aexec}}$ and key $\key{k}$, 
 we define the set $\Versions_{\hat{\aexec}}(\key{k}) \subseteq \Versions$ to be the smallest set such that 
 \begin{enumerate}
-\item for any $\tsid \in \T_{\hat{\aexec}}$ such that $\WR\;\key{k}: n \in_{\aexec} \TtoOp(\tsid)$,
+\item for any $\tsid \in \T_{\hat{\aexec}}$ such that $\WR\;\key{k}: n \in_{\aexec} \TtoOp{T}(\tsid)$,
 then
 $(n, \tsid, \mathcal{R}(\tsid, \key{k})) \in \Versions_{\hat{\aexec}}(\key{k})$, 
 where $\mathcal{R}(\tsid, \key{k}) = \{\tsid' \mid \tsid \xrightarrow{\RF(\key{k})} \tsid'\}$ 
