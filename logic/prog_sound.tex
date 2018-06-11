@@ -189,10 +189,42 @@ It can be proven for the similar reason as the proof for stable pre-condition.
 \caseI{\rl{TRFrame}}
 
 Given \( \tripleG{\gpre}{\cmd}{\gpost} \) and \( \stable{\gframe, \como}\), if \( \gpre \sep \gframe \) holds, we need to prove \( \tripleG{\gpre \sep \gframe }{\cmd}{\gpost \sep \gframe } \implies \tripleSemG{\gpre \sep \gframe }{\cmd}{\gpost \sep \gframe }\).
-By the \ih that  \( \tripleG{\gpre}{\cmd}{\gpost} \implies \tripleSemG{\gpre}{\cmd}{\gpost} \), we know that for any trace defined by the \( \predn{step} \) predicate with an initial world \( \w \) satisfying the precondition \( \gpre \), the finial world \( \w' \) satisfies the postcondition \( \gpost \).
-We need to prove the frame \( \gframe \) does not affect the trace.
+By the \ih that  \( \tripleG{\gpre}{\cmd}{\gpost} \implies \tripleSemG{\gpre}{\cmd}{\gpost} \), we know that for any trace defined by the \( \predn{step} \) predicate with an initial world \( \w \) satisfying the precondition \( \gpre \), the finial world \( \w' \) satisfies the postcondition \( \gpost \). 
+Now we need to prove the frame \( \gframe \) does not invalidate the triple.
+It means to prove for any trace \( \trc \) corresponding to the \( \tripleSemG{\gpre}{\cmd}{\gpost} \), there exists a trace \( \trc_f\) corresponding to \( \tripleSemG{\gpre \sep \gframe }{\cmd}{\gpost \sep \gframe } \) when \( \stable{\gframe}\):
+\[
+\begin{array}[t]{@{}l}
+    \fora{ \w,\w', \stk, \stk', \lenv, \nat, \et }  
+    \land \pred{step}{\nat, \w, \w', \stk, \stk', \cmd, \como} 
+    \land \stable{\gframe, \et} \\
+    \quad \fora{\w_{f}} \exsts{\w_{f}'}
+    \pred{step}{\nat, \w \composeW \w_f, \w'\composeW \w_{f}', \stk, \stk', \cmd, \como} 
+    \land \w_f \in \evalW[\lenv, \stk]{\gframe} 
+    \land \w_{f}' \in \evalW[\lenv, \stk']{\gframe}
+\end{array}
+\]
+We prove it by induction on the number \( \nat \) and the construct \( \cmd \).
+If \( \nat = 0 \),  we know \( \w = \w'\), \( \stk = \stk'\) and \( \cmd = \pskip \).
+By the composition of precondition and frame \( \gpre \sep \gframe \), we can pick any world \( \w_f  \in \evalW{\gframe}\) such that \( (\w \composeW \w_f)\isdef \).
+Assume it holds for any structure and under \( \nat = i \) steps, let consider any structure \( \cmd \) under \( i + 1 \) steps.
+Assume some worlds \( \w \), stacks \( \stk \) and logical environments \( \lenv \), and worlds from the frame \( \w_f \in \evalW[\lenv, \stk]{\gframe}\) such that \( \w \composeW \w_f\).
+Given the definition of \( \predn{step}\) predicate, the next step may be \( (\w, \w') \in \Guar \) or \( (\w. \w') \in \Rely \).
+If it is a guarantee step \( (\w, \w') \in \Guar \), let \( \cmd' \) be the new command, and \( \stk' \) be the new stack.
+Because of the side condition \( \func{fv}{\gframe} \cap \func{modify}{\cmd} = \emptyset \), we know \( \evalW{\gframe} = \evalW[\stk',\lenv]{\gframe}\).
+Then because of the \cref{lem:locality-update}, we know there exists a rely step for the frame \( (\w_f, \w_{f}') \in \Rely \land \w_{f}' \in \stable{\gframe, \et} \) such that the key-value stores are the same \( \eraseW{\w_{f}'}\projection{1} = \eraseW{\w}\projection{1}\) and the local capabilities are disjointed \( (\w'\projection{1} \composeC \w'_{f}\projection{1})\isdef\).
+By the \cref{lem:mono-view}, we know that the view from \( \w'\) is greater than the view from \( \w \).
+Since the rely does not change the view, we know \( \eraseW{\w_f'}\projection{2} \leq \eraseW{\w'} \).
+By the stable, which allows to the key-value stores against the rely and arbitrarily update the view to the right, there exists \( \w_{f}'' \) such that \( (\w' \composeW \w_{f}'')\isdef\).
 
-Initially, 
+
+%Assume a world that satisfying the precondition \( \w \in \evalW{\gpre} \).
+%Because the assertion \( \gpre \sep \gframe \) holds, by the interpretation function (\cref{def:assertion}), assume a world \( \w_{f}\) that satisfies the frame and is compatible with the precondition, \ie \( (\w \composeW \w_f)\isdef \).
+%It means the machine states are the same \( \eraseW{\w} = \eraseW{\w_f}\) and the local capabilities are disjointed, \( \w\projection{1} \composeC \w_{f}\projection{1} \).
+%This mean the for every step from the first trace \( \w_i \) there exists a world \( \w_i \compose \w_f\) where \( \w_f \in \evalW{}\)
+%We prove that by induction on the length of the first trace.
+%Assume after \( i \) steps, the first trace ends up with a world \( \w' \composeW \w_{f}'\), and the second trace ends up with \( \w' \).
+%Let consider the next step for the first trace.
+%If the next step executes the commands, it means the transformation of the world is allowed by guarantee.
 \end{proof}
 
 
@@ -238,8 +270,25 @@ Because the guarantee require the orthogonal of capabilities remains the same so
 \end{proof}
 
 \begin{lemma}[monotonicity of view]
-Given a state for a client \( (\mkvs, )\)
+\label{lem:mono-view}
+Given a state for a client \( (\mkvs, \stk, \vi )\), the view monotonically increases with respect to the operational semantic for a client.
+\[
+    \begin{array}{@{}l}
+        \fora{\mkvs, \mkvs', \stk, \stk', \vi, \vi', \cmd, \cmd'} (\mkvs, \stk, \vi), \cmd \toT (\mkvs', \stk', \vi'), \cmd \implies \vi' \geq \vi
+    \end{array}
+\]
 \end{lemma}
+\begin{proof}
+    Induction on the derivations.
+    \caseB{\rl{PCommit}}
+    By the definition of \( \Vupdate \), we know the updated view is greater than the view before, \ie \( \fora{\mkvs, \vi, \vi', \opset} \vi' = \updV{\mkvs, \vi, \opset} \implies \vi' \geq \vi\).
+    By the semantics, the finial view \( \vi' \) after executing a transaction is \( \vi' \geq \updV{\mkvs', \vi'', \opset} \) where \( \vi'' \geq \vi\).
+    Thus, we prove \( \vi' \geq \vi \).
+    \caseB{\rl{PAssign}, \rl{Passume}, \rl{PChoice}, \rl{Iter}, \rl{PSeq}}
+    For these cases, we have \( \vi' = \vi\).
+    \caseI{\rl{PSeq}}
+    It can be directly derived from \ih
+\end{proof}
 
 
 
@@ -331,6 +380,5 @@ There are two possibilities for the first thread: (a) it commits a transaction; 
 If the first thread commits a transaction, which means the last step of the new trace \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) it is allowed by the guarantee \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Guar \).
 By the \cref{lem:locality-update}, there exists \( \w_{2}^{j+1} \) satisfying the conditions, therefore we can construct the new trace for the second thread as \( \tau_{2}' = \tau_{2} \cup \Set{(\w_{2}^{j},\w_{2}^{j+1})} \).
 If the first thread take a rely step, \ie \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) such that \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Rely \), there are two possibilities, this transfer is triggered by a capability is either included in the second thread or not.
-
 
 \end{proof}
