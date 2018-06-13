@@ -227,7 +227,7 @@ Therefore, for any world transformation via guarantee \( (\w, \w') \in \Guar \),
 By the definition of guarantee we have \( (\w composeW \w_f, \w' composeW \w''_f) \in \Guar \).
 Finally, by applying \ih when \( \nat = i \), we have the prove for \( \nat = i + 1 \).
 
-If it is a rely step, this mean the command remains the untouched.
+If it is a rely step, this mean the command remains untouched.
 Assuming \( (\w, \w') \in \Rely \) and \( (\w \composeW \w_f, \w'') \in \Rely \) for some world \( \w'' \), we want to prove \( \w''  = \w' \composeW \w_f'' \) and \( \w_f'' \in \evalW[\lenv, \stk]{\gframe} \).
 By \( (\w \composeW \w_f, \w'') \in \Rely \), we know the world transformation is triggered by some capabilities, says \( \ca\), that compatible with the local capabilities from \( \w \composeW \w_f \), \ie \( (\ca \composeC (\w\projection{1} \composeC \w_f\projection{1}) )\isdef \).
 It means the capabilities \( \ca \) are disjointed with the local capabilities \( \w\projection{1} \) and local capabilities \( \w_f\projection{1}\) respectively.
@@ -310,42 +310,45 @@ Given a state for a client \( (\mkvs, \stk, \vi )\), the view monotonically incr
 \end{proof}
 
 
-
-
-
-\sx{Need some help here to form the judgement}
-
 The program soundness is for the parallel rule.
 This is non-trivial as threads have the up-to-date history heap but not the views.
-\begin{definition}[Judgement]
+\begin{definition}
 \[
+\begin{rclarray}
+    \func{world2conf}{\wenv} & \defeq & 
+    \begin{cases}
+        (\mkvs, \lambda \client \ldotp \eraseW{\wenv(\client)}\projection{2}) & \text{if } \fora{ \client }  \eraseW{\wenv(\client)}\projection{1} = \mkvs \\
+        \text{undefined} & \text{otherwise}
+    \end{cases}\\
+    \pred{stepp}{0,\wenv, \wenv', \thdenv, \thdenv',\prog, \como} & \defeq & 
+    \begin{array}[t]{@{}l}
+    \wenv = \wenv' \land \thdenv = \thdenv' \land {} \\
+    \dom(\wenv) = \dom(\thdenv) = \dom(\prog) \\
+    \quad {} \land \fora{\client \in \dom(\prog)} \prog(\client) = \pskip
+    \end{array} \\
+    \pred{stepp}{ \nat + 1, \wenv, \wenv', \thdenv, \thdenv',\prog, \como} & \defeq & 
+    \begin{array}[t]{@{}l}
+    \exsts{\wenv'', \thdenv'', \prog''} \\
+    \func{world2conf}{\wenv}, \thdenv, \prog \toG{\como} \func{world2conf}{\wenv''}, \thdenv'', \prog'' \\
+    \quad {} \land \pred{steps}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
+    \end{array} \\
+\end{rclarray}
 \]
 \end{definition}
 
-\sx{The judgement is not correct, should be a lift for the \(\predn{step} \).}
 \begin{theorem}[Program soundness]
 For any program \( \prog \), if a precondition \( \gpre \) satisfies a history heap \( \hh \) and a thread environment \( \thdenv \), and if there exist a final history heap and thread environment \( \hh', \thdenv' \)  such that \( (\hh, \thdenv, \prog) \toG{\como} (\hh', \thdenv', (\lambda \thid \ldotp \pskip) ) \) holds, then the post-condition \( \gpost \) derived from the logic rules should satisfies the final configuration.
 This is,
 \[
 \begin{array}{@{}l}
-\fora{\gpre, \gpost, \prog, \lenv, \como, \stk, \w, \hh, \hh', \vi, \thdenv, \thdenv'}\\
-    \quad \tripleG{\gpre}{\prog}{\gpost}
-    \land \w \in \evalW{\gpre}
-    \land (\hh, \vi) \in \clpsW{\w}
-    \land \dom(\thdenv) = \dom(\prog)  \\
-    \quad {} \land \fora{\thid} \thdenv(\thid) = (\stk, \vi)
-    \land (\hh, \thdenv, \prog) \toG{\como} (\hh', \thdenv', (\lambda \thid \ldotp \pskip) ) \\
-    \qquad \implies  
-    \exsts{\stk', \vi', \w'} \\
-    \qqquad \begin{B}
-        \fora{\addr, \thid',\var, \val} 
-        \thdenv(\thid')\projection{1}(\var) = \val 
-        \implies {} \\
-        \quad \stk'(\var) = \val  
-        \land \vi'(\addr) = \max\Setcon{n}{\exsts{\thid''} \thdenv(\thid'')\projection{2}(\addr) = n} 
-    \end{B} \\
-    \qqquad {} \land (\hh', \vi') \in \clpsW{\w'}
-    \land \w' \in \evalW[\lenv, \stk']{\gpost}
+\fora{\gpre, \gpost, \prog, \lenv, \como, \stk, \w, \wenv, \wenv', \thdenv, \thdenv', \nat}  \exsts{\stk'}
+    \tripleG{\gpre}{\prog}{\gpost} \\
+    \quad {} \land \w \in \evalW{\gpre}
+    \land \dom(\wenv) = \dom(\prog) = \dom(\thdenv)
+    \land \prod\limits_{\cl \in \dom(\wenv)} \wenv(\cl) = \w \\
+    \quad {} \land \fora{\thid} \thdenv(\thid) = (\stk)
+    \land \pred{steps}{\nat,\wenv, \wenv', \thdenv, \thdenv',\prog, \como}  \\
+    \qquad {} \implies \prod\limits_{\cl \in \dom(\wenv')} \wenv'(\cl) \in \evalW[\lenv, \stk']{\gpost}
 \end{array}
 \] 
 \end{theorem}
@@ -354,7 +357,7 @@ Induction on derivations.
 
 \caseB{\( \dom(\prog) \equiv \Set{\txid} \)}
  
-If there is only one thread, it is proved by the \cref{thm:per-thread-soundness}.
+If there is only one thread, it derives from the \cref{thm:per-thread-soundness}.
 
 \caseB{\( \dom(\prog) \equiv \Set{\txid, \txid'} \)}
 
@@ -401,3 +404,14 @@ By the \cref{lem:locality-update}, there exists \( \w_{2}^{j+1} \) satisfying th
 If the first thread take a rely step, \ie \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) such that \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Rely \), there are two possibilities, this transfer is triggered by a capability is either included in the second thread or not.
 
 \end{proof}
+
+
+\begin{lemma}
+\[
+\begin{array}{@{}l}
+    \for{\nat, \w, \w', \stk, \stk', \cmd, \et, \cl}
+    \pred{step}{\nat, \w, \w', \stk, \stk', \cmd, \et} \implies {}  \\
+    \pred{stepp}{\nat, \Set{\cl \mapsto \w},\Set{\cl \mapsto \w'}, \Set{\cl \mapsto \stk}, \Set{ \cl \mapsto \stk'}, \Set{\cl \mapsto \cmd}, \et}
+\end{array}
+\]
+\end{lemma}
