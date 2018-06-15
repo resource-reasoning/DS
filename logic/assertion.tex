@@ -341,18 +341,16 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 %The invariant is a labelled transition system that describes how a region evolves providing all the allowed operations.
 %Note that the labels are capabilities (with region identifiers) instead of client-specified capabilities, which is only for technical reason.
 
-%\begin{definition}[Invariant of a region]
-%\label{def:invariant-region}
-%\label{def:world2aexec}
-%\label{def:state2aexec}
-%Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps \times \powerset{\Views} } \) that returns initial history heaps and sets of views for regions, and \( \funcn{como} : \RegionID \to \ConsisModels \) that returns the consistency models associated to regions.
-%The invariant of a region, namely \( \func{inv}{\rid, \intf} \), is the labelled transition system where the initial state is \( \func{init}{\rid}\) and all the operations are included in the interference.
-%\[
-%\begin{rclarray}
-    %\func{inv}{\rid, \intf} & \defeq & (\hhset \times \cuset, \Setcon{\opset}{\exsts{\kap} \opset \in \intfO(\kap)}, \toLTS{}, \func{init}{\rid}, \func{como}{\rid}) \\
-%\end{rclarray}
-%\]
-%\end{definition}
+\begin{definition}[Invariant of a region]
+\label{def:invariant-region}
+Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps } \) that returns initial key-value stores for regions.
+Given the initial states for a region \( \func{init}{\rid}\), the invariant of a region, written \( \func{inv}{\rid, \intf} \), is a set of key-value stores that is closed under the interference \( \intf \).
+\[
+\begin{array}{@{}l}
+    \func{init}{\rid} \in \func{inv}{\rid, \intf} \land \fora{\mkvs, \mkvs'} \mkvs \in \func{inv}{\rid, \intf} \exsts{\w, \w'} ( \mkvs, \stub ) = \eraseW{\w} \land ( \mkvs', \stub ) = \eraseW{\w'} \land (\w, \w') \in \Guar \implies \mkvs' \in \func{inv}{\rid, \intf} 
+\end{array}
+\]
+\end{definition}
 
 %For brevity, \( (\hh,\cu) \in \func{inv}{\rid, \intf} \) denotes \( (\hh,\cu) \in \func{inv}{\rid,\intf}\projection{1} \), and similarly \( (\hh,\cu) \toLTS{\opset} (\hh',\cu') \in \func{inv}{\rid, \intf} \).
 
@@ -399,13 +397,14 @@ Finally, there is no garbage capability, a capability where the associated regio
         (\ca, \gs) 
     }{ 
         \ca \in \Caps \land \gs \in \SStates
-        \land \exsts{ \ca' } \\
-        \quad (\stub, \stub, \ca') \in \func{collapse}{\gs}
+        \land \exsts{ \ca' } 
+        (\stub, \stub, \ca') \in \func{collapse}{\gs}
         \land \dom(\ca \composeC \ca') \subseteq \dom(\gs)  \\
         \quad {} \land \fora{\rid}
-        \exsts{\hh, \vi} 
-        \gs(\rid) = (\hh, \vi, \stub) 
-        \land \dom(\hh) = \dom(\vi) \\
+        \exsts{\hh, \vi, \intf} 
+        \gs(\rid) = (\hh, \vi, \stub, \intf) 
+        \land \dom(\hh) = \dom(\vi) 
+        \land \mkvs \in \func{inv}{\rid, \intf} \\
         \quad {} \land \fora{ \addr \in \dom(\vi) }
         0 \leq \cu( \addr ) \le \left| \hh(\addr) \right|
     }
@@ -426,17 +425,17 @@ where the \(\funcn{collapse} \) function collapses a shared state by erasing the
 The \emph{world composition function}, $\composeW: \World \times \World \parfun \World$, is defined component-wise as: $\composeW \eqdef (\composeC, \composeS)$.
 The \emph{world unit set} is $\unitW \eqdef \Setcon{(\ca, \gs)}{(\ca, \gs) \in \World \land \ca \in \unitC}$.
 The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
-The function \( \eraseW{.} : \World \parfun \powerset{\HisHeaps \times \Views} \) collapses a world to a pair of a key-value store and a view:
+Because of the well-formedness condition, the function \( \eraseW{.} : \World \to \HisHeaps \times \Views \) collapses a world to \emph{a unique pair of a key-value store and a view}:
 \[
 \begin{rclarray}
-    \eraseW{(\ca, \gs)} & \defeq & \Setcon{(\hh, \vi)}{(\hh, \vi, \ca') \in \func{collapse}{\gs}} \\
+    \eraseW{\w} & \defeq & (\hh, \vi) \text{  where } (\hh, \vi, \stub) \in \func{collapse}{\w\projection{2}}\\
 \end{rclarray}
 \] 
 \end{definition}
 
 \begin{definition}[Assertions]
 \label{def:assertion}
-Given the set of logical expression \( \lexpr \in \exprset \subseteq \LExpr\), the set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
+Given the set of logical expression \( \lexpr \subseteq \LExpr\), the set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
 \[
 \begin{rclarray}
     \bar{\lpre}, \bar{\lpost} & ::= & \False \mid \True \mid \bar{\lpre} \land \bar{\lpost} \mid \bar{\lpre} \lor \bar{\lpost} \mid \exsts{\lvar} \bar{\lpre} \mid \bar{\lpre} \implies \bar{\lpost} \mid \assemp \mid \cass{\kap}{\lrid} \mid \lexpr \pt \exprset \mid \bar{\lpre} \sep \bar{\lpost} \\
@@ -482,7 +481,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     \func{intp}{\exsts{\lvar} \bar{\lpre},\lenv,\stk} & \defeq & \bigcup\limits_{\val \in \Val} \func{intp}{\bar{\lpre}, \lenv\rmto{\lvar}{\val}, \stk} \\
     \func{intp}{\bar{\lpre} \implies \bar{\lpost},\lenv,\stk} & \defeq & \Setcon{ (\hh, \vi, \ca) }{ (\hh, \vi, \ca) \in \func{intp}{\bar{\lpre},\lenv,\stk} \implies (\hh, \vi, \ca) \in \func{intp}{\bar{\lpost},\lenv,\stk} }\\
     \func{intp}{\cass{\kap}{\lrid},\lenv,\stk} & \defeq & \Set{ (\unitHH, \unitVI, \Set{\lrid \mapsto \evalC{\kap}}) }\\
-    \func{intp}{\lexpr_{1} \pt \exprset,\lenv,\stk} & \defeq & \Setcon{ (\hh, \vi, \ca) }{ \fora{ \vi' \geq \vi } \exsts{\lexpr_{2} \in \exprset} \ca \in \unitC \land {} \\ \quad \Set{ \evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}} } = \clpsHH{\hh, \vi'} } \\
+    \func{intp}{\lexpr_{1} \pt \lexpr_2,\lenv,\stk} & \defeq & \Setcon{ (\hh, \vi, \ca) }{ \Set{ \evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}} } = \clpsHH{\hh, \vi} } \\
     \func{intp}{\bar{\lpre} \sep \bar{\lpost},\lenv,\stk} & \defeq & \Setcon{ (\hh \composeHH \hh', \vi \composeVI \vi', \ca \composeC \ca') }{ (\hh, \vi, \ca) \in \func{intp}{\bar{\lpre},\lenv,\stk} \land (\hh', \vi', \ca') \in \func{intp}{\bar{\lpost},\lenv,\stk} } \\
 \end{rclarray}
 \]

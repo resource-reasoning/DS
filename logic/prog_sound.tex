@@ -1,13 +1,17 @@
 \subsection{Program Soundness}
 
-The soundness judgement says for any terminated trace, a trace reaching \( \pskip \), where every step in the trace is either a environment step that is allowed by the rely and consistency model, or the command get reduced one step, then if the precondition satisfies the initial world of the trace \( \w \in \evalW{\gpre} \) the postcondition should satisfy the final world \( \w' \in \evalW[\lenv,\stk']{\gpost} \).
+The soundness judgement says for any terminated trace with the initial state satisfying the precondition, if every step in the trace is either a rely step from the environment,
+or the command runs one step, the postcondition should satisfy the final world \( \w' \in \evalW[\lenv,\stk']{\gpost} \).
+The trace is defined by \( \pred{step}{\nat, \w, \w', \stk, \stk', \cmd, \et} \) predicate (\cref{def:soundness-judgement}).
+It asserts that given a world \( \w \) and a local stack \( \stk \), after \( \nat \) steps of relies and local executions, the \( \cmd \) reaches \( \pskip \) and the final world and stack are \( \w'\) and \( \stk' \).
+Note that \( (\mkvs, \mkvs') \in \et \) denotes the transformation on key-value store is allowed by the execution test \( \et \).
 
-\begin{definition}[Soundness Judgement]
+\begin{definition}[soundness judgement for commands]
 \label{def:semantic-triple}
 \label{def:triple-semantic}
 \label{def:semantic-steps}
 \label{def:soundness-judgement}
-The \( \predn{step} \) predicate is defined as the follows,
+The \( \predn{step} \) predicate is defined as the follows:
 \[
 \begin{rclarray}
     \pred{step}{0,\w, \w', \stk, \stk',\pskip, \como} & \defeq & 
@@ -16,26 +20,23 @@ The \( \predn{step} \) predicate is defined as the follows,
     \end{array} \\
     \pred{step}{\nat + 1,\w, \w', \stk, \stk', \cmd, \como} & \defeq &
     \begin{array}[t]{@{}l}
-    \exsts{ \hh, \hh', \w''}  \\
-        \quad (\w,\w'') \in \Rely  
-        \land (\hh, \stub ) \in \clpsW{\w}
-        \land (\hh', \stub ) \in \clpsW{\w'} \\
-        \qquad {} \land (\hh, \hh') \in \como 
+        \exsts{ \hh, \hh'', \w''}  
+        (\w,\w'') \in \Rely  
+        \land (\hh, \stub ) = \clpsW{\w}
+        \land (\hh'', \stub ) = \clpsW{\w''} \\
+        \qquad {} \land (\hh, \hh'') \in \como 
         \land \pred{step}{\nat, \w'', \w', \stk, \stk', \cmd, \como} \\
     \end{array} \\
     \pred{step}{\nat + 1,\w, \w', \stk, \stk', \cmd, \como} & \defeq &
     \begin{array}[t]{@{}l}
-        \fora{\hh, \hh'', \vi, \vi'', \stk'', \lb, \thid, \cmd'}
-        (\hh,\vi) \in \clpsW{\w} \\
-        \quad {} \land (\stk, \hh, \vi), \cmd \toT{\como} ( \stk'', \hh'', \vi'' ), \cmd' \\
-        \qquad {} \land \exsts{\w''}
-        (\w, \w'') \in \Guar
-        \land (\hh'',\vi'') \in \clpsW{\w''} 
+        \exsts{\cl, \w'', \stk'', \thid, \cmd'}
+        \land (\clpsW{\w}, \stk), \cmd \toT{\como} ( \clpsW{\w''}, \stk'' ), \cmd' \\
+        \quad {} \land (\w, \w'') \in \Guar
         \land \pred{step}{\nat, \w'', \w', \stk'', \stk', \cmd', \como} \\
     \end{array}
 \end{rclarray}
 \]
-Given above the soundness judgement is as the follows,                                                  
+The \emph{soundness judgement for commands} is as the follows:
 \[
 \begin{rclarray}
     \como \tripleSemG{\gpre}{\cmd}{\gpost} & \defeq &
@@ -49,13 +50,10 @@ Given above the soundness judgement is as the follows,
 \]
 \end{definition}                                         
 
-Here it is a over approximation of the view environment that assumes the view environment does not intertwine with the current view.
-For many consistency models this judgement is good enough, because the specifications do not mentioned the view environment.
-Yet the soundness judgement for SI, for example, is not very strong since it includes some cases that are allowed locally but might be disallowed when the view environment comes in.
-
-\begin{theorem}[soundness for a client]
+\begin{theorem}[soundness for commands]
+\label{thm:command-soundness}
 \label{thm:per-thread-soundness}
-The per-thread soundness is the follows,
+The \emph{soundness for commands} is:
 \[
     \fora{\gpre, \cmd, \gpost}
     \como \tripleG{\gpre}{\cmd}{\gpost} 
@@ -68,125 +66,170 @@ Induction on the derivations.
 
 \caseB{\rl{PRCommit}}
 
-We have \( \prog \equiv \ptrans{\trans} \).
-Because a transaction \( \ptrans{\trans} \) is reduced by one step in the semantics, it is sufficient to prove for any world \(\w\) that satisfies pre-condition, after arbitrary steps of rely, \ie \( (\w, \w') \in \Rely^{*} \) (\cref{equ:stable-pre-condition}) if the corresponding machine state \((\hh',\vi') \in \clpsW{\w'}\), can transfers to a new state \((\hh'',\vi'')\) (\cref{equ:commit-transaction}) then followed by arbitrary steps of rely \((\w'',\w''') \in \Rely^{*} \), the final world \( \w''' \) should satisfy the post-condition \(\gpost\) (\cref{equ:stable-post-condition}).
-\sx{typesetting is a bit strange}
+Assume pre- and post- condition such that \( \tripleG{\gpre}{\ptrans{\trans}}{\gpost}  \).
+By the \rl{PCommit} rule in \cref{fig:program_semantics}, It suffices to prove for any world \( \w \) that satisfies pre-condition, after arbitrary steps of rely, \ie \( (\w, \w') \in \Rely^{*} \) (\cref{equ:stable-pre-condition}) if the corresponding machine state \(\clpsW{\w'}\), can transfers to a new state \((\hh'',\vi'')\) (\cref{equ:commit-transaction}) then followed by arbitrary steps of rely \((\w'',\w''') \in \Rely^{*} \), the final world \( \w''' \) should satisfy the post-condition \(\gpost\) (\cref{equ:stable-post-condition}).
+\sx{How to deal the \( \cl \)}
 \begin{gather}
     \begin{array}{@{}l}
     \stable{\gpre, \como}  
     \implies 
     \fora{\w, \w',\lenv, \stk}  
-    \exsts{ \hh, \hh' } \\
-    \quad \w \in \evalW{\gpre} 
+    \exsts{ \hh, \hh' } 
+    \w \in \evalW{\gpre} 
     \land (\w, \w') \in \Rely \\
-    \qquad {} \land (\hh, \stub) \in \clpsW{\w}
-    \land (\hh', \stub) \in \clpsW{\w'}
+    \qquad {} \land (\hh, \stub) = \clpsW{\w}
+    \land (\hh', \stub) = \clpsW{\w'}
     \land (\hh, \hh') \in \como
     \implies \w' \in \evalW{\gpre} 
     \end{array} \tag{Stable Pre} \label{equ:stable-pre-condition} \\
+    \nonumber \\
 %
     \begin{array}{@{}l}
     \tripleL{\lpre}{\trans}{\lpost}
     \land \repartition{\gpre}{\gpost}{\lpre}{\lpost}
     \implies 
-    \fora{\w, \hh, \hh', \vi, \vi', \thid, \lenv, \stk, \stk'} \\
+    \fora{\w, \w', \cl, \lenv, \stk, \stk'} \\
     \quad \w \in \evalW{\gpre}
-    \land (\hh, \vi) \in \clpsW{\w} 
-    \land \thid, (\stk, \hh, \vi), \ptrans{\trans} 
-    \toT{\como} (\stk', \hh', \vi'), \pskip  \\
-    \qquad {} \land \exsts{\w'}
-    (\w, \w') \in \Guar
-    (\hh', \vi') \in \clpsW{\w'} 
-    \land \w' \in \evalW[\lenv, \stk']{\gpost} 
-    \end{array} \label{equ:commit-transaction} \tag{Commit} \\
+    \land \cl \vdash (\eraseW{\w}, \stk), \ptrans{\trans} 
+    \toT{\como} (\eraseW{\w'}, \stk'), \pskip 
+    \land (\w, \w') \in \Guar \\
+    \qquad \implies \w' \in \evalW[\lenv, \stk']{\gpost} 
+    \end{array} \tag{Commit} \label{equ:commit-transaction} \\
+    \nonumber \\
 %
     \begin{array}{@{}l}
     \stable{\gpost, \como}  
     \implies 
     \fora{\w, \w',\lenv, \stk}  
-    \exsts{ \hh, \hh' } \\
-    \quad \w \in \evalW{\gpre} 
+    \exsts{ \hh, \hh' } 
+    \w \in \evalW{\gpre} 
     \land (\w, \w') \in \Rely \\
-    \qquad {} \land (\hh, \stub) \in \clpsW{\w}
-    \land (\hh', \stub) \in \clpsW{\w'}
+    \qquad {} \land (\hh, \stub) = \clpsW{\w}
+    \land (\hh', \stub) = \clpsW{\w'}
     \land (\hh, \hh') \in \como
     \implies \w' \in \evalW{\gpost} 
     \end{array} \tag{Stable Post} \label{equ:stable-post-condition} 
 \end{gather}
 
-\sx{make sure the stack is correct}
 
-\noindent\textbf{Stable pre-condition.} 
-The \( \stable{\gpre, \como} \) predicate asserts any world \( \w \) that satisfies the pre-condition \( \gpre \), if the world can transfer to another world \( \w' \) through rely \( \Rely \), and if the transfer also satisfies the consistency model \( \como \), the new world \( \w' \) satisfies the pre-condition, which implies \cref{equ:stable-pre-condition}. 
-\\
-\textbf{Commit.}
-For any \( \w, \hh, \vi, \lenv, \stk \) such that \( \w \in \evalW{\gpre} \) and \( (\hh, \vi) \in \clpsW{\w} \), we know \( (\clpsHH{\hh, \vi}, \unitO) \in \evalLS{\lpre} \), this is,
+\mypar{Stable pre-condition.} 
+The \( \stable{\gpre, \como} \) (\cref{def:stable}) asserts any world \( \w \) that satisfies the pre-condition \( \gpre \), 
+if the world can transfer to another world \( \w' \) through rely \( \Rely \), and if the transformation passes the execution test \( \como \), 
+the new world \( \w' \) satisfies the pre-condition.
+Thus It implies \cref{equ:stable-pre-condition}. 
+
+\mypar{Commit.}
+For any \( \w \lenv, \stk \) such that \( \w \in \evalW{\gpre} \), by the first part of repartitioning, we know \( (\clpsHH{\hh, \vi}, \unitO) \in \evalLS{\lpre} \):
 \begin{equation}
 \label{equ:local-pre-condition}
-\fora{\w, \hh, \vi, \lenv, \stk} \w \in \evalW{P} \land (\hh, \vi) \in \clpsW{\w} \implies (\clpsHH{\hh, \vi}, \unitO) \in \evalLS{\lpre}
+\fora{\w, \lenv, \stk} \w \in \evalW{P} \implies (\clpsHH{\clpsW{\w}}, \unitO) \in \evalLS{\lpre}
 \end{equation}
-Because of the soundness of transaction (\cref{thm:transaction-soundness}), given an initial stack \( \stk \) and a logical environment \( \lenv \), if the initial configuration \( (\stk, \h, \unitO), \trans \) satisfies the pre-condition, \ie \( (\h, \unitO) \in \evalLS[\lenv,\stk]{\lpre} \), and if it can transfer to a final configuration \( (\stk', \h', \opset), \pskip \), the final state should satisfy the post-condition \( \lpost \).
-This is,
+Because of the soundness for transactions (\cref{thm:transaction-soundness}) that for any initial stacks \( \stk \), logical environments \( \lenv \) and snapshots \( \h \), if the initial configuration \( (\stk, \h, \unitO), \trans \) satisfies the pre-condition, \ie \( (\h, \unitO) \in \evalLS[\lenv,\stk]{\lpre} \), the final state \( (\stk', \h', \opset), \pskip \) should satisfy the post-condition \( \lpost \):
 \begin{equation}
 \label{equ:local-transaction-sound}
 \begin{array}{@{}l}
-    \tripleL{\lpre}{\trans}{\lpost} \implies \\
-    \quad \fora{\lenv, \stk, \stk', \hh, \vi, \h', \opset}  
-    (\getSN{\hh,\vi}, \unitO) \in \evalLS[\lenv,\stk]{\lpre}
-    \land \vdash (\stk, \h, \unitO), \trans \toL (\stk', \h', \opset), \pskip
+    \tripleL{\lpre}{\trans}{\lpost} \implies 
+    \fora{\lenv, \stk, \stk', \w, \h', \opset}
+    (\getSN{\eraseW{\w}}, \unitO) \in \evalLS[\lenv,\stk]{\lpre} \\
+    \quad {} \land (\stk, \getSN{\eraseW{\w}}, \unitO), \trans \toL (\stk', \h', \opset), \pskip
     \implies (\h', \opset) \in \evalLS[\lenv,\stk']{\lpost}
 \end{array}
 \end{equation}
-The repartition \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \) also asserts that any world \( \w \) satisfying the pre-condition \( \gpre \), if the corresponding machine of the world (ignoring the capabilities here), \ie \( (\hh, \vi) \), can transfer to a new state \( (\hh',\vi') \), by committing the operations \( \opset \), then if a world \( \w' \) can collapses to the new machine state \( (\hh',\vi') \) and the transition \( (\w, \w') \) is allowed by both the guarantee and the consistency model, the new world \( \w' \) should satisfy the post-condition.
+The repartition \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \) also asserts that any world \( \w \) satisfying the pre-condition \( \gpre \), if the corresponding machine of the world \( \eraseW{\w} \) can transfer to a new state \( \eraseW{\w'} \) by executing the fingerprint \( \opset \), and if the world transformation \( (\w, \w') \) is allowed by the guarantee, the new world \( \w' \) should satisfy the post-condition.
 \begin{equation}
 \label{equ:repartition}
 \begin{array}{@{}l}
-    \fora{\w,  \hh, \hh', \vi, \vi', \lenv, \stk, \stk', \txid, \opset} \exsts{\w'} \\
+    \fora{\w, \w', \cl, \lenv, \stk, \stk', \txid, \opset} \\
     \quad \w \in \evalW{\gpre}
-    \land (\hh, \vi, \stub) \in \eraseW{\w}
-    \land \txid \in \fresh{\hh} 
+    \land \txid \in \fresh{\eraseW{\w}\projection{1}, \cl} 
     \land (\stub,\opset) \in \evalLS[\lenv, \stk']{\lpost} \\
-    \quad {} \land \hh' = \updM{\hh, \vi, \txid, \opset}  
-    \land \vi' \geq \updV{\hh', \vi, \opset} \\
-    \quad {} \land (\hh',\vi', \stub) \in \eraseW{\w'}
-    \land (\w, \w') \in \Guar 
-    \land (\hh, \vi') \csat \opset : \vi' 
-    \land \w' \in \evalW[\lenv, \stk']{\gpost}
+    \quad {} \land \eraseW{\w'}\projection{1} = \updM{\eraseW{\w}, \txid, \opset}  
+    \land \eraseW{\w'}\projection{2} \geq \updV{\eraseW{\w}, \opset} \\
+    \quad {} \land (\w, \w') \in \Guar 
+    \land \eraseW{\w} \csat \opset : \eraseW{\w'}\projection{2} 
+    \implies \w' \in \evalW[\lenv, \stk']{\gpost}
 \end{array}
 \end{equation}
-First by \cref{equ:local-transaction-sound}, we substitute the \( (\stub, \opset) \in \evalLS[\lenv, \stk']{\lpost}\) in \cref{equ:repartition} by the transaction semantics,
+First by \cref{equ:local-transaction-sound}, we substitute the \( (\stub, \opset) \in \evalLS[\lenv, \stk']{\lpost}\) in \cref{equ:repartition} by the semantics for transactions,
 \begin{equation}
 \label{equ:combined-transaction-sound}
 \begin{array}{@{}l}
-    \fora{\w,  \hh, \hh', \vi, \vi', \lenv, \stk, \stk', \txid, \opset} \exsts{\w'} \\
+    \fora{\w, \w', \cl, \lenv, \stk, \stk', \h', \txid, \opset} \\
     \quad \w \in \evalW{\gpre}
-    \land (\hh, \vi, \stub) \in \eraseW{\w}
-    \land \txid \in \fresh{\hh}  \\
-    \quad {} \land {} \vdash (\stk, \clpsHH{\hh, \cu}, \unitO), \trans \toL (\stk', \h', \opset), \pskip  \\
-    \quad {} \land \hh' = \updM{\hh, \vi, \txid, \opset}  
-    \land \vi' \geq \updV{\hh', \vi, \opset} \\
-    \quad {} \land (\hh',\vi', \stub) \in \eraseW{\w'}
-    \land (\w, \w') \in \Guar 
-    \land (\hh, \vi') \csat \opset : \vi' 
-    \land \w' \in \evalW[\lenv, \stk']{\gpost}
+    \land \txid \in \fresh{\eraseW{\w}\projection{1}, \cl} 
+    \land {} \vdash (\stk, \clpsHH{\eraseW{\w}}, \unitO), \trans \toL (\stk', \h', \opset), \pskip  \\
+    \quad {} \land \eraseW{\w'}\projection{1} = \updM{\eraseW{\w}, \txid, \opset}  
+    \land \eraseW{\w'}\projection{1} \geq \updV{\eraseW{\w}, \opset} \\
+    \quad {} \land (\w, \w') \in \Guar 
+    \land \eraseW{\w} \csat \opset : \vi' 
+    \implies \w' \in \evalW[\lenv, \stk']{\gpost}
 \end{array}
 \end{equation}
 Hence we prove \cref{equ:commit-transaction} by folding all the side conditions for a atomic transaction,
 \[
 \begin{array}{@{}l}
-    \fora{\w,  \hh, \hh', \vi, \vi', \lenv, \stk, \stk', \txid, \opset} \exsts{\w'} \\
+    \fora{\w, \w', \stk, \stk', \lenv, \cl} \\
     \quad \w \in \evalW{\gpre}
-    \land (\hh, \vi, \stub) \in \eraseW{\w} 
-    \land {} (\stk, \hh, \vi), \ptrans{\trans} \toT{\como} (\stk', \hh', \vi'), \pskip  \\
-    \quad {} \land (\hh',\vi', \stub) \in \eraseW{\w'}
+    \land {} \cl \vdash (\eraseW{\w}, \stk), \ptrans{\trans} \toT{\como} (\eraseW{\w'}, \stk'), \pskip
     \land (\w, \w') \in \Guar 
-    \land \w' \in \evalW[\lenv, \stk']{\gpost}
+    \implies \w' \in \evalW[\lenv, \stk']{\gpost}
 \end{array}
 \]
-\textbf{Stable post-condition.} 
+
+\mypar{Stable post-condition.} 
 It can be proven for the similar reason as the proof for stable pre-condition.
 
-\caseI{\rl{TRFrame}}
+\caseB{\rl{PRAss}}
+We have \( \gpre \equiv \vx \dot= \lexpr\), \( \cmd = \passign{\vx}{\expr}\) and \( \gpost = \vx \dot= \expr\sub{\lexpr}{\vx}\) for some \( \vx, \lexpr \) and \( \expr \).
+The precondition is interpreted to unit worlds \( \unitW = \evalW{\gpre} \), which is closed under rely.
+If it takes one step to a new state where the stack is updated to \( \stk' = \stk\rmto{\vx}{\evalE{\expr}} \), it is easy to see that the logical value is evaluated to the same as before \( \evalLE[\lenv, \stk']{\lexpr} = \evalLE{\lexpr} \) and thus \( \evalLE[\lenv, \stk']{\expr\sub{\lexpr}{\vx}} = \evalLE[\lenv, \stk]{\expr} \).
+We also know local assignment does not change the state of the world:
+\[
+    \fora{\w, \w', \stk, \stk', \lenv} \w \in \evalLE{\gpre} \land \eraseW{\w}, \stk, \passign{\vx}{\expr} \toT{\stub} \eraseW{\w'}, \stk', \pskip \implies \w = \w' \land \w' \in \evalLE[\lenv, \stk']{\gpost}
+\]
+Last, for the similar reasons the rely does not affect the post-condition.
+
+\caseB{\rl{PRAssume}}
+We have \( \gpre \equiv \gpost \equiv \expr \dot\neq 0\) and \( \cmd = \passume{\expr}\) for some \( \vx \) and \( \expr \).
+The rely does not affect the pre- and post-condition because of they are interpreted to unit worlds \( \unitW\).
+The semantics for assume \( \passume{\expr} \) does not change the state of the world, so we have the proof.
+
+\caseI{\rl{PRChoice}}
+We have \( \cmd \equiv \cmd_1 \pchoice \cmd_2 \) for some \( \cmd_1 \) and \( \cmd_2 \) such that \( \tripleSemG{\gpre}{\cmd_1}{\gpost} \) and \( \tripleSemG{\gpre}{\cmd_2}{\gpost} \) for some \( \cmd_1 \) and \( \cmd_2 \).
+Because the semantics for non-deterministic choice \( \cmd_1 \pchoice \cmd_2 \) does not change the state of the world, It is easy to see:
+\[
+    \tripleSemG{\gpre}{\cmd_1}{\gpost} \land \tripleSemG{\gpre}{\cmd_2}{\gpost} \implies \tripleSemG{\gpre}{\cmd_1 \pchoice \cmd_2}{\gpost}
+\]
+
+\caseI{\rl{PRSeq}}
+We have \( \cmd \equiv \cmd_1 \pseq \cmd_2 \) for some \( \cmd_1 \) and \( \cmd_2 \) such that \( \tripleSemG{\gpre}{\cmd_1}{\gframe} \) and \( \tripleSemG{\gframe}{\cmd_2}{\gpost} \) for some \( \cmd_1, \cmd_2\) and \( \gframe \).
+By the semantics  we know for any world \( \w \) and stack \( \stk \):
+\[
+    (\eraseW{\w}, \stk), \pskip \pseq \cmd_2 \toT{\stub} (\eraseW{\w}, \stk), \cmd_2
+\]
+it is easy to see:
+\[
+    \tripleSemG{\gpre}{\cmd_1 }{\gframe} \land \tripleSemG{\gframe}{\cmd_2}{\gpost} \implies \tripleSemG{\gpre}{\cmd_1 \pseq \cmd_2}{\gpost}
+\]
+
+\caseI{\rl{PRIter}}
+By the definition of \( \predn{step}\), it suffice to prove:
+\[
+    \fora{\nat} \tripleG{\gpre}{\cmd^{\nat}}{\gpre} \implies \tripleSemG{\gpre}{\cmd^{\nat}}{\gpre} 
+\]
+We prove this by induction on the number \( \nat \).
+When \( \nat = 1 \), it holds by the \ih
+If it holds when \( \nat = i\), let consider \( \nat = i + 1 \).
+By the semantics  we know for any world \( \w \) and stack \( \stk \):
+\[
+    (\eraseW{\w}, \stk), \pskip \pseq \cmd \toT{\stub} (\eraseW{\w}, \stk), \cmd
+\]
+it is easy to see:
+\[
+    \fora{\nat} \tripleSemG{\gpre}{\cmd^{i}}{\gpre} \land \tripleSemG{\gpre}{\cmd}{\gpre} \implies \tripleSemG{\gpre}{\cmd^{i+1}}{\gpre} 
+\]
+
+\caseI{\rl{PRFrame}}
 
 %Now we need to prove the frame \( \gframe \) does not invalidate the triple.
 
@@ -315,6 +358,12 @@ This is non-trivial as threads have the up-to-date history heap but not the view
 \begin{definition}
 \[
 \begin{rclarray}
+    \pred{compatible}{\wenv} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \exsts{\wenv'}
+        (\sep_{\cl \in \dom{\wenv'}} \wenv'{\cl} )\isdef
+        \fora{\cl \in \dom{\wenv}} (\wenv(\cl), \wenv'(\cl)) \relyV 
+    \end{array} \\
     \func{world2conf}{\wenv} & \defeq & 
     \begin{cases}
         (\mkvs, \lambda \client \ldotp \eraseW{\wenv(\client)}\projection{2}) & \text{if } \fora{ \client }  \eraseW{\wenv(\client)}\projection{1} = \mkvs \\
@@ -328,9 +377,21 @@ This is non-trivial as threads have the up-to-date history heap but not the view
     \end{array} \\
     \pred{stepp}{ \nat + 1, \wenv, \wenv', \thdenv, \thdenv',\prog, \como} & \defeq & 
     \begin{array}[t]{@{}l}
-    \exsts{\wenv'', \thdenv'', \prog''} \\
-    \func{world2conf}{\wenv}, \thdenv, \prog \toG{\como} \func{world2conf}{\wenv''}, \thdenv'', \prog'' \\
-    \quad {} \land \pred{steps}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
+    \exsts{\wenv'', \thdenv'', \prog'', \cl, \w, \w'} \\
+    \fora{\cl \in \dom(wenv)}
+    \land (\wenv(\cl), \wenv(\cl)'') \in \Rely \\
+    \quad {} \land \pred{compatible}{\wenv''} \\
+    \quad {} \land \pred{stepp}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
+    \end{array} \\
+    \pred{stepp}{ \nat + 1, \wenv, \wenv', \thdenv, \thdenv',\prog, \como} & \defeq & 
+    \begin{array}[t]{@{}l}
+    \exsts{\wenv'', \thdenv'', \prog'', \cl, \w, \w'} \\
+    \quad \wenv(\cl) = \w 
+    \land \wenv'(\cl) = \w' 
+    \land (\w, \w') \in \Guar \\
+    \quad {} \land \func{world2conf}{\wenv}, \thdenv, \prog \toG{\como} \func{world2conf}{\wenv''}, \thdenv'', \prog'' \\
+    \quad {} \land \pred{compatible}{\wenv''} \\
+    \quad {} \land \pred{stepp}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
     \end{array} \\
 \end{rclarray}
 \]
@@ -355,58 +416,54 @@ This is,
 \begin{proof}
 Induction on derivations.
 
-\caseB{\( \dom(\prog) \equiv \Set{\txid} \)}
+\caseB{\( \dom(\prog) = \Set{\txid \mapsto \cmd} \)}
  
-If there is only one thread, it derives from the \cref{thm:per-thread-soundness}.
+If there is only one thread, we need to prove \( \tripleSemG{\gpre}{\cmd}{\gpost}\) which can be derived from the soundness for commands \cref{thm:per-thread-soundness} and the \cref{lem:prgram-step-to-command-step}.
 
-\caseB{\( \dom(\prog) \equiv \Set{\txid, \txid'} \)}
+\caseI{\( \prog \ppar \cmd \)}
 
-We have \( \tripleG{\gpre_{1} \sep \gpre_{2}}{\cmd_{1} \ppar \cmd_{2}}{ \gpost_{1} \sep \gpost_{2} } \) and \( \tripleG{\gpre_{i}}{\cmd_{i}}{ \gpost_{i} } \) for \( i \in \Set{1,2} \).
-Give the \ih and the soundness result per thread, we need to prove for any possible traces for the entire program \( \theta \), there exists traces \( \tau_{1} \) and \( \tau_{2} \) from the first thread and second thread with the same state for history heap in each step.
-For brevity, we use numbers \( 1\)  and \(2\) both as subscript for two traces and the thread identifiers.
-The following also proves the local capabilities from the two local traces always compatible.
+We have \( \tripleG{\gpre_{1} \sep \gpre_{2}}{\prog \ppar \cmd}{ \gpost_{1} \sep \gpost_{2} } \) and therefore \( \tripleG{\gpre_{1}}{\prog}{ \gpost_{1} } \) and \( \tripleG{\gpre_{2}}{\cmd}{ \gpost_{2} } \).
+Because \( \gpre_{1} \sep \gpre_{2} \), we have \( \wenv\) and \( \w \) such that \( \prod\limits_{\cl \in \dom(\wenv)} \wenv(\cl) \in \evalW{\gpre_{1}} \) and \( \w \in \evalW{\gpre_{2}}\) for some \( \lenv\) and \( \stk \), which implies \( \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}}\).
+Note that since stacks are local for clients, it is safe to assume variables from different stacks are disjointed.
+Give the \ih that \( \prog \) holds and the soundness result for commands \( \cmd \), we want to prove the follows:
 \[
 \begin{array}{@{}l}
-    \fora{\theta} \exsts{\tau_{1}, \tau_{2}} \\
-    \quad 
-    \begin{B}
-        \fora{\hh, \hh', \thdenv, \thdenv'} 
-        ((\hh,\thdenv), (\hh', \thdenv')) \in \theta \\
-        \quad {} \land \dom(\thdenv) = \dom(\thdenv') = \Set{1,2} 
-        \land \exsts{\w_{1}, \w_{2}, \w_{1}', \w_{2}, i \in \Set{1,2}} \\
-        \qquad (\w_{i}, \w_{i}') \in \tau_{i}
-        \land \hh = \clps{\w_{i}}\projection{1} 
-        \land \hh' = \clps{\w_{i}'}\projection{1} 
-        \land (\w_{1}\projection{1} \composeC \w_{2}\projection{1})\isdef
-        \land (\w_{1}'\projection{1} \composeC \w_{2}'\projection{1})\isdef  \\
-        \qquad {} \land \thdenv(i)\projection{2} = \clpsW{\w_{i}}\projection{2}
-        \land \thdenv'(i)\projection{2} = \clpsW{\w_{i}'}\projection{2}
-    \end{B}
+    \fora{\nat, \wenv, \wenv', \thdenv, \thdenv', \w, \w', \stk, \stk', \cl, \et}  \\
+    \quad \pred{stepp}{\nat, \wenv, \wenv', \thdenv, \thdenv', \prog, \et} 
+    \land \pred{step}{\nat, \w, \w', \stk, \stk', \cmd, \et} 
+    \land \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}} \\
+    \qquad \exsts{\wenv'', \thdenv'', \stk'' } \\
+    \qquad {} \land \pred{stepp}{\nat, \wenv \uplus \Set{\cl \mapsto \w}, \wenv'', \thdenv \uplus \Set{\cl \mapsto \stk}, \thdenv'', \prog \uplus \Set{\cl \mapsto \cmd}, \et}  \\
+    \qqquad {} \land \prod\limits_{\cl' \in \dom(\wenv'') } \wenv''(\cl')  \in \evalW[\lenv, \stk']{\gpost_{1} \sep \gpost_{2}}
 \end{array}
 \]
-We prove by constructing the traces \( tau_{1}\) and \( \tau_{2} \) inductively.
-Initially, because \( \gpre_{1} \sep \gpre_{2} \) is defined, we pick any states \( \w_{1}^{0} \)  and \( \w_{2}^{0} \) such that \( \w_{1}^{0} \in \evalW{\gpre_{1}}\), \( \w_{2}^{0} \in \evalW{\gpre_{2}}\) and \( (\w_{1}^{0} \composeW \w_{2}^{0})\isdef\).
-This means the initial history heaps and views match, \ie 
-\[ 
-    \fora{i \in \Set{1,2}} 
-    \hh^{0} = \clps{\w_{1}^{0} \composeW \w_{2}^{0}}\projection{1} = \clps{\w_{i}^{0}}\projection{1}
-    \land \thdenv^{0}(i)\projection{2} = \clps{\w_{i}^{0}}\projection{2}
+We prove by induction on the number \( \nat \).
+If \( \nat = 0\), it holds trivially by picking \( \wenv'' = \wenv \uplus \Set{\cl \mapsto \w} \).
+If it holds when \( \nat = i\), let considers \( \nat = i + 1\).
+One client is going to take a guarantee step.
+By unfolding the definition of \( \predn{stepp} \) if the \( \prog \) takes one step to a new \( \wenv_i\), \( \prog_i \) and \( \thdenv_i \),
+\[
+\exsts{\cl} (\wenv(\cl), \wenv_i(\cl)) \in \Guar \land  \pred{compatible}{\wenv_i} \land \pred{steppp}{i, \wenv_i, \wenv', \thdenv_i, \thdenv', \prog_i, \et}
 \]
-and the local capabilities are compatible,
-\[ 
-    (\w_{1}^{0}\projection{1} \composeC \w_{2}^{0}\projection{1})\isdef 
+because the of the compatibility \( \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}} \) and the \cref{lem:locality-update}, there exists a world \( \w''\) by unfolding \( \predn{step} \):
+\[
+    (\w, \w'') \in \Rely \land \pred{step}{i, \w'', \w', \stk, \stk', \cmd, \et}  \land \pred{compatible}{\wenv_i \uplus \Set{\cl \mapsto \w''}}
 \]
-Assume there exists two traces \( \tau_{1}, \tau_{2}\) after \( i \) steps, let consider the next step for the entire program.
-Now two traces \( \tau_{1}\) and \( \tau_{2} \) where the current finial states are \( \w_{1}^{i} \) and \( \w_{2}^{j} \) such that \( \clps{\w_{1}^{i}}\projection{1} = \clps{\w_{2}^{j}}\projection{1} \) and \( (\w_{1}^{i}\projection{1} \composeC \w_{2}^{j}\projection{1})\isdef \).
-There are two possibilities for the first thread: (a) it commits a transaction; or (b) it take a rely step which updates the history heap and shared capabilities.
-If the first thread commits a transaction, which means the last step of the new trace \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) it is allowed by the guarantee \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Guar \).
-By the \cref{lem:locality-update}, there exists \( \w_{2}^{j+1} \) satisfying the conditions, therefore we can construct the new trace for the second thread as \( \tau_{2}' = \tau_{2} \cup \Set{(\w_{2}^{j},\w_{2}^{j+1})} \).
-If the first thread take a rely step, \ie \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) such that \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Rely \), there are two possibilities, this transfer is triggered by a capability is either included in the second thread or not.
+Now we have the proof by applying \ih when \( \nat = i \).
+Similarly, Let consider that the \( \cmd \) takes one step transferring the world to \( \w'' \) as \( (\w, \w'') \in \Guar \).
+Because the of the compatibility \( \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}} \) and the \cref{lem:locality-update}, there exists a world \( \wenv''\) by unfolding \( \predn{stepp} \):
+\[
+    \fora{\cl \in \dom(\wenv)} \land (\wenv(\cl), \wenv(\cl)'') \in \Rely \land \pred{compatible}{\wenv''} \land \pred{stepp}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
+\]
+Now we have the proof by applying \ih when \( \nat = i \).
+Last, both \( \prog\) and \( \cmd \) take a rely step.
+Because the \( \pred{compatible}{\wenv''} \) and \ih, we have the proof when \( \nat =  i + 1\).
 
 \end{proof}
 
 
 \begin{lemma}
+\label{lem:prgram-step-to-command-step}
 \[
 \begin{array}{@{}l}
     \for{\nat, \w, \w', \stk, \stk', \cmd, \et, \cl} \\
@@ -420,6 +477,14 @@ Induction on the number \( \nat \).
 
 \caseB{\nat = 0}
 It is easy to see that \( \cmd = \pskip \), \( \w = \w'\) and \( \stk = \stk' \) by the definition of \(  \predn{stepp}\).
+
 \caseI{\nat = i + 1}
-By the definition \( \predn{stepp}\)
+
+The if it is a rely step, it trivially holds.
+Let consider a guarantee step.
+By the definition \( \predn{stepp}\), there exists a world \( \w'' \), a stack \( \stk'' \) and commands \( \cmd' \) such that \( (\w, \w'') \Guar\) and
+\( \pred{stepp}{ i, \Set{\cl \mapsto \w''},\Set{\cl \mapsto \w'}, \Set{\cl \mapsto \stk''}, \Set{ \cl \mapsto \stk'}, \Set{\cl \mapsto \cmd'}, \como}  \).
+First by \ih, we know  \( \pred{steps}{ i, \w'', \w', \stk'', \stk', \cmd', \como} \) holds.
+Since there is only one client, by the semantics for commands and programs (\cref{fig:program_semantics}), we know \( (\eraseW{\w}, \stk ), \cmd \toL{\et} (\eraseW{\w''}, \stk'), \cmd' \).
+By folding one guarantee step and the \ih, we know that \( \pred{steps}{ i + 1, \w, \w', \stk, \stk', \cmd', \como} \) holds.
 \end{proof}
