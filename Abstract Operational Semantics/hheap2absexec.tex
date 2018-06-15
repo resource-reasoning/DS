@@ -13,9 +13,18 @@
 \newcommand{\anarchicsmall}{\raisebox{-1.5pt}{{\small \text{\CircledA}}}}
 \newcommand{\Ax}{\ensuremath{\mathsf{Ax}}}
 \newcommand{\compatible}{\ensuremath{\mathop{\simeq}}}
+\newcommand{\versionList}{\ensuremath{\mathsf{VersionList}}}
 
 \newcommand{\ruleATX}{\ensuremath{\mathit(A-Tx)}}
+\newcommand{\kvTrace}{\ensuremath{\mathsf{KVtrace}}}
 %\newcommand{\Clients}{\ensuremath{\mathsf{Clients}}}
+
+\newcommand{\nextView}{\ensuremath{\mathsf{nextView}}}
+\newcommand{\intermediateView}{\ensuremath{\mathsf{intermediateView}}}
+
+\newcommand{\lastWrite}{\ensuremath{\mathsf{lastWrite}}}
+\newcommand{\indexOf}{\ensuremath{\mathsf{index}}}
+\newcommand{\getView}{\ensuremath{\mathsf{getView}}}
 
 In this Section we propose an alternative 
 semantics of programs. In this semantics, states 
@@ -592,7 +601,7 @@ from which it follows that $\aexec \in \interpr{\prog}_{\CM}$.
 
 \subsection{Encoding into Key-value store semantics}
 Let $\CM$ be an axiomatic specification, with $\CM = (\RP_{\LWW}, \calA)$. 
-The aim of this section is that the abstract execution semantics of $\CP$ can be 
+The aim of this section is that the abstract execution semantics of $\CM$ can be 
 simulated by the key-value store semantics, for an appropriate execution test $\ET$. 
 That is, given an execution of the form 
 \[
@@ -604,6 +613,8 @@ we want to find an equivalent execution
 \rangle.
 \]
 
+
+\paragraph{Compatibility of Abstract Executions and Key-value Stores.}
 Formally speaking, we need to define what it means for two executions, defined in the abstract operational semantics and key-value semantics, respectively, 
 to be equivalent. We start by defining a notion of \emph{compatibility} between abstract executions and key-value stores. 
 This definition follows the intuition that an abstract execution $\aexec$ is compatible with a key-value store $s$ if 
@@ -620,13 +631,13 @@ respect to $\hh$.
 \ac{The constraint that views are atomic is necessary for later results.}
 We say that $\aexec$ is compatible with $\hh$, written 
 $\aexec \compatible \hh$, if and only if there exists a  mapping 
-$f: \powerset(\T_{\aexec}) \rightarrow \Views_{\hh}$
+$f: \powerset{\T_{\aexec}} \rightarrow \Views_{\hh}$
 such that  
 \begin{itemize}
 \item for any subset $\T \subseteq \T_{\aexec}$, let$\RP_{\LWW}(\aexec, \T) = \{\h\}$; 
 then $\h = \snapshot(\hh, f(\T))$, 
 \item for any view $V$, there exists a subset $\T \subseteq \T_{\aexec}$ 
-such that $f(\T) = V$, and $\snapshot(\aexec, V) = \h$, where 
+such that $f(\T) = V$, and $\snapshot(\hh_{aexec}, V) = \h$, where 
 $\RP_{\LWW}(\aexec, \T) = \{h\}$.
 \end{itemize}
 \end{definition}
@@ -676,26 +687,49 @@ $l \in L$, we let $x_1 <_{l} x_2$ if $l = \_ \cdot x_1 \cdot \_ \cdot x_2 \cdot 
 \ac{The sentence above should appear much before.}
 
 \begin{definition}
+\label{def:absexec2hh}
 Let $\aexec$ be an abstract execution. 
 %Let $\tsid_0$ be a transaction identifier 
 %that is not included in $\dom(\TtoOp)$. 
 We define the key-value store $\hh_{\aexec}$ as follows: 
 \begin{itemize}
+\item let $\mathcal{R}(\tsid_{0}, \key{k}) = \{ \tsid' \mid (\RD; \key{k}: \_ ) \in_{\aexec} \tsid' \wedge 
+\RF(\key{k})^{-1}(\tsid') = \emptyset\}$; we define the version $\nu_{\aexec}(\tsid_{0}, \key{k}) = (0, \tsid_{0}, 
+\mathcal{R}(\tsid_{0}, \key{k}) \}$; 
+\item for each transaction $\tsid \in \T_{\aexec}$ such that $(\WR\;\key{k}:n) \in_{\aexec} \tsid$, 
+let $\mathcal{R}(\tsid, \key{k}) = \{ \tsid' \mid \tsid \xrightarrow{\RF_{\aexec}(\key{k})} \tsid' \}$. 
+Then we let $\nu_{\aexec}(\tsid, \key{k}) = (n, \tsid, \mathcal{R}(\tsid, \key{k})$; 
 \item For each transaction $\tsid \in \T_{\aexec}$ and key $\key{k}$, 
-we define the set $\Versions_{\aexec}(\key{k}) \subseteq \Versions$ to be the smallest set such that 
-\begin{enumerate}
-\item for any $\tsid \in \T_{\aexec}$ such that $(\WR\;\key{k}: n) \in_{\aexec} \tsid$,
-then
-$(n, \tsid, \mathcal{R}(\tsid, \key{k})) \in \Versions_{aexec}(\key{k})$, 
-where $\mathcal{R}(\tsid, \key{k}) = \{\tsid' \mid \tsid \xrightarrow{\RF_{\aexec}(\key{k})} \tsid'\}$ 
-\item $(0, \tsid_0, \mathcal{R}(\tsid_{0}, \key{k}) \in \Versions_{\aexec}(\key{k})$, 
-where $\mathcal{R}(\tsid_{0}, \key{k}) = \{\tsid' \mid \tsid_0 \xrightarrow{\RF_{\aexec}(\key{k})} \tsid'\}$.
-\end{enumerate}
-\item The key-value store $\hh_{\aexec}$ is defined to be the unique one such that 
-for any key $\key{k} \in \Addr$, $\nu \in \hh_{\hat{\aexec}}(\key{k})$ if and only if 
-$\nu \in \Versions_{\hat{\aexec}}(\key{k})$; furthermore, for any $\nu, \nu' \in \hh_{\hat{\aexec}}(\key{k})$, 
-we have that $\nu <_{\hh_{\aexec}(\key{k})} \nu'$ if and only if $\nu = (\_, \tsid, \_)$, 
-$\nu' = (\_, \tsid', \_)$, and $\tsid \xrightarrow{\VO_{\aexec}(\key{k})} \tsid'$.
+we define the set 
+$\Versions_{\aexec}(\key{k}) = \{ \nu_{\aexec}(\tsid, \key{k}) \mid \tsid = \tsid_{0} \vee (\WR\;\key{k}:\_) \in_{\aexec} \tsid \}$;
+%\begin{enumerate}
+%\item for any $\tsid \in \T_{\aexec}$ such that $(\WR\;\key{k}: n) \in_{\aexec} \tsid$,
+%then
+%$(n, \tsid, \mathcal{R}(\tsid, \key{k})) \in \Versions_{\aexec}(\key{k})$, 
+%where $\mathcal{R}(\tsid, \key{k}) = \{\tsid' \mid \tsid \xrightarrow{\RF_{\aexec}(\key{k})} \tsid'\}$ 
+%\item $(0, \tsid_0, \mathcal{R}(\tsid_{0}, \key{k}) \in \Versions_{\aexec}(\key{k})$, 
+%where $\mathcal{R}(\tsid_{0}, \key{k}) = \{\tsid' \mid \tsid_0 \xrightarrow{\RF_{\aexec}(\key{k})} \tsid'\}$.
+%\end{enumerate}
+\item for each key $\key{k}$ and set of transactions $\T$, define the list of versions 
+$\versionList'_{\aexec}(\key{k}, \T)$ inductively as follows: 
+\[
+\versionList'_{\aexec}(\key{k}, \T) = 
+\begin{cases}
+\varepsilon & \text{if } \T \cap \{ \tsid \mid (\WR\; \key{k}: \_) \in_{\aexec} \tsid \} = \emptyset\\
+\nu_{\aexec}(\tsid, \key{k}) \cdot \versionList_{\aexec}(\key{k}, \T \setminus \{ \tsid \}) & \text{if } 
+\tsid = \min_{\VO(\key{k})}(\T)
+\end{cases}
+\]
+then we let $\versionList_{\aexec}(\key{k}, \T) = \nu_{\aexec}(\tsid_0, \key{k}) \cdot 
+\versionList'_{\aexec}(|key{k}, \T)$ 
+\ac{this last bit made me feel more like doing programming rather than mathematics.} 
+\item The key-value store $\hh_{\aexec}$ is defined as 
+$\lambda \key{k}. \versionList_{\aexec}(\key{k}, \T_{\aexec})$.
+%to be the unique one such that 
+%for any key $\key{k} \in \Addr$, $\nu \in \hh_{\aexec}(\key{k})$ if and only if 
+%$\nu \in \Versions_{\hat{\aexec}}(\key{k})$; furthermore, for any $\nu, \nu' \in \hh_{\aexec}(\key{k})$, 
+%we have that $\nu <_{\hh_{\aexec}(\key{k})} \nu'$ if and only if $\nu = (\_, \tsid, \_)$, 
+%$\nu' = (\_, \tsid', \_)$, and $\tsid \xrightarrow{\VO_{\aexec}(\key{k})} \tsid'$.
 %\item $\progOrd_{\hat{\aexec}}$ is the function that maps each $\tid \in \dom(\I_{\aexec})$ into a list of transaction 
 %identifiers which is consistent with the program order of $\tid$ in $\hat{\aexec}$, and which 
 %contains $\tid_0$ as its initial element : $\tsid \in \progOrd_{\hat{\aexec}}(\tid)$ 
@@ -708,55 +742,343 @@ $\nu' = (\_, \tsid', \_)$, and $\tsid \xrightarrow{\VO_{\aexec}(\key{k})} \tsid'
 \end{definition}
 
 \begin{proposition}
+\label{prop:aexec2hh}
 Let $\aexec$ be an abstract execution such that $\aexec \models \RP_{\LWW}$. 
 %Then $(\hh_{\hat{\aexec}}, \pi_{\hat{\aexec}})$ is well-formed.
 Then $\aexec \compatible \hh_{\aexec}$. 
 \end{proposition}
 
-\begin{proof}
-For each subset $\T \subseteq \T_{\aexec}$ and key $\key{k}$, let 
-$\tsid_{\T}^{\key{k}} = \tsid_0$ if 
-$(\T \cap \{\tsid \mid (\WR\; \key{k}: \_) \in_{\aexec} \tsid\}) = \emptyset$, 
-$\tsid_{\T}^{\key{k}} = \max_{\AR_{\aexec}}(\T \cap \{\tsid \mid (\WR\; \key{k}: \_) \in_{\aexec} \tsid\})$ otherwise.
-Let also $\nu_{\T}^{\key{k}}$ be the 
- version in $\hh_{\aexec}(\key{k})$ such that $\WTx(\nu_{\T}^{\key{k}}) = \tsid_{\T}^{\key{k}}$. 
-Note that the version $\nu_{\T}^{\key{k}}$ exists and is uniquely determined because of the 
-definition of $\Versions_{\aexec}(\key{k})$.
-Define $f = \lambda \T. V_{\T}$, where $V_{\T} = (\lambda \key{k}. \nu_{\T}^{\key{k}}$. 
+The following definition will help in the proof of Proposition \ref{prop:aexec2hh}.
+\begin{definition}
+Let $\aexec$ be an abstract execution. Let $\T \subseteq \key{k}$, 
+Define 
+\begin{itemize}
+\item $\lastWrite(\T, \key{k}) = \tsid_0$ if 
+$(\T \cap \{\tsid \mid (\WR; \key{k}: \_) \in_{\aexec} \tsid \}) = \emptyset$, 
+otherwise $\lastWrite(\T, \key{k}) = \max_{\AR}(\T \cap \{\tsid \mid (\WR\;\key{k}: \_) \in_{\aexec} \tsid \})$.
+\item $\version(\T, \key{k}) = \nu_{\aexec}(\lastWrite(\T, \key{k}), \key{k})$, 
+\item let $i$ be the only index such that $\hh_{\aexec}(\key{k}, i) = \version(\T, \key{k})$\footnote{
+We know that at least one such index exists and is unique from the definition of $\Versions_{\aexec}(\key{k})$}.
+We define $\indexOf(\T, \key{k}) = i$.
+\item $\getView(\T) := \lambda \key{k}. \indexOf(\T, \key{k})$.
+\end{itemize}
+\end{definition}
+
+%For each subset $\T \subseteq \T_{\aexec}$ and key $\key{k}$, let 
+%$\tsid_{\T}^{\key{k}} = \tsid_0$ if 
+%$(\T \cap \{\tsid \mid (\WR\; \key{k}: \_) \in_{\aexec} \tsid\}) = \emptyset$, 
+%$\tsid_{\T}^{\key{k}} = \max_{\AR_{\aexec}}(\T \cap \{\tsid \mid (\WR\; \key{k}: \_) \in_{\aexec} \tsid\})$ otherwise.
+%Let also $\nu_{\T}^{\key{k}} = \nu_{\aexec}(\tsid_{\T}^{\key{k}}, \key{k})$, which we know to exist 
+%and be included in $\hh_{\aexec}(\key{k})$ from Definition \ref{def:absexec2hh}. 
+
+%Therefore, there exists a unique index $i_{\T}^{\key{k}} = 0,\cdots, \lvert \hh_{\aexec}(\key{k}) \rvert - 1$ 
+%such that $\hh_{\aexec}(\key{k}, i_{\T}^{\key{K}}) = \nu_{\T}^{\key{k}}$. 
+%be the unique index 
+% version in $\hh_{\aexec}(\key{k})$ such that $\WTx(\nu_{\T}^{\key{k}}) = \tsid_{\T}^{\key{k}}$. 
+%Note that the version $\nu_{\T}^{\key{k}}$ exists and is uniquely determined because of the 
+%definition of $\Versions_{\aexec}(\key{k})$.
+\begin{proof}[Proof of Proposition \ref{prop:aexec2hh}]
 We prove the following facts: 
 \begin{itemize}
-\item let $\h = \RP_{\LWW}(\aexec, \T)$. Then we have that, for each key $\key{k}$, 
-$\h(\key{k}) = n$, where either $n = 0$ and $\tsid_{\T}^{\key{k}} = \tsid_0$, or 
-$(\WR\;\key{k}: n) \in_{\aexec} \tsid_{\T}^{\key{k}}$. 
-If $\tsid_{\T}^{\key{k}} = \tsid_0$, then it must be the case that 
-$\nu_{\T}^{\key{k}} = (0, \tsid_0, \_)$, and therefore $\snapshot(\hh_{\aexec},V_{\T})(\key{k}) = 0$; 
-otherwise, $\nu_{\T}^{\key{k}} = (n, \tsid_{\T}^{\key{k}}, \_)$, and 
-$\snapshot(\hh_{\aexec}, V_{\T})(\key{k}) = n$.
+\item let $\{\h\} = \RP_{\LWW}(\aexec, \T)$. Then $\h = \snapshot(\hh_{\aexec}, \getView(\T))$. 
+By definition, for each key $\key{k}$, 
+$\h(\key{k}) = 0$, and $\lastWrite(\T, \key{k}) = \tsid_0$, or 
+$\h(\key{k}) = n$ for some $n$ such that $(\WR\;\key{k}: n) \in_{\aexec} \lastWrite(\T, \key{k})$. 
 
-\item let now $V$ be an atomic view over $\hh_{\aexec}$. For each key $\key{k}$, $\hh(\key{k}, V(\key{k}))$ 
-is included in $\Versions_{\aexec}(\key{k})$. Therefore, either $\hh_{\aexec}(\key{k}, V(\key{k})) = 
-(0, \tsid_0, \_)$, or there exists a transaction $\tsid_{V}^{\key{k}} \in \T_{\aexec}$ such that 
-$(\WR\; \key{k}: n) \in_{\aexec} \tsid_{V}^{\key{k}}$ and $\hh_{\aexec}(\key{k}, V(\key{k})) = 
-(n, \tsid_{V}^{\key{k}}, \_)$. Let $\T_{V} = \{ \tsid_{V}^{\key{k}} \mid k \in \Addr\}$. 
+If $\lastWrite(\T, \key{k}) = \tsid_0$, then by the definition of $\versionList_{\aexec}(\key{k})$ 
+it must be the case that $\indexOf(\T, \key{k}) = 0$ and $\version(\T, \key{k}) = (0, \tsid_0, \_)$. 
+Therefore 
+\[ 
+\snapshot(\hh_{\aexec},\getView(\T))(\key{k}) = \valueOf(\hh_{\aexec}(\key{k}, \indexOf(\T, \key{k}))) = 
+\valueOf(\version(\T, \key{k})) = 0.
+\]
 
-Note that, if $(\WR\;\key{k}: \_ ) \in_{\aexec} \tsid$ for some $\tsid \in \T_{V}$, 
-then we must have that either $\tsid = \tsid_{V}^{\key{k}}$, or $\tsid \xrightarrow{\AR_{\aexec}} 
-\tsid_{V}^{\key{k}}$. This is because, if it were $\tsid_{V}^{\key{k}} \xrightarrow{\AR_{\aexec}} 
-\tsid$, then there would exists an index $i: V(\key{k}) < i$ such that  $\hh(\key{k}, i) = (\_, \tsid, \_)$;  
-that is, the view $V$ includes the update to some $\key{k}' \neq \key{k}$ performed by $\tsid$ 
-(such an update must exist because we are assuming that $\tsid \in \T_{V}$, but not the update 
-to key $\key{k}$ performed by the same transaction $\tsid$. This violates the assumption that $V$ is 
+Otherwise, $\version(\T, \key{k}) = \nu_{\aexec}(\tsid, \key{k})$, 
+where $\tsid = \lastWrite(\T, \key{k})$. 
+Because $\h(\key{k}) = n$ and $\{\h \} = \RP_{\LWW}(\aexec, \T)$, 
+the definition of $\RP_{\LWW}$ ensures that $(\WR\;\key{k}: n) \in_{\aexec} \tsid$, 
+and therefore $\version(\T, \key{k}) = \nu_{\aexec}(\tsid, \key{k}) = (n, \tsid, \_)$. 
+Now we have that $\snapshot(\hh_{\aexec}, \getView{\T})(\key{k}) = 
+\valueOf(\hh_{\aexec}(\key{k}, \indexOf(\T, \key{k})) = \valueOf(\version(\T, \key{k})) = n$.
+
+\item let now $V$ be an atomic view over $\hh_{\aexec}$. We need to prove that there exists 
+a set $\T_{V} \subseteq \T_{\aexec}$ such that $\getView(\T_{V}) = V$, and  
+$\snapshot(\hh_{\aexec}, V) = \h$, 
+where $\{\h\} = \RP_{\LWW}(\aexec, \T_{V})$. 
+%For simplicity, for any key $\key{k}$, we let $i_{\key{k}} = V(\key{k})$.
+
+By definition, for each key $\key{k}$, the version $\hh_{\aexec}(\key{k}, V(\key{k}))$ 
+is included in $\Versions_{\aexec}(\key{k})$. 
+In particular,  there exists a transaction $\tsid(V, \key{k}) \in \T_{\aexec} \cup \{\tsid_0\}$ 
+such that 
+\[
+\hh_{\aexec}(\key{k}, V(\key{k})) = \nu_{\aexec}( \tsid({V}, \key{k}), \key{k}).
+\]
+
+By definition, if $V(\key{k}) = 0$, then $\tsid(V, \key{k}) = \tsid_0$, and therefore
+$\nu_{\aexec}(\tsid({V},{\key{k}}), \key{k}) = 
+(0, \tsid_0, \_)$. Otherwise $\nu_{\aexec}(\tsid({V}, \key{k}), \key{k}) = 
+(n, \tsid(V, \key{k}), \_)$ for some $n$ such that 
+%In particular, either $i_{\key{k}} = 0$ and 
+%$\hh_{\aexec}(\key{k}, V(\key{k})) = \nu_{\tsid_0}^{\key{k}}$, 
+%$i_{\key{k}} > 0$, and 
+%$\hh_{\aexec}(\key{k}, i_{\key{k}}) = \nu_{\aexec}(\tsid_{V}^{\key{k}}), \key{k})$ 
+%for some transaction $\tsid_{V}^{\key{k}} \in \T_{\aexec}$. 
+%$\nu_{\aexec}(\tsid_V^{\key{k}}, \key{k}) = \hh_{\aexec}(\key{k}, V(\key{k})$. 
+%By definition of $\nu_{\aexec}(\tsid_V^{\key{k}}, \key{k})$, and because $i_{\key{k}} > 0$, 
+%we have that 
+%$\hh_{\aexec}(\key{k}, V(\key{k})) = (n, \tsid_{V}^{\key{k}})$, 
+%for some $n$ such that 
+$(\WR\; \key{k}: n) \in_{\aexec} \tsid(V, \key{k})$. 
+%$\hh_{\aexec}(\key{k}, V(\key{k})) = 
+%(n, \tsid_{V}^{\key{k}}, \_)$. 
+Let $\T_{V} = \{ \tsid(V, \key{k}) \mid \key{k} \in \Addr \wedge V(\key{k}) > 0 \}$. 
+Note that $\T_{V} \subseteq \T_{\aexec}$.
+
+If $(\WR\;\key{k}: \_ ) \in_{\aexec} \tsid$ for some $\tsid \in \T_{V}$, 
+then we must have that $\tsid(V, \key{k}) \in \T_{\aexec}$ (i.e. $V(\key{k}) > 0)$, and 
+either $\tsid = \tsid(V, \key{k})$, or $\tsid \xrightarrow{\AR_{\aexec}} 
+\tsid(V, \key{k})$. By definition, this implies that for any key $\key{k}$, 
+$\tsid(V, \key{k}) = \lastWrite(\T_{V}, \key{k})$.
+To see why the claim above holds, consider the following:
+\begin{itemize} 
+\item if it were $\tsid(V, \key{k}) \notin \T_{\aexec}$, 
+then $\tsid(V, \key{k}) = \tsid_0$ and $V(\key{k}) = 0$; on the other hand, 
+because $\tsid \in \T_{V} \subseteq \T_{\aexec}$, then $\tsid \neq \tsid(V, \key{k})$. 
+Therefore it must be that  $\tsid = \tsid(V, \key{k}')$ for some 
+$\key{k}' \neq \key{k}$ such that $\hh_{\aexec}(\key{k}', V(\key{k}')) = 
+\nu_{\aexec}( \tsid({V}, \key{k}'), \key{k}') = (\_, \tsid(V, \key{k}'), \_) = 
+(\_, \tsid, \_)$. 
+Because $(\WR\;\key{k} \_) \in_{\aexec} \tsid$, 
+then there exists an index $i(\tsid, \key{k})$ 
+such that  $\hh_{\aexec}(\key{k}, i(\tsid, \key{k})) = (\_, \tsid, \_)$. 
+Because $\tsid \neq \tsid(V, \key{k})$, then clearly $i(\tsid, \key{k}) > 0 = V(\key{k})$. 
+Therefore, the view $V$ includes the update to $\key{k}'$ performed by 
+$\tsid$, but not the update of $\key{k}$ performed by the same transaction.
+This contradicts the fact that $V$ is atomic. 
+Therefore, it must be the case that $\tsid(V, {\key{k}}) \in \T_{\aexec}$.
+\item next, suppose that $\tsid(V, \key{k}) \xrightarrow{\AR_{\aexec}} 
+\tsid$, $\tsid \in \T_{V}$ and $(\WR\;\key{k}: \_) \in_{\aexec} \tsid$. 
+Because $\tsid(V, \key{k}) \xrightarrow{\AR_{\aexec}} \tsid$, 
+we have that $\tsid \neq \tsid(V, \key{k})$, and because 
+$\tsid \in \T_{V}$, then there must exist a key $\key{k}' \neq \key{k}$ such 
+that $\tsid = \tsid({V}, \key{k'})$. This implies that $\hh_{\aexec}(\key{k}', V(\key{k})) = 
+\nu_{\aexec}(\tsid({V}, \key{k'}), \key{k}') = (\_, \tsid_{V}^{\key{k'}}, \_) = (\_, \tsid, \_)$. 
+Because we are assuming that $(\WR\;\key{k}: n) \in_{\aexec} \tsid$, and  
+$\tsid(V, \key{k}) \xrightarrow{\AR_{\aexec}} \tsid$ - 
+ by Definition then $\tsid({V}, \key{k}) \xrightarrow{\VO_{\aexec}(\key{k})} \tsid$ -  
+then there must exist an index $i > V(\key{k})$ such that $\hh_{\aexec}(\key{k}, i) = (\_, \tsid, \_)$. 
+Again,  the view $V$ includes the update to some $\key{k}' \neq \key{k}$ performed by $\tsid$ 
+but not the update to key $\key{k}$ performed by the same transaction $\tsid$. This violates the assumption that $V$ is 
 atomic. 
+\end{itemize}
 
-We have proved that either $\hh(\key{k}, V(\key{k}) = (0, \tsid_0, \_)$, or $\hh_{\aexec}(\key{k}, V(\key{k})) = 
-(n, \tsid_{V}^{\key{k}}, \_)$, where $(\WR\;\key{k}:n) \in_{\aexec} \tsid_{V}^{\key{k}}$.
-Furthermore, whenever $\tsid \in \T_{V}$ and $(\WR\;\key{k}: \_) \in_{\aexec} \tsid$ 
-then either $\tsid = \tsid_{V}^{\key{k}}$, or $\tsid \xrightarrow{\AR_{\aexec}} \tsid_{V}^{\key{k}}$. 
-This implies that, for any key $\key{k}$, $f(\T_{V}) = V$; let also $\{ \h \} = \RP_{\LWW}(\aexec, \T_{V})$. 
+So far we have proved the following facts:
+\begin{itemize}
+\item either $V(\key{k}) = 0$ and $\hh(\key{k}, V(\key{k})) = (0, \tsid_0, \_) = \nu_{\aexec}(\tsid_0, \key{k})$, 
+or 
+$V(\key{k}) > 0$ and $\hh_{\aexec}(\key{k}, V(\key{k})) = 
+\nu_{\aexec}(\tsid(V, \key{k}), \key{k}) = (n, \tsid(V, \key{k}), \_)$, 
+for some transaction $\tsid_{V}^{\key{k}}$ such that $(\WR\;\key{k}:n) \in_{\aexec} \tsid_{V}^{\key{k}}$.
+\item whenever $\tsid \in \T_{V}$ and $(\WR\;\key{k}: \_) \in_{\aexec} \tsid$ 
+then either $\tsid = \tsid({V}, \key{k})$, or $\tsid \xrightarrow{\AR_{\aexec}} \tsid({V}, \key{k})$. 
+In other words, for any key $\key{k}$, $\tsid(V, \key{k}) = \lastWrite(\T_{V}, \key{k})$. 
+\end{itemize}
+These two facts imply that, $\getView(\T_{V}) = V$; 
+for any key $\key{k}$, we have that 
+%$V(\key{k}) = i_{\key{k}}$, 
+%and $f(\T_{V})(\key{k}) = i_{\T_{V}}^{\key{k}}$. 
+$\getView(T_{V})(\key{k}) = \indexOf(\T_{V}, \key{k})$.
+Also, 
+\[
+\begin{array}{l}
+\hh_{\aexec}(\key{k},\indexOf(\T_{V}, \key{k})) = \version_{\aexec}(\T_V, \key{k}) =  
+= \nu_{\aexec}(\lastWrite(\T_V, \key{k}), \key{k}) = \\ 
+\nu_{\aexec}(\tsid(V, \key{k}), \key{k}) = 
+\hh_{\aexec}(\key{k}, V(\key{k}))
+\end{array}
+\]
+and because there 
+exists a unique index $i$ such that $\hh_{\aexec}(\key{k}, i) = \version(\T_{V}, \key{k})$, 
+then it must be the case that $V(\key{k}) = \indexOf(\T_{V}, \key{k})$.
+
+Finally, let $\{ \h \} = \RP_{\LWW}(\aexec, \T_{V})$. 
 For each key $\key{k}$, the value of $\h(\key{k})$ is the value of the write of the last transaction 
 (in the arbitration order) that wrote to key $\key{k}$, or $0$ if there is no such transaction in $\T$. 
 This is exactly the value of the version of $\key{k}$ to which view $V$ points in $\hh_{\aexec}$, 
 that is $\h(\key{k}) = \snapshot(\hh_{\aexec}, V)(\key{k})$.
 
 \end{itemize}
+\ac{This proof contained so much notation that I got mad, and possibly got something 
+wrong. The intuition follows along, but details need to be checked.}
 \end{proof}
+
+\paragraph{Equivalence of Executions.}
+\ac{The term execution may be conflicting with abstract executions. Better call them traces.}
+We are now ready to define what it means, for a trace in the abstract 
+execution semantics, to be encoded to a trace in the key-value store semantics. 
+
+\begin{definition}
+We say that a trace (in the abstract execution semantics) of the form
+\[
+\langle \aexec_0, \thdstackFun_{0}, \prog_0 \rangle \absrightarrow_{\_} \cdots \absrightarrow_{\_} \langle \aexec_{n}, \thdstackFun_{n}, \prog_{n} \rangle
+\]
+with $\prog = \prog_0$, is equivalent to the trace (in the key-value store semantics)
+\[
+\langle \mathcal{C}_0, \thdstackFun'_{0}, \prog'_0 \rangle \rightarrow_{\_} \cdots \rightarrow_{\_} \langle \mathcal{C}_{n}, \thdstackFun'_{m}, \prog'_m \rangle
+\]
+if $m = n$, for any $i=0,\cdots, n$ then $\thdstackFun_{i} = \thdstackFun'_{i}, \prog_{i} = \prog'_{i}$, 
+$\mathcal{C}_{i} = (\hh_i, \viewFun_i)$ for some $\hh_i, \viewFun_{i}$ such that $\aexec_{i} \compatible \hh_{i}$.
+
+\end{definition}
+
+\begin{definition}
+Let $\CM$ be an axiomatic specification of a consistency model, and $\ET$ be an execution test. 
+We say that $\ET$ is \emph{sound} with respect to $\CM$ if, for any program $\prog$ and 
+trace of $\prog$ under $\ET$, there exists an equivalent trace of $\prog$ under $\CM$.
+
+We say that the execution test $\ET$ is \emph{complete} with respect to the axiomatic specification $\CM$ 
+if for any program $\prog$ and trace of $\prog$ under $\CM$, there exists an equivalent trace of 
+$\prog$ under $CM$.
+\end{definition}
+
+The rest of this Section is devoted to proving that the execution tests that we have provided 
+for several consistency models are both sound and complete with respect to their axiomatic 
+specifications.
+
+\ac{The part below is experimental, so it's going to contain a lot of mess.}
+
+\subsection{Constructing Key-Value Traces from Abstract Ones.}
+In the following we use $\alpha, \alpha'$ to range over traces in the 
+abstract execution semantics, and $\gamma, \gamma'$ to range 
+over traces in the key-value store semantics.
+
+Given the following,
+\[
+\alpha = \langle \aexec_0, \thdstackFun_0, \prog_0 \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} 
+\langle \aexec_n, \thdstackFun_n, \prog_n \rangle
+\]
+
+we want to construct an equivalent trace 
+\[
+\gamma = \langle \conf_0, \thdstackFun_0, \prog_0 \rangle \rightarrow_{\ET_{\bot}} \cdots \rightarrow_{\ET_{\bot}} \langle 
+\conf_{n}, \thdstackFun_n, \prog_n \rangle.
+\]
+
+We do this in several step. 
+First, we augment traces in the abstract execution semantics by labelling transitions 
+with the identifier $\tid$ of the client $\tid$ that executed the action, 
+and with the set of operations (if any) to be executed by the client. 
+Note that we can always infer which client performed a transition 
+in the abstract execution semantics, by looking at the command 
+to be executed by each client before and after the transition.
+\begin{proposition}
+Let $\prog = \prod_{i = 1}^{n} \tid_{i}: \cmd_{i}$. 
+If $\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} 
+\langle \aexec', \thdstackFun', \prog' \rangle$, then there exists 
+an index $j=1,\cdots, n$ such that $\prog' = 
+\prog_{i=1}^{n} \tid_{n}: \prog'_{n}$, for any $i =1,\cdots, n$ 
+such that $i \neq j$ then $\prog'_{i} = \prog_{i}$, and $\prog'_{j} \neq \prog_{j}$.
+\end{proposition}
+\ac{Honestly, I would have much less trouble if labelled 
+transitions were introduced from the beginning 
+already. Also, note that this proposition is not true anymore if we switch 
+again to the semantics with program variables and fixed point, as the command 
+$\mu X.X$ reduces to itself.}
+\ac{Henceforth, I will assume that transitions in both semantics have been labelled 
+with the following actions. $\tid: \tau$ if client $\tid$ executes a non-transactional 
+action, and $\tid: \mathcal{O}$ if client $\tid$ executes a transaction with fingerprint 
+$\mathcal{O}$. I don't care if this is done directly in the definition of the transition, 
+or actions are defined later by looking at the structure of transitions (see the proposition 
+above). I am happy with both choices (possibly happier with the former).}
+
+Next, given a trace $\alpha$ and a view $V$, 
+we define the functions $\intermediateView(\alpha, V)$ and $\nextView(\alpha, V)$. 
+On an intuitive level, our goal is that of matching the  
+first transition in $\alpha$, which we assume to have the form 
+\[
+\langle \aexec, \thdstackFun, \prog \rangle \xrightarrow{\tid: \mu} \langle \aexec', \thdstackFun', \prog' \rangle
+\]
+ with a transition of the form 
+\[
+\langle \conf, \thdstackFun, \prog \rangle \rightarrow_{\ET_{\bot}} \langle \conf', \thdstackFun, \prog' \rangle
+\]
+ 
+where $\conf = (\hh, \viewFun)$ and $\conf' = (\hh', \viewFun')$ 
+for some $\hh, \viewFun$, $\hh', \conf'$ such that 
+$\aexec \compatible \hh$, $\aexec' \compatible \hh'$. 
+Furthermore, when the action $\tid: \mu$ corresponds to the execution of a transaction 
+with fingerprint $\mathcal{O}$, we must also find two views $V', V''$ such that 
+$\ET_{\bot} \vdash \hh_{\aexec}, V' \vdash \mathcal{O} : V''$, 
+and $\viewFun(\tid) \sqsubseteq V'$.
+By Proposition \ref{prop:aexec2hh}, we know that $\hh_{\aexec}$ and 
+$\hh_{\aexec'}$ are two valid candidates for $\hh, \hh'$, respectively. 
+Assuming that the function $\viewFun$ is known, it remains to 
+determine the view $V', V''$ above. Then we let 
+$\viewFun' = \viewFun[ \tid \mapsto V'']$.
+This is exactly what the functions $\intermediateView(\alpha, V)$ 
+and $\nextView(\alpha, V)$ are for.
+
+The function $\intermediateView(\alpha, V)$ is defined according 
+to the following intuition: assuming that the first transition in 
+$\alpha$ corresponds to client $\tid$ executing a transaction 
+with fingerprint $\mathcal{O}$, then the execution $\aexec'$ 
+contains exactly one more transaction than $\aexec$, i.e. 
+$\T_{\aexec'} \setminus \T_{\aexec} = \{\tsid\}$ for some $\tsid$. 
+Furthermore, the set $\VIS^{-1}(\tsid)$ corresponds to the 
+transaction in $\aexec$ that are visible by the client 
+$\tid$ immediately before executing the transaction $\tsid$. 
+Using the function $\getView$, we can transform the set 
+$\VIS^{-1}(\tsid)$ into the required view $\intermediateView(\alpha, V)$. 
+
+\ac{Insert formal definition here. It seems like $\intermediateView$ does 
+not depend on future transitions, or on the view $V$, 
+so maybe it should be a function of a transition and a view}
+
+
+
+
+
+\ac{Main Idea: translate abstract execution into compatible history heaps, as per 
+Definition \ref{def:absexec2hh}. It remains to associate, at each step, 
+each client with the appropriate view. In practice, when a client $\tid$ performs a transition 
+$\langle (\hh_{\aexec}, \viewFun), \thdstackFun, \prog \rangle \rightarrow_{\ET} 
+\langle (\hh_{\aexec}', \viewFun), \thdstackFun', \prog' \rangle$, 
+we associate three different views to $\tid$: the view$V = \viewFun(\tid)$, the 
+view $V'' = \viewFun(\tid')$, and 
+an intermediate view $V'$ corresponding to the view that the client must have 
+immediately before executing a transaction: that is, the view for which 
+we must ensure that $\ET \vdash \hh_{\aexec}, V' \triangleright \mathcal{O}: V''$. 
+
+To define these views, we follow the following approach: 
+\begin{itemize}
+\item initially, every client is mapped into the initial view. 
+\item we assume that transitions in both semantics are annotated with actions of the form $\tid: \mathcal{O}$. 
+This can be done by tweaking the semantics and introduce labels. Or, if a less invasive approach is preferred, 
+we can prove that by looking a transition of the semantic, we can always infer which client performed an 
+action, and which set of operations it performed ($\emptyset$ if no transaction was executed). 
+\item Suppose that we have already determined an execution fragment of the form 
+\[
+\langle \mathcal{C}_{0}, \thdstackFun_0, \prog_0 \rangle \rightarrow_{\ET} \cdots \langle \mathcal{C}_{i}, \thdstackFun_{i}, \prog_{i} \rangle
+\]
+and we look at the transition $\langle \aexec_{i}, \thdstackFun_{i}, \prog_{i} \xrightarrow{\tid: \mathcal{O}}_{\CM} 
+\langle \aexec_{i+1}, \thdstackFun_{i+1}, \prog_{i+1} \rangle$. If $\mathcal{O} = \emptyset$, we 
+let $V' = V'' = \thdstackFun(\tid)$. Otherwise, we let $\tsid_{i}$ be the only transaction in $\T_{\aexec_{i+1}} \setminus 
+\T_{\aexec}$. We define the view $V'$ to be the  
+view that points, for each key $\key{k}$ to the version $(\_, \tsid', \_) \in \Versions_{\aexec_{i+1}}(\key{k})$, 
+if $\visibleWrites_{\aexec_{i+1}}(\key{k}, \tsid_{i}) = \emptyset$ and $\tsid' = (0, \tsid_{0}, \_)$, or 
+$\tsid' = \max_{\AR}(\visibleWrites_{\aexec_{i+1}}(\key{k}, \tsid))$. The view $V''$ is more complicated 
+to define. If there is no transition $\langle \aexec_{j}, \thdstack_{j}, \prog_{j} \rangle \xrightarrow{\tid:\mathcal{O}'}_{\CM} 
+\langle \aexec_{j+1}, \thdstack_{j+1}, \prog_{j+1} \rangle$ corresponding to the execution of a transaction, 
+then we let $V''$ be the view such that points to the 
+most recent version of each key in $\aexec_{i+1}$. Otherwise, let $\tsid_{j}$ be the 
+only transaction in $\T_{\aexec_{j+1}} \setminus \T_{\aexec_{j}}$, and we consider 
+the set $\T'' = \VIS^{-1}_{\aexec_{j+1}}(\tsid_{j}) \cap \AR^{-1}(\tsid_{i})$. 
+For each key $\key{k}$, we let $V''$ to $\key{k}$-point to the unique version $(\_, \tsid'', \_) \in 
+\Versions_{\aexec_{i+1}}(\key{k})$, where $\tsid''$ contains the last write to key $\key{k}$ 
+in the set $\T''$, according to $\AR_{\aexec_{j+1}}$. If no such transaction exists, then 
+$V''$ $\key{k}$-points to the initial version $(0, \tsid_0, \_)$.
+
+\end{itemize}
+
+}
