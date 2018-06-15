@@ -108,11 +108,11 @@ This constraint disallow any creation and deletion for capabilities, but it allo
 Note that in the rely and guarantee, it is allowed to update several regions, but each region can be updated at most once.
 \begin{definition}[Rely and guarantee]
 \label{def:rely-guarantee}
-Given the set of worlds $\World$ (\cref{def:world}), the \emph{rely} relation, $\Rely \subseteq \World \times \World$, is defined as follows,
+Given the set of worlds $\World$ (\cref{def:world}), the \emph{update rely} relation, $\relyU \subseteq \World \times \World$, is defined as follows:
 \sx{In case I get confused again, it is world to world so the shared and local capabilities should always make sense.}
 \[	
     \begin{rclarray}
-	\Rely & \eqdef &
+	\relyU & \eqdef &
 	\Setcon{
 		((\ca_l,\gs), (\ca_l, \gs'))	
 	}{
@@ -129,6 +129,24 @@ Given the set of worlds $\World$ (\cref{def:world}), the \emph{rely} relation, $
 	} \\
     \end{rclarray}
 \]
+The \emph{view shift rely} relation $\relyV \subseteq \World \times \World$, is defined as follows:
+\[
+    \begin{rclarray}
+	\relyV & \eqdef &
+	\Setcon{
+		((\ca_l,\gs), (\ca_l, \gs'))	
+	}{
+        \exsts{\ca_e}
+        (\ca_e \composeC \ca_l) \isdef
+        \land \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor 
+        \exsts{\hh, \vi, \vi'\ca, \ca, \intf}   \\
+        \quad \gs(\rid) = (\hh, \vi, \ca, \intf)
+        \land \gs'(\rid) = (\hh, \vi', \ca, \intf) 
+	} \\
+    \end{rclarray}
+\]
+The \emph{rely} relation is transitive closure of updates and view shift: \( \Rely = (\relyU \cup \relyV)^{*} \).
 The \emph{guarantee} relation, $\Guar: \World \times \World$, is defined as follows:
 \[	
     \begin{rclarray}
@@ -153,27 +171,16 @@ where for any element \( m \) from its domain \( \sort{M} \), the  \emph{orthogo
 m^{\perp} & \defeq & \Setcon{m'}{(m \compose{} m')\isdef \land m' \in \sort{M}} 
 \end{rclarray}
 \]
-%The \emph{guarantee} relation, $\GuarI \subseteq \World \times \World$, is defined as follows:
-%\sx{take away of the closure}
-%\[
-	%\GuarI \eqdef \guarU
-%\]
 \end{definition}
 
 The stabilisation says assertions remain true against the environment.
 Formally a set of worlds \( \setworld \) is stable under certain execution tests \( \et \) if the set is closed under rely relation under the side conditions: (a) the key-value store transfer is allowed by the execution tests \( (\mkvs, \mkvs') \in \et \);
-\sx{and (b) the new view under the new key-value store is able to progress.
+and (b) the new view under the new key-value store is able to progress.
 The first condition says there is at least one view from the environment that can trigger the transformation on the key-value store, and it is allowed by the execution tests.
 The second condition is more subtle, as it allows to also update the view to a new view \( \vi' \) so that for all the possible transactions with the fingerprints \( \opset \), if they can execute under the old view, it should be able to execute under the new view.
-It is especially useful when the execution tests are for serialisibility, which means that the view can always shift to the end when the key-value store has been updated by the environment.
-\[
-    \vi' \geq \vi
-    \quad {} \fora{opset}
-    \land (\hh', \vi) \csat \opset : \stub \implies (\hh', \vi) \csat \opset : \stub \\
-\]
-}
 
 \begin{definition}[Stable]
+\label{def:stable}
 A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld, \como}$, if and only if it is closed under the rely relation: 
 \[
     \begin{rclarray}
@@ -183,28 +190,35 @@ A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{
             \w \in \setworld 
             \land (\w, \w') \in \Rely  
             \land \exsts{\hh, \hh', \vi, \opset} \\
-            \quad (\hh, \vi) \in \eraseW{\w}
-            \land (\hh', \vi') \in \eraseW{\w'} 
-            \land \vi' \geq \vi
-            \land (\hh, \hh') \in \como \\
+            \quad (\hh, \vi) = \eraseW{\w}
+            \land (\hh', \vi') = \eraseW{\w'} 
+            \land (\hh, \hh') \in \como 
+            \land \pred{progress}{\w, \et} \\
             \qqquad \implies \w' \in \setworld
-        \end{array}
+        \end{array} \\
     \end{rclarray}
 \]
-If a update history heap update is allowed by consistency model, \ie \( (\hh, \hh') \in \como \), it means there exist some view \( \vi \) and operation set \( \opset \) allowed by the consistency model and the history is updated to \( \hh' \) via them.
+A update history heap update is allowed by consistency model, \ie \( (\hh, \hh') \in \como \), iff there exist some view \( \vi \) and operation set \( \opset \) allowed by the consistency model and the history is updated to \( \hh' \) via them:
 \[
     \begin{rclarray}
         (\hh, \hh') \in \como & \eqdef & 
         \begin{array}[t]{@{}l}
             \hh = \hh' \lor 
-            \exsts{ \vi, \vi', \opset, \txid}  \\
+            \exsts{ \vi, \vi', \opset, \txid, \cl}  \\
             \quad (\hh, \vi) \csat \opset : \vi' 
-            \land \txid \in \fresh{\hh} 
+            \land \txid \in \fresh{\hh, \cl} 
             \land \hh'  = \updM{\hh,\vi, \txid, \opset}
         \end{array}
     \end{rclarray}
 \]
+A world is able to progress under an execution test \( \et \), iff it is able to execute at least one non-empty fingerprint:
+\[
+    \begin{rclarray}
+        \pred{progress}{\w, \et} & \exsts{\opset \neq \unitO, \vi} \eraseW{\w} \csat \opset :  \vi
+    \end{rclarray}
+\]
 \end{definition}
+
 
 \subsection{Rules for Global}
 
@@ -226,7 +240,7 @@ The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to glo
         \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
     }
     \and
-    \inferrule[\rl{TRPar}]{%
+    \inferrule[\rl{PRPar}]{%
         \tripleG{ \gpre_{1} }{ \cmd_{1} }{ \gpost_{1} }
         \\ \tripleG{ \gpre_{2} }{ \cmd_{2} }{ \gpost_{2} } 
         \\\\ \stable{\gpre_{1}, \como} 
@@ -252,20 +266,20 @@ The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to glo
         \tripleG{ \gpre }{ \cmd_{1} \pchoice \cmd_{2} }{ \gpost }
     }
     \and
-    \inferrule[\rl{TRSeq}]{%
+    \inferrule[\rl{PRSeq}]{%
         \tripleG{ \gpre }{ \cmd_{1} }{ \gframe }
         \\ \tripleG{ \gframe }{ \cmd_{2} }{ \gpost }
     }{%
         \tripleG{ \gpre }{ \cmd_{1} \pseq \cmd_{2} }{ \gpost }
     }
     \and
-    \inferrule[\rl{TRIter}]{%
+    \inferrule[\rl{PRIter}]{%
         \tripleG{ \gpre }{ \cmd }{ \gpre } 
     }{%
         \tripleG{ \gpre }{ \cmd\prepeat }{ \gpre }
     }
     \and
-    \inferrule[\rl{TRFrame}]{%
+    \inferrule[\rl{PRFrame}]{%
         \tripleG{ \gpre }{ \cmd }{ \gpost } 
         \\ \stable{\gframe, \como}
         \\ \func{fv}{\gframe} \cap \func{modify}{\cmd} = \emptyset 
@@ -280,22 +294,18 @@ The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to glo
 \begin{rclarray}
     \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \defeq & 
     \begin{array}[t]{@{}l@{}}
-        \fora{ \w, \hh, \vi, \lenv, \stk } 
+        \fora{ \w, \lenv, \stk } 
         \w \in \evalW{\gpre} 
-        \land (\hh, \cu) \in \eraseW{\w} \implies \\
-        \quad \exsts{\h}
-        \h = \getSN{\hh, \cu} 
-        \land (\h, \unitO) \in \evalLS{\lpre}\\
-        \qquad {} \land
-        \fora{\stk', \txid, \opset, \hh', \vi'} 
-        \exsts{ \w'} 
-        \txid \in \fresh{\hh} 
+        \implies 
+        (\getSN{\eraseW{\w}}, \unitO) \in \evalLS{\lpre} 
+        \land \fora{\stk', \txid, \opset, \w', \cl}  \\
+        \quad \txid \in \fresh{\eraseW{\w}\projection{1}, \cl} 
         \land (\stub, \opset) \in \evalF[\lenv, \stk']{\lpost} \\
-        \qqquad {} \land \hh' = \updM{\hh, \vi, \txid, \opset} 
-        \land \vi' \geq \updV{\hh, \vi, \opset} \\
-        \qqquad {} \land (\w, \w') \in \Guar  
-        \land (\hh,\vi) \csat \opset : \vi'
-        \land (\hh',\vi') \in \eraseW{\w'} \land \w' \in \evalW[\lenv, \stk']{\gpost}
+        \quad {} \land \eraseW{\w'}\projection{1} = \updM{\eraseW{\w}, \txid, \opset} 
+        \land \eraseW{\w'}\projection{2} \geq \updV{\eraseW{\w}, \opset} \\
+        \quad {} \land (\w, \w') \in \Guar  
+        \land \eraseW{\w} \csat \opset : \eraseW{\w'}\projection{2}
+        \implies \w' \in \evalW[\lenv, \stk']{\gpost}
     \end{array} 
 \end{rclarray}                          
 \]
@@ -332,47 +342,48 @@ The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to glo
     %\end{array} 
 %\]
 %}
-The \( \HHupdate \) and \( \Vupdate \) in the repartition can be replaced by syntactic rules.
 
-\begin{figure}
-\hrule\vspace{5pt}
+%The \( \HHupdate \) and \( \Vupdate \) in the repartition can be replaced by syntactic rules.
 
-\[
-   \infer[\rl{FInit}]{%
-       \tripleF{ \lexpr \pt \lexpr }{ \lexpr \fpI \lexpr }{ \lexpr \pt \lexpr }
-   }{}
-\]
+%\begin{figure}
+%\hrule\vspace{5pt}
 
-\[
-   \infer[\rl{FRead}]{%
-       \tripleF{ \lexpr \pt \lexpr }{ \lexpr \fpR \lexpr }{ \lexpr \pt \lexpr }
-   }{}
-\]
+%\[
+   %\infer[\rl{FInit}]{%
+       %\tripleF{ \lexpr \pt \lexpr }{ \lexpr \fpI \lexpr }{ \lexpr \pt \lexpr }
+   %}{}
+%\]
 
-\[
-   \infer[\rl{FWrite}]{%
-       \tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpW \lexpr' }{ \lexpr \pt \lexpr' }
-   }{}
-\]
+%\[
+   %\infer[\rl{FRead}]{%
+       %\tripleF{ \lexpr \pt \lexpr }{ \lexpr \fpR \lexpr }{ \lexpr \pt \lexpr }
+   %}{}
+%\]
 
-\[
-   \infer[\rl{FReWrt}]{%
-       \tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpRW (\lexpr,\lexpr') }{ \lexpr \pt \lexpr' }
-   }{}
-\]
+%\[
+   %\infer[\rl{FWrite}]{%
+       %\tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpW \lexpr' }{ \lexpr \pt \lexpr' }
+   %}{}
+%\]
 
-\[
-   \infer[\rl{FFrame}]{%
-       \tripleF{ \bar{\lpre}_{1} \sep \bar{\lpre}_{2}  }{  \bar{\fp}_{1} \sep \bar{\fp}_{2} }{ \bar{\lpost}_{1} \sep \bar{\lpost}_{2} }
-   }{
-       \tripleF{ \bar{\lpre}_{1} }{ \bar{\fp}_{1} }{ \bar{\lpost}_{1} }
-       && \tripleF{ \bar{\lpre}_{2}  }{ \bar{\fp}_{2} }{ \bar{\lpost}_{2} }
-    }
-\]
+%\[
+   %\infer[\rl{FReWrt}]{%
+       %\tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpRW (\lexpr,\lexpr') }{ \lexpr \pt \lexpr' }
+   %}{}
+%\]
+
+%\[
+   %\infer[\rl{FFrame}]{%
+       %\tripleF{ \bar{\lpre}_{1} \sep \bar{\lpre}_{2}  }{  \bar{\fp}_{1} \sep \bar{\fp}_{2} }{ \bar{\lpost}_{1} \sep \bar{\lpost}_{2} }
+   %}{
+       %\tripleF{ \bar{\lpre}_{1} }{ \bar{\fp}_{1} }{ \bar{\lpost}_{1} }
+       %&& \tripleF{ \bar{\lpre}_{2}  }{ \bar{\fp}_{2} }{ \bar{\lpost}_{2} }
+    %}
+%\]
 
 
-\hrule\vspace{5pt}
-\caption{Syntactic rule for \( \HHupdate \) and \( \Vupdate \) functions}
-\label{fig:rule-prog}
-\end{figure}
+%\hrule\vspace{5pt}
+%\caption{Syntactic rule for \( \HHupdate \) and \( \Vupdate \) functions}
+%\label{fig:rule-prog}
+%\end{figure}
 
