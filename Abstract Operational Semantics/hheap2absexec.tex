@@ -12,6 +12,7 @@
 \newcommand{\anarchic}{\raisebox{-1.5pt}{{\Large \text{\CircledA}}}}
 \newcommand{\anarchicsmall}{\raisebox{-1.5pt}{{\small \text{\CircledA}}}}
 \newcommand{\Ax}{\ensuremath{\mathsf{Ax}}}
+\newcommand{\compatible}{\ensuremath{\mathop{\simeq}}}
 
 \newcommand{\ruleATX}{\ensuremath{\mathit(A-Tx)}}
 %\newcommand{\Clients}{\ensuremath{\mathsf{Clients}}}
@@ -33,7 +34,7 @@ executions,
 \item \textbf{Done!} an operational semantics based on abstract executions, 
 which is parametric in the axiomatic specification of a consistency model given using 
 the declarative style of \cite{framework-concur,SIanalysis,laws}, 
-\item a proof that, the semantics is \emph{faithful} with respect to any consistency model $\CM$: 
+\item \textbf{Done!} a proof that, the semantics is \emph{faithful} with respect to any consistency model $\CM$: 
 for any program $\prog$ and consistency model specification $\CM$, 
 the abstract execution semantics captures all the potential behaviours that $\prog$ can 
 exhibit under $\CM$. Faithfulness is necessary to validate the soundness of 
@@ -83,12 +84,16 @@ The set of all abstract executions is denoted by $\aeset$.
 In general, given an abstract execution ${\aexec} = (\TtoOp{T}, \ClSet, \PO, \VIS, \AR)$, we let ${\TtoOp{T}}_{\aexec} = \TtoOp{T}, 
  \PO_{\aexec} = \PO, {\VIS}_{\aexec} = \VIS, \AR_{\aexec} = \AR$. We also let $\T_{\aexec} = \dom(\TtoOp{T}_{\aexec})$, 
  $\ClSet_{\aexec} = \dom(\PO_{\aexec})$, and $\T_{\aexec}(\tid) = \{\tsid \in \T_{\aexec} \mid (\tsid \xrightarrow{\PO_{\aexec}(\tid)} \_) 
- \vee (\_ \xrightarrow{\PO_{\aexec}} \tsid \}$. For $o \in \Op$, we also write $o \in_{{\aexec}} \tsid$ in lieu of $o \in \TtoOp{T}_{\aexec}(\tsid)$.
+ \vee (\_ \xrightarrow{\PO_{\aexec}} \tsid \}$. Without loss of generality, we always assume that $\T_{\aexec}(\tid) = \{ \tsid_{\tid}^{n} \mid 
+ \exists m \geq 0 \wedge n \leq m \}$, and that $\tsid_{\tid}^{n} \xrightarrow{\PO_{\aexec}(\tid)} \tsid_{\tid}^{m}$ if and 
+ only if $n < m$.
+ For $o \in \Op$, we also write $o \in_{{\aexec}} \tsid$ in lieu of $o \in \TtoOp{T}_{\aexec}(\tsid)$.
 We often write $\tsid \xrightarrow{\VIS_{{\aexec}}} \tsid'$ in lieu of $(\tsid, \tsid') \in \xrightarrow{\VIS_{{\aexec}}}$, 
 and similarly for other relations. We also commit an abuse of notation, and let $\PO_{{\aexec}} = 
 \bigcup_{\tid \in \ClSet_{\aexec}} \PO(\tid)$. Henceforth, it will always be clear from the context 
 whether the symbol $\PO_{\aexec}$ refers to a function from client identifiers to a relation between transaction, or to a relation
 between transactions. 
+\ac{This is way too much notation. Move into a figure.}
 Given two abstract executions $\aexec_1, \aexec_2$ and a subset $\T \subseteq \T_{\aexec_1} \cap \T_{\aexec_2}$, 
 we say that $\aexec_1$ and $\aexec_2$ agree on $\T$ if, and only if, $\forall \tsid,\tsid' \in \T. \TtoOp{T}_{\aexec_1}(\tsid) = 
 \TtoOp{T}_{\aexec_2}(\tsid)$, $\tsid \xrightarrow{\PO_{\aexec_1(\tid)}} \tsid'$ if and only if $\tsid \xrightarrow{\PO_{\aexec_2}(\tid)} 
@@ -558,8 +563,8 @@ $\CM$:
 \end{theorem}
 
 \begin{proof}
-\begin{description}
 Let $\prog$ be a program, and $\CM$ be a consistency model specification.
+\begin{description}
 \item[Correctness:] Let $\aexec \in \interpr{\prog}_{\CM}$. By definition, we have that 
 \[ 
 \langle \aexec_0, \thdstackFun_{0}, \prog \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} \langle \aexec_{n}, \thdstackFun_{n}, 
@@ -585,26 +590,81 @@ from which it follows that $\aexec \in \interpr{\prog}_{\CM}$.
 \end{description}
 \end{proof}
 
-\subsection{Encoding of Abstract Executions into configurations}
-\ac{IMPORTANT: This definition assumes that the definition of configurations in the MKVS framework has changed as to include, besides 
-the mapping $\kappa: \Keys \rightarrow \Versions^{\ast}$ and the mapping from clients to views, 
-also a partial function $\pi: \tidset \rightharpoonup \TransID^{\ast}$ corresponding to the order 
-in which transactions have been executed by clients.}
+\subsection{Encoding into Key-value store semantics}
+Let $\CM$ be an axiomatic specification, with $\CM = (\RP_{\LWW}, \calA)$. 
+The aim of this section is that the abstract execution semantics of $\CP$ can be 
+simulated by the key-value store semantics, for an appropriate execution test $\ET$. 
+That is, given an execution of the form 
+\[
+\langle \aexec_0, \thdstackFun_{0}, \prog_0 \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} \langle \aexec_{n}, \thdstackFun_{n}, \prog_{n} \rangle
+\]
+we want to find an equivalent execution 
+\[
+\langle \mathcal{C}_{0}, \thdstackFun_{0}, \prog_0 \rangle \rightarrow_{\ET} \cdots \langle \rightarrow_{\ET} \rangle \mathcal{C}_n, \thdstackFun_{n}, \prog_{n} 
+\rangle.
+\]
 
-In the following, we assume a special transaction identifier $\tsid_0$ that is not used 
-in abstract executions. This can be thought as an initial transaction that initialises the value of all 
-keys in the key-value store to the default value $0$.
-\begin{definition}[Transaction Dependencies]
-\ac{This is basically the definition of Adya's/Jade's dependencies.}
-Let $\hat{\aexec}$ be an abstract execution. For each $\key{k} \in \Addr$, 
-we define the relations $\RF(\key{k}), \VO(\key{k}) \subseteq (\T_{\hat{\aexec}} \uplus \{\tsid_0\}) \times 
-\T_{\hat{\aexec}}$ as follows: 
+Formally speaking, we need to define what it means for two executions, defined in the abstract operational semantics and key-value semantics, respectively, 
+to be equivalent. We start by defining a notion of \emph{compatibility} between abstract executions and key-value stores. 
+This definition follows the intuition that an abstract execution $\aexec$ is compatible with a key-value store $s$ if 
+any observation made by a client in the former can be simulated by an observation made by a client in the latter, and vice-versa. 
+For abstract executions, observations of clients amount to select a subset of visible transaction and extract 
+a snapshot from there, according to the last write wins resolution policy. For key-value stores, 
+observations of clients corresponds to selecting a view over the key-value store, and extracting the snapshot 
+associated with such a view.
+
+\begin{definition}
+Let $\aexec$ be an abstract execution, $\hh$ be a key-value store. 
+Let $\Views_{\hh}$ be the set of atomic views that are well-formed with 
+respect to $\hh$.
+\ac{The constraint that views are atomic is necessary for later results.}
+We say that $\aexec$ is compatible with $\hh$, written 
+$\aexec \compatible \hh$, if and only if there exists a  mapping 
+$f: \powerset(\T_{\aexec}) \rightarrow \Views_{\hh}$
+such that  
 \begin{itemize}
-\item $\tsid \xrightarrow{\RF(\key{k})} \tsid'$ if and only if either $\tsid = \tsid_0$ and 
-$\visibleWrites_{\hat{\aexec}}(\key{k}, \tsid) = \emptyset$, or 
-$\tsid = \max_{\AR_{\hat{\aexec}}}(\visibleWrites_{\hat{\aexec}}(\key{k}, \tsid))$, 
-\item $\tsid \xrightarrow{\VO(\key{k}} \tsid'$ if and only if either $\tsid = \tsid_0$ 
-and $\WR\;\key{k}: \_ \in_{\hat{\aexec}} \tsid'$, or $\tsid, \tsid' \in_{\hat{\aexec}} (\WR\;\key{k}: \_)$ 
+\item for any subset $\T \subseteq \T_{\aexec}$, let$\RP_{\LWW}(\aexec, \T) = \{\h\}$; 
+then $\h = \snapshot(\hh, f(\T))$, 
+\item for any view $V$, there exists a subset $\T \subseteq \T_{\aexec}$ 
+such that $f(\T) = V$, and $\snapshot(\aexec, V) = \h$, where 
+$\RP_{\LWW}(\aexec, \T) = \{h\}$.
+\end{itemize}
+\end{definition}
+
+It is always possible to convert an abstract execution that satisfies the $\RP_{\LWW}$ 
+policy into a compatible 
+key-value store, as the following definitions and result show.
+\begin{definition}
+Let $\aexec$ be an abstract execution such that $\aexec \models \RP_{\LWW}$. 
+Let also $\tsid_0$ be a transaction identifier not included in $\aexec$. 
+\end{definition}
+\ac{Following this definition, it may be the case that we could define 
+$\TxID = \{ \tsid_0 \} \cup \{ \tsid_{\tid}^{n} \mid \tid \in \tidset wedge n \in \mathbb{N}\}$.
+}
+
+\paragraph{Recovering Compatible Key-value Stores}
+\ac{IMPORTANT: This definition assumes that the definition of configurations in the MKVS framework has changed 
+to that the set of transaction identifiers is given by $\{\tsid_0\} \cup \{ \tsid_{\tid}^{n} \mid \tid \in \tidset \wedge n \geq 0 \}$, 
+and that $\tid_0$ does not play occur into $\aexec$.}
+%
+%In the following, we assume a special transaction identifier $\tsid_0$ that is not used 
+%in abstract executions. This can be thought as an initial transaction that initialises the value of all 
+%keys in the key-value store to the default value $0$.
+\begin{definition}[Transaction Dependencies]
+\ac{This is basically the definition of Adya's/Jade's dependencies. The encoding 
+of abstract executions into key-value-stores is basically done in two steps: first 
+convert the abstract execution into a dependency graph, then convert the dependency graph 
+into a key-value store. Recall that, now that we have the information about the program order, 
+there is a isomorphism between dependency graphs and key-value stores.}
+Let $\aexec$ be an abstract execution. For each $\key{k} \in \Addr$, 
+we define the relations $\RF(\key{k}), \VO(\key{k}) \subseteq (\T_{\aexec} \uplus \{\tsid_0\}) \times 
+\T_{\aexec}$ as follows: 
+\begin{itemize}
+\item $\tsid \xrightarrow{\RF_{\aexec}(\key{k})} \tsid'$ if and only if either $\tsid = \tsid_0$ and 
+$\visibleWrites_{\aexec}(\key{k}, \tsid) = \emptyset$, or 
+$\tsid = \max_{\AR_{\aexec}}(\visibleWrites_{\aexec}(\key{k}, \tsid))$, 
+\item $\tsid \xrightarrow{\VO_{\aexec}(\key{k})} \tsid'$ if and only if either $\tsid = \tsid_0$ 
+and $(\WR\;\key{k}: \_) \in_{\aexec} \tsid'$, or $\tsid, \tsid' \in_{\aexec} (\WR\;\key{k}: \_)$ 
 and $\tsid \xrightarrow{\AR_{\aexec}} \tsid'$.
 \end{itemize}
 \end{definition}
@@ -616,40 +676,87 @@ $l \in L$, we let $x_1 <_{l} x_2$ if $l = \_ \cdot x_1 \cdot \_ \cdot x_2 \cdot 
 \ac{The sentence above should appear much before.}
 
 \begin{definition}
-Let $\hat{\aexec}$ be an abstract execution. 
+Let $\aexec$ be an abstract execution. 
 %Let $\tsid_0$ be a transaction identifier 
 %that is not included in $\dom(\TtoOp)$. 
-We define the MKVS $(\hh_{\hat{\aexec}}, \progOrd_{\hat{\aexec}})$ as follows: 
+We define the key-value store $\hh_{\aexec}$ as follows: 
 \begin{itemize}
-\item For each transaction $\tsid \in \T_{\hat{\aexec}}$ and key $\key{k}$, 
-we define the set $\Versions_{\hat{\aexec}}(\key{k}) \subseteq \Versions$ to be the smallest set such that 
+\item For each transaction $\tsid \in \T_{\aexec}$ and key $\key{k}$, 
+we define the set $\Versions_{\aexec}(\key{k}) \subseteq \Versions$ to be the smallest set such that 
 \begin{enumerate}
-\item for any $\tsid \in \T_{\hat{\aexec}}$ such that $\WR\;\key{k}: n \in_{\aexec} \TtoOp{T}(\tsid)$,
+\item for any $\tsid \in \T_{\aexec}$ such that $(\WR\;\key{k}: n) \in_{\aexec} \tsid$,
 then
-$(n, \tsid, \mathcal{R}(\tsid, \key{k})) \in \Versions_{\hat{\aexec}}(\key{k})$, 
-where $\mathcal{R}(\tsid, \key{k}) = \{\tsid' \mid \tsid \xrightarrow{\RF(\key{k})} \tsid'\}$ 
-\item $(0, \tsid_0, \mathcal{R}(\tsid_{0}, \key{k}) \in \Versions_{\hat{\aexec}}(\key{k})$, 
-where $\mathcal{R}(\tsid_{0}, \key{k}) = \{\tsid' \mid \tsid_0 \xrightarrow{\RF(\key{k})} \tsid'\}$.
+$(n, \tsid, \mathcal{R}(\tsid, \key{k})) \in \Versions_{aexec}(\key{k})$, 
+where $\mathcal{R}(\tsid, \key{k}) = \{\tsid' \mid \tsid \xrightarrow{\RF_{\aexec}(\key{k})} \tsid'\}$ 
+\item $(0, \tsid_0, \mathcal{R}(\tsid_{0}, \key{k}) \in \Versions_{\aexec}(\key{k})$, 
+where $\mathcal{R}(\tsid_{0}, \key{k}) = \{\tsid' \mid \tsid_0 \xrightarrow{\RF_{\aexec}(\key{k})} \tsid'\}$.
 \end{enumerate}
-\item The MKVS $\hh_{\hat{\aexec}}$ is defined to be the unique MKVS such that 
+\item The key-value store $\hh_{\aexec}$ is defined to be the unique one such that 
 for any key $\key{k} \in \Addr$, $\nu \in \hh_{\hat{\aexec}}(\key{k})$ if and only if 
 $\nu \in \Versions_{\hat{\aexec}}(\key{k})$; furthermore, for any $\nu, \nu' \in \hh_{\hat{\aexec}}(\key{k})$, 
-we have that $\nu <_{\hh_{\hat{\aexec}(\key{k})}} \nu'$ if and only if $\nu = (\_, \tsid, \_)$, 
-$\nu' = (\_, \tsid', \_)$, and $\tsid \xrightarrow{\VO_{\hat{\aexec}}(\key{k})} \tsid'$.
-\item $\progOrd_{\hat{\aexec}}$ is the function that maps each $\tid \in \dom(\I_{\aexec})$ into a list of transaction 
-identifiers which is consistent with the program order of $\tid$ in $\hat{\aexec}$, and which 
-contains $\tid_0$ as its initial element : $\tsid \in \progOrd_{\hat{\aexec}}(\tid)$ 
-if and only if either $\tsid = \tsid_0$, or $\tsid \xrightarrow{\PO_{\hat{\aexec}}} \tid$. 
-Furthermore, whenever $\tsid <_{\progOrd_{\hat{\aexec}(\tid)}} \tsid'$, then either 
-$tsid = \tsid_0$, or $\tsid \xrightarrow{\PO_{\hat{\aexec}}} \tsid'$. 
-\ac{This automatically implies that $\tsid_0$ is the first element in the program order 
-of each client.}
+we have that $\nu <_{\hh_{\aexec}(\key{k})} \nu'$ if and only if $\nu = (\_, \tsid, \_)$, 
+$\nu' = (\_, \tsid', \_)$, and $\tsid \xrightarrow{\VO_{\aexec}(\key{k})} \tsid'$.
+%\item $\progOrd_{\hat{\aexec}}$ is the function that maps each $\tid \in \dom(\I_{\aexec})$ into a list of transaction 
+%identifiers which is consistent with the program order of $\tid$ in $\hat{\aexec}$, and which 
+%contains $\tid_0$ as its initial element : $\tsid \in \progOrd_{\hat{\aexec}}(\tid)$ 
+%if and only if either $\tsid = \tsid_0$, or $\tsid \xrightarrow{\PO_{\hat{\aexec}}} \tid$. 
+%Furthermore, whenever $\tsid <_{\progOrd_{\hat{\aexec}(\tid)}} \tsid'$, then either 
+%$tsid = \tsid_0$, or $\tsid \xrightarrow{\PO_{\hat{\aexec}}} \tsid'$. 
+%\ac{This automatically implies that $\tsid_0$ is the first element in the program order 
+%of each client.}
 \end{itemize}
 \end{definition}
 
 \begin{proposition}
-Let $\hat{\aexec}$ be an abstract execution that satisfies the last write wins policy. 
-Then $(\hh_{\hat{\aexec}}, \pi_{\hat{\aexec}})$ is well-formed.
+Let $\aexec$ be an abstract execution such that $\aexec \models \RP_{\LWW}$. 
+%Then $(\hh_{\hat{\aexec}}, \pi_{\hat{\aexec}})$ is well-formed.
+Then $\aexec \compatible \hh_{\aexec}$. 
 \end{proposition}
 
+\begin{proof}
+For each subset $\T \subseteq \T_{\aexec}$ and key $\key{k}$, let 
+$\tsid_{\T}^{\key{k}} = \tsid_0$ if 
+$(\T \cap \{\tsid \mid (\WR\; \key{k}: \_) \in_{\aexec} \tsid\}) = \emptyset$, 
+$\tsid_{\T}^{\key{k}} = \max_{\AR_{\aexec}}(\T \cap \{\tsid \mid (\WR\; \key{k}: \_) \in_{\aexec} \tsid\})$ otherwise.
+Let also $\nu_{\T}^{\key{k}}$ be the 
+ version in $\hh_{\aexec}(\key{k})$ such that $\WTx(\nu_{\T}^{\key{k}}) = \tsid_{\T}^{\key{k}}$. 
+Note that the version $\nu_{\T}^{\key{k}}$ exists and is uniquely determined because of the 
+definition of $\Versions_{\aexec}(\key{k})$.
+Define $f = \lambda \T. V_{\T}$, where $V_{\T} = (\lambda \key{k}. \nu_{\T}^{\key{k}}$. 
+We prove the following facts: 
+\begin{itemize}
+\item let $\h = \RP_{\LWW}(\aexec, \T)$. Then we have that, for each key $\key{k}$, 
+$\h(\key{k}) = n$, where either $n = 0$ and $\tsid_{\T}^{\key{k}} = \tsid_0$, or 
+$(\WR\;\key{k}: n) \in_{\aexec} \tsid_{\T}^{\key{k}}$. 
+If $\tsid_{\T}^{\key{k}} = \tsid_0$, then it must be the case that 
+$\nu_{\T}^{\key{k}} = (0, \tsid_0, \_)$, and therefore $\snapshot(\hh_{\aexec},V_{\T})(\key{k}) = 0$; 
+otherwise, $\nu_{\T}^{\key{k}} = (n, \tsid_{\T}^{\key{k}}, \_)$, and 
+$\snapshot(\hh_{\aexec}, V_{\T})(\key{k}) = n$.
 
+\item let now $V$ be an atomic view over $\hh_{\aexec}$. For each key $\key{k}$, $\hh(\key{k}, V(\key{k}))$ 
+is included in $\Versions_{\aexec}(\key{k})$. Therefore, either $\hh_{\aexec}(\key{k}, V(\key{k})) = 
+(0, \tsid_0, \_)$, or there exists a transaction $\tsid_{V}^{\key{k}} \in \T_{\aexec}$ such that 
+$(\WR\; \key{k}: n) \in_{\aexec} \tsid_{V}^{\key{k}}$ and $\hh_{\aexec}(\key{k}, V(\key{k})) = 
+(n, \tsid_{V}^{\key{k}}, \_)$. Let $\T_{V} = \{ \tsid_{V}^{\key{k}} \mid k \in \Addr\}$. 
+
+Note that, if $(\WR\;\key{k}: \_ ) \in_{\aexec} \tsid$ for some $\tsid \in \T_{V}$, 
+then we must have that either $\tsid = \tsid_{V}^{\key{k}}$, or $\tsid \xrightarrow{\AR_{\aexec}} 
+\tsid_{V}^{\key{k}}$. This is because, if it were $\tsid_{V}^{\key{k}} \xrightarrow{\AR_{\aexec}} 
+\tsid$, then there would exists an index $i: V(\key{k}) < i$ such that  $\hh(\key{k}, i) = (\_, \tsid, \_)$;  
+that is, the view $V$ includes the update to some $\key{k}' \neq \key{k}$ performed by $\tsid$ 
+(such an update must exist because we are assuming that $\tsid \in \T_{V}$, but not the update 
+to key $\key{k}$ performed by the same transaction $\tsid$. This violates the assumption that $V$ is 
+atomic. 
+
+We have proved that either $\hh(\key{k}, V(\key{k}) = (0, \tsid_0, \_)$, or $\hh_{\aexec}(\key{k}, V(\key{k})) = 
+(n, \tsid_{V}^{\key{k}}, \_)$, where $(\WR\;\key{k}:n) \in_{\aexec} \tsid_{V}^{\key{k}}$.
+Furthermore, whenever $\tsid \in \T_{V}$ and $(\WR\;\key{k}: \_) \in_{\aexec} \tsid$ 
+then either $\tsid = \tsid_{V}^{\key{k}}$, or $\tsid \xrightarrow{\AR_{\aexec}} \tsid_{V}^{\key{k}}$. 
+This implies that, for any key $\key{k}$, $f(\T_{V}) = V$; let also $\{ \h \} = \RP_{\LWW}(\aexec, \T_{V})$. 
+For each key $\key{k}$, the value of $\h(\key{k})$ is the value of the write of the last transaction 
+(in the arbitration order) that wrote to key $\key{k}$, or $0$ if there is no such transaction in $\T$. 
+This is exactly the value of the version of $\key{k}$ to which view $V$ points in $\hh_{\aexec}$, 
+that is $\h(\key{k}) = \snapshot(\hh_{\aexec}, V)(\key{k})$.
+
+\end{itemize}
+\end{proof}
