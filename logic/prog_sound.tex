@@ -315,6 +315,12 @@ This is non-trivial as threads have the up-to-date history heap but not the view
 \begin{definition}
 \[
 \begin{rclarray}
+    \pred{compatible}{\wenv} & \defeq & 
+    \begin{array}[t]{@{}l}
+        \exsts{\wenv'}
+        (\sep_{\cl \in \dom{\wenv'}} \wenv'{\cl} )\isdef
+        \fora{\cl \in \dom{\wenv}} (\wenv(\cl), \wenv'(\cl)) \relyV 
+    \end{array} \\
     \func{world2conf}{\wenv} & \defeq & 
     \begin{cases}
         (\mkvs, \lambda \client \ldotp \eraseW{\wenv(\client)}\projection{2}) & \text{if } \fora{ \client }  \eraseW{\wenv(\client)}\projection{1} = \mkvs \\
@@ -328,9 +334,21 @@ This is non-trivial as threads have the up-to-date history heap but not the view
     \end{array} \\
     \pred{stepp}{ \nat + 1, \wenv, \wenv', \thdenv, \thdenv',\prog, \como} & \defeq & 
     \begin{array}[t]{@{}l}
-    \exsts{\wenv'', \thdenv'', \prog''} \\
-    \func{world2conf}{\wenv}, \thdenv, \prog \toG{\como} \func{world2conf}{\wenv''}, \thdenv'', \prog'' \\
-    \quad {} \land \pred{steps}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
+    \exsts{\wenv'', \thdenv'', \prog'', \cl, \w, \w'} \\
+    \fora{\cl \in \dom(wenv)}
+    \land (\wenv(\cl), \wenv(\cl)'') \in \Rely \\
+    \quad {} \land \pred{compatible}{\wenv''} \\
+    \quad {} \land \pred{stepp}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
+    \end{array} \\
+    \pred{stepp}{ \nat + 1, \wenv, \wenv', \thdenv, \thdenv',\prog, \como} & \defeq & 
+    \begin{array}[t]{@{}l}
+    \exsts{\wenv'', \thdenv'', \prog'', \cl, \w, \w'} \\
+    \quad \wenv(\cl) = \w 
+    \land \wenv'(\cl) = \w' 
+    \land (\w, \w') \in \Guar \\
+    \quad {} \land \func{world2conf}{\wenv}, \thdenv, \prog \toG{\como} \func{world2conf}{\wenv''}, \thdenv'', \prog'' \\
+    \quad {} \land \pred{compatible}{\wenv''} \\
+    \quad {} \land \pred{stepp}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
     \end{array} \\
 \end{rclarray}
 \]
@@ -355,58 +373,54 @@ This is,
 \begin{proof}
 Induction on derivations.
 
-\caseB{\( \dom(\prog) \equiv \Set{\txid} \)}
+\caseB{\( \dom(\prog) \equiv \Set{\txid \mapsto \cmd} \)}
  
-If there is only one thread, it derives from the \cref{thm:per-thread-soundness}.
+If there is only one thread, we need to prove \( \tripleSemG{\gpre}{\cmd}{\gpost}\) which can be derived from the soundness for commands \cref{thm:per-thread-soundness} and the \cref{lem:prgram-step-to-command-step}.
 
-\caseB{\( \dom(\prog) \equiv \Set{\txid, \txid'} \)}
+\caseI{\( \prog \ppar \cmd \)}
 
-We have \( \tripleG{\gpre_{1} \sep \gpre_{2}}{\cmd_{1} \ppar \cmd_{2}}{ \gpost_{1} \sep \gpost_{2} } \) and \( \tripleG{\gpre_{i}}{\cmd_{i}}{ \gpost_{i} } \) for \( i \in \Set{1,2} \).
-Give the \ih and the soundness result per thread, we need to prove for any possible traces for the entire program \( \theta \), there exists traces \( \tau_{1} \) and \( \tau_{2} \) from the first thread and second thread with the same state for history heap in each step.
-For brevity, we use numbers \( 1\)  and \(2\) both as subscript for two traces and the thread identifiers.
-The following also proves the local capabilities from the two local traces always compatible.
+We have \( \tripleG{\gpre_{1} \sep \gpre_{2}}{\prog \ppar \cmd}{ \gpost_{1} \sep \gpost_{2} } \) and therefore \( \tripleG{\gpre_{1}}{\prog}{ \gpost_{1} } \) and \( \tripleG{\gpre_{2}}{\cmd}{ \gpost_{2} } \).
+Because \( \gpre_{1} \sep \gpre_{2} \), we have \( \wenv\) and \( \w \) such that \( \prod\limits_{\cl \in \dom(\wenv)} \wenv(\cl) \in \evalW{\gpre_{1}} \) and \( \w \in \evalW{\gpre_{2}}\) for some \( \lenv\) and \( \stk \), which implies \( \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}}\).
+Note that since stacks are local for clients, it is safe to assume variables from different stacks are disjointed.
+Give the \ih that \( \prog \) holds and the soundness result for commands \( \cmd \), we want to prove the follows:
 \[
 \begin{array}{@{}l}
-    \fora{\theta} \exsts{\tau_{1}, \tau_{2}} \\
-    \quad 
-    \begin{B}
-        \fora{\hh, \hh', \thdenv, \thdenv'} 
-        ((\hh,\thdenv), (\hh', \thdenv')) \in \theta \\
-        \quad {} \land \dom(\thdenv) = \dom(\thdenv') = \Set{1,2} 
-        \land \exsts{\w_{1}, \w_{2}, \w_{1}', \w_{2}, i \in \Set{1,2}} \\
-        \qquad (\w_{i}, \w_{i}') \in \tau_{i}
-        \land \hh = \clps{\w_{i}}\projection{1} 
-        \land \hh' = \clps{\w_{i}'}\projection{1} 
-        \land (\w_{1}\projection{1} \composeC \w_{2}\projection{1})\isdef
-        \land (\w_{1}'\projection{1} \composeC \w_{2}'\projection{1})\isdef  \\
-        \qquad {} \land \thdenv(i)\projection{2} = \clpsW{\w_{i}}\projection{2}
-        \land \thdenv'(i)\projection{2} = \clpsW{\w_{i}'}\projection{2}
-    \end{B}
+    \fora{\nat, \wenv, \wenv', \thdenv, \thdenv', \w, \w', \stk, \stk', \cl, \et}  \\
+    \quad \pred{stepp}{\nat, \wenv, \wenv', \thdenv, \thdenv', \prog, \et} 
+    \land \pred{step}{\nat, \w, \w', \stk, \stk', \cmd, \et} 
+    \land \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}} \\
+    \qquad \exsts{\wenv'', \thdenv'', \stk'' } \\
+    \qquad {} \land \pred{stepp}{\nat, \wenv \uplus \Set{\cl \mapsto \w}, \wenv'', \thdenv \uplus \Set{\cl \mapsto \stk}, \thdenv'', \prog \uplus \Set{\cl \mapsto \cmd}, \et}  \\
+    \qqquad {} \land \prod\limits_{\cl' \in \dom(\wenv'') } \wenv''(\cl')  \in \evalW[\lenv, \stk']{\gpost_{1} \sep \gpost_{2}}
 \end{array}
 \]
-We prove by constructing the traces \( tau_{1}\) and \( \tau_{2} \) inductively.
-Initially, because \( \gpre_{1} \sep \gpre_{2} \) is defined, we pick any states \( \w_{1}^{0} \)  and \( \w_{2}^{0} \) such that \( \w_{1}^{0} \in \evalW{\gpre_{1}}\), \( \w_{2}^{0} \in \evalW{\gpre_{2}}\) and \( (\w_{1}^{0} \composeW \w_{2}^{0})\isdef\).
-This means the initial history heaps and views match, \ie 
-\[ 
-    \fora{i \in \Set{1,2}} 
-    \hh^{0} = \clps{\w_{1}^{0} \composeW \w_{2}^{0}}\projection{1} = \clps{\w_{i}^{0}}\projection{1}
-    \land \thdenv^{0}(i)\projection{2} = \clps{\w_{i}^{0}}\projection{2}
+We prove by induction on the number \( \nat \).
+If \( \nat = 0\), it holds trivially by picking \( \wenv'' = \wenv \uplus \Set{\cl \mapsto \w} \).
+If it holds when \( \nat = i\), let considers \( \nat = i + 1\).
+One client is going to take a guarantee step.
+By unfolding the definition of \( \predn{stepp} \) if the \( \prog \) takes one step to a new \( \wenv_i\), \( \prog_i \) and \( \thdenv_i \),
+\[
+\exsts{\cl} (\wenv(\cl), \wenv_i(\cl)) \in \Guar \land  \pred{compatible}{\wenv_i} \land \pred{steppp}{i, \wenv_i, \wenv', \thdenv_i, \thdenv', \prog_i, \et}
 \]
-and the local capabilities are compatible,
-\[ 
-    (\w_{1}^{0}\projection{1} \composeC \w_{2}^{0}\projection{1})\isdef 
+because the of the compatibility \( \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}} \) and the \cref{lem:locality-update}, there exists a world \( \w''\) by unfolding \( \predn{step} \):
+\[
+    (\w, \w'') \in \Rely \land \pred{step}{i, \w'', \w', \stk, \stk', \cmd, \et}  \land \pred{compatible}{\wenv_i \uplus \Set{\cl \mapsto \w''}}
 \]
-Assume there exists two traces \( \tau_{1}, \tau_{2}\) after \( i \) steps, let consider the next step for the entire program.
-Now two traces \( \tau_{1}\) and \( \tau_{2} \) where the current finial states are \( \w_{1}^{i} \) and \( \w_{2}^{j} \) such that \( \clps{\w_{1}^{i}}\projection{1} = \clps{\w_{2}^{j}}\projection{1} \) and \( (\w_{1}^{i}\projection{1} \composeC \w_{2}^{j}\projection{1})\isdef \).
-There are two possibilities for the first thread: (a) it commits a transaction; or (b) it take a rely step which updates the history heap and shared capabilities.
-If the first thread commits a transaction, which means the last step of the new trace \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) it is allowed by the guarantee \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Guar \).
-By the \cref{lem:locality-update}, there exists \( \w_{2}^{j+1} \) satisfying the conditions, therefore we can construct the new trace for the second thread as \( \tau_{2}' = \tau_{2} \cup \Set{(\w_{2}^{j},\w_{2}^{j+1})} \).
-If the first thread take a rely step, \ie \( \tau_{1}' = \tau_{1} \cup \Set{(\w_{1}^{i}, \w_{1}^{i+1})} \) such that \( (\w_{1}^{i}, \w_{1}^{i+1}) \in \Rely \), there are two possibilities, this transfer is triggered by a capability is either included in the second thread or not.
+Now we have the proof by applying \ih when \( \nat = i \).
+Similarly, Let consider that the \( \cmd \) takes one step transferring the world to \( \w'' \) as \( (\w, \w'') \in \Guar \).
+Because the of the compatibility \( \pred{compatible}{\wenv \uplus \Set{\cl \mapsto \w}} \) and the \cref{lem:locality-update}, there exists a world \( \wenv''\) by unfolding \( \predn{stepp} \):
+\[
+    \fora{\cl \in \dom(\wenv)} \land (\wenv(\cl), \wenv(\cl)'') \in \Rely \land \pred{compatible}{\wenv''} \land \pred{stepp}{ \nat, \wenv'', \wenv', \thdenv'', \thdenv',\prog'', \como} 
+\]
+Now we have the proof by applying \ih when \( \nat = i \).
+Last, both \( \prog\) and \( \cmd \) take a rely step.
+Because the \( \pred{compatible}{\wenv''} \) and \ih, we have the proof when \( \nat =  i + 1\).
 
 \end{proof}
 
 
 \begin{lemma}
+\label{lem:prgram-step-to-command-step}
 \[
 \begin{array}{@{}l}
     \for{\nat, \w, \w', \stk, \stk', \cmd, \et, \cl} \\
@@ -420,6 +434,14 @@ Induction on the number \( \nat \).
 
 \caseB{\nat = 0}
 It is easy to see that \( \cmd = \pskip \), \( \w = \w'\) and \( \stk = \stk' \) by the definition of \(  \predn{stepp}\).
+
 \caseI{\nat = i + 1}
-By the definition \( \predn{stepp}\)
+
+The if it is a rely step, it trivially holds.
+Let consider a guarantee step.
+By the definition \( \predn{stepp}\), there exists a world \( \w'' \), a stack \( \stk'' \) and commands \( \cmd' \) such that \( (\w, \w'') \Guar\) and
+\( \pred{stepp}{ i, \Set{\cl \mapsto \w''},\Set{\cl \mapsto \w'}, \Set{\cl \mapsto \stk''}, \Set{ \cl \mapsto \stk'}, \Set{\cl \mapsto \cmd'}, \como}  \).
+First by \ih, we know  \( \pred{steps}{ i, \w'', \w', \stk'', \stk', \cmd', \como} \) holds.
+Since there is only one client, by the semantics for commands and programs (\cref{fig:program_semantics}), we know \( (\eraseW{\w}, \stk ), \cmd \toL{\et} (\eraseW{\w''}, \stk'), \cmd' \).
+By folding one guarantee step and the \ih, we know that \( \pred{steps}{ i + 1, \w, \w', \stk, \stk', \cmd', \como} \) holds.
 \end{proof}

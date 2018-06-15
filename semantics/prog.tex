@@ -91,12 +91,13 @@ key-value stores.
 
 
 \begin{figure}[!t]
-\sx{change the order to key-value, view and stack, and the program semantics change to the type of configuration + a stack env.}
+\sx{drop \( \func{updateView}{\hh', \vi'', \opset} \orderVI \vi'\) and use \( \vi'' \leq \vi' \) which corresponds to monotonic read. }
 \hrule
 %
 \[
 \begin{rclarray}
 	\toT{}  & : &
+    \ClientID \; \times \;
 	\left( ( \HisHeaps \times \Views \times \Stacks ) \times \Commands \right) 
 	\; \times\; \Como \;\times \;
 	\left( ( \HisHeaps \times \Views \times \Stacks ) \times \Commands \right) 
@@ -108,54 +109,54 @@ key-value stores.
         \vi \orderVI  \vi''
         \\ \h = \clpsHH{\hh,\vi''}
         \\ (\stk, \h, \unitO), \trans \ \toL^{*} \  (\stk', \stub,  \opset) , \pskip
-        \\ \txid \in \func{fresh}{\hh}  
+        \\ \txid \in \func{nextTxid}{\hh,\cl}  
         \\\\ \hh' = \func{updateMKVS}{\hh, \vi'', \txid, \opset}  
         \\ \func{updateView}{\hh', \vi'', \opset} \orderVI \vi'
         \\ (\hh, \vi) \csat \opset : \vi'
     }{%
-        ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{\como} \ ( \hh', \vi', \stk' ) , \pskip
+        \cl \vdash ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{\como} \ ( \hh', \vi', \stk' ) , \pskip
     }
     \and
     \inferrule[\rl{PAssign}]{
         \val = \evalE{\expr}
     }{%
-        ( \hh, \vi, \stk ) , \passign{\var}{\expr} \ \toT{\como} \  ( \hh, \vi, \stk\rmto{\var}{\val} ) , \pskip
+        \cl \vdash ( \hh, \vi, \stk ) , \passign{\var}{\expr} \ \toT{\como} \  ( \hh, \vi, \stk\rmto{\var}{\val} ) , \pskip
     }
     \and
     \inferrule[\rl{PAssume}]{%
         \evalE[\thstk]{\expr} \neq 0
     }{%
-        ( \hh, \vi, \stk ) , \passume{\expr} \ \toT{\como} \  ( \hh, \vi, \stk ) , \pskip
+        \cl \vdash ( \hh, \vi, \stk ) , \passume{\expr} \ \toT{\como} \  ( \hh, \vi, \stk ) , \pskip
     }
     \and
     \inferrule[\rl{PChoice}]{
         i \in \Set{1,2}
     }{%
-        ( \hh, \vi, \stk ) , \cmd_{1} \pchoice \cmd_{2} \ \toT{\como} \  ( \hh, \vi, \stk ) , \cmd_{i}
+        \cl \vdash ( \hh, \vi, \stk ) , \cmd_{1} \pchoice \cmd_{2} \ \toT{\como} \  ( \hh, \vi, \stk ) , \cmd_{i}
     }
     \and
     \inferrule[\rl{PIter}]{ }{%
-        ( \hh, \vi, \stk ) , \cmd\prepeat \ \toT{\como} \  ( \hh, \vi, \stk ) , \pskip \pchoice (\cmd \pseq \cmd\prepeat)
+        \cl \vdash ( \hh, \vi, \stk ) , \cmd\prepeat \ \toT{\como} \  ( \hh, \vi, \stk ) , \pskip \pchoice (\cmd \pseq \cmd\prepeat)
     }
     \and
     \inferrule[\rl{PSeqSkip}]{ }{%
-        ( \hh, \vi, \stk ) , \pskip \pseq \cmd \ \toT{\como} \  ( \hh, \vi, \stk ) , \cmd
+        \cl \vdash ( \hh, \vi, \stk ) , \pskip \pseq \cmd \ \toT{\como} \  ( \hh, \vi, \stk ) , \cmd
     }
     \and
     \inferrule[\rl{PSeq}]{% 
-        ( \hh, \vi, \stk ) , \cmd_{1} \ \toT{\como} \  ( \hh, \vi', \stk' ) , {\cmd_{1}}' 
+        \cl \vdash ( \hh, \vi, \stk ) , \cmd_{1} \ \toT{\como} \  ( \hh, \vi', \stk' ) , {\cmd_{1}}' 
     }{%
-        ( \hh, \vi, \stk ) , \cmd_{1} \pseq \cmd_{2} \ \toT{\como} \ ( \hh, \vi', \stk' ) , {\cmd_{1}}' \pseq \cmd_{2}
+        \cl \vdash ( \hh, \vi, \stk ) , \cmd_{1} \pseq \cmd_{2} \ \toT{\como} \ ( \hh, \vi', \stk' ) , {\cmd_{1}}' \pseq \cmd_{2}
     }\vspace{5pt}
 \end{mathpar}
 \begin{flushleft} 
 with
 \quad
 $
-\func{fresh}{\hh}  \eqdef
-\Setcon{ \txid }{ 
-	\txid \in \TxID \land \fora{\addr, i} \txid \neq \WTx(\hh(\addr,i)) 
-	\land \txid \notin \RTx(\hhR(\addr,i))
+\func{nextTxid}{\hh,\cl}  \eqdef
+\Setcon{ \txid^{\cl} }{ 
+	\txid^{\cl} \in \TxID \land \fora{\addr, i, \txid} \txid^{\cl} > \WTx(\hh(\addr,i)) 
+	\land \txid^{\cl} > \txid \land \txid \in \RTx(\hhR(\addr,i))
 } 
 $, and
 \vspace{5pt}
@@ -211,7 +212,7 @@ $, and
 \]
 \begin{mathpar}
     \inferrule[\rl{PSingleThread}]{%
-        ( \mkvs, \viewFun(\thid), \thdenv(\thid) ), \prog(\thid), \ \toT{\como} \  ( \mkvs', \vi', \stk' ) , \cmd'  
+        \cl \vdash ( \mkvs, \viewFun(\thid), \thdenv(\thid) ), \prog(\thid), \ \toT{\como} \  ( \mkvs', \vi', \stk' ) , \cmd'  
     }{%
         ( (\mkvs, \viewFun), \thdenv, \prog ) \ \toG{\como} \  ( \mkvs', \viewFun\rmto{\thid}{\vi'}) \thdenv\rmto{\thid}{\stk'} , \prog\rmto{\thid}{\cmd'} ) 
     }
