@@ -4,8 +4,8 @@
 Read atomic (RA) \cite{ramp} is the weakest consistency model among those that enjoy \emph{atomic visibility} \cite{framework-concur}. 
 It requires of a transaction to read an atomic snapshot of the database and never observe the partial effects of other transactions.
 This is also known as the \emph{all-or-nothing} property: a transaction observes either none or all the updates performed by other transactions. 
-One litmus test that should \textbf{not} be failed in RAMP consists of the program $\prog_1$ from \secref{sec:semantics.example}, which we have presented a trace violating atomic visibility if no constraints on the commit test are placed.
-Intuitively, in such a program, it violate the atomic visibility because it is allowed to execute the second transaction \( \trans_2\) when the thread $\thid_2$ only observes partial effect from transaction \( \txid_1 \).
+One litmus test that should \textbf{not} be failed in RAMP consists of the program $\prog_1$ from \cref{sec:semantics.example}, which we have presented a trace violating atomic visibility if no constraints on the execution test are placed.
+Intuitively, in such a program, it violate the atomic visibility because it is allowed to execute the second transaction \( \trans_2\) when the client $\thid_2$ only observes partial effect from transaction \( \txid_1 \).
 %\ac{, which is obtained by removing all the information about $\thid_1$ (view and stack) in Figure \ref{fig:opsem.example}(c).
 %\[
 %\prog_1 \equiv 
@@ -23,13 +23,13 @@ Intuitively, in such a program, it violate the atomic visibility because it is a
 
 %\ac{
 %To avoid transactions to only observe the partial effects of other transactions, we 
-%must ensure that transactional code cannot be executed by a thread whose 
+%must ensure that transactional code cannot be executed by a client whose 
 %views is up-to-date with respect to some transaction $\tsid$ for some location $[\loc_x]$, 
 %but not for some other location $[\loc_y]$. This leads to the following definition.
 %}
-To avoid a transaction to observe the partial effects of other transactions, we need to ensure that transactional code cannot be executed by a thread whose views is partially up-to-date with respect to some transactions.
+To avoid a transaction to observe the partial effects of other transactions, it needs to ensure that transactional code cannot be executed by a client whose views is partially up-to-date with respect to some transactions.
 This leads to the following definition.
-\begin{defn}[Read atomic]
+\begin{definition}[Read atomic]
 \label{def:readatomic}
 %Let $\hh$ be a history heap,$V$ be a view, $[\loc_x]$ be 
 %a location and $\nu$ be a version. We say that $V$ $[\loc_x]$-\emph{sees} version 
@@ -66,7 +66,7 @@ this is not strictly necessary. In this case the check becomes:
 Then given a history \( \hh \), the view $\vi$ is \emph{consistent} with respect to \emph{atomic visibility}, written $\pred{atomic}{\vi, \hh}$, if the view $\vi$ is up-to-date with some of the updates performed by transaction $\txid$, then it should be up-to-date with all the updates performed by $\txid$,
 \[
 \begin{rclarray}
-\pred{atomic}{\vi ,\hh} & \eqdef & \fora{\txid } \exsts{\ke, i} i \leq \vi(\ke) \land \hh(\ke)(i) = (\stub, \txid, \stub) \implies \pred{vusible}{\txid, \vi, \hh}
+\pred{atomic}{\vi ,\hh} & \eqdef & \fora{\txid } \exsts{\ke, i} i \leq \vi(\ke) \land \hh(\ke)(i) = (\stub, \txid, \stub) \implies \pred{visible}{\txid, \vi, \hh}
 \end{rclarray}
 \]
 The commit test for \emph{read atomic} $\csatRA$ is defined as,
@@ -84,11 +84,11 @@ The commit test for \emph{read atomic} $\csatRA$ is defined as,
 %\item if $\WS(\hh([\loc_x])(i)) = \tsid$ for some $i = 0,\cdots, \lvert \hh([\loc_n]) -1 \rvert$, 
 %then $i \leq V([\loc_n])$.
 %\end{itemize}
-\end{defn}
+\end{definition}
 
 Suppose that we execute the program $\prog_1$ under read atomic $\comoRA$.
-Assume the \( \txid_{1}\) is still committed first as in Section \ref{sec:semantics.example}, yielding the result shown in \figref{fig:opsem-example-b}.
-Yet the second transaction \( \txid_{2} \) cannot starts with a view as in \figref{fig:opsem-example-c}, because later when the transaction try to commit, the read atomic commit test will stop it.
+Assume the \( \txid_{1}\) is still committed first as in Section \ref{sec:semantics.example}, yielding the result shown in \cref{fig:opsem-example-b}.
+Yet the second transaction \( \txid_{2} \) cannot starts with a view as in \cref{fig:opsem-example-c}, because later when the transaction try to commit, the read atomic commit test will stop it.
 \ac{
 $\langle \mathcal{C_0}, \prog_1 \rangle \xrightarrow{\mathsf{RA}} \langle \mathcal{C}_1, \prog_1' \rangle$, 
 where we recall that $\mathcal{C}_0$, $\mathcal{C}_1$ are depicted in Figure \ref{fig:opsem.exampe}(a), 
@@ -96,10 +96,27 @@ where we recall that $\mathcal{C}_0$, $\mathcal{C}_1$ are depicted in Figure \re
 
 It is immediate to observe that the only way in which the execution of transaction $\ptrans{\trans}$ from $\thid_2$ in $\prog_1'$ can return value ${\Large \frownie}$ is the following: 
 \begin{itemize}
-\item first, push the view $V$ of thread $\txid_2$ in the configuration 
+\item first, push the view $V$ of client $\txid_2$ in the configuration 
 $\mathcal{C}_1$ of Figure \ref{fig:opsem.example}(b) to observe the update of location $[\vx]$, but not the update of 
 $[\vy]$. This view is the one labelled with $\txid_2$ in Figure \ref{fig:opsem.example}(c), and we refer 
 to it as $V'$;
 \item then, execute the transaction $\ptrans{\trans}$ in $\thid_2$. 
 \end{itemize}
 }
+
+One may wonder whether it is the case that an execution of a command may get stuck because of a ill-defined execution test.
+For example, for a given execution test $\ET$, it may be possible to reach a state of the system, with MKVS $\hh$ and view $\vi$ for client $\cl$ , such that for any $\vi': \vi \sqsubseteq \vi'$ we have that $ \comoRA \not\vdash (\hh, \vi') \csat[] \stub : \stub $.
+We show that this is not the case for the execution test $\comoRA$. 
+
+\ac{This does not mean that progress is ensured. A transaction may very well 
+not terminate. Rather, this says that the inability of a program to execute a 
+transaction does not depend on the execution test itself.}
+\sx{what do you mean???}
+\begin{proposition}
+\label{prop:ra.progress}
+The execution test $\comoRA$ \emph{does not hinder progress}: for any MKVS $\mkvs$, views $\vi$, and fingerprint $\opset$, there exist two views $\vi': \vi \sqsubseteq \vi'$, $\vi'': \Vupdate(\hh, \vi', \opset) \sqsubseteq \vi''$ such that $(\hh, \vi) \csatRA \opset : \vi'$.
+\end{proposition}
+
+\begin{proof}
+For a given MKVS $\hh$, let $\func{up-to-date}{\hh} = \lambda \key{k}. (\lvert \hh \rvert - 1)$ be the view that points to the most recent version of each object. It is immediate to note that $\pred{atomic}{\hh, \func{up-to-date}{\hh}}$, and therefore $(\hh, \vi) \csatRA \opset : \vi'$. 
+\end{proof}
