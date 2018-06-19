@@ -25,6 +25,12 @@
 \newcommand{\lastWrite}{\ensuremath{\mathsf{lastWrite}}}
 \newcommand{\indexOf}{\ensuremath{\mathsf{index}}}
 \newcommand{\getView}{\ensuremath{\mathsf{getView}}}
+\newcommand{\absTrace}{\ensuremath{\mathsf{ATraces}}}
+\newcommand{\transclient}{\ensuremath{\mathsf{clientOf}}}
+\newcommand{\transmove}{\ensuremath{\mathsf{moveOf}}}
+\newcommand{\progset}{\ensuremath{\mathbb{P}}}
+
+\newcommand{\first}{\ensuremath{\mathsf{first}}}
 
 In this Section we propose an alternative 
 semantics of programs. In this semantics, states 
@@ -105,7 +111,7 @@ between transactions.
 \ac{This is way too much notation. Move into a figure.}
 Given two abstract executions $\aexec_1, \aexec_2$ and a subset $\T \subseteq \T_{\aexec_1} \cap \T_{\aexec_2}$, 
 we say that $\aexec_1$ and $\aexec_2$ agree on $\T$ if, and only if, $\forall \tsid,\tsid' \in \T. \TtoOp{T}_{\aexec_1}(\tsid) = 
-\TtoOp{T}_{\aexec_2}(\tsid)$, $\tsid \xrightarrow{\PO_{\aexec_1(\tid)}} \tsid'$ if and only if $\tsid \xrightarrow{\PO_{\aexec_2}(\tid)} 
+\TtoOp{T}_{\aexec_2}(\tsid)$, $\tsid \xrightarrow{\PO_{\aexec_1}(\tid)} \tsid'$ if and only if $\tsid \xrightarrow{\PO_{\aexec_2}(\tid)} 
 \tsid'$, and similarly for $\VIS_{\_}$ and $\AR_{\_}$.
 
 Given an abstract execution $\aexec$, a key $\key{k}$ and a transaction identifier $\tsid \in \dom(\T_{\aexec})$, we 
@@ -603,21 +609,91 @@ from which it follows that $\aexec \in \interpr{\prog}_{\CM}$.
 Let $\CM$ be an axiomatic specification, with $\CM = (\RP_{\LWW}, \calA)$. 
 The aim of this section is that the abstract execution semantics of $\CM$ can be 
 simulated by the key-value store semantics, for an appropriate execution test $\ET$. 
-That is, given an execution of the form 
+That is, given a computation of the form 
 \[
-\langle \aexec_0, \thdstackFun_{0}, \prog_0 \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} \langle \aexec_{n}, \thdstackFun_{n}, \prog_{n} \rangle
+\alpha = \langle \aexec_0, \thdstackFun_{0}, \prog_0 \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} \langle \aexec_{n}, \thdstackFun_{n}, \prog_{n} \rangle
 \]
-we want to find an equivalent execution 
+we want to find an equivalent computation 
 \[
-\langle \mathcal{C}_{0}, \thdstackFun_{0}, \prog_0 \rangle \rightarrow_{\ET} \cdots \langle \rightarrow_{\ET} \rangle \mathcal{C}_n, \thdstackFun_{n}, \prog_{n} 
+\gamma = \langle \mathcal{C}_{0}, \thdstackFun_{0}, \prog_0 \rangle \rightarrow_{\ET} \cdots \rightarrow_{\ET} \langle \mathcal{C}_n, \thdstackFun_{n}, \prog_{n} 
 \rangle.
 \]
 
+In the following, it will be important to fix the structure of computations. 
+The following definition serves to its purpose. 
+\begin{definition}
+A computation fragment $\alpha$ is 
+a non-empty sequence of triples of the form $\langle \aexec, \thdstackFun, \prog$. 
+That is, $\alpha \in (\aeset \times \ThdStacks \times \progset)^{+}$. 
+Let $\CM$ be a consistency model specification. A computation fragment 
+\begin{equation}
+\label{eq:computation}
+\langle \aexec_0, \thdstackFun_0, \prog_0 \rangle \cdots \langle \aexec_{n}, \thdstackFun_{n}, 
+\prog_{n} \rangle
+\end{equation}
+is \emph{$\CM$-valid} if, for any $i=0,\cdots, n-1$, the transition $\langle \aexec_{i}, \thdstackFun_{i}, 
+\prog_{i} \rangle \absrightarrow_{\CM} \langle \aexec_{i+1}, \thdstackFun_{i+1}, \prog_{i+1} \rangle$ 
+can be inferred from the rules of the abstract execution semantics of programs.
+
+A $\CM$-valid computation fragment is also called a $\CM$-\emph{computation} if 
+$\T_{\aexec_0} = \emptyset$, whenever $\thdstackFun$ maps a client into 
+a stack $\thdstack$, then $\thdstack = \lambda \tid. \lambda \pvar{a}.0$, 
+and $\prog_{n} = \prod_{i=1}^{m} \tid_{i} : \nil$.
+\end{definition}
+We use $\alpha$ to range over computation fragments and $\CM$-computations, 
+while we use $\hat{\alpha}$ to refer either to a computation or to the empty sequence $\varepsilon$.
+A computation fragment of length $2$ is also called a \emph{transition}. We use the meta-variable $\tau$ 
+to range over transitions.
+
+Computation fragments $\gamma$ with respect to the key-value store semantics, as well as $\ET$-valid 
+execution fragments, are defined similarly. Assuming that the computation fragment $\alpha$ 
+from Equation \eqref{eq:computation} is $\CM$-valid, for some consistency model specification $\CM$, 
+we write 
+\[
+\langle \aexec_0, \thdstackFun_0, \prog_0 \rangle \absrightarrow_{\CM} \cdots 
+\absrightarrow_{\CM} \langle \aexec_{n}, \thdstackFun_{n}, \prog_{n} \rangle
+\]
+
+\begin{definition}
+Given a transition of the form $\tau = \langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\_} 
+\langle \aexec', \thdstackFun, \prog' \rangle$, we define 
+two functions $\transclient(\tau)$ and $\transmove(\tau)$ as follows: 
+\[
+\begin{array}{lcl}
+\transclient &:& (\aeset \times \ThdStacks \times \progset)^{2} \rightarrow \Clients\\
+\transclient(\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\_} 
+\langle \aexec', \thdstackFun', \prog' \rangle) &=& \tid_{j} 
+\text{ where } \exists n \geq j.\; \prog = \prod_{i=1}^{n} \cmd_{i} \wedge {}\\
+&& \prog' = \prod_{i=1}^{n} \tid_{i}: \cmd'_{i} 
+\wedge \forall i \neq j. \cmd_i = \cmd'_i\\
+&&\\
+\transmove &:& (\aeset \times \ThdStacks \times \progset)^{2} \rightarrow \powerset{\Op} \uplus \{\varepsilon\}\\
+\transmove(\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\_} 
+\langle \aexec', \thdstackFun', \prog' \rangle) &=& 
+\begin{cases}
+\varepsilon & \text{if } \aexec = \aexec' \\
+\TtoOp{T}_{\aexec'}(\tsid) &\text{if } \T_{\aexec'} \setminus \T_{\aexec} = \{\tsid\}
+\end{cases}
+\end{array}
+\]
+We usually write $\langle \aexec, \thdstackFun, \prog \rangle \xrightarrow{\tid: \mu}_{\CM} 
+\langle \aexec', \thdstackFun', \prog' \rangle$, where
+$\tid = \transclient(\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} 
+\langle \aexec', \thdstackFun', \prog' \rangle)$, and 
+$\mu = \transmove(\langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} 
+\langle \aexec', \thdstackFun', \prog' \rangle)$.
+\end{definition}
+
+\begin{proposition}
+If $\tau$ is a $\CM$-valid transition for some consistency model specification $\CM$, 
+then the functions $\transclient(\tau)$ 
+and $\transmove(\tau)$ are well-defined.
+\end{proposition}
 
 \paragraph{Compatibility of Abstract Executions and Key-value Stores.}
 Formally speaking, we need to define what it means for two executions, defined in the abstract operational semantics and key-value semantics, respectively, 
 to be equivalent. We start by defining a notion of \emph{compatibility} between abstract executions and key-value stores. 
-This definition follows the intuition that an abstract execution $\aexec$ is compatible with a key-value store $s$ if 
+This definition follows the intuition that an abstract execution $\aexec$ is compatible with a key-value store $\hh$ if 
 any observation made by a client in the former can be simulated by an observation made by a client in the latter, and vice-versa. 
 For abstract executions, observations of clients amount to select a subset of visible transaction and extract 
 a snapshot from there, according to the last write wins resolution policy. For key-value stores, 
@@ -921,11 +997,11 @@ execution semantics, to be encoded to a trace in the key-value store semantics.
 \begin{definition}
 We say that a trace (in the abstract execution semantics) of the form
 \[
-\langle \aexec_0, \thdstackFun_{0}, \prog_0 \rangle \absrightarrow_{\_} \cdots \absrightarrow_{\_} \langle \aexec_{n}, \thdstackFun_{n}, \prog_{n} \rangle
+\alpha = \langle \aexec_0, \thdstackFun_{0}, \prog_0 \rangle \absrightarrow_{\_} \cdots \absrightarrow_{\_} \langle \aexec_{n}, \thdstackFun_{n}, \prog_{n} \rangle
 \]
 with $\prog = \prog_0$, is equivalent to the trace (in the key-value store semantics)
 \[
-\langle \mathcal{C}_0, \thdstackFun'_{0}, \prog'_0 \rangle \rightarrow_{\_} \cdots \rightarrow_{\_} \langle \mathcal{C}_{n}, \thdstackFun'_{m}, \prog'_m \rangle
+\gamma = \langle \mathcal{C}_0, \thdstackFun'_{0}, \prog'_0 \rangle \rightarrow_{\_} \cdots \rightarrow_{\_} \langle \mathcal{C}_{n}, \thdstackFun'_{m}, \prog'_m \rangle
 \]
 if $m = n$, for any $i=0,\cdots, n$ then $\thdstackFun_{i} = \thdstackFun'_{i}, \prog_{i} = \prog'_{i}$, 
 $\mathcal{C}_{i} = (\hh_i, \viewFun_i)$ for some $\hh_i, \viewFun_{i}$ such that $\aexec_{i} \compatible \hh_{i}$.
@@ -951,7 +1027,36 @@ specifications.
 \subsection{Constructing Key-Value Traces from Abstract Ones.}
 In the following we use $\alpha, \alpha'$ to range over traces in the 
 abstract execution semantics, and $\gamma, \gamma'$ to range 
-over traces in the key-value store semantics.
+over traces in the key-value store semantics. 
+In our settings, traces are sequences of transitions in the system; 
+for example, 
+\[
+\alpha = \langle \aexec_0, \thdstackFun_0, \prog_0, \rangle \absrightarrow_{\CM} \cdots \absrightarrow_{\CM} 
+langle \aexec_{n}, \thdstackFun_{n}, \prog_n \rangle
+\]
+%is a trace in the abstract execution semantics. 
+%Formally, we define the set of abstract execution traces as the smallest set $\Atraces$ such that: 
+%\[
+%\begin{array}{l}
+%\forall \aexec, \thdStackFun, \prog. \langle \aexec, \thdStackFun, \prog \rangle \rangle \in \Atraces\\
+%%\mathsf{head}(\langle \aexec, \thdstackFun, \prog\rangle ) = \langle \aexec, \thdstackFun, \prog \rangle\\
+%%~\\
+%\forall \aexec, \thdstackFun, \prog, \alpha. \langle \aexec, \thdstackFun, \prog \rangle 
+%\absrightarrow_{\CM} \alpha \in \Atraces
+%\end{array}
+%\]
+%In the following, we will often need to perform a case analysis on the 
+%structure of a trace. To this end, we define the partial composition operator $\cdot$ 
+%so that $\alpha_1 \cdot \alpha_2$ is defined if and only if the last state of $\alpha_1$ coincides 
+%with the first state of $\alpha_1$, i.e. 
+%\[
+%\begin{array}{l}
+%\alpha_1 = \alpha_1' \absrightarrow_{\CM} \langle \aexec, \thdstackFun, \prog \rangle \\
+%\alpha_2 = \langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} \alpha_2'\\
+%\alpha_1 \cdot \alpha_2 = \alpha_1 \absrightarrow_{\CM}
+%\]
+
+\ac{$\alpha, \gamma$ already used before.}
 
 Given the following,
 \[
@@ -1031,11 +1136,34 @@ $\tid$ immediately before executing the transaction $\tsid$.
 Using the function $\getView$, we can transform the set 
 $\VIS^{-1}(\tsid)$ into the required view $\intermediateView(\alpha, V)$. 
 
+Formally, we let 
+\[
+\begin{array}{lcl}
+\first&:& (\aeset \times \ThdStacks \times \progset)^{+} \rightarrow (\aeset \times \ThdStacks \times \progset)\\
+\first(\langle \aexec, \thdstackFun, \prog \rangle \cdot \hat{\alpha}) &=& \langle \aexec, \prog, \rangle\\
+&&\\
+\intermediateView&:& (\aeset \times \ThdStacks \times \progset)^{+} \rightarrow \Views\\
+\intermediateView(\langle \aexec, \thdstackFun, \prog \rangle, V) &=& V \\ 
+\intermediateView(\langle \aexec, \thdstackFun, \prog \rangle \cdot \alpha', V) &=& 
+\mathit{let } \langle \aexec', \thdstackFun', \alpha' \rangle = \first(\alpha') \mathit{ in } \\
+&& \mathit{let } \tau = \langle \aexec, \thdstackFun, \prog \rangle \absrightarrow_{\CM} \langle \aexec', \thdstackFun, \prog \rangle \mathit{ in } \\
+&&%
+\begin{cases}
+V & \text{if } \transmove(\tau) = \varepsilon)\\
+\getView(\VIS_{\aexec'}^{-1}(\tsid)) & \text{if } \transmove(\tau) = (\tsid \mapsto \_)
+\end{cases}
+\end{array}
+\]
+
 \ac{Insert formal definition here. It seems like $\intermediateView$ does 
 not depend on future transitions, or on the view $V$, 
-so maybe it should be a function of a transition and a view}
+so maybe it should be a function of a transition}
 
-
+\begin{definition}
+\[
+\intermediateView( \langle \aexec, \_, \_ \rangle \xrightarrow{\tid: \mu}_{\CM} \langle \aexec' \xrightarrow{\_}_{\CM} \alpha, V) = 
+\]
+\end{definition}
 
 
 
