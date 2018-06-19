@@ -60,11 +60,11 @@ Second, it is ghost resources to help the reasoning.
 
 A \emph{fingerprint assertion} describes the possible global effect from a transaction.
 It includes the first read \( \lexpr_{1} \fpR \lexpr_{2} \), last write \( \lexpr_{1} \fpW \lexpr_{2} \) for the address \( \lexpr_{1} \) and the combination of them \( \lexpr_{1} \fpRW \lexpr_{2} \).
-\azalea{
-I have changed it from $\stackrel{\perp}{\hookrightarrow}$ to $\fpI$, as $\perp$ has weird connotations. 
-Default is no fingerprint so far and thus empty tag. 
-I have also dropped the $\backslash$ from $\fpA$ and $\fpD$ as it looks a little strange. 
-}
+%\azalea{
+%I have changed it from $\stackrel{\perp}{\hookrightarrow}$ to $\fpI$, as $\perp$ has weird connotations. 
+%Default is no fingerprint so far and thus empty tag. 
+%I have also dropped the $\backslash$ from $\fpA$ and $\fpD$ as it looks a little strange. 
+%}
 The \( \lexpr_{1} \fpI \lexpr_{2} \) means the address \( \lexpr_{1} \) has no associated fingerprint and the initial value is \( \lexpr_{2} \).
 The \( \lexpr_{1} \fpR \lexpr_{2} \) means the address has been read before any other write and the current value is \( \lexpr_{2} \).
 The \( \lexpr_{1} \fpW \lexpr_{2} \) means the address has been written at least once, and the last written value is \( \lexpr_{2} \).
@@ -148,7 +148,7 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
         \Setcon{(\unitH, \unitO, \ca, \ca')}{
             \ca = \evalC{\cass{\kap(\vec{\lvar})}{\lrid}} \land \ca'  = \evalC{\cass{\kap'(\vec{\lvar}')}{\lrid}} 
         } \\
-    \evalF{\fp_{1} \sep \fp_{2}} & \defeq & \Setcon{ ( \h_{1} \composeH \h_{2}, \opset_{1} \composeO \opset_{2}, \ca_{1} \composeC \ca_{2}, \ca'_{1} \composeC \ca'_{2} ) }{(\h_{1}, \opset_{1}, \ca_{1}, \ca'_{1}) \in \evalF{\fp_{1}} \land (\h_{2}, \opset_{2}, \ca_{2}, \ca'_{2}) \in \evalF{\fp_{2}}}\\
+    \evalF{\fp_{1} \sep \fp_{2}} & \defeq & \Setcon{ ( \h_{1} \composeH \h_{2}, \opset_{1} \composeO \opset_{2}, \ca_{1} \composeC \ca_{2}, \ca'_{1} \composeC \ca'_{2} ) }{(\h_{1}, \opset_{1}, \ca_{1}, \ca'_{1}) \in \evalF{\fp_{1}}  \\ {} \land (\h_{2}, \opset_{2}, \ca_{2}, \ca'_{2}) \in \evalF{\fp_{2}}}\\
 
 \end{rclarray}
 \]
@@ -276,20 +276,21 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     Fix the typesetting later.
     } 
 \[
-\begin{rclarray}
-	\evalI{\Set{ \exsts{\vec{\lvar}} \perm{\kap} : \fp } \cup \intass }(\kap') & \eqdef &
-    	\begin{cases}
+\begin{array}{@{}l}
+	\evalI{\Set{ \exsts{\vec{\lvar}} \perm{\kap} : \fp } \cup \intass }(\kap') \eqdef \\
+    	\quad \begin{cases}
 	    		\Setcon{
                     \begin{B}
 	    				(\hh, \vi, \ca_r \composeC \ca_f ), \\ 
 	    				(\hh',\vi', \ca_f \composeC \ca_a)
                     \end{B}
 	    		}{ 
-	    			\exsts{\txid, \opset} \\
+	    			\exsts{\txid, \opset, \cl} \\
 	    				\quad ( \stub, \opset, \ca_{a}, \ca_{r} ) \in \evalF[\lenv',\stk]{\fp}   \\
-					\quad {} \land \txid \in \func{fresh}{\hh}  \\
-	       			\quad {} \land \hh' = \func{updHisHp}{\hh, \vi, \txid, \opset}  \\
-		        	\quad {} \land \vi' \geq \func{updView}{\hh', \vi, \opset} \\
+					\quad {} \land \txid \in \func{nextTxid}{\hh, \cl}  \\
+	       			\quad {} \land \hh' = \updM{\hh, \vi, \txid, \opset}  \\
+		        	\quad {} \land \pred{readFrom}{\hh, \vi, \opset} 
+                    \land \vi' \geq \vi \\
 	    		} 
 	    		\cup \evalI{\intass}(\kap')  
     		& \text{ if } \dagger \\\\
@@ -297,7 +298,13 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 	    	\evalI{\intass}(\kap') 
 	    	& \text{ otherwise} \\
     	\end{cases}  \\
-        \dagger & \equiv & \exsts{\vec{\val}, \lenv'} \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \land \kap' = \evalI[\lenv', \stk]{\kap} \\
+        \qquad \dagger \equiv \exsts{\vec{\val}, \lenv'} \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}} \land \kap' = \evalI[\lenv', \stk]{\kap} \\
+\end{array}
+\]
+The \( \predn{readFrom} \) asserts the fingerprint make sense with respect to the view:
+\[
+\begin{rclarray}
+    \pred{readFrom}{\hh, \vi, \opset} & \defeq & \fora{\ke, \val} (\otR, \ke, \val) \in \opset \implies \valueOf(\hh(\ke,\vi(\ke))) = \val
 \end{rclarray}
 \]
 %
@@ -343,11 +350,14 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 
 \begin{definition}[Invariant of a region]
 \label{def:invariant-region}
-Assume two global functions, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps } \) that returns initial key-value stores for regions.
-Given the initial states for a region \( \func{init}{\rid}\), the invariant of a region, written \( \func{inv}{\rid, \intf} \), is a set of key-value stores that is closed under the interference \( \intf \).
+Assume a global function, \( \funcn{init} : \RegionID \to \powerset{ \HisHeaps } \) returning initial key-value stores for regions.
+Given the initial states for a region \( \func{init}{\rid}\), the invariant of a region, written \( \func{inv}{\rid, \intf} \), is a set of key-value stores that is closed under the interference \( \intf \):
 \[
-\begin{array}{@{}l}
-    \func{init}{\rid} \in \func{inv}{\rid, \intf} \land \fora{\mkvs, \mkvs'} \mkvs \in \func{inv}{\rid, \intf} \exsts{\w, \w'} ( \mkvs, \stub ) = \eraseW{\w} \land ( \mkvs', \stub ) = \eraseW{\w'} \land (\w, \w') \in \Guar \implies \mkvs' \in \func{inv}{\rid, \intf} 
+\begin{array}[t]{@{}l}
+    \func{init}{\rid} \in \func{inv}{\rid, \intf} \land 
+    \fora{\mkvs, \mkvs'} 
+    \exsts{\w, \w', \kap} \\
+    \quad \mkvs \in \func{inv}{\rid, \intf} \land  ( \mkvs, \stub ) = \eraseW{\w} \land ( \mkvs', \stub ) = \eraseW{\w'} \land (\w, \w') \in \intf(\kap) \implies \mkvs' \in \func{inv}{\rid, \intf} 
 \end{array}
 \]
 \end{definition}
@@ -438,7 +448,7 @@ Because of the well-formedness condition, the function \( \eraseW{.} : \World \t
 Given the set of logical expression \( \lexpr \subseteq \LExpr\), the set of \emph{assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
 \[
 \begin{rclarray}
-    \bar{\lpre}, \bar{\lpost} & ::= & \False \mid \True \mid \bar{\lpre} \land \bar{\lpost} \mid \bar{\lpre} \lor \bar{\lpost} \mid \exsts{\lvar} \bar{\lpre} \mid \bar{\lpre} \implies \bar{\lpost} \mid \assemp \mid \cass{\kap}{\lrid} \mid \lexpr \pt \exprset \mid \bar{\lpre} \sep \bar{\lpost} \\
+    \bar{\lpre}, \bar{\lpost} & ::= & \False \mid \True \mid \bar{\lpre} \land \bar{\lpost} \mid \bar{\lpre} \lor \bar{\lpost} \mid \exsts{\lvar} \bar{\lpre} \mid \bar{\lpre} \implies \bar{\lpost} \mid \assemp \mid \cass{\kap}{\lrid} \mid \lexpr \pt \lexpr \mid \bar{\lpre} \sep \bar{\lpost} \\
 	\gpre , \gpost & ::= & \False \mid \True \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \gpre \sep \gpost \mid \boxass{\bar{\lpre}}{\lrid}{\intass}\\
 \end{rclarray}
 \]
@@ -482,7 +492,8 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
     \func{intp}{\bar{\lpre} \implies \bar{\lpost},\lenv,\stk} & \defeq & \Setcon{ (\hh, \vi, \ca) }{ (\hh, \vi, \ca) \in \func{intp}{\bar{\lpre},\lenv,\stk} \implies (\hh, \vi, \ca) \in \func{intp}{\bar{\lpost},\lenv,\stk} }\\
     \func{intp}{\cass{\kap}{\lrid},\lenv,\stk} & \defeq & \Set{ (\unitHH, \unitVI, \Set{\lrid \mapsto \evalC{\kap}}) }\\
     \func{intp}{\lexpr_{1} \pt \lexpr_2,\lenv,\stk} & \defeq & \Setcon{ (\hh, \vi, \ca) }{ \Set{ \evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}} } = \clpsHH{\hh, \vi} } \\
-    \func{intp}{\bar{\lpre} \sep \bar{\lpost},\lenv,\stk} & \defeq & \Setcon{ (\hh \composeHH \hh', \vi \composeVI \vi', \ca \composeC \ca') }{ (\hh, \vi, \ca) \in \func{intp}{\bar{\lpre},\lenv,\stk} \land (\hh', \vi', \ca') \in \func{intp}{\bar{\lpost},\lenv,\stk} } \\
+    \func{intp}{\bar{\lpre} \sep \bar{\lpost},\lenv,\stk} & \defeq & 
+    \Setcon{ (\hh \composeHH \hh', \vi \composeVI \vi', \ca \composeC \ca') }{ (\hh, \vi, \ca) \in \func{intp}{\bar{\lpre},\lenv,\stk} \\ {} \land (\hh', \vi', \ca') \in \func{intp}{\bar{\lpost},\lenv,\stk} } \\
 \end{rclarray}
 \]
 \end{definition}
