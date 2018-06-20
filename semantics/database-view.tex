@@ -48,106 +48,170 @@ represent MKVSs, but still avoiding allocation and deallocation of keys.}.
 \azalea{I have changed the values to $v_0$ and $v_1$ (from $0$ and $1$) to help clarify the distinction between indexes and values.
 I have also paraphrased, please double check.  }
 
-\mypar{MKVSs} We model the state of a system using \emph{multi-version key-value stores} (MKVSs). An MKVS is a map from keys to lists of versions.
-%where each key is associated with a list \emph{versions} from the initial one to the latest one (\defref{def:mkvs}).
-More concretely, each version associated with a key $\ke$ is a tuple of the form \( \ver =( \val, \txid, \txidset ) \), where $\val$ denoting the \emph{current value} of $\ke$, 
-the $\txid$ is a transaction identifier \( \txid \), identifying its \emph{writer}, i.e.\ the transaction responsible for writing value $\val$, and 
-$\txidset$ is a set of transaction identifiers, denoting its \emph{readers}, i.e.\ those transactions who read from $\ke$ (see \cref{def:mkvs}).
-\cref{fig:hheap-a} depicts an example of an MKVS. 
-Ignoring the lines labelled $\client_1$ and $\client_2$, the depicted MKVS contains two keys \( \ke_1\) and \( \ke_2 \), each of which associated with two versions (with values $v_0$ and $v_1$ for $\ke_1$, and values $v'_0$ and $v'_1$ for $\ke_2$).
-The versions of a key are listed in chronological order from left to right.
-We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
+\mypar{Key-value Stores} 
 
+%We model the state of a system using \emph{multi-version key-value stores} (MKVSs). 
+We assume a countably infinite set of \emph{keys} $\Keys = \{\ke, \ke', \cdots\}$, 
+a set of \emph{values} $\Val = \{\val, \val', \cdots\}$, a set of clients $\Clients = \{\cl, \cl',\cdots\}$. 
+We also assume a set of transaction identifiers $\TxID = \{ \txid_{\cl}^{n} \mid \cl \in \Clients \wedge n \geq 0 \} 
+\uplus \{\txid_{0}\}$,
+each of which is either a special transaction identifier $\txid_0$, 
+or it is indexed by a client identifier and a natural number. This particular structure is chosen to 
+embed the session order of transactions executed by individual clients (\cref{sec:exectest}). Elements 
+of $\TxID$ are ranged over by $\txid, \txid', \cdots$, while subsets of $TxID$ are ranged over 
+$\txidset, \txidset', \cdots$. Given a set $X$, then $\powerset{X}$ denotes 
+the powerset of $X$, while $X^{\ast}$ is the free monoid induced by $X$.
 
-Given a version $\ver = (\val, \txid, \txidset)$, we write $\valueOf(\ver)$ for its value ($n$), $\WTx(\ver)$ for its writer ($\txid$), $\RTx(\ver)$ for its readers ($\txidset$), and \( \txid' \in \ver \) for \( \txid' = \txid \lor \txid' \in \txidset \).
-%A \emph{Multi-version Key-value Store (MKVS)} is a mapping $\hh : \Keys \parfinfun \Versions^{\ast}$ from keys to lists of versions. 
-Given a list of versions $L = \List{\ver_0, \cdots, \ver_{s-1}}$, we write  $\lvert L\rvert$ for its length ($s$). 
-Given an MKVS $\hh$ and a key $\ke$, we write $\hh(\ke)$ for the list of versions associated with $\ke$ in $\hh$, and write \(\hh(\ke,i) \) for the $i$\textsuperscript{th} entry (indexed from $0$) in $\hh(\ke)$. 
-%We assume the index starts from 0, so \( \hh(\ke)(\left|\hh(\ke)\right| - 1)\) is the latest versions of the key \( \ke \).
-
-\azalea{I think $\hh$ is too close to $\ke$ and we should use a different symbol. Maybe $H$? }
-
-We assume a countably infinite set of \emph{keys}, $\Keys $,
-a set of countably infinite set of \emph{program values}, \( \val \in \Val \),
-a countably infinite set of \emph{client identifiers}, \( \cl \in \Clients \),
-and a countably infinite set of \emph{transactions identifiers indexed by client}, $\txid^{\cl} \in \TxID$
-We also assume there are countably infinite elements for every client, and elements for each client are ordered.
-We use \( \txid^{\cl}_{i}\) for the \emph{i-th} identifier among the total order and it is indexed by the client \( \cl \). 
-For a client, the order among transaction identifiers corresponds to the session order of them.
-Sometime we omit the order and/or client index when they are irrelevant.
-We use $\ke$ and its variants (e.g.\ $\ke_1$, $\ke'$ and so forth) as meta-variables for keys in $\Keys$.
-%and use $\txid$ and its variants as meta-variables for transaction identifiers in $\TxID$. 
 \begin{definition}[Multi-version key-value stores]
 \label{def:his_heap}
 \label{def:mkvs}
 %Assuming a countably infinite set of keys $\Keys = \Set{\ke_1, \cdots}$, \emph{transactions identifiers} \( \TxID \defeq \Set{\txid_{1}, \cdots}\) and natural numbers \(\nat \in \Nat \), 
-A\emph{multi-version key-value store (MKVS)}, \( \mkvs \in \MKVSs \), is a partial finite function from keys to lists of \emph{versions}.
-A \emph{version} is a triple containing a program value \( \val \), a transaction identifier \( \txid \) and a set of transactions identifiers \( \txidset \):
-\[
-\begin{rclarray}
-    \ver \in \Versions & \defeq &  \Setcon{(\val, \txid, \txidset)}{\val \in \Val \land \txid \in \TxID \land \txidset \subseteq \TxID \land \txid \notin \txidset} \\
-    \HisHeaps & \defeq & 
-    \Setcon{ \mkvs }{%
-        \mkvs \in \Keys \parfinfun \Versions^{*} 
-        \land \fora{\ke, \txid, i, j} 
-        \WTx(\hh(\ke, i)) = \WTx(\hh(\ke, j)) \lor {} \\
-        (\txid \in \RTx(\hh(\ke, i)) \land \txid \in \RTx(\hh(\ke, j))
-        \implies i = j 
-    }
-\end{rclarray}
-\]
-A key-value store is \emph{well-formed} iff 
-a transaction identifier appears in all versions of a key at most twice, once as the writer and once as a reader.
-%(i) it does not contain circular dependencies across its versions; and 
-%
-%Given two versions $\ver_1, \ver_2$ in an MKVS $\hh$, the $\ver_2$ \emph{directly depends} on $\ver_1$, written $\ver_1 \xrightarrow{\ddep} \ver_2$, iff:
-%\[ 
+A \emph{version} is a triple $\ver = (\val, \txid, \txidset)$. The set of versions is denoted by $\Versions \defeq \Val \times \TxID \times \powerset{\TxID}$, 
+where $\powerset{\cdot}$ is the powerset operator. 
+
+A \emph{key-value store} is a partial, finite mapping $\hh : \Keys \parfinfun \Versions^{\ast}$. 
+%The set of key-value stores is denoted as $\HisHeaps$.
+\end{definition}
+\ac{Is it safe to assume that key-value stores are partial functions? What happens if we execute a program 
+that tries to access a key that is not in the key-value store? In his Thesis, Viktor had the notion of fault to distinguish cases 
+where non-allocated variables were used. Check.}
+Intuitively, a version $\ver = (\val, \txid, \txidset)$ consists of a value and the meta-data of the transactions 
+that accessed such a version; specifically, $\txid = \WTx(\ver)$ denotes the transaction identifier corresponding to the 
+writer of the version, while $\txidset = \RTx(\ver)$ contains the set of the transaction identifier that read a version. 
+A key-value store is then a mapping from keys to the list of versions that have been installed by 
+transactions for such a key. For a given kv-store, $\hh$, key $\ke$ and index $i \geq 0$, we use the notation $\hh(\ke, i)$ 
+the $i$-th version (starting from $0$) installed for $\ke$; that is, if $\hh(\ke) = \ver_0 \cdots\ver_{n}$, then 
+$\hh(\ke, i) = \ver_{i}$ if $i \leq n$, it is undefined otherwise. We also let $\lvert \hh(\ke) \rvert = n +1 $ denote 
+the length of $\hh(\ke)$.
+
+It will be often convenient to depict key-value stores graphically: an 
+example is given by the kv-store $\hh_{0}$ of Figure \cref{fig:hheap-a}.
+Ignoring the lines labelled $\client_1$ and $\client_2$, $\hh_{0}$ contains two keys \( \ke_1\) and \( \ke_2 \), 
+each of which associated with two versions (with values $v_0$ and $v_1$ for $\ke_1$, and values $v'_0$ and $v'_1$ for $\ke_2$).
+The versions of a key are listed in %chronological 
+order from left to right. 
+We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
+
+In this paper we only focus on kv-stores whose consistency model ensures that transactions enjoy 
+\emph{atomic visibility} \cite{framework-concur}. We also assume that the special transaction identifier $\tsid_0$ is used 
+to install the initial version of a key. This amounts to require from a kv-store $\hh$ that \textbf{(i)} for each 
+key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (v_0, \txid, \_)$ for some initial value $v_0$,
+\textbf{(ii)} transactions never write more than one version per key - $\forall \ke \in \dom(\hh)\; \forall i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert.\; 
+\WTx(\ke, i) = \WTx(\ke, j) \implies i = j$, \textbf{(iii)} transactions never read different versions 
+for the same key - $\forall \ke \in \dom(\hh).\; \forall i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert.\; 
+\RTx(\ke, i) \cap \RTx(\ke, j) \neq \emptyset \implies i = j$, and 
+\textbf{(iv)} all the reads of a transactions precede the writes of the same transaction. $\forall \ke \in \dom(\hh). 
+\forall i : 0 \leq i < \lvert \hh(k) \rvert.\; \WTx(\hh, k) \notin \RTx(\hh,k)$. We also require that \textbf{(v)} the order 
+in which transactions issued by the same client install different versions for some key $\ke$, is consistent with the order in which 
+such transactions have been invoked by the client  - $\forall \ke \in \dom(\hh), \cl \in \Clients.\;\forall i,j; 0 \leq i < j < \lvert \hh(\ke) \rvert. 
+\forall n, m \geq 0.\; (\WTx(\ke(k,i)) = \txid_{\cl}^{n} \wedge \WTx(\ke(k,j)) = \txid_{\cl}^{m}) \implies n < m$.
+We call kv-stores that satisfy the conditions (i-v) \emph{well-formed}. Henceforth, we always assume that kv-stores 
+are well formed, and let $\HisHeaps$ be the set of well-formed kv-stores.
+
+
+%A\emph{multi-version key-value store (MKVS)}, \( \mkvs \in \MKVSs \), is a partial finite function from keys to lists of \emph{versions}.
+%A \emph{version} is a triple containing a program value \( \val \), a transaction identifier \( \txid \) and a set of transactions identifiers \( \txidset \):
+%\[
 %\begin{rclarray}
-%\ver_1 \xrightarrow{\ddep} \ver_2 & \defeq &
-%\begin{array}[t]{@{}l}
-%\WTx(\ver_2) \in \RTx(\ver_1) 
-%%\exsts{\cl,i,j,\txid_{i}^{\cl},\txid_{j}^{\cl}} \\
-%%\quad \txid_{i}^{\cl} < \txid_{j}^{\cl}
-%%\land \txid_{i}^{\cl} \in \ver_{1}
-%%\land \txid_{j}^{\cl} \in \ver_{2}
-%\end{array}
+%    \ver \in \Versions & \defeq &  \Setcon{(\val, \txid, \txidset)}{\val \in \Val \land \txid \in \TxID \land \txidset \subseteq \TxID \land \txid \notin \txidset} \\
+%    \HisHeaps & \defeq & 
+%    \Setcon{ \mkvs }{%
+%        \mkvs \in \Keys \parfinfun \Versions^{*} 
+%        \land \fora{\ke, \txid, i, j} 
+%        \WTx(\hh(\ke, i)) = \WTx(\hh(\ke, j)) \lor {} \\
+%        (\txid \in \RTx(\hh(\ke, i)) \land \txid \in \RTx(\hh(\ke, j))
+%        \implies i = j 
+%    }
 %\end{rclarray}
 %\]
-%that is, a transaction $\txid$ wrote the version $\ver_2$ after reading $\ver_1$;
-%%or two transactions from the same client access
-%%The $\ver_1 \xrightarrow{\ddep(\hh)} \ver_2$ denotes that $\ver_1, \ver_2$ appear as versions from the same KVMS $\hh$ and \( \ver_1\) depends on \(\ver_2 \).
-
-%A key-value store is \emph{well-formed}, written $\pred{wfMKVS}{\hh}$, iff 
-%(i) it does not contain circular dependencies across its versions; and 
-%(ii) a transaction identifier appears in all versions of a key at most twice, once as the writer and once as a reader.
-%% a transaction identifier appears in all the versions for an key at most twice, one as the writer and one as a reader.
+%
+%We model a kv-store $\hh$ as a map from keys to lists of versions.
+%%where each key is associated with a list \emph{versions} from the initial one to the latest one (\defref{def:mkvs}).
+%%More concretely, versions associated with a key $\ke$ 
+%Versions are tuples of the form \( \ver =( \val, \txid, \txidset ) \), where $\val$ denotes the \emph{current value} of $\ke$, 
+%$\txid$ is the identifier of the transaction that wrote such a version, 
+%%, identifying its \emph{writer}, i.e.\ the transaction responsible for writing value $\val$, 
+%and $\txidset$ is the set of identifiers of transactions that read the version.
+%%, denoting its \emph{readers}, i.e.\ those transactions who read from $\ke$ 
+%(see \cref{def:mkvs}).
+%
+%\cref{fig:hheap-a} depicts an example of an MKVS. 
+%Ignoring the lines labelled $\client_1$ and $\client_2$, the depicted MKVS contains two keys \( \ke_1\) and \( \ke_2 \), each of which associated with two versions (with values $v_0$ and $v_1$ for $\ke_1$, and values $v'_0$ and $v'_1$ for $\ke_2$).
+%The versions of a key are listed in chronological order from left to right.
+%We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
+%
+%
+%Given a version $\ver = (\val, \txid, \txidset)$, we write $\valueOf(\ver)$ for its value ($n$), $\WTx(\ver)$ for its writer ($\txid$), $\RTx(\ver)$ for its readers ($\txidset$), and \( \txid' \in \ver \) for \( \txid' = \txid \lor \txid' \in \txidset \).
+%%A \emph{Multi-version Key-value Store (MKVS)} is a mapping $\hh : \Keys \parfinfun \Versions^{\ast}$ from keys to lists of versions. 
+%Given a list of versions $L = \List{\ver_0, \cdots, \ver_{s-1}}$, we write  $\lvert L\rvert$ for its length ($s$). 
+%Given an MKVS $\hh$ and a key $\ke$, we write $\hh(\ke)$ for the list of versions associated with $\ke$ in $\hh$, and write \(\hh(\ke,i) \) for the $i$\textsuperscript{th} entry (indexed from $0$) in $\hh(\ke)$. 
+%%We assume the index starts from 0, so \( \hh(\ke)(\left|\hh(\ke)\right| - 1)\) is the latest versions of the key \( \ke \).
+%
+%\azalea{I think $\hh$ is too close to $\ke$ and we should use a different symbol. Maybe $H$? }
+%
+%We assume a countably infinite set of \emph{keys}, $\Keys $,
+%a set of countably infinite set of \emph{program values}, \( \val \in \Val \),
+%a countably infinite set of \emph{client identifiers}, \( \cl \in \Clients \),
+%and a countably infinite set of \emph{transactions identifiers indexed by client}, $\txid^{\cl} \in \TxID$
+%We also assume there are countably infinite elements for every client, and elements for each client are ordered.
+%We use \( \txid^{\cl}_{i}\) for the \emph{i-th} identifier among the total order and it is indexed by the client \( \cl \). 
+%For a client, the order among transaction identifiers corresponds to the session order of them.
+%Sometime we omit the order and/or client index when they are irrelevant.
+%We use $\ke$ and its variants (e.g.\ $\ke_1$, $\ke'$ and so forth) as meta-variables for keys in $\Keys$.
+%%and use $\txid$ and its variants as meta-variables for transaction identifiers in $\TxID$. 
+%
+%A key-value store is \emph{well-formed} iff 
+%a transaction identifier appears in all versions of a key at most twice, once as the writer and once as a reader.
+%%(i) it does not contain circular dependencies across its versions; and 
 %%
-%%Also there are no circular dependencies in versions. 
-%%More concretely, the first well-formedness condition (i) of an KVMS ensures that the \emph{transitive closure} of the direct dependency relation $\left(\xrightarrow{\ddep(\hh)}\right)^{+}$ is acyclic:
-%%in $\hh$, i.e. $\left(\xrightarrow{\ddep(\hh)} \right)^{+} \cap \text{Id} = \emptyset$ (where $\text{Id}$ is 
-%%the identity relation).
-%%\[
+%%Given two versions $\ver_1, \ver_2$ in an MKVS $\hh$, the $\ver_2$ \emph{directly depends} on $\ver_1$, written $\ver_1 \xrightarrow{\ddep} \ver_2$, iff:
+%%\[ 
 %%\begin{rclarray}
-    %%\pred{wfMKVS}{\hh} & \defeq &
-    %%\begin{array}[t]{@{}l}
-        %%\pred{acyclic}{\left(\xrightarrow{\ddep(\hh)}\right)^{+}}
-        %%\land \fora{\ke, \txid, i, j}
-        %%\begin{B}
-        %%\WTx(\hh(\ke, i)) = \WTx(\hh(\ke, j)) \lor {} \\ (\txid \in \RTx(\hh(\ke, i)) \land \txid \in \RTx(\hh(\ke, j))
-        %%\end{B} 
-        %%\implies i = j 
-    %%\end{array}
+%%\ver_1 \xrightarrow{\ddep} \ver_2 & \defeq &
+%%\begin{array}[t]{@{}l}
+%%\WTx(\ver_2) \in \RTx(\ver_1) 
+%%%\exsts{\cl,i,j,\txid_{i}^{\cl},\txid_{j}^{\cl}} \\
+%%%\quad \txid_{i}^{\cl} < \txid_{j}^{\cl}
+%%%\land \txid_{i}^{\cl} \in \ver_{1}
+%%%\land \txid_{j}^{\cl} \in \ver_{2}
+%%\end{array}
 %%\end{rclarray}
 %%\]
-%%
-The \emph{partial commutative monoid (pcm) of MKVSs} is $(\MKVSs, \composeHH, \{\unitHH\})$, where 
-$\composeHH:  \MKVSs \times \MKVSs \rightharpoonup \MKVSs$ denotes the \emph{pcm composition} defined as the standard function disjointed union: $\composeHH \eqdef \uplus$; and
-%\( \hh \composeHH \hh' \defeq \hh \uplus \hh' \)
-$\unitHH \in \MKVSs$ denotes the \emph{pcm unit element}:  $\unitHH \eqdef \emptyset$, where $\emptyset$ denotes a function with an empty domain.
-\end{definition}
-
-\ac{A point that this does not ensure a real causal dependency between the two versions, yet it is consistent with the notion of causality employed in databases, should be made}. 
-
+%%that is, a transaction $\txid$ wrote the version $\ver_2$ after reading $\ver_1$;
+%%%or two transactions from the same client access
+%%%The $\ver_1 \xrightarrow{\ddep(\hh)} \ver_2$ denotes that $\ver_1, \ver_2$ appear as versions from the same KVMS $\hh$ and \( \ver_1\) depends on \(\ver_2 \).
+%
+%%A key-value store is \emph{well-formed}, written $\pred{wfMKVS}{\hh}$, iff 
+%%(i) it does not contain circular dependencies across its versions; and 
+%%(ii) a transaction identifier appears in all versions of a key at most twice, once as the writer and once as a reader.
+%%% a transaction identifier appears in all the versions for an key at most twice, one as the writer and one as a reader.
+%%%
+%%%Also there are no circular dependencies in versions. 
+%%%More concretely, the first well-formedness condition (i) of an KVMS ensures that the \emph{transitive closure} of the direct dependency relation $\left(\xrightarrow{\ddep(\hh)}\right)^{+}$ is acyclic:
+%%%in $\hh$, i.e. $\left(\xrightarrow{\ddep(\hh)} \right)^{+} \cap \text{Id} = \emptyset$ (where $\text{Id}$ is 
+%%%the identity relation).
+%%%\[
+%%%\begin{rclarray}
+%    %%\pred{wfMKVS}{\hh} & \defeq &
+%    %%\begin{array}[t]{@{}l}
+%        %%\pred{acyclic}{\left(\xrightarrow{\ddep(\hh)}\right)^{+}}
+%        %%\land \fora{\ke, \txid, i, j}
+%        %%\begin{B}
+%        %%\WTx(\hh(\ke, i)) = \WTx(\hh(\ke, j)) \lor {} \\ (\txid \in \RTx(\hh(\ke, i)) \land \txid \in \RTx(\hh(\ke, j))
+%        %%\end{B} 
+%        %%\implies i = j 
+%    %%\end{array}
+%%%\end{rclarray}
+%%%\]
+%%%
+%The \emph{partial commutative monoid (pcm) of MKVSs} is $(\MKVSs, \composeHH, \{\unitHH\})$, where 
+%$\composeHH:  \MKVSs \times \MKVSs \rightharpoonup \MKVSs$ denotes the \emph{pcm composition} defined as the standard function disjointed union: $\composeHH \eqdef \uplus$; and
+%%\( \hh \composeHH \hh' \defeq \hh \uplus \hh' \)
+%$\unitHH \in \MKVSs$ denotes the \emph{pcm unit element}:  $\unitHH \eqdef \emptyset$, where $\emptyset$ denotes a function with an empty domain.
+%\end{definition}
+%
+%\ac{A point that this does not ensure a real causal dependency between the two versions, yet it is consistent with the notion of causality employed in databases, should be made}. 
+%
 
 \begin{figure}
 \begin{center}
