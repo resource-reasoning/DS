@@ -5,11 +5,19 @@
 We present a logic that is parametrised by any consistency model \emph{at least satisfying atomic  read and monotonic read}.
 We motivate it by the \emph{write skew} example under snapshot isolation (\cref{fig:write-skew-si-proof}).
 This example distinguishes serialisibility from snapshot isolation (SI).
-If it is under serialisibility that transactions appear one after another, either \( \vx \) or \( \vy \) will be 1 at end.
+If under serialisibility that transactions appear one after another, either \( \vx \) or \( \vy \) will be 1 at the end.
 While under SI, both keys \( \vx \) and \( \vy \) might be 1.
-Both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and both will be able to commit because the two transactions write different keys.
+Both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and both can commit because the two transactions write different keys.
 
-In the sketch proof (\cref{fig:write-skew-si-proof}), 
+We use \emph{shared region assertions} also know as \emph{boxed assertions} to describe the views on key-value stores, and use \emph{capabilities} to control the concurrent access.
+Shared regions, identified by unique labels \( \lrid \), describes views on key-value stores.
+Each region is indivisible and separates with each other.
+Since a view might be out-of-date, a value with a underline means \emph{a potentially out-of-date value}, otherwise it is the \emph{most recent value}.
+For instance, \( \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0}  \lor \vy \pt \underline{1} ) }{\lrid}{\intass}\) from \( P1 \) asserts a view where \( \vx \) points to the most recent value of 0, but \( \vy \) points to a potentially out-of-date value of either 0 or 1.
+Each region is associated with a \emph{interference} to describe how the region can evolve.
+The interference is a set of fingerprints labelled by \emph{capabilities}.
+
+A region is associated with \emph{interference} \( \intass \) describing how a region can evolve.
 
 There are two types of assertions, 
 
@@ -40,43 +48,43 @@ This capabilities also helps to understand the repartition especially under snap
 \hrule\vspace{5pt}
 \[
 \begin{session}
-{\color{blue}\texttt{P} : } \specline{ \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass}  } \\
+{\color{blue}P : } \specline{ \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass}  } \\
 \begin{parl}
 \begin{session}
-    {\color{blue}\texttt{P1} : } \specline{\cass{\CB{L}}{\lrid} \sep 
+    {\color{blue}P1 : } \specline{\cass{\CB{L}}{\lrid} \sep 
             \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0}  \lor \vy \pt \underline{1} ) }{\lrid}{\intass} 
     } \\
     \txid_1 : \begin{transaction}
-        {\color{blue}\texttt{p1} : } \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
+        {\color{blue}p1 : } \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
         \pderef{\pvar{b}}{\vy} ; 
         \quad \pifs{\pvar{b} = 0} 
         \pmutate{\vx}{1} ;
         \pife \\
-        {\color{blue}\texttt{q1} : } \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
+        {\color{blue}q1 : } \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
     \end{transaction} \\
-    {\color{blue}\texttt{Q1} : } \specline{\cass{\CB{L}}{\lrid} \sep 
+    {\color{blue}Q1 : } \specline{\cass{\CB{L}}{\lrid} \sep 
             \boxass{ \vx \pt 1 \sep \vy \pt \underline{0} \lor {} \\ \vx \pt 1 \sep \vy \pt \underline{1} \lor \vx \pt 0 \sep \vy \pt \underline{1} }{\lrid}{\intass} \\
     } \\
 \end{session}
 &
 \begin{session}
-    {\color{blue}\texttt{P2} : } \specline{\cass{\CB{R}}{\lrid} \sep 
+    {\color{blue}P2 : } \specline{\cass{\CB{R}}{\lrid} \sep 
             \boxass{ ( \vx \pt \underline{0} \lor \vx \pt \underline{1} ) \sep \vy \pt 0 }{\lrid}{\intass} 
     } \\
     \txid_2 : \begin{transaction}
-        {\color{blue}\texttt{p2} : } \specline{ ( \vx \fpI 0 \lor \vx \fpI 1 ) \sep \vy \fpI 0 )} \\
+        {\color{blue}p2 : } \specline{ ( \vx \fpI 0 \lor \vx \fpI 1 ) \sep \vy \fpI 0 )} \\
         \pderef{\pvar{a}}{\vx} ; 
         \quad \pifs{\pvar{a} = 0} 
         \pmutate{\vy}{1} ; 
         \pife \\
-        {\color{blue}\texttt{q2} : } \specline{ \vx \fpR 0 \sep \vy \fpW 1 \lor \vx \fpR 1 \sep \vy \fpI 0 )} \\
+        {\color{blue}q2 : } \specline{ \vx \fpR 0 \sep \vy \fpW 1 \lor \vx \fpR 1 \sep \vy \fpI 0 )} \\
     \end{transaction} \\
-    {\color{blue}\texttt{Q2} : } \specline{\cass{\CB{R}}{\lrid} \sep 
+    {\color{blue}Q2 : } \specline{\cass{\CB{R}}{\lrid} \sep 
             \boxass{\vx \pt \underline{0} \sep \vy \pt 1 \lor {} \\ \vx \pt \underline{1} \sep \vy \pt 1 \lor \vx \pt \underline{1} \sep \vy \pt 0 }{\lrid}{\intass} \\
     } \\
 \end{session}
 \end{parl} \\
-{\color{blue}\texttt{Q} : } \specline{%
+{\color{blue}Q : } \specline{%
     \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep 
     \boxass{\vx \pt 0 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 0 }{\lrid}{\intass} \\ } \\
 \end{session}
