@@ -65,18 +65,19 @@ $(\otW, \ke, \val) \in \opset$ means that the transaction writes a new version, 
 Condition \textbf{(ii)} above follows from the fact that we assume that a client either observes none or all the updates 
 of a transaction, consequently we require at most one write operation per key, in the fingerprint of a transaction. 
 
-\paragraph{View Shifts and Transaction Commits.}
-To model how a kv-store can evolve, we introduce two different operations over configurations: view-shifting, and transaction commit. 
-Given a configuration $(\hh, \viewFun)$, view-shifting amounts to replace the view $\vi$ of one 
-or more clients $\cl \in \dom(\viewFun)$, with a newer view $\vi'$. That is, newer versions of some key are 
-made available to clients. Formally, we let 
-\[
-\shift(\hh, \viewFun) = \{ (\hh, \viewFun') \mid \forall \cl \in \dom(\viewFun) = \dom(\viewFun') \wedge \forall \cl \in \dom(\viewFun). 
-\viewFun(\cl) \viewleq \viewFun'(\cl) \}.
-\]
+\paragraph{Committing Transactions.}
+%To model how a kv-store can evolve, we introduce two different operations over configurations: view-shifting, and transaction commit. 
+%Given a configuration $(\hh, \viewFun)$, view-shifting amounts to replace the view $\vi$ of one 
+%or more clients $\cl \in \dom(\viewFun)$, with a newer view $\vi'$. That is, newer versions of some key are 
+%made available to clients. Formally, we let 
+%\[
+%\shift(\hh, \viewFun) = \{ (\hh, \viewFun') \mid \forall \cl \in \dom(\viewFun) = \dom(\viewFun') \wedge \forall \cl \in \dom(\viewFun). 
+%\viewFun(\cl) \viewleq \viewFun'(\cl) \}.
+%\]
 
-The second operation, modelling the commit of the effects of a  transaction from a client into the kv-store, is 
-much more complicated. Suppose that a client $\cl$, with view $\vi$ in the kv-store $\hh$,
+The first step in describing how a kv-store can evolve under a given consistency model, 
+is that of specifying howa client  committing the effects of a transaction affects the kv-store. 
+Suppose that a client $\cl$, with view $\vi$ in the kv-store $\hh$,
 wants to apply to said kv-store the effects of a transaction, modelled by the fingerprint $\opset$. 
 We model this via the function $\updateKV: \HisHeaps \times \Views \times \Clients \times \powerset{\Ops}) 
 \rightarrow \HisHeaps$, defined recursively below and discussed presently. In the following, $\nextTxId(\cl, \hh)$ denotes 
@@ -131,6 +132,16 @@ transactions commit is standard \cite{adya,framework-concur,seebelieve}.
 Formally, a \emph{consistency model} $\CMs$ is a 
 set of kv-store. Each $\hh \in \CM$ represents a possible scenario that 
 can be obtained as a result of multiple clients committing a transactions. 
+For example, \emph{serialisability} can be described as the set 
+of kv-stores for which it is possible to recover a total schedule of transactions, 
+such that each read operation on key $\ke$ fetches its value from the 
+most recent write on the same key.
+In this sense, the kv-store $\hh_0$ from \cref{fig:hheap-a} is not serialisable: 
+transaction $\txid_1$ reads the initial version $\val'_0$ for key $\ke_{2}$, 
+and installs a new version fof $\ke_{2}$ carrying value $\val_1$. Similarly, transaction $\txid_2$ 
+reads the initial version $\val'_0$, and therefore (assuming $\val_1 \neq \val'_0$), 
+cannot be scheduled after $\txid_1$. Similarly, $\txid_2$ cannot be scheduled after $\txid_1$.
+
 In implementation of protocols of distributed databases, transactions can 
 commit only upon passing a \emph{commit test}. 
 The nature of the commit test determines the consistency model of 
@@ -138,7 +149,11 @@ the key-value store.
 Similarly, to specify consistency models we adopt the notion of 
 \emph{execution tests}. An execution test 
 $\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
-is a set of tuples of the form $(\hh, \vi, \opset, \vi')$; 
+is a set of tuples of the form $(\hh, \vi, \opset, \vi')$, 
+which is downward-closed with respect to set inclusion over fingerprints: 
+if $(\hh, \vi, \opset, \vi') \in \ET$ and $\opset' \subseteq \opset$, then 
+$(\hh, \vi, \opset', \vi') \in \ET$.
+Intuitively, 
 $(\hh, \vi, \opset, \vi') \in \ET$ means that, under the execution test 
 $\ET$, a client whose view on the kv-store $\hh$ is $\vi$ can safely 
 commit a transaction with fingerprint $\opset$, and the resulting 
@@ -156,10 +171,11 @@ Let $\ET$ be an execution test. The set of all configurations
 induced by $\ET$ is the smallest set $\mathsf{Configs}(\ET)$ 
 such that 
 \[
-\begin{array}{lll}
+\begin{array}{l}
 \forall \conf. \conf \text{ is initial} \implies \conf \in \mathsf{Configs}(\ET)\\
 \forall \hh, \cl \viewFun,\vi'.\; (\hh, \viewFun) \in \mathsf{Configs}(\ET) \wedge \viewFun(\cl) \viewleq \vi' \implies (\hh, \viewFun\rmto{\cl}{\vi'}) \in \mathsf{Configs}(\ET)\\
-\forall \hh, \cl, \viewFun, \opset, \vi, \vi'.\; \vi = (\viewFun(\cl) \wedge \ET \vdash (\hh, \vi) \triangleright \opset : \vi') \implies 
+\forall \hh, \cl, \viewFun, \opset, \vi, \vi'.\; \vi = (\viewFun(\cl) \wedge \ET \vdash (\hh, \vi) \triangleright \opset : \vi') \implies {}\\
+\hspace{15pt}
 ((\updateKV(\hh, \vi, \cl, \opset), \viewFun\rmto{\cl}{\vi'} \in \mathsf{Configs}(\ET)
 \end{array}
 \]
@@ -169,3 +185,7 @@ The \emph{consistency model} induced by $\ET$ is defined as
 \CMs(\ET) = \{ \hh \mid \exists \vi.\; (\hh, \vi) \in \mathsf{Configs}(\ET). 
 \]
 \end{definition}
+
+Thus, consistency models are computed from execution test by closing the set of initial kv-stores with 
+respect to two operations: replacing the view of a client on the kv-store with a newer one, and committing 
+the effects of a transaction.
