@@ -112,7 +112,12 @@ Intuitively,
 $(\hh, \vi, \opset, \vi') \in \ET$ means that, under the execution test 
 $\ET$, a client whose view on the kv-store $\hh$ is $\vi$ can safely 
 commit a transaction with fingerprint $\opset$, and the resulting 
-view for the client is updated to $\vi'$. Henceforth, we use the more 
+view for the client is updated to $\vi'$. If $\cl$ is the client executing 
+the transaction, and $\txid$ is the identifier of the transaction, we can think of the view 
+$\vi$ as including the versions that $\cl$ is aware of immediately before 
+executing $\txid$, and of $\vi'$ as including the versions that $\cl$ is 
+aware of immediately after executing $\txid$.
+Henceforth, we use the more 
 suggestive notation $\ET \vdash \hh, \vi \triangleright \opset : \vi'$, 
 in lieu of $(\hh, \vi, \opset, \vi') \in \ET$.
 Execution tests induce consistency models in the following way: 
@@ -240,3 +245,57 @@ captured by th execution test $\ET_{\WFR}$ from Figure \cref{fig:execution.tests
 \ac{The session guarantees must be explained better. But for now this will do.}
 
 \subparagraph{Causal Consistency: }
+Causal Consistency requires that the observations made if a client observes a version 
+$\ver$ of some key $\ke$, then it must also observe any version $\ver'$ of some key $\ke'$ 
+from which $\ver$ potentially depends \cite{cops}. A necessary and sufficient condition to enforce 
+causal consistency is that of enforcing the consistency guarantees $\MRd, \MW, \RYW, \WFR$ 
+discussed above \cite{session2causal}. Therefore, we let $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} 
+\cap \ET_{\RYW} \cap \ET_{\WFR}$.
+%However, for the sake of completeness we prefer to 
+%give a definition of execution test for causal consistency after the standard definition. 
+%The notion of \emph{potential dependency} $\xrightrrow{\pdep}$ between versions is defined by 
+%letting $\ver \xrightarrow{\pdep} \ver'$ if  
+%$\exists \txid, \txid'. \txid \in \{\WTx(\ver)\} \cup \RTx(\ver) \wedge 
+%\txid' \in \{\WTx(\ver')\} \cup \RTx(\ver') \wedge \txid \xrightarrow{\SO} \txid'$: 
+%this corresponds to the intuition that operations within a session potentially depends from previous operations in the same session.
+%The notion of \emph{potential data dependency} between versions is given 
+%by $\ver \xrightarrow{\ddep} \ver'$ if $\WTx(\ver') \in  \RTx(\ver)$.
+
+\subparagraph{Update Atomic.} 
+This consistency model has been proposed in \cite{framework-concur}, though we 
+are not aware of any implementation. However, many implemented consistency models 
+can be obtained by strengthening Update Atomic. Roughly speaking, in Update Atomic 
+concurrent transactions writing to the same key cannot execute concurrently; this property 
+is known as write conflict detection. In the kv-stores 
+framework, we can compute the set of transactions that are concurrent by transaction $\txid$ 
+immediately before executing such a transaction. At the moment a client $\cl$ tries to 
+commit the effects of transaction $\txid$, then any transaction $\txid'$ that read or wrote versions not included 
+in the view of $\cl$ is concurrent to $\txid$. Following this intuition, we can enforce write 
+conflict detection by requiring that whenever a client $\cl$ wants to commit the effect of 
+transactions writing key $\ke$ in the kv-store $\hh$, then the view of $\cl$ must include all the versions of $\ke$. 
+Formally, this leads to the execution test $\ET_{\UA}$ defined in \cref{fig:execution.tests}
+
+\subparagraph{Consistent Prefix.}
+This consistency model strengthens causal consistency by requiring that if a client 
+sees observes the effects of a transaction $\txid$, then it also observe the effects 
+of any transaction $\txid'$ that committed before $\txid$. By Looking at the structure 
+of a kv-store, it is not immediate to infer a total order in which transactions have been 
+executed (this problem has been analysed in a slightly different setting, see \cite{SIanalysis,laws} 
+for details). An equivalent definition of consistent prefix requires that different clients 
+never see updates to the kv-stores performed in different order. We can enforce this property 
+by strengthening causal consistency with the requirement that clients, 
+after committing the effects of a transaction, always shift their view to 
+the most recent version of each key.  The execution $\ET_{\CP}$ for consistent 
+prefix is defined in \cref{fig:execution.tests}.
+
+\subparagraph{Parallel Snapshot Isolation and (Strong Session) Snapshot Isolation.} 
+These two consistency models are obtained by combining causal consistency with update atomic, 
+and consistent prefix with update atomic, respectively. Formally, we have 
+$\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$, and $\ET_{\SI} = \ET_{\CC} \cap \ET_{\UA}$.
+
+\subparagraph{(Strict) Serialisability}
+The last consistency model that we consider is serialisability. This consistency model 
+requires that there exist a serial, or sequential schedule of transaction. It can be 
+enforced by requiring that clients always see the most up-to-date version of a key, 
+i.e. that the view of a client before executing a transaction is always the newest one. 
+The execution test $\ET_{\SER}$ of \cref{fig:exec.tests} models exactly this scenario.
