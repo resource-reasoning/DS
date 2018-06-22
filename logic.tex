@@ -5,45 +5,55 @@
 We present a logic that is parametrised by any consistency model \emph{at least satisfying atomic  read and monotonic read}.
 We motivate it by the \emph{write skew} example under snapshot isolation (\cref{fig:write-skew-si-proof}).
 This example distinguishes serialisibility from snapshot isolation (SI).
-If under serialisibility that transactions appear one after another, either \( \vx \) or \( \vy \) will be 1 at the end.
+Under serialisibility that transactions appear one after another, only one key, \( \vx \) or \( \vy \), will be 1 at the end.
 While under SI, both keys \( \vx \) and \( \vy \) might be 1.
-Both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and both can commit because the two transactions write different keys.
+Because both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and both can commit because the two transactions write different keys.
 
-We use \emph{shared region assertions} also know as \emph{boxed assertions} to describe the views on key-value stores, and use \emph{capabilities} to control the concurrent access.
-Shared regions, identified by unique labels \( \lrid \), describes views on key-value stores.
-Each region is indivisible and separates with each other.
-Since a view might be out-of-date, a value with a underline means \emph{a potentially out-of-date value}, otherwise it is the \emph{most recent value}.
-For instance, \( \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0}  \lor \vy \pt \underline{1} ) }{\lrid}{\intass}\) from \( P1 \) asserts a view where \( \vx \) points to the most recent value of 0, but \( \vy \) points to a potentially out-of-date value of either 0 or 1.
-Each region is associated with a \emph{interference} to describe how the region can evolve.
-The interference is a set of fingerprints labelled by \emph{capabilities}.
+In the sketch proof (\cref{fig:write-skew-si-proof}), \emph{A shared region assertion} also know as \emph{a boxed assertion} in the form of \( \boxass{\gpre}{\lrid}{\intass}\) describes that there is a region with \emph{a unique region identifier} \( \lrid \) and \emph{interference} \( \intass \), and the assertions inside \( \gpre \) satisfies views on key-value stores.
+Note that there might be many views on the same key-value store, some of which might be out-of-date.
+In the assertion, a value with a underline means \emph{a potentially out-of-date value}, otherwise it is the \emph{most recent value}.
+For instance, \( \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0} \lor \vy \pt \underline{1} ) }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vx \) points to the most recent value of 0, but \( \vy \) points to a potentially out-of-date value of either 0 or 1.
+Each region are shareable and indivisible, \ie \( \boxass{\gpre}{\lrid}{\intass} \sep \boxass{\gpost}{\lrid}{\intass} \iff \boxass{\gpre \land \gpost}{\lrid}{\intass}\).
 
-A region is associated with \emph{interference} \( \intass \) describing how a region can evolve.
+Regions are associated with \emph{interference} to specify how the regions can evolve.
+The \emph{interference} \( \intass \) is a set of actions, each of which has the form \( \kap : \fp \) where \( \kap \) is the \emph{client-specified capability} and \( \fp \) is the \emph{fingerprint}.
+A client is allowed to execute a transaction with the fingerprint \( \fp \), when the client holds the capability \( \kap \).
+The \emph{client-specified capability} forms \emph{a partial commutative monoid (PCM)} where \( \composeK \) denotes the composition function.
+In the write skew example, both \( \CB{L} \) and \( \CB{R} \) are unique because the compositions with themselves are undefined, and \( \CB{0} \) is the unit.
+The \( \CB{L}\) allows a client to read \( \vy \) when it is 0 and write 1 to \( \vx \), and similarly \( \CB{R} \) allows a client to read \( \vx \) when it is 0 and write 1 to \( \vy \).
+The unit \( \CB{0} \) allows clients to always read \( \vx \) or \( \vy \) no matter the values.
 
-There are two types of assertions, 
-
-To understand better, we associate unique capabilities for addresses, which indicates the latest values.
-Under serialisibility, a thread always observes be the latest values.
-While under snapshot isolation, it is sufficient to only see the latest values for addresses before the next transaction, if those addresses will be overwrite by the next transaction.
-After transaction a thread updates its view to the latest, yet it does not need to be always the latest while other threads interfere with the database which change the history heap.
-
-Since the capabilities always remember the latest values, therefore in the interference \( \intass \), if a transaction writes to an address, it also updates the capabilities to the value written, for example \( \cass{\CB{x}(\V n)}{\lrid} \fpU \cass{\CB{x}(1)}{\lrid} \).
-This capabilities also helps to understand the repartition especially under snapshot isolation, in a way that after committing a transaction, the view should be updated to the latest for all addresses.
+When a transaction starts, it take a snapshot give provided by the views.
+For example the \( \txid_1 \) in \cref{fig:write-skew-si-proof} has precondition \( p1 \).
+The transactional assertions for a single key are combinations of the state of key and the fingerprint.
+They are one of the forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \), where \( \otR \) and \( \otW \) are read and write labels.
+The first three asserts the key \( \vx \) in the local snapshot has value 0 and it has not been touched, has been read and has been written respectively.
+The last one asserts that the key \( \vx \) has value 1, \emph{the first read preceding any write} fetches 0 and the \emph{the last write} updates the key to \( 1 \).
 
 \begin{figure}[!t]
-\hrule\vspace{5pt}
+\hrule
 \[
 \intass :
-\begin{array}[t]{@{} c  c @{} }
+\begin{array}[t]{@{} c @{\quad} c @{\quad} c @{\quad} c @{} }
 \begin{rclarray}[t]
     \CB{L} & : & \vx \fpW 1 \sep \vy \fpR 0  \\
-    \CB{0} & : & \exsts{\V n} \vy \fpR \V{n} \\
 \end{rclarray}
 &
 \begin{rclarray}[t]
     \CB{R} & : & \vx \fpR 0 \sep \vy \fpW 1  \\
-    \CB{0} & : & \exsts{\V n} \vx \fpR \V{n} \\
 \end{rclarray}
+&
+\begin{rclarray}[t]
+    \CB{0} & : & \exsts{\V n} \vx \fpR \V{n} \\
+\end{rclarray} 
+&
+\begin{rclarray}[t]
+    \CB{0} & : & \exsts{\V n} \vy \fpR \V{n} \\
+\end{rclarray} \\
 \end{array}
+\]
+\[
+\CB{L} \composeK \CB{L} \ \text{is undefined} \quad  \CB{R} \composeK \CB{R} \ \text{is undefined} \quad \CB{0} \ \text{is the unit}
 \]
 \hrule\vspace{5pt}
 \[
@@ -89,8 +99,8 @@ This capabilities also helps to understand the repartition especially under snap
     \boxass{\vx \pt 0 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 0 }{\lrid}{\intass} \\ } \\
 \end{session}
 \]
-\hrule\vspace{5pt}
-\caption{Sketch proof for write skew under snapshot isolation}
+\hrule
+\caption{Interference, capabilities (the top), and sketch proof (the bottom) for write skew under snapshot isolation}
 \label{fig:write-skew-si-proof}
 \end{figure}
 
