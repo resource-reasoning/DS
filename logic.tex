@@ -2,10 +2,25 @@
 
 \sx{small intro for why a logic}
 
-We present a framework of logic that focuses on consistency models satisfying at least stronger session guarantee and read atomic.
-We motivate this by the write skew example under snapshot isolation (\cref{fig:write-skew-si-proof}).
+We present a logic that is parametrised by any consistency model \emph{at least satisfying atomic  read and monotonic read}.
+We motivate it by the \emph{write skew} example under snapshot isolation (\cref{fig:write-skew-si-proof}).
+This example distinguishes serialisibility from snapshot isolation (SI).
+If under serialisibility that transactions appear one after another, either \( \vx \) or \( \vy \) will be 1 at the end.
+While under SI, both keys \( \vx \) and \( \vy \) might be 1.
+Both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and both can commit because the two transactions write different keys.
 
-This example distinguishes serialisibility from snapshot isolation.
+We use \emph{shared region assertions} also know as \emph{boxed assertions} to describe the views on key-value stores, and use \emph{capabilities} to control the concurrent access.
+Shared regions, identified by unique labels \( \lrid \), describes views on key-value stores.
+Each region is indivisible and separates with each other.
+Since a view might be out-of-date, a value with a underline means \emph{a potentially out-of-date value}, otherwise it is the \emph{most recent value}.
+For instance, \( \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0}  \lor \vy \pt \underline{1} ) }{\lrid}{\intass}\) from \( P1 \) asserts a view where \( \vx \) points to the most recent value of 0, but \( \vy \) points to a potentially out-of-date value of either 0 or 1.
+Each region is associated with a \emph{interference} to describe how the region can evolve.
+The interference is a set of fingerprints labelled by \emph{capabilities}.
+
+A region is associated with \emph{interference} \( \intass \) describing how a region can evolve.
+
+There are two types of assertions, 
+
 To understand better, we associate unique capabilities for addresses, which indicates the latest values.
 Under serialisibility, a thread always observes be the latest values.
 While under snapshot isolation, it is sufficient to only see the latest values for addresses before the next transaction, if those addresses will be overwrite by the next transaction.
@@ -18,62 +33,64 @@ This capabilities also helps to understand the repartition especially under snap
 \hrule\vspace{5pt}
 \[
 \intass :
+\begin{array}[t]{@{} c  c @{} }
+\begin{rclarray}[t]
+    \CB{L} & : & \vx \fpW 1 \sep \vy \fpR 0  \\
+    \CB{0} & : & \exsts{\V n} \vy \fpR \V{n} \\
+\end{rclarray}
+&
 \begin{rclarray}[t]
     \CB{R} & : & \vx \fpR 0 \sep \vy \fpW 1  \\
-    \CB{L} & : & \vx \fpW 1 \sep \vy \fpR 0  \\
-    \CB{0} & : & \exsts{ \V{a} \in \Set{\vx, \vy} , \V{n}} \V{a} \fpR \V{n} \\
+    \CB{0} & : & \exsts{\V n} \vx \fpR \V{n} \\
 \end{rclarray}
+\end{array}
 \]
 \hrule\vspace{5pt}
 \[
 \begin{session}
-\specline{\boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} } \\
+{\color{blue}P : } \specline{ \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass}  } \\
 \begin{parl}
 \begin{session}
-    \specline{\cass{\CB{L}}{\lrid} \sep 
-            \boxass{\vx \pt 0 \sep ( \vy \pt 0  \lor \vy \pt 1 ) }{\lrid}{\intass} 
+    {\color{blue}P1 : } \specline{\cass{\CB{L}}{\lrid} \sep 
+            \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0}  \lor \vy \pt \underline{1} ) }{\lrid}{\intass} 
     } \\
-    \begin{transaction}
-        \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
-        \pderef{\pvar{b}}{\vy} ; \\
-        \pifs{\pvar{b} = 0} 
+    \txid_1 : \begin{transaction}
+        {\color{blue}p1 : } \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
+        \pderef{\pvar{b}}{\vy} ; 
+        \quad \pifs{\pvar{b} = 0} 
         \pmutate{\vx}{1} ;
         \pife \\
-        \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
+        {\color{blue}q1 : } \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
     \end{transaction} \\
-    QL : \specline{\cass{\CB{L}}{\lrid} \sep 
-            \boxass{\vx \pt 1 \sep \vy \pt 0  }{\lrid}{\intass} \\
-            {} \lor \boxass{\vx \pt 1 \sep \vy \pt 1 }{\lrid}{\intass} \\
-            {} \lor \boxass{\vx \pt 0 \sep \vy \pt 1 }{\lrid}{\intass} \\
+    {\color{blue}Q1 : } \specline{\cass{\CB{L}}{\lrid} \sep 
+            \boxass{ \vx \pt 1 \sep \vy \pt \underline{0} \lor {} \\ \vx \pt 1 \sep \vy \pt \underline{1} \lor \vx \pt 0 \sep \vy \pt \underline{1} }{\lrid}{\intass} \\
     } \\
 \end{session}
 &
 \begin{session}
-    \specline{\cass{\CB{R}}{\lrid} \sep 
-            \boxass{ ( \vx \pt 0 \lor \vx \pt 1 ) \sep \vy \pt 0 }{\lrid}{\intass} 
+    {\color{blue}P2 : } \specline{\cass{\CB{R}}{\lrid} \sep 
+            \boxass{ ( \vx \pt \underline{0} \lor \vx \pt \underline{1} ) \sep \vy \pt 0 }{\lrid}{\intass} 
     } \\
-    \begin{transaction}
+    \txid_2 : \begin{transaction}
+        {\color{blue}p2 : } \specline{ ( \vx \fpI 0 \lor \vx \fpI 1 ) \sep \vy \fpI 0 )} \\
         \pderef{\pvar{a}}{\vx} ; 
         \quad \pifs{\pvar{a} = 0} 
         \pmutate{\vy}{1} ; 
-        \pife 
+        \pife \\
+        {\color{blue}q2 : } \specline{ \vx \fpR 0 \sep \vy \fpW 1 \lor \vx \fpR 1 \sep \vy \fpI 0 )} \\
     \end{transaction} \\
-    QR : \specline{\cass{\CB{R}}{\lrid} \sep 
-            \boxass{\vx \pt 0 \sep \vy \pt 1 }{\lrid}{\intass} \\
-            {} \lor \boxass{\vx \pt 1 \sep \vy \pt 1 }{\lrid}{\intass} \\
-            {} \lor \boxass{\vx \pt 1 \sep \vy \pt 0 }{\lrid}{\intass} \\
+    {\color{blue}Q2 : } \specline{\cass{\CB{R}}{\lrid} \sep 
+            \boxass{\vx \pt \underline{0} \sep \vy \pt 1 \lor {} \\ \vx \pt \underline{1} \sep \vy \pt 1 \lor \vx \pt \underline{1} \sep \vy \pt 0 }{\lrid}{\intass} \\
     } \\
 \end{session}
 \end{parl} \\
-QL \sep QR : \specline{\cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep 
-        \boxass{\vx \pt 0 \sep \vy \pt 1  }{\lrid}{\intass} \\
-        {} \lor \boxass{\vx \pt 1 \sep \vy \pt 1 }{\lrid}{\intass} 
-        \lor \boxass{\vx \pt 1 \sep \vy \pt 0 }{\lrid}{\intass} \\
-} \\
+{\color{blue}Q : } \specline{%
+    \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep 
+    \boxass{\vx \pt 0 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 0 }{\lrid}{\intass} \\ } \\
 \end{session}
 \]
 \hrule\vspace{5pt}
-\caption{write skew under snapshot isolation}
+\caption{Sketch proof for write skew under snapshot isolation}
 \label{fig:write-skew-si-proof}
 \end{figure}
 
