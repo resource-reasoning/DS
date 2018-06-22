@@ -23,7 +23,7 @@
 %the straight lines labelled $\txid_1$ and $\txid_2$).
 \ac{\sx{Partial is better for logic}Maybe it's better to keep $\ke$ fixed and say that we look at only a 
 fragment of the key value store. Alternatively, we can go for partial mappings to 
-represent MKVSs, but still avoiding allocation and deallocation of keys.}.
+represent MKVSs, but still avoiding allocation and deallocation of keys.}
 
 
 
@@ -72,6 +72,7 @@ where $\powerset{\cdot}$ is the powerset operator.
 A \emph{key-value store} is a partial, finite mapping $\hh : \Keys \parfinfun \Versions^{\ast}$. 
 %The set of key-value stores is denoted as $\HisHeaps$.
 \end{definition}
+Elements of $\Versions^{\ast}$ are ranged over by $\vilist, \vilist',\cdots$.
 \ac{Is it safe to assume that key-value stores are partial functions? What happens if we execute a program 
 that tries to access a key that is not in the key-value store? In his Thesis, Viktor had the notion of fault to distinguish cases 
 where non-allocated variables were used. Check. \sx{I think it has no semantics in our case.}}
@@ -95,7 +96,7 @@ We represent each version as a three-cell box, with the left cell storing the va
 In this paper we only focus on kv-stores whose consistency model ensures that transactions enjoy 
 \emph{atomic visibility} \cite{framework-concur}. We also assume that the special transaction identifier $\tsid_0$ is used 
 to install the initial version of a key. This amounts to require from a kv-store $\hh$ that \textbf{(i)} for each 
-key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (v_0, \txid, \_)$ for some initial value $v_0$,
+key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (v_0, \txid_0, \_)$ for some initial value $v_0$,
 \textbf{(ii)} transactions never write more than one version per key - $\forall \ke \in \dom(\hh)\; \forall i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert.\; 
 \WTx(\ke, i) = \WTx(\ke, j) \implies i = j$, \textbf{(iii)} transactions never read different versions 
 for the same key - $\forall \ke \in \dom(\hh).\; \forall i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert.\; 
@@ -375,6 +376,8 @@ are well formed, and let $\HisHeaps$ be the set of well-formed kv-stores.
 \end{tabular}
 \end{center}
 \hrule\vspace{5pt}
+\ac{Remove ill-formed heap. Insert Configuration with non-atomic view. Refer to the figure 
+when explaining the notion of atomic view.}
 \caption{Multi-version key-value stores}
 \label{fig:hheap}
 \end{figure}
@@ -480,111 +483,178 @@ are well formed, and let $\HisHeaps$ be the set of well-formed kv-stores.
 %in $\hh$the second and most up-to-date version for both $\key{k}_1$ and $\key{k}_2$.
 %}
 
-\mypar{Views}
-A MKVS tracks the global state of the system; however, different \emph{clients} may observe different versions of the same key. 
-To model this, we introduce the notion of \emph{views} (\cref{def:views}). 
-A view $V$ reflects the particular version for each key that a client observes upon executing a transaction. 
-We present an example of views in \cref{fig:hheap-a} with two views: $\client_1$ in red and $\client_2$ in blue.
-More concretely, the view for \( \client_1 \) is given formally as $\vi_1 = \Set{\key{k}_1 \mapsto 1, \key{k}_2 \mapsto 0}$.
-That is, the client with view $\vi_1$ observes the second version (at index 1) of key \( \ke_{1} \) with value $v_1$, and the first version (at index 0) of key \( \ke_2 \) with value $v'_0$.
-%, and 
-%the first version of $\key{k}_2$, carrying value $0$. Similarly, according to its view 
-%$V_2 = [\key{k}_1 \mapsto 2, \key{k}_2 \mapsto 2]$, the client $\txid_2$ observes 
-%in $\hh$the second and most up-to-date version for both $\key{k}_1$ and $\key{k}_2$.
-
-\begin{definition}[Views]
+\mypar{Views, Configurations and Snapshots.}
+\ac{Configurations are trivial once that view are defined.}
+The main idea behind our formal notion of key-value stores is that, 
+when executing a transaction, different clients may observe 
+different version of the same key, at any given time. To keep track of 
+the versions they observe, clients are associated with a \emph{view}. 
+\begin{definition}
 \label{def:view}
 \label{def:cuts}
 \label{def:views}
-\emph{A view} is a partial finite function from keys to indexes:
-$
-\vi \in \Views \defeq \Addr \parfinfun \Nat 
-%\begin{rclarray}
-%    \vi \in \Views & \defeq & \Addr \parfinfun \Nat 
-%\end{rclarray}
-$.                                                                 
-The \emph{view composition}, $\composeVI: \Views \times \Views \rightharpoonup \Views$ is defined as the standard disjoint function union: $\composeVI \eqdef \uplus$. 
-% \( \vi \composeVI \vi' \defeq \vi \uplus \vi'\) 
-The \emph{unit view}, $\unitVI \in \Views$, is a function with an empty domain: $\unitVI \eqdef \emptyset$. 
-% and the unit is \( \unitVI \defeq \emptyset\).
-The \emph{order relation} on views, $\orderVI: \Views \times \Views$, is defined between two views with the same domain as the point-wise comparison of their indexes for each entry: 
-\[
-\begin{rclarray}
-    \vi \orderVI \vi' & \defiff & \dom(\vi) = \dom(\vi') \land \fora{\ke} \cu(\ke) \leq \cu'(\ke) \\
-\end{rclarray}
-\]
+\label{def:configuration}
+Let $\hh$ be a key-value store; a view in $\hh$ is function  
+$V: \dom(\hh) \rightarrow \Nat$ such that, for any $\ke \in \dom(\hh)$, 
+$V(\ke) < \lvert \hh(\ke) \rvert$, and 
+\begin{equation}
+\label{eq:view.atomic}
+\forall \ke,\ke' \in \dom(\hh), i,j \in \Nat.\; (j \leq  \vi(\ke) \wedge 
+\WTx(\hh(\ke, v(\ke))) = \WTx(\hh(\ke', i)) \implies i \leq \vi(\ke').
+\tag{AtomicView}
+\end{equation}
+The set of views of $\hh$ is denoted 
+as $\Views_{\hh}$, and we let $\Views = \bigcup_{\hh \in \HisHeaps} 
+\Views_{\hh}$.
+
+A configuration $\conf$ is a pair $(\hh, \viewFun)$, where $\viewFun: 
+\Clients \parfinfun \Views_{\hh}$.
 \end{definition}
-%
-We say view $\vi$ is \emph{older} than view $\vi'$ (or $\vi'$ is \emph{newer} than $\vi$) whenever $\vi \orderVI \vi'$ holds.
+Given $\hh \in \HisHeaps$ and two views $\vi, \vi' \in \Views_{\hh}$, 
+we let $\vi \viewleq \vi'$ if, for any $\ke \in \dom(\hh)$, $\vi(k) \leq \vi'(\ke)$. 
+In this case we say that $\vi$ is older than $\vi'$ ($\vi'$ is newer than $\vi$).
 
-\mypar{Configurations} A \emph{configuration} comprises an MKVS, and the views associated with clients.
-In \cref{fig:hheap-a} we present an example of a configuration comprising an MKVS and the two views associated with clients $\client_1$ and $\client_2$. 
-We write $\version(\hh, \ke, \vi)$ for $\hh(\ke, \vi(\ke))$; 
-and write $\valueOf(\hh, \ke, \vi)$ as a shorthand for $ \valueOf(\version(\hh, \key{k}, V))$; similarly for $\WTx, \RTx$.
-%we commit an abuse of notation and often write $\valueOf(\hh, \ke, \vi)$ in lieu of $ \valueOf(\version(\hh, \key{k}, V))$, and similarly for $\WTx, \RTx$.
-When $\ver = \version(\hh, \ke, \vi)$, we say that \emph{$\vi$ $\ke$-points to $\ver$ in $\hh$}. 
-When $\ver = \hh(\ke, i)$ for some $0 \leq i \le \vi(\ke)$, we say that \emph{$\vi$ $\ke$-includes $\ver$ in $\hh$}.
-Lastly, we always assume that MKVSs, views, and configurations are well-formed, unless otherwise stated.
+Simply put, a configuration augments the notion of kv-stores with the information 
+about the version observed by each client of its clients. The view of a client $\cl$ in $\hh$ 
+keeps track of the most recent version of $\hh$ that $\cl$ can access when executing a 
+transaction. The constraint of \cref{eq:view.atomic} establishes that clients observe 
+either none or all the updates performed by a transaction, thus modelling atomic 
+visibility.
+We often depict configurations graphically by depicting views as client-labelled lines crossing 
+versions  of key-value stores. A line labelled $\cl$ crossing the $i$-th version of key $\ke$ defines a view 
+$\vi$ for client $\cl$, with $\vi(\ke) = i$. One example is given by the configuration 
+$\conf_0 = (\hh_0, [\cl_1 \mapsto \vi_1, \cl_2 \mapsto \vi_2])$ of \cref{fig:hheap-a}. 
+There are two clients, 
+$\cl_1$ and $\cl_2$, with views $\vi_1, \vi_2$ respectively. $\vi_1$ Crosses $\ke_1$ at its $0$-th 
+version, and $\ke_2$ at its $1$-st version. Therefore we have $\vi_1 = [\ke_1 \mapsto 0, \ke_2 \mapsto_1]$. 
+Similarly, $\vi_2 = [\ke_1 \mapsto 1, \ke_2 \mapsto 0]$. 
+\ac{Never refer to colors in text. People may read in black and white.}
 
-
-
-\begin{definition}[Configurations]
-A view $\vi$ is \emph{well-formed with respect to an MKVS} $\mkvs$, written \( \wfV{\mkvs, \vi} \),  iff they have the same domain and every index from $\vi$ is within the range of the corresponding entry in $\mkvs$ and the view is \emph{atomic} with  respect to the key-value store: 
-\[
-\begin{rclarray}
-    \wfV{\mkvs, \vi} & \defeq & \dom(\mkvs) = \dom(\vi) \land \fora{\ke \in \dom(\vi)} 0 \leq \vi(\ke) < \lvert \mkvs(\ke) \rvert \\
-    \pred{atomic}{\vi ,\hh} & \eqdef & \fora{\txid } \exsts{\ke, i} i \leq \vi(\ke) \land \hh(\ke,i) = (\stub, \txid, \stub) \implies \pred{visible}{\txid, \vi, \hh} \\ 
-    \pred{visible}{\txid, \vi, \hh} & \eqdef & \fora{\ke, i} \hh(\ke,i) = (\stub, \txid, \stub) \implies i \leq \vi(\ke) 
-\end{rclarray}
-\]
-%
-\azalea{We need a symbol for this to fill the ???? above. Also ???? below. \sx{Done}}
-A \emph{configuration} $\conf$ is a pair of the form $(\hh, \viewFun)$, where $\hh$ denotes an MKVS, and $\viewFun: \Clients \parfinfun \Views$ is a partial finite function from clients to views. 
-A configuration $\conf = (\hh, \viewFun)$ is \emph{well-formed}, written \( \wfC{\conf}\), iff for all clients $\cl \in \dom(\viewFun)$, the view $\viewFun(\txid)$ is well-formed with respect to $\hh$. 
-%We say that a view $V$ is well-defined with respect to the 
-%MKVS $\hh$ if, $\forall \key{k} \in \ke. 0 < V(\key{k}) \leq 
-%\lvert \hh(\key{k}) \rvert$. 
-%Given a view $V$ that is well-defined 
-%with respect to a 
-
-\end{definition}
-
-\mypar{Snapshots} When a client executes a transaction on the $\mkvs$ MKVS, it extracts a \emph{snapshot} of it via the \( \func{snapshot}{\mkvs, \vi} \) function, extracting the values corresponding to the versions indexed by its view \( \vi \) (\cref{def:snapshot}).
-For instance, for client \( \client_1 \) in \cref{fig:hheap-a}, the $\func{snapshot}{\cdots}$ functions yields a state where key $\ke_1$ carries value $v_1$ and second key \( \ke_2 \) carries value $v'_0$.
-%The concrete state extracted in this way takes the name of the \emph{snapshot} of the transaction.
-%In general, the process of determining the view of a client, hence the snapshot in which such a client executes transactions, is non-deterministic.
-
-\azalea{Before in MKVSs we had values drawn from $\Nat$ in \cref{def:mkvs}. Now we use $\Val$. I think you mean to use $\Val$ in both places? \sx{I would say so} }
-\begin{definition}[Snapshots]
+Given a kv-store $\hh$, a view $\vi$ and a key $\ke \in \dom(\hh)$, 
+we commit an abuse of notation and write $\hh(\ke, \vi)$ as a shorthand 
+for $\hh(\ke, \vi(\ke))$. The view $\vi$ naturally induces a \emph{snapshot} 
+by extracting the value of the $\vi(\ke)$-th version for each key $\ke \in \dom(\hh)$. 
+As we will see presently, snapshots are used to determine the value of keys returned 
+by read operations of transactions. 
+\begin{definition}
 \label{def:heaps}
 \label{def:snapshot}
-Given the sets of values $\Val$  and keys \( \Addr\)  (\cref{def:mkvs}), the set of \emph{snapshots} is:
-$
-    \h \in \Heaps \eqdef \Addr \parfinfun \Val
-$. 
-%\[
-%\begin{rclarray}
-%    \h \in \Heaps & \eqdef & \Addr \parfinfun \Val
-%\end{rclarray}
-%\]
-The \emph{snapshot composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ snapshot unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
-The \emph{partial commutative monoid of snapshots} is $(\Heaps, \composeH, \{\unitH\})$.
-Given an MKVS $\hh$ and a view $\vi$, the snapshot of $\vi$ in $\hh$, written $\snapshot(\hh, \vi) $, is defined as:
-$
-    \snapshot(\hh, \vi) \defeq \lambda \ke \ldotp \valueOf(\hh, \ke, \vi)
-$.
-%\[
-%\begin{rclarray}
-%    \snapshot(\hh, \vi) & \defeq & \lambda \ke \ldotp \valueOf(\hh, \ke, \vi).
-%\end{rclarray}
-%\]
+Let $\hh \in \HisHeaps, \vi \in \Views_{\hh}$. The snapshot of $\vi$ in 
+$\hh$ is defined as $\snapshot(\hh, \vi) = \lambda \ke. \valueOf(\hh(\ke, \vi))$.
 \end{definition}
 
-\sx{Need some explanation}
-\ac{General Comment on this Section: it is too abstract. We 
-should give either here or in the introduction an example of computation - 
-the write skew program should be okay that helps the reader understanding 
-what's going on. Also, it could be also good to illustrate the notions 
-of execution tests and consistency models.}
+\ac{General comment: the explanations should be okay, but I wonder whether we now have 
+too many definitions. We may consider putting all the definitions in a table, and 
+go through there in the text. Though I am for using tables with notations and 
+definitions only as a last resort - they tend to be scary.}
 
-\sx{From Andrea: introduce the execution test here with a table, also introduce fingerprint here}
+%of $\vi$ by accessing the value of 
+%A view $\vi$ in $\hh$ naturally defines a snapshot $\snapshot(\hh, \nu)$
+%A MKVS tracks the global state of the system; however, different \emph{clients} may observe different versions of the same key. 
+%To model this, we introduce the notion of \emph{views} (\cref{def:views}). 
+%A view $V$ reflects the particular version for each key that a client observes upon executing a transaction. 
+%%We present an example of views in \cref{fig:hheap-a} with two views: $\client_1$ in red and $\client_2$ in blue.
+%More concretely, the view for \( \client_1 \) is given formally as $\vi_1 = \Set{\key{k}_1 \mapsto 1, \key{k}_2 \mapsto 0}$.
+%That is, the client with view $\vi_1$ observes the second version (at index 1) of key \( \ke_{1} \) with value $v_1$, and the first version (at index 0) of key \( \ke_2 \) with value $v'_0$.
+%%, and 
+%%the first version of $\key{k}_2$, carrying value $0$. Similarly, according to its view 
+%%$V_2 = [\key{k}_1 \mapsto 2, \key{k}_2 \mapsto 2]$, the client $\txid_2$ observes 
+%%in $\hh$the second and most up-to-date version for both $\key{k}_1$ and $\key{k}_2$.
+%
+%\begin{definition}[Views]
+%\label{def:view}
+%\label{def:cuts}
+%\label{def:views}
+%\emph{A view} is a partial finite function from keys to indexes:
+%$
+%\vi \in \Views \defeq \Addr \parfinfun \Nat 
+%%\begin{rclarray}
+%%    \vi \in \Views & \defeq & \Addr \parfinfun \Nat 
+%%\end{rclarray}
+%$.                                                                 
+%The \emph{view composition}, $\composeVI: \Views \times \Views \rightharpoonup \Views$ is defined as the standard disjoint function union: $\composeVI \eqdef \uplus$. 
+%% \( \vi \composeVI \vi' \defeq \vi \uplus \vi'\) 
+%The \emph{unit view}, $\unitVI \in \Views$, is a function with an empty domain: $\unitVI \eqdef \emptyset$. 
+%% and the unit is \( \unitVI \defeq \emptyset\).
+%The \emph{order relation} on views, $\orderVI: \Views \times \Views$, is defined between two views with the same domain as the point-wise comparison of their indexes for each entry: 
+%\[
+%\begin{rclarray}
+%    \vi \orderVI \vi' & \defiff & \dom(\vi) = \dom(\vi') \land \fora{\ke} \cu(\ke) \leq \cu'(\ke) \\
+%\end{rclarray}
+%\]
+%\end{definition}
+%%
+%We say view $\vi$ is \emph{older} than view $\vi'$ (or $\vi'$ is \emph{newer} than $\vi$) whenever $\vi \orderVI \vi'$ holds.
+%
+%
+%\mypar{Configurations} A \emph{configuration} comprises an MKVS, and the views associated with clients.
+%In \cref{fig:hheap-a} we present an example of a configuration comprising an MKVS and the two views associated with clients $\client_1$ and $\client_2$. 
+%We write $\version(\hh, \ke, \vi)$ for $\hh(\ke, \vi(\ke))$; 
+%and write $\valueOf(\hh, \ke, \vi)$ as a shorthand for $ \valueOf(\version(\hh, \key{k}, V))$; similarly for $\WTx, \RTx$.
+%%we commit an abuse of notation and often write $\valueOf(\hh, \ke, \vi)$ in lieu of $ \valueOf(\version(\hh, \key{k}, V))$, and similarly for $\WTx, \RTx$.
+%When $\ver = \version(\hh, \ke, \vi)$, we say that \emph{$\vi$ $\ke$-points to $\ver$ in $\hh$}. 
+%When $\ver = \hh(\ke, i)$ for some $0 \leq i \le \vi(\ke)$, we say that \emph{$\vi$ $\ke$-includes $\ver$ in $\hh$}.
+%Lastly, we always assume that MKVSs, views, and configurations are well-formed, unless otherwise stated.
+%
+%
+%
+%\begin{definition}[Configurations]
+%A view $\vi$ is \emph{well-formed with respect to an MKVS} $\mkvs$, written \( \wfV{\mkvs, \vi} \),  iff they have the same domain and every index from $\vi$ is within the range of the corresponding entry in $\mkvs$ and the view is \emph{atomic} with  respect to the key-value store: 
+%\[
+%\begin{rclarray}
+%    \wfV{\mkvs, \vi} & \defeq & \dom(\mkvs) = \dom(\vi) \land \fora{\ke \in \dom(\vi)} 0 \leq \vi(\ke) < \lvert \mkvs(\ke) \rvert \\
+%    \pred{atomic}{\vi ,\hh} & \eqdef & \fora{\txid } \exsts{\ke, i} i \leq \vi(\ke) \land \hh(\ke,i) = (\stub, \txid, \stub) \implies \pred{visible}{\txid, \vi, \hh} \\ 
+%    \pred{visible}{\txid, \vi, \hh} & \eqdef & \fora{\ke, i} \hh(\ke,i) = (\stub, \txid, \stub) \implies i \leq \vi(\ke) 
+%\end{rclarray}
+%\]
+%%
+%\azalea{We need a symbol for this to fill the ???? above. Also ???? below. \sx{Done}}
+%A \emph{configuration} $\conf$ is a pair of the form $(\hh, \viewFun)$, where $\hh$ denotes an MKVS, and $\viewFun: \Clients \parfinfun \Views$ is a partial finite function from clients to views. 
+%A configuration $\conf = (\hh, \viewFun)$ is \emph{well-formed}, written \( \wfC{\conf}\), iff for all clients $\cl \in \dom(\viewFun)$, the view $\viewFun(\txid)$ is well-formed with respect to $\hh$. 
+%%We say that a view $V$ is well-defined with respect to the 
+%%MKVS $\hh$ if, $\forall \key{k} \in \ke. 0 < V(\key{k}) \leq 
+%%\lvert \hh(\key{k}) \rvert$. 
+%%Given a view $V$ that is well-defined 
+%%with respect to a 
+%
+%\end{definition}
+%
+%\mypar{Snapshots} When a client executes a transaction on the $\mkvs$ MKVS, it extracts a \emph{snapshot} of it via the \( \func{snapshot}{\mkvs, \vi} \) function, extracting the values corresponding to the versions indexed by its view \( \vi \) (\cref{def:snapshot}).
+%For instance, for client \( \client_1 \) in \cref{fig:hheap-a}, the $\func{snapshot}{\cdots}$ functions yields a state where key $\ke_1$ carries value $v_1$ and second key \( \ke_2 \) carries value $v'_0$.
+%%The concrete state extracted in this way takes the name of the \emph{snapshot} of the transaction.
+%%In general, the process of determining the view of a client, hence the snapshot in which such a client executes transactions, is non-deterministic.
+%
+%\azalea{Before in MKVSs we had values drawn from $\Nat$ in \cref{def:mkvs}. Now we use $\Val$. I think you mean to use $\Val$ in both places? \sx{I would say so} }
+%\begin{definition}[Snapshots]
+%\label{def:heaps}
+%\label{def:snapshot}
+%Given the sets of values $\Val$  and keys \( \Addr\)  (\cref{def:mkvs}), the set of \emph{snapshots} is:
+%$
+%    \h \in \Heaps \eqdef \Addr \parfinfun \Val
+%$. 
+%%\[
+%%\begin{rclarray}
+%%    \h \in \Heaps & \eqdef & \Addr \parfinfun \Val
+%%\end{rclarray}
+%%\]
+%The \emph{snapshot composition function}, $\composeH: \Heaps \times \Heaps \parfun \Heaps$, is defined as $\composeH \eqdef \uplus$, where $\uplus$ denotes the standard disjoint function union. The \emph{ snapshot unit element} is $\unitH \eqdef \emptyset$, denoting a function with an empty domain.
+%The \emph{partial commutative monoid of snapshots} is $(\Heaps, \composeH, \{\unitH\})$.
+%Given an MKVS $\hh$ and a view $\vi$, the snapshot of $\vi$ in $\hh$, written $\snapshot(\hh, \vi) $, is defined as:
+%$
+%    \snapshot(\hh, \vi) \defeq \lambda \ke \ldotp \valueOf(\hh, \ke, \vi)
+%$.
+%%\[
+%%\begin{rclarray}
+%%    \snapshot(\hh, \vi) & \defeq & \lambda \ke \ldotp \valueOf(\hh, \ke, \vi).
+%%\end{rclarray}
+%%\]
+%\end{definition}
+%
+%\sx{Need some explanation}
+%\ac{General Comment on this Section: it is too abstract. We 
+%should give either here or in the introduction an example of computation - 
+%the write skew program should be okay that helps the reader understanding 
+%what's going on. Also, it could be also good to illustrate the notions 
+%of execution tests and consistency models.}
+%
+%\sx{From Andrea: introduce the execution test here with a table, also introduce fingerprint here}
