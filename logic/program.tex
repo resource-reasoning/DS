@@ -1,31 +1,4 @@
-\subsection{Local/Transaction}
-
-\begin{definition}[Logical Expressions]
-\label{def:logical-expr}
-Assume a countably infinite set of \emph{logical variables} $\lvar \in \LVar$.
-The set of \emph{logical expressions}, $ \lexpr \in \LExpr$ is defined by the following inductive grammar, where \(\val \in \Val\) (\cref{def:program_values}) and \(\var \in \Vars\)(\cref{def:stacks}),
-\[
-\begin{rclarray}
-   \lexpr & ::= & \val \mid \lvar \mid \var \mid \lexpr + \lexpr \mid \lexpr \times \lexpr \mid \dots 
-\end{rclarray}
-\]
-Assume a set of \emph{logical environments} \(\lenv \in \LEnv: \LVar \parfun \Val\) which associates logical variables with values.
-Given a stack $\stk \in \Stacks$ (\cref{def:stacks}) and a logical environment $\lenv \in \LEnv$, the \emph{logical expression evaluation} function, $\evalLE[(., .)]{.}:\LExpr \times \Stacks \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions as follows,
-%
-\[
-    \begin{rclarray}
-        \evalLE{\val} & \defeq & \val \\
-        \evalLE{\lvar} & \defeq & \lenv(\lvar) \\
-        \evalLE{\var} & \defeq & \txstk(\var) \\
-        \evalLE{\lexpr_1 + \lexpr_2} & \defeq & \evalLE{\lexpr_1} + \evalLE{\lexpr_2} \\
-        \evalLE{\lexpr_1 \times \lexpr_2} & \defeq & \evalLE{\lexpr_1} \times \evalLE{\lexpr_2} \\
-        \dots & \defeq & \dots \\
-    \end{rclarray}
-\]
-Note that the stack \( \stk \) includes transaction variables and thread variables.
-\end{definition}
-
-\sx{The variable \( \kap \) is a bit confused, since it is used in the model and syntax in assertion}
+\subsection{Reasoning programs}
 
 \begin{definition}[Capabilities]
 \label{def:capabilities}
@@ -58,19 +31,6 @@ The capability are used, first, as a token that grants some abilities to access 
 Second, it is ghost resources to help the reasoning.
 %For brevity, when we write \( \cass{\kap}{\lrid} \), and this means there are implicit parameters.
 
-A \emph{fingerprint assertion} describes the possible global effect from a transaction.
-It includes the first read \( \lexpr_{1} \fpR \lexpr_{2} \), last write \( \lexpr_{1} \fpW \lexpr_{2} \) for the address \( \lexpr_{1} \) and the combination of them \( \lexpr_{1} \fpRW \lexpr_{2} \).
-%\azalea{
-%I have changed it from $\stackrel{\perp}{\hookrightarrow}$ to $\fpI$, as $\perp$ has weird connotations. 
-%Default is no fingerprint so far and thus empty tag. 
-%I have also dropped the $\backslash$ from $\fpA$ and $\fpD$ as it looks a little strange. 
-%}
-The \( \lexpr_{1} \fpI \lexpr_{2} \) means the address \( \lexpr_{1} \) has no associated fingerprint and the initial value is \( \lexpr_{2} \).
-The \( \lexpr_{1} \fpR \lexpr_{2} \) means the address has been read before any other write and the current value is \( \lexpr_{2} \).
-The \( \lexpr_{1} \fpW \lexpr_{2} \) means the address has been written at least once, and the last written value is \( \lexpr_{2} \).
-Last, The \( \lexpr_{1} \fpRW (\lexpr_{2}, \lexpr_{3}) \) means the address has been read and then written, the first read value is \( \lexpr_{2} \) and the last written  value is \( \lexpr_{3} \).
-
-%For better presentation, we introduce \( \fpE \) which means ``untouched for the rest addresses''.
 We will use fingerprint assertions to specify interference (shown later), therefore we also have special fingerprint for transferring of capabilities, \ie adding to the shared state \( \fpA \cass{\kap}{\lrid} \), deleting from the shared state \( \fpD \cass{\kap}{\lrid} \) and updating the capabilities \( \cass{\kap(\vec{\lvar})}{\lrid} \fpU \cass{\kap(\vec{\lvar})}{\lrid} \).
 The shared state, intuitively, is the state aware by all threads and we will explain the details later.
 
@@ -155,49 +115,15 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \end{definition}
 
 %\sx{ It should be fine for local assertion to include the capabilities, as it either becomes frame or (not sure) helps local reasoning}
-The local assertions have true, false, conjunction \( \land \), disjunction \( \lor \), existential quantification \( \exists \), implication \( \implies  \), empty \( \assemp \),  heap-related fingerprint assertions \( \bar{\fp}\) and separation conjunction \( \sep \).
-They describes the state of local heap used by a transaction and more importantly the fingerprint of the transaction.
-They are interpreted to pairs of heaps and operation sets.
 
 %The standard separation assertions describe the current local state, while the fingerprints are all the local effects that will be committed to the database.
 
-\begin{definition}[Local assertions]
-\label{def:local_assertions}
-Given the set of logical expressions \( \LExpr \) and logical variables \( \LVar \), the set of \emph{local assertions}, $\lpre,  \lpost \in \LAst$, is defined by lifting the \emph{read-write fraction of fingerprint assertions} \( \bar{\fp} \),
-\[
-\begin{rclarray}
-    \bar{\fp} & ::= & \lexpr \fpR \lexpr \mid \lexpr \fpW \lexpr \mid \lexpr \fpRW (\lexpr, \lexpr) \mid \lexpr \fpI \lexpr  \\
-	\lpre, \lpost  & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \mid \Emp \mid \bar{\fp} \mid \lpre \sep \lpost  \\
-\end{rclarray}	 
-\]
-Given a logical environment $\lenv \in \LEnv$, the \emph{local interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \Opsets} $, is defined over the structure of local assertions as follows,
-\[
-\begin{rclarray}
-	\evalLS{\assfalse} & \eqdef & \emptyset \\
-	\evalLS{\asstrue} & \defeq & \Heaps \times \Opsets \\
-	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
-	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
-	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
-	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{(\h, \opset)}{(\h , \opset) \in \evalLS{\lpre} \implies (\h , \opset) \in \evalLS{\lpost}}\\
-	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
-	\evalLS{ \bar{\fp} } & \defeq & \Setcon{(\h, \opset)}{ \exsts{\h, \opset, \ca, \ca'} (\h, \opset, \ca, \ca') \in \evalF{\bar{\fp}} \land \ca,\ca' \in \unitC} \\
-	\evalLS{\lpre \sep \lpost} & \defeq & 
-    \Setcon{
-        (\h_1 \composeH \h_2, \opset_{1} \composeE \opset_{2})
-    }{ 
-        (\h_{1},\opset_{1}) \in \evalLS{\lpre} 
-        \land (\h_{2}, \opset_{2} ) \in \evalLS{\lpost} 
-    } 
-\end{rclarray}
-\]
-\end{definition}
 
-\azalea{
-    \sx{Leave this notation for now, when settle other parts, we can change the macro systematically for confused notations.}
-    The definition of $\evalLS{ \bar{\fp} }$ looks cyclic as you use the same notation for interpreting local assertions and fingerprint assertions.
-}
+%\azalea{
+    %\sx{Leave this notation for now, when settle other parts, we can change the macro systematically for confused notations.}
+    %The definition of $\evalLS{ \bar{\fp} }$ looks cyclic as you use the same notation for interpreting local assertions and fingerprint assertions.
+%}
 
-Observe that program expressions $\Expr$  (\cref{def:language}) are contained in logical expressions $\LExpr$ (\cref{def:local_assertions} above), \ie $\Expr \subset \LExpr$. 
 Because the local assertions do not contain any assertions related to capabilities, it is enough to interpret them to heaps and sets of operations \( \Opsets \).
 
 \begin{lemma}
@@ -211,7 +137,6 @@ Induction on the structures.
 
 %For readability, we will write angle brackets, \eg \( \fpass{(\etR, \vx, 0)} \) instead of curly brackets \( \fpto{\Set{(\etR, \vx, 0)}} \) for fingerprint assertions.
 
-\subsection{Global/Program}
 
 %The interference \( \exsts{\vec{\lvar}} \perm{\kap} : \bar{\lpre} \mat \fp \) says if a thread holds the capability \( \perm{\kap}\) and \emph{the current state of database} satisfies the assertions \( \bar{\lpre} \), the thread is allowed to commit a transaction that has the fingerprint \( \fp \).
 %The current state of database refers to the state that all the committed transactions are visible.
@@ -502,4 +427,302 @@ Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, th
 \end{rclarray}
 \]
 \end{definition}
+
+
+
+\subsubsection{Rely and Guarantee}
+
+The \emph{rely} and \emph{guarantee} describes the world transformation for the environment and for the current client (\cref{def:rely-guarantee}).
+To recall, a world includes local capabilities and a shared state, and a shared state is a client's view for the key-value store.
+The \emph{rely} \( \Rely \) is a set of pairs on worlds, describing how the environment can change the state of the key-value store.
+Given the local capabilities \( \ca_l \), the environment might own any capabilities \( \ca_e\) that is compatible, \ie \( (\ca_l \composeC \ca_e)\isdef \).
+Therefore, the environment can perform actions associated with the their capabilities \( \ca_e \) with their own view \( \vi_e \) to update the key-value store and shared capabilities.
+For technical reasons, even though the environment cannot change the view of the current client \( \vi_r\), but it is allowed to arbitrarily shift to the later versions due to the fact that for certain execution tests, the old view might be valid under the new key-value store.
+
+The \emph{guarantee} \( \Guar \) describes the allowed actions for the current client.
+The current client can perform actions associated with the local capabilities \( \ca_l \) to update the shared state and the local capabilities.
+Yet it should ensure no resource created or deleted by requiring the \emph{orthogonal} of local capabilities and shared capabilities together remains unchanged.
+The orthogonal of local capabilities \( \ca \) is a set of capabilities that are compatible with the local capabilities \( \ca \).
+This constraint disallow any creation and deletion for capabilities, but it allows to update capabilities.
+Note that in the rely and guarantee, it is allowed to update several regions, but each region can be updated at most once.
+\begin{definition}[Rely and guarantee]
+\label{def:rely-guarantee}
+Given the set of worlds $\World$ (\cref{def:world}), the \emph{update rely} relation, $\relyU \subseteq \World \times \World$, is defined as follows:
+\sx{In case I get confused again, it is world to world so the shared and local capabilities should always make sense.}
+\[	
+    \begin{rclarray}
+	\relyU & \eqdef &
+	\Setcon{
+		((\ca_l,\gs), (\ca_l, \gs'))	
+	}{
+        \exsts{\ca_e}
+        (\ca_e \composeC \ca_l) \isdef
+        \land \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor 
+        \exsts{\kap, \hh, \hh', \vi_\rid, \vi_{\rid}', \vi_{e}, \vi_{e}', \ca_\rid, \ca_{\rid}', \intf}   \\
+        \quad \gs(\rid) = (\hh, \vi_\rid, \ca_\rid, \intf)
+        \land \gs'(\rid) = (\hh', \vi_{\rid}', \ca_{\rid}',\intf) \\
+        \quad {} \land \kap \sqsubseteq \ca_{e}(\rid) 
+        \land ( (\hh, \vi_e, \ca_e), (\hh', \vi_{e}', \ca_{e}') )  \in \intf(\kap)
+        \land \vi_{\rid}' \geq \vi_\rid
+	} \\
+    \end{rclarray}
+\]
+The \emph{view shift rely} relation $\relyV \subseteq \World \times \World$, is defined as follows:
+\[
+    \begin{rclarray}
+	\relyV & \eqdef &
+	\Setcon{
+		((\ca_l,\gs), (\ca_l, \gs'))	
+	}{
+        \exsts{\ca_e}
+        (\ca_e \composeC \ca_l) \isdef
+        \land \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor 
+        \exsts{\hh, \vi, \vi'\ca, \ca, \intf}   \\
+        \quad \gs(\rid) = (\hh, \vi, \ca, \intf)
+        \land \gs'(\rid) = (\hh, \vi', \ca, \intf) 
+	} \\
+    \end{rclarray}
+\]
+The \emph{rely} relation is transitive closure of updates and view shift: \( \Rely = (\relyU \cup \relyV)^{*} \).
+The \emph{guarantee} relation, $\Guar: \World \times \World$, is defined as follows:
+\[	
+    \begin{rclarray}
+	\Guar & \eqdef &
+	\Setcon{
+		((\ca_l,\gs), (\ca_{l}', \gs'))	
+	}{
+        \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor {}
+        \exsts{\kap, \hh, \hh', \vi_\rid, \vi_{\rid}', \ca_\rid, \ca_{\rid}', \intf}   \\
+        \quad \gs(\rid) = (\hh, \vi_\rid, \ca_\rid,\intf)
+        \land \gs'(\rid) = (\hh', \vi_{\rid}', \ca_{\rid}',\intf) 
+        \land \kap \sqsubseteq \ca_{l}(\rid)  \\
+        \quad {} \land ( (\hh, \vi_\rid, \ca_\rid), (\hh', \vi_{\rid}', \ca_{\rid}') )  \in \intf(\kap)
+        \land (\ca_{l} \composeC \ca_\rid)^{\perp} = (\ca_{l}' \composeC \ca_{\rid}')^{\perp}
+	} \\
+    \end{rclarray}
+\]
+where for any element \( m \) from its domain \( \sort{M} \), the  \emph{orthogonal} is defined as:
+\[
+\begin{rclarray}
+m^{\perp} & \defeq & \Setcon{m'}{(m \compose{} m')\isdef \land m' \in \sort{M}} 
+\end{rclarray}
+\]
+\end{definition}
+
+The stabilisation says assertions remain true against the environment.
+Formally a set of worlds \( \setworld \) is stable under certain execution tests \( \et \) if the set is closed under rely relation under the side conditions: (a) the key-value store transfer is allowed by the execution tests \( (\mkvs, \mkvs') \in \et \);
+and (b) the new view under the new key-value store is able to progress.
+The first condition says there is at least one view from the environment that can trigger the transformation on the key-value store, and it is allowed by the execution tests.
+The second condition is more subtle, as it allows to also update the view to a new view \( \vi' \) so that for all the possible transactions with the fingerprints \( \opset \), if they can execute under the old view, it should be able to execute under the new view.
+
+\begin{definition}[Stable]
+\label{def:stable}
+A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld, \como}$, if and only if it is closed under the rely relation: 
+\[
+    \begin{rclarray}
+        \stable{\setworld, \como} & \eqdef & 
+        \begin{array}[t]{@{}l}
+            \fora{\w, \w'} 
+            \w \in \setworld 
+            \land (\w, \w') \in \Rely  
+            \land \exsts{\hh, \hh', \vi, \opset} \\
+            \quad (\hh, \vi) = \eraseW{\w}
+            \land (\hh', \vi') = \eraseW{\w'} 
+            \land (\hh, \hh') \in \como 
+            \land \pred{progress}{\w, \et} \\
+            \qqquad \implies \w' \in \setworld
+        \end{array} \\
+    \end{rclarray}
+\]
+A update history heap update is allowed by consistency model, \ie \( (\hh, \hh') \in \como \), iff there exist some view \( \vi \) and operation set \( \opset \) allowed by the consistency model and the history is updated to \( \hh' \) via them:
+\[
+    \begin{rclarray}
+        (\hh, \hh') \in \como & \eqdef & 
+        \begin{array}[t]{@{}l}
+            \hh = \hh' \lor 
+            \exsts{ \vi, \vi', \opset, \txid, \cl}  \\
+            \quad (\hh, \vi) \csat \opset : \vi' 
+            \land \txid \in \fresh{\hh, \cl} 
+            \land \hh'  = \updM{\hh,\vi, \txid, \opset}
+        \end{array}
+    \end{rclarray}
+\]
+A world is able to progress under an execution test \( \et \), iff it is able to execute the empty fingerprint:
+\[
+    \begin{rclarray}
+        \pred{progress}{\w, \et} & \defeq & \exsts{\vi} \eraseW{\w} \csat \unitO :  \vi
+    \end{rclarray}
+\]
+\end{definition}
+
+
+\subsection{Rules for Global}
+
+The \rl{PRCommit} rule lifts the local effect of transaction \( \trans \) to global level by first converting global state to (local) observable state and then propagating the local fingerprint to the global state.
+%The \( \predn{down} \) predicate asserts that the local predicate \( \lpre \) is a over-approximation of the valid observation that is given by the interference.
+%The \( \predn{up} \) predicate says the post-condition \( \gpost \) is the result by lifting the local fingerprints \( \fp \) to pre-condition \( \gpre \).
+
+
+\begin{figure}[t!]
+\hrule\vspace{5pt}
+
+\begin{mathpar}
+    \inferrule[\rl{PRCommit}]{%
+        \tripleL{\lpre}{\trans}{\lpost} 
+        \\ \repartition{\gpre}{\gpost}{\lpre}{\lpost}
+        \\\\ \stable{\gpre, \como} 
+        \\ \stable{\gpost, \como} 
+    }{%
+        \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
+    }
+    \and
+    \inferrule[\rl{PRPar}]{%
+        \tripleG{ \gpre_{1} }{ \cmd_{1} }{ \gpost_{1} }
+        \\ \tripleG{ \gpre_{2} }{ \cmd_{2} }{ \gpost_{2} } 
+        \\\\ \stable{\gpre_{1}, \como} 
+        \\ \stable{\gpre_{2}, \como} 
+    }{%
+        \tripleG{ \gpre_{1} \sep \gpre_{2} }{ \cmd_{1} \ppar \cmd_{2} }{ \gpost_{1} \sep \gpost_{2} }
+    }
+    \and
+    \inferrule[\rl{PRAss}]{%
+        \thvar \notin \func{fv}{\lexpr} 
+    }{%
+        \tripleG{\thvar \dot= \lexpr }{ \pass{\thvar}{\expr} }{\thvar \dot= \expr\sub{\thvar}{\lexpr} }
+    }
+    \and
+    \inferrule[\rl{PRAssume}]{ }{%
+        \tripleG{ \expr \dot\neq 0 }{ \passume{\expr} }{ \expr \dot\neq 0 } 
+    }
+    \and
+    \inferrule[\rl{PRChoice}]{%
+        \tripleG{ \gpre }{ \cmd_{1} }{ \gpost } 
+        \\ \tripleG{ \gpre }{ \cmd_{2} }{ \gpost } 
+    }{%
+        \tripleG{ \gpre }{ \cmd_{1} \pchoice \cmd_{2} }{ \gpost }
+    }
+    \and
+    \inferrule[\rl{PRSeq}]{%
+        \tripleG{ \gpre }{ \cmd_{1} }{ \gframe }
+        \\ \tripleG{ \gframe }{ \cmd_{2} }{ \gpost }
+    }{%
+        \tripleG{ \gpre }{ \cmd_{1} \pseq \cmd_{2} }{ \gpost }
+    }
+    \and
+    \inferrule[\rl{PRIter}]{%
+        \tripleG{ \gpre }{ \cmd }{ \gpre } 
+    }{%
+        \tripleG{ \gpre }{ \cmd\prepeat }{ \gpre }
+    }
+    \and
+    \inferrule[\rl{PRFrame}]{%
+        \tripleG{ \gpre }{ \cmd }{ \gpost } 
+        \\ \stable{\gframe, \como}
+        \\ \func{fv}{\gframe} \cap \func{modify}{\cmd} = \emptyset 
+    }{%
+        \tripleG{ \gpre \sep \gframe }{ \cmd }{ \gpost \sep \gframe }
+    }
+\end{mathpar}
+
+
+\hrule\vspace{5pt}
+\[
+\begin{rclarray}
+    \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+        \fora{ \w, \lenv, \stk } 
+        \w \in \evalW{\gpre} 
+        \implies 
+        (\getSN{\eraseW{\w}}, \unitO) \in \evalLS{\lpre}  \\
+        \quad {} \land \fora{\stk', \txid, \opset, \w', \cl} 
+        \txid \in \fresh{\eraseW{\w}\projection{1}, \cl} 
+        \land (\stub, \opset) \in \evalF[\lenv, \stk']{\lpost} \\
+        \qquad {} \land \eraseW{\w'}\projection{1} = \updM{\eraseW{\w}, \txid, \opset}  \\
+        %\land \eraseW{\w}\projection{2} \leq \eraseW{\w'}\projection{2} \\
+        \qquad {} \land (\w, \w') \in \Guar  
+        \land \eraseW{\w} \csat \opset : \eraseW{\w'}\projection{2}
+        \implies \w' \in \evalW[\lenv, \stk']{\gpost}
+    \end{array} 
+\end{rclarray}                          
+\]
+
+\hrule\vspace{5pt}
+\caption{The rules for programs}
+\label{fig:rule-prog}
+\end{figure}
+
+%\azalea{
+    %\sx{How to deal with the stack here? As the stack for P and Q are different, just for all quantify two stacks??}
+%The quantification seems wrong. Especially, the $\extopset$ needs to be for all quantified, $\h$ needs to be there exist quantified.
+%\[
+     %\repartition{\gpre}{\gpost}{\lpre}{\lpost} \defeq 
+     %\begin{array}[t]{@{}l@{}}
+		 %\fora{\w, \hh, \vi, \lenv, \stk, \txid } 
+            %\w \in \evalW{\gpre} 
+            %\land (\hh, \cu) \in \eraseW{\w}
+            %\Rightarrow\\
+            %\quad \exsts{\h}
+            %\begin{array}[t]{@{} l @{}}
+			%\h = \getSN{\hh, \cu}  
+                %\land (\h, \unitO) \in \evalLS{\lpre} \\
+                %\land\, \fora{\extopset \in \evalF{\lpost}} 
+                    %\exsts{\w', \hh', \vi'} \\
+                        %\quad \hh' = \updM{\hh, \vi, \txid, \extopset} 
+                       %\land \cu' = \updV{\hh, \vi, \extopset} 
+                       %\land (\hh',\vi') \in \eraseW{\w'} \\
+                        %\quad \land (\w, \w') \in \Guar  
+                        %\land (\w, \w') \in \como
+                        %\land \w' \in \evalW{\gpost}			
+		%\end{array}	
+%%		\right)			        	
+    %\end{array} 
+%\]
+%}
+
+%The \( \HHupdate \) and \( \Vupdate \) in the repartition can be replaced by syntactic rules.
+
+%\begin{figure}
+%\hrule\vspace{5pt}
+
+%\[
+   %\infer[\rl{FInit}]{%
+       %\tripleF{ \lexpr \pt \lexpr }{ \lexpr \fpI \lexpr }{ \lexpr \pt \lexpr }
+   %}{}
+%\]
+
+%\[
+   %\infer[\rl{FRead}]{%
+       %\tripleF{ \lexpr \pt \lexpr }{ \lexpr \fpR \lexpr }{ \lexpr \pt \lexpr }
+   %}{}
+%\]
+
+%\[
+   %\infer[\rl{FWrite}]{%
+       %\tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpW \lexpr' }{ \lexpr \pt \lexpr' }
+   %}{}
+%\]
+
+%\[
+   %\infer[\rl{FReWrt}]{%
+       %\tripleF{ \lexpr \pt \lexpr  }{  \lexpr \fpRW (\lexpr,\lexpr') }{ \lexpr \pt \lexpr' }
+   %}{}
+%\]
+
+%\[
+   %\infer[\rl{FFrame}]{%
+       %\tripleF{ \bar{\lpre}_{1} \sep \bar{\lpre}_{2}  }{  \bar{\fp}_{1} \sep \bar{\fp}_{2} }{ \bar{\lpost}_{1} \sep \bar{\lpost}_{2} }
+   %}{
+       %\tripleF{ \bar{\lpre}_{1} }{ \bar{\fp}_{1} }{ \bar{\lpost}_{1} }
+       %&& \tripleF{ \bar{\lpre}_{2}  }{ \bar{\fp}_{2} }{ \bar{\lpost}_{2} }
+    %}
+%\]
+
+
+%\hrule\vspace{5pt}
+%\caption{Syntactic rule for \( \HHupdate \) and \( \Vupdate \) functions}
+%\label{fig:rule-prog}
+%\end{figure}
 
