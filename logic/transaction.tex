@@ -1,0 +1,198 @@
+\subsection{Reasoning inside transactions}
+
+Transactions work on their own snapshots of the key-value store.
+However, because of atomicity of transactions, only the \emph{first reads preceding any write} and the \emph{last writes} for keys affect the key-value store.
+Transaction's first read for a key come from the version that initial view points to.
+When a transaction commits, it will install new version to a key with value as the last write for the key.
+While all the intermediate reads and writes are not observable to other transactions and have no effect on the key-value store.
+The transactional assertions extend normal sequential separate logic assertions \eg \( \vx \pt 0 \) with read and/or write labels so that they also describe the fingerprints (\cref{def:local_assertions}).
+
+
+\begin{definition}[Transactional assertions]
+\label{def:fingerprint}
+\label{def:local_assertions}
+\label{def:logical-expr}
+Assume a countably infinite set of \emph{logical variables} $\lvar \in \LVar$.
+The set of \emph{logical expressions}, $ \lexpr \in \LExpr$ is defined by the following inductive grammar, where \(\val \in \Val\) (\cref{def:program_values}) and \(\var \in \Vars\)(\cref{def:stacks}),
+\[
+\begin{rclarray}
+   \lexpr & ::= & \val \mid \lvar \mid \var \mid \lexpr + \lexpr \mid \lexpr \times \lexpr \mid \dots 
+\end{rclarray}
+\]
+Assume a set of \emph{logical environments} \(\lenv \in \LEnv: \LVar \parfun \Val\) which associates logical variables with values.
+Given a stack $\stk \in \Stacks$ (\cref{def:stacks}) and a logical environment $\lenv \in \LEnv$, the \emph{logical expression evaluation} function, $\evalLE[(., .)]{.}:\LExpr \times \Stacks \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions as follows:
+%
+\[
+\begin{array}{@{}c@{}}
+    \begin{rclarray}
+        \evalLE{\val} & \defeq & \val \\
+    \end{rclarray}
+    \quad 
+    \begin{rclarray}
+        \evalLE{\lvar} & \defeq & \lenv(\lvar) \\
+    \end{rclarray}
+    \quad 
+    \begin{rclarray}
+        \evalLE{\var} & \defeq & \txstk(\var) \\
+    \end{rclarray} \\
+    \begin{rclarray}
+        \evalLE{\lexpr_1 + \lexpr_2} & \defeq & \evalLE{\lexpr_1} + \evalLE{\lexpr_2} \\
+    \end{rclarray}
+    \quad 
+    \begin{rclarray}
+        \evalLE{\lexpr_1 \times \lexpr_2} & \defeq & \evalLE{\lexpr_1} \times \evalLE{\lexpr_2} \\
+    \end{rclarray}
+    \quad 
+    \dots
+\end{array}
+\]
+The set of \emph{transactional assertions}, $\lpre,  \lpost, \fp \in \LAst$, is defined by the following grammars:
+\[
+\begin{rclarray}
+	\lpre, \lpost, \fp & ::= & \False \mid \True \mid \lpre \land \lpost \mid \lpre \lor \lpost \mid \exsts{\lvar} \lpre \mid \lpre \implies \lpost \\
+    & & \mid \Emp \mid \lexpr \fpI \lexpr \mid \lexpr \fpR \lexpr \mid \lexpr \fpW \lexpr \mid \lexpr \fpRW (\lexpr, \lexpr)  \mid \lpre \sep \lpost  \\
+\end{rclarray}	 
+\]
+The \emph{transactional assertion interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \Opsets} $, is defined over the structure of local assertions as follows:
+\[
+\begin{array}{@{}c @{\quad\quad} c @{}}
+\begin{rclarray}
+	\evalLS{\assfalse} & \eqdef & \emptyset \\
+	\evalLS{\asstrue} & \defeq & \Heaps \times \Opsets \\
+	\evalLS{\lpre \land \lpost} & \defeq & \evalLS{\lpre} \cap \evalLS{\lpost} \\
+	\evalLS{\lpre \lor \lpost} & \defeq & \evalLS{\lpre} \cup \evalLS{\lpost} \\
+\end{rclarray}
+&
+\begin{rclarray}
+	\evalLS{\exsts{\lvar} \lpre} & \defeq & \bigcup\limits_{\val \in \textnormal{\Val}}\evalLS[\lenv\remapsto{\lvar}{\val}, \stk]{\lpre}  \\
+	\evalLS{\lpre \implies \lpost} & \defeq & \Setcon{(\h, \opset)}{(\h , \opset) \in \evalLS{\lpre} \\ \implies (\h , \opset) \in \evalLS{\lpost}}\\
+	\evalLS{\assemp} & \defeq & \Set{ ( \unitH, \unitE) }  \\
+\end{rclarray}
+\\
+\multicolumn{2}{@{}c@{}}{%
+\begin{rclarray}
+	\evalLS{ \lexpr_1 \fpI \lexpr_2 } & \defeq & \Set{(\Set{\evalLE{\lexpr_1} \mapsto \evalLE{\lexpr_2} }, \unitO)} \\
+	\evalLS{ \lexpr_1 \fpR \lexpr_2 } & \defeq & \Set{(\Set{\evalLE{\lexpr_1} \mapsto \evalLE{\lexpr_2} }, \Set{(\otR, \evalLE{\lexpr_1},\evalLE{\lexpr_2})})} \\
+	\evalLS{ \lexpr_1 \fpW \lexpr_2 } & \defeq & \Set{(\Set{\evalLE{\lexpr_1} \mapsto \evalLE{\lexpr_2} }, \Set{(\otW, \evalLE{\lexpr_1},\evalLE{\lexpr_2})})} \\
+	\evalLS{ \lexpr_1 \fpRW (\lexpr_2, \lexpr_3) } & \defeq & \Set{(\Set{\evalLE{\lexpr_1} \mapsto \evalLE{\lexpr_3} }, \Set{(\otR, \evalLE{\lexpr_1},\evalLE{\lexpr_2}), (\otW, \evalLE{\lexpr_1},\evalLE{\lexpr_3})})} \\
+	\evalLS{\lpre \sep \lpost} & \defeq & 
+    \Setcon{
+        (\h_1 \composeH \h_2, \opset_{1} \composeE \opset_{2})
+    }{ 
+        (\h_{1},\opset_{1}) \in \evalLS{\lpre} 
+        \land (\h_{2}, \opset_{2} ) \in \evalLS{\lpost} 
+    } 
+\end{rclarray}%
+}
+\end{array}
+\]
+\end{definition}
+
+The local assertions have true, false, conjunction \( \land \), disjunction \( \lor \), existential quantification \( \exists \), implication \( \implies  \), empty \( \assemp \), fingerprint assertions \( \stub \stackrel{\stub}{\hookrightarrow} \stub \) and separation conjunction \( \sep \).
+They describes the state of local snapshot used by a transaction and more importantly the fingerprint of the transaction.
+They are interpreted to pairs of heaps and operation sets.
+
+A \emph{fingerprint assertion} describes the possible global effect from a transaction.
+It includes the first read \( \lexpr_{1} \fpR \lexpr_{2} \), last write \( \lexpr_{1} \fpW \lexpr_{2} \) for the key \( \lexpr_{1} \) and the combination of them \( \lexpr_{1} \fpRW \lexpr_{2} \).
+The read \( \otR \) and write \( \otW \) labels combined with the values give the information about \emph{first read preceding any write} and the \emph{last write}.
+The \( \lexpr_{1} \fpI \lexpr_{2} \) means the key \( \lexpr_{1} \) has no associated fingerprint and the only key in the local snapshot has value \( \lexpr_{2} \).
+The \( \lexpr_{1} \fpR \lexpr_{2} \) means the key has been read before any other write and the current value is \( \lexpr_{2} \).
+The \( \lexpr_{1} \fpW \lexpr_{2} \) means the key has been written at least once, and the last written value is \( \lexpr_{2} \).
+Because read does not change the state of snapshot, and the write fingerprint is the last write for the key, so the state of the snapshot matches the fingerprint.
+Last, The \( \lexpr_{1} \fpRW (\lexpr_{2}, \lexpr_{3}) \) means the key has been read and then written at least once, the first read fetched value \( \lexpr_{2} \), and the last written value and the current state of the local snapshot for the key is \( \lexpr_{3} \).
+
+The first order assertions are standard.
+The separation conjunction \( \sep \) asserts two local snapshots and fingerprints where the keys are disjointed.
+Observe that program expressions $\Expr$ (\cref{def:language}) are contained in logical expressions $\LExpr$ (\cref{def:local_assertions}), \ie $\Expr \subset \LExpr$. 
+
+The proof rules for transactions (\cref{fig:rule-trans}) are standard except \rl{TRLookup} and \rl{TRMutate}.
+The \rl{TRLookup} rule adds read fingerprint only if there is no write fingerprint, because once a key has been written, the following reads are local.
+However, the local read always needs to match the current state of snapshot.
+The\rl{TRMutate} rule adds write fingerprint if there no write fingerprint, otherwise throws the old value and keeps track the last written value.
+
+\begin{figure}[!t]
+\sx{Font for E}
+\hrule
+\begin{mathpar}
+    \inferrule[\rl{TRLookup}]{%
+        \var \notin \func{fv}{\lexpr}  
+        \\ \lpre \toFP{\otR(\expr, \lexpr)} \lpost
+    }{%
+        \tripleL{ \lpre }{ \plookup{\var}{\expr} }{\var \dot= \lexpr \sep \lpost\sub{\var}{\lexpr} }
+    }
+    \and
+    \inferrule[\rl{TRMutate}]{
+        \lpre \toFP{\otW(\expr_{1},\expr_{2})} \lpost
+    }{%
+        \tripleL{ \lpre }{ \pmutate{\expr_1}{\expr_2} }{ \lpost } 
+    }
+    \and
+    \inferrule[\rl{TRAss}]{
+        \var \notin \func{fv}{\lexpr}
+    }{%
+        \tripleL{\var \dot= \lexpr }{ \pass{\var}{\expr} }{\var \dot= \expr\sub{\var}{\lexpr} }
+    }
+    \and
+    \inferrule[\rl{TRAssume}]{ }{%
+        \tripleL{ \expr \dot\neq 0 }{ \passume{\expr} }{ \expr \dot\neq 0 } 
+    }
+    \and
+    \inferrule[\rl{TRChoice}]{%
+        \tripleL{ \lpre }{ \trans_{1} }{ \lpost } 
+        \\ \tripleL{ \lpre }{ \trans_{2} }{ \lpost } 
+    }{%
+        \tripleL{ \lpre }{ \trans_{1} \pchoice \trans_{2} }{ \lpost }
+    }
+    \and
+    \inferrule[\rl{TRSeq}]{%
+        \tripleL{ \lpre }{ \trans_{1} }{ \lframe }
+        \\ \tripleL{ \lframe }{ \trans_{2} }{ \lpost }
+    }{%
+        \tripleL{ \lpre }{ \trans_{1} \pseq \trans_{2} }{ \lpost }
+    }
+    \and
+    \inferrule[\rl{TRIter}]{%
+        \tripleL{ \lpre }{ \trans }{ \lpre } 
+    }{%
+        \tripleL{ \lpre }{ \trans\prepeat }{ \lpre }
+    }
+    \and
+    \inferrule[\rl{TRFrame}]{%
+        \tripleL{ \lpre }{ \trans }{ \lpost } 
+         %&& \func{fv}{\lpre} \cap \func{fv}{\lframe} = \emptyset
+         %&& \func{fv}{\lpost} \cap \func{fv}{\lframe} = \emptyset
+    }{%
+        \tripleL{ \lpre \sep \lframe }{ \trans }{ \lpost \sep \lframe }
+    }
+    %\and
+    %\inferrule[\rl{TRSkip}]{ }{%
+        %\tripleL{\assemp }{ \pskip }{\assemp }
+    %}
+\end{mathpar}
+
+
+\hrule
+%\sx{The% font is a bit overwhelming}
+\[
+\begin{array}{@{} c @{\qquad} c @{}}
+\begin{rclarray}
+    \lexpr \fpI \lexpr' & \toFP{\otR(\lexpr,\lexpr')} & \lexpr \fpR \lexpr' \\
+    \lexpr \fpR \lexpr' & \toFP{\otR(\lexpr,\lexpr')} & \lexpr \fpR \lexpr' \\
+    \lexpr \fpW \lexpr' & \toFP{\otR(\lexpr,\lexpr')} & \lexpr \fpW \lexpr' \\
+    \lexpr \fpRW (\lexpr'', \lexpr') & \toFP{\otR(\lexpr,\lexpr')} & \lexpr \fpRW (\lexpr'', \lexpr') \\
+\end{rclarray}
+&
+\begin{rclarray}
+    \lexpr \fpI \lexpr' & \toFP{\otW(\lexpr,\lexpr'')} & \lexpr \fpW \lexpr'' \\
+    \lexpr \fpR \lexpr' & \toFP{\otW(\lexpr,\lexpr'')} & \lexpr \fpRW (\lexpr',\lexpr'') \\
+    \lexpr \fpW \lexpr' & \toFP{\otW(\lexpr,\lexpr'')} & \lexpr \fpW \lexpr'' \\
+    \lexpr \fpRW (\lexpr'', \lexpr') & \toFP{\otW(\lexpr,\lexpr''')} & \lexpr \fpRW (\lexpr'', \lexpr''') \\
+\end{rclarray}
+\end{array}
+\]
+\hrule
+\caption{The rules for transactions}
+\label{fig:rule-trans}
+ \end{figure}
+
+
