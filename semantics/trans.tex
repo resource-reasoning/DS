@@ -1,32 +1,51 @@
 \subsection{Programming Language}
 \azalea{I rewrote most of this section.}
-We define a simple programming language for client programs interacting with an MKVS where clients may only interact with the MKVS via transactions. 
-For simplicity, we abstract away from aborting transactions: rather than assuming that a transaction may abort due to a violation of the consistency guarantees given by the MKVS, we only allow the execution of a transaction when its effects are guaranteed to not violate the consistency model. This emulates the setting in which clients always restart a transaction if it aborts.
+In this section we define a simple programming language for client programs interacting with a kv-store. Clients may only interact with the kv-store by 
+issuing read and write requests via transactions. 
+For simplicity, we abstract away from aborting transactions
+: rather than assuming that a transaction may abort due to a violation of the consistency guarantees given by the kv-store, we only allow the execution of a transaction when its effects are guaranteed to not violate the consistency model. This emulates the setting in which clients always restart a transaction if it aborts.
 \sx{The sentence is too long. I think before the ``:'' is enough}
- 
-%\mypar{Programming Language}
-\emph{A program} \( \prog \) contains a fixed number of clients, where each client is associated with a unique identifier \( \thid \in \ThreadID \), and executes a sequential \emph{command}.
-We thus model a program $\prog$ as a function from client identifiers  to commands (\cref{def:language}).
-For clarity, we often write \( \cmd_{1}\ppar \dots \ppar \cmd_{n}\) as a syntactic sugar for a program \( \prog \) with $n$ implicit clients associated with identifiers, $\thid_1 \dots \thid_n$, where each client $\thid_i$ executes the command $\cmd_i$:  \( \prog = \Set{\thid_{1} \mapsto \cmd_{1}, \dots, \thid_{n} \mapsto \cmd_{n}  }\).
-Sequential \emph{commands}, ranged over by $\cmd$, are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\cmd; \cmd$), non-deterministic choice ($\cmd+\cmd$) and loops ($\cmd^*$).
-To simulate conditional branching and loops, commands include the standard constructs of assume (\( \passume{\expr}\)), and assignment (\( \passign{\var}{\expr} \)), where \( \var \) denotes a local variable (on the stack), and \( \expr \) denotes an arithmetic expression with no side effect.  
-evaluated with respect to a stack  with no side effect.
-Arithmetic expressions are evaluated with respect to a local stack (variable store) -- see  \cref{def:stacks,def:eval-expr} below.
-We assume a countably infinite set of local variables, $\Vars $, and use the \texttt{typewriter} font for its meta variables, \eg $\var$.\\
-%
-\indent Commands additionally include the \emph{transaction} construct, $\ptrans{\trans}$, denoting the \emph{atomic} execution of the transaction $\trans$. 
-The atomicity guarantees the execution are dictated by the underlying consistency model.
-\emph{Transactions}, ranged over by $\trans$, are similarly defined by an inductive grammar comprising $\pskip$, \emph{primitive commands} \( \transpri \), non-deterministic choice, loops and sequential composition.
-Primitive commands include assignment (\( \passign{\var}{\expr}\)), lookup (\( \pderef{\expr}{\expr}\)), mutation (\( \pmutate{\expr}{\expr}\)) and assume (\( \passume{\expr}\)). 
-Note that transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are executed atomically.
 
-%We assume a valid transactions codes must have the only return at the end.
-%For better presentation, sometime we omit the default return zero \( \preturn{0} \).
-%Transactions can only assign to their own variables, namely transaction variables (\defref{def:program_values}), but it can read from both the thread and transaction stacks.
-
-%\begin{definition}[Program values]
-%where $ \nat \in \Nat$ denotes the set of natural numbers.
-%\end{definition}
+\begin{figure}
+\[
+\begin{array}{lcllcl}
+\Val &=& \Nat \cup \Addr & 
+\expr & ::= &
+        \val \mid
+        \var \mid
+        \expr + \expr \mid
+%        \expr \times \expr \mid
+        \dots  
+ \\
+   \cmdpri & ::= & 
+   		\pass{\txvar}{\expr} \mid 
+   		\passume{\expr} 
+    & 
+ 	\transpri & ::= &
+ 	    \cmdpri \mid 
+%        \pass{\txvar}{\expr} \mid
+        \pderef{\txvar}{\expr} \mid
+        \pmutate{\expr}{\expr} \mid
+%        \passume{\expr} \\
+	\trans & ::= &
+        \pskip \mid
+        \transpri \mid 
+        \trans \pseq \trans \mid
+        \trans \pchoice \trans \mid
+        \trans\prepeat   
+        &
+    \cmd & ::= & 
+        \pskip \mid 
+%        \passign{\thvar}{\expr} \mid
+%        \passume{\expr} \mid
+		\cmdpri \mid
+        \ptrans{\trans} \mid 
+        \cmd \pseq \cmd \mid 
+        \cmd \pchoice \cmd \mid 
+        \cmd \prepeat \\
+ \end{array} 
+\]
+\end{figure}
 
 \begin{definition}[Programming language]
 \label{def:language}
@@ -73,37 +92,108 @@ $\val \in \Val \eqdef \Nat \cup \Addr$ denotes the set of \emph{program values},
     \end{rclarray}
 \end{array} 
 \]
-%The $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar including the primitive transactional commands \( \transpri\):
-%The transaction codes \( \ptrans{\trans} \) satisfy a well-form condition that there is exactly a return at the end, \ie \( \ptrans{\trans} \iff \exsts{\trans', \expr} \trans \equiv ( \trans' \pseq \preturn{\expr} )  \land \pred{noRet}{\trans'} \)
+\end{definition}
+ 
+%\mypar{Programming Language}
+\emph{A program} \( \prog \) consists of a finite number of clients, where each client is associated with a unique identifier \( \thid \in \ThreadID \), and executes a sequential \emph{command}. The syntax of command is standard. 
+%We thus model a program $\prog$ as a function from client identifiers to commands (\cref{def:language}).
+For clarity, we often write \( \cmd_{1}\ppar \dots \ppar \cmd_{n}\) as a syntactic sugar for a program \( \prog \) with $n$ implicit clients associated with identifiers, $\thid_1 \dots \thid_n$, where each client $\thid_i$ executes the command $\cmd_i$:  \( \prog = \Set{\thid_{1} \mapsto \cmd_{1}, \dots, \thid_{n} \mapsto \cmd_{n}  }\).
+Sequential \emph{commands}, ranged over by $\cmd$, are defined by an inductive grammar comprising the standard constructs of $\pskip$, sequential composition ($\cmd; \cmd$), non-deterministic choice ($\cmd+\cmd$) and loops ($\cmd^*$).
+To simulate conditional branching and loops, commands include the standard constructs of assume (\( \passume{\expr}\)), and assignment (\( \passign{\var}{\expr} \)), where \( \var \) denotes a local variable (on the stack), and \( \expr \) denotes an arithmetic expression with no side effect.  
+evaluated with respect to a stack  with no side effect.
+Arithmetic expressions are evaluated with respect to a local stack (variable store) -- see  \cref{def:stacks,def:eval-expr} below.
+We assume a countably infinite set of local variables, $\Vars $, and use the \texttt{typewriter} font for its meta variables, \eg $\var$.\\
+%
+\indent Commands additionally include the \emph{transaction} construct, $\ptrans{\trans}$, denoting the \emph{atomic} execution of the transaction $\trans$. 
+The atomicity guarantees the execution are dictated by the underlying consistency model.
+\emph{Transactions}, ranged over by $\trans$, are similarly defined by an inductive grammar comprising $\pskip$, \emph{primitive commands} \( \transpri \), non-deterministic choice, loops and sequential composition.
+Primitive commands include assignment (\( \passign{\var}{\expr}\)), lookup (\( \pderef{\expr}{\expr}\)), mutation (\( \pmutate{\expr}{\expr}\)) and assume (\( \passume{\expr}\)). 
+Note that transactions do \emph{not} contain the \emph{parallel} composition construct ($\ppar$) as they are executed atomically.
+
+%We assume a valid transactions codes must have the only return at the end.
+%For better presentation, sometime we omit the default return zero \( \preturn{0} \).
+%Transactions can only assign to their own variables, namely transaction variables (\defref{def:program_values}), but it can read from both the thread and transaction stacks.
+
+%\begin{definition}[Program values]
+%where $ \nat \in \Nat$ denotes the set of natural numbers.
+%\end{definition}
+
+%\begin{definition}[Programming language]
+%\label{def:language}
+%\label{def:program_values}
+%A \emph{program}, $\prog \in \Programs$, is a partial finite function from client identifiers to commands.
+%The sequential \emph{commands}, \( \cmd \in \Commands \), are defined by the following grammar, where
+%$\val \in \Val \eqdef \Nat \cup \Addr$ denotes the set of \emph{program values}, and $\addr \in \Addr$ denotes the set of MKVS keys (\cref{def:mkvs}):
 %\[
+%\begin{array}{@{} l @{}  l @{}}
 %    \begin{rclarray}
-%        \transpri & ::= &
-%        \pass{\txvar}{\expr} \mid
-%        \pderef{\txvar}{\expr} \mid
-%        \pmutate{\expr}{\expr} \mid
-%        \passume{\expr} \mid \\
-%        %\preturn{\expr} \\
-%        \trans & ::= &
-%        \pskip \mid
-%        \transpri \mid 
-%        \trans \pseq \trans \mid
-%        \trans \pchoice \trans \mid
-%        \trans\prepeat
-%    \end{rclarray}
-%\]
-%Given the set of \emph{keys}, $\addr \in \Addr$ (\cref{def:mkvs}), the set of \emph{program values} is $\val \in \Val \eqdef \Nat \cup \Addr$.
-%The $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar:
-%\[
-%    \begin{rclarray}
-%        \expr & ::= &
+%    \cmd & ::= &
+%        \pskip \mid 
+%        \passign{\thvar}{\expr} \mid
+%        \passume{\expr} \mid
+%        \ptrans{\trans} \mid 
+%        \cmd \pseq \cmd \mid 
+%        \cmd \pchoice \cmd \mid 
+%        \cmd \prepeat \\
+%%
+%	 \expr & ::= &
 %        \val \mid
 %        \var \mid
 %        \expr + \expr \mid
 %        \expr \times \expr \mid
-%        \dots 
+%        \dots  
+%       \end{rclarray} 
+%%    
+%	& 
+%%
+%	\begin{rclarray}        
+%	\trans & ::= &
+%        \pskip \mid
+%        \transpri \mid 
+%        \trans \pseq \trans \mid
+%        \trans \pchoice \trans \mid
+%        \trans\prepeat   \\
+%%        
+%	\transpri & ::= &
+%        \pass{\txvar}{\expr} \mid
+%        \pderef{\txvar}{\expr} \mid
+%        \pmutate{\expr}{\expr} \mid
+%        \passume{\expr} 
+%%
 %    \end{rclarray}
+%\end{array} 
 %\]
-\end{definition}
+%%The $\trans \in \Transactions$ in the grammar above denotes a \emph{transaction} defined by the following grammar including the primitive transactional commands \( \transpri\):
+%%The transaction codes \( \ptrans{\trans} \) satisfy a well-form condition that there is exactly a return at the end, \ie \( \ptrans{\trans} \iff \exsts{\trans', \expr} \trans \equiv ( \trans' \pseq \preturn{\expr} )  \land \pred{noRet}{\trans'} \)
+%%\[
+%%    \begin{rclarray}
+%%        \transpri & ::= &
+%%        \pass{\txvar}{\expr} \mid
+%%        \pderef{\txvar}{\expr} \mid
+%%        \pmutate{\expr}{\expr} \mid
+%%        \passume{\expr} \mid \\
+%%        %\preturn{\expr} \\
+%%        \trans & ::= &
+%%        \pskip \mid
+%%        \transpri \mid 
+%%        \trans \pseq \trans \mid
+%%        \trans \pchoice \trans \mid
+%%        \trans\prepeat
+%%    \end{rclarray}
+%%\]
+%%Given the set of \emph{keys}, $\addr \in \Addr$ (\cref{def:mkvs}), the set of \emph{program values} is $\val \in \Val \eqdef \Nat \cup \Addr$.
+%%The $\expr \in \Expressions$ denotes an \emph{arithmetic expression} defined by the grammar:
+%%\[
+%%    \begin{rclarray}
+%%        \expr & ::= &
+%%        \val \mid
+%%        \var \mid
+%%        \expr + \expr \mid
+%%        \expr \times \expr \mid
+%%        \dots 
+%%    \end{rclarray}
+%%\]
+%\end{definition}
 
 \begin{definition}[Stacks]
 \label{def:stacks}
