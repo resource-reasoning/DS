@@ -1,19 +1,19 @@
 \subsection{Specification of Consistency Models using Key-value Stores}
 \label{sec:execution.tests}
 
-In this Section we model how key-value stores can evolve when a client tries to update 
+In this Section we model how key-value stores evolve when a client commits 
 the effects of a transaction. Because we want to model different consistency models, 
 this notion is parameterised by an \emph{execution test}, which determine whether 
-a client may apply the effects of a transaction to the kv-store, at a given time.
+a client may commit the effects of a transaction to the kv-store, at a given time.
 
 \paragraph{Fingerprints} 
 Formally, the effects of transactions are modelled as sets of reads and writes 
-over keys; we assume a set of $\Ops = \{(\otR, \ke, \val), (\otW, \ke, \val) \mid \ke \in \Keys \wedge 
-\val \in \Val \}$ of operations. The \emph{fingerprint} of a transaction consists of a 
-set of operations $\opset \subseteq \Ops$, such that 
+over keys; we assume a set of operations $\Ops = \{(\otR, \ke, \val), (\otW, \ke, \val) \mid \ke \in \Keys \wedge 
+\val \in \Val \}$. The \emph{fingerprint} of a transaction consists of a 
+set of operations $\opset \subseteq \Ops$, such that for any $\ke \in \Keys$ 
 \textbf{(i)} whenever $(\otR, \ke, \val_1) \in \opset$, $(\otR, \ke, \val_2) \in \opset$, then $\val_1 = \val_2$, 
 and \textbf{(ii)} whenever $(\otW, \ke, \val_1) \in \opset$, $(\otW, \ke, \val_2) \in \opset$, then $\val_1 = \val_2$. 
-Intuitively, $(\otR, \ke, \val) \in \opset$ means that the transaction requested to \textsf{R}ead key $\ke$ from the kv-store, 
+Intuitively, $(\otR, \ke, \val) \in \opset$ means that the transaction requested to read key $\ke$ from the kv-store, 
 and it fetched a version carrying value $\val$. Condition \textbf{(i)} above formalises the intuition that, in our setting, 
 transactions always read from an atomic snapshot of the kv-store, hence only one version will be read for key $\ke$. 
 $(\otW, \ke, \val) \in \opset$ means that the transaction writes a new version, carrying value $\val$, for key $\ke$. 
@@ -30,27 +30,29 @@ of a transaction, consequently we require at most one write operation per key, i
 %\viewFun(\cl) \viewleq \viewFun'(\cl) \}.
 %\]
 
-The first step in describing how a kv-store can evolve under a given consistency model, 
-is that of specifying howa client  committing the effects of a transaction affects the kv-store. 
+The first step in describing how a kv-store evolves under a given consistency model, 
+is that of specifying how a client committing the effects of a transaction affects the kv-store. 
 Suppose that a client $\cl$, with view $\vi$ in the kv-store $\hh$,
 wants to apply to said kv-store the effects of a transaction, modelled by the fingerprint $\opset$. 
 We model this via the function $\updateKV: \HisHeaps \times \Views \times \Clients \times \powerset{\Ops}) 
-\rightarrow \HisHeaps$, defined recursively below and discussed presently. In the following, $\nextTxId(\cl, \hh)$ denotes 
-the set of transaction identifiers $\{\txid_{\cl}^{n} \mid \forall m \geq n.\; txid_{\cl}^{m} \text{ does not appear in } \hh \}$.
+\rightarrow \HisHeaps$, defined recursively below and discussed presently. In the following, $\nextTxId(\cl, \hh) = 
+\{\txid_{\cl}^{n} \mid \forall m \geq n.\; \txid_{\cl}^{m} \text{ does not appear in } \hh \}$
+% denotes the set of transaction identifiers that client $\cl$ can associate to the fingerprint $\opset$
+ .
 \[
 \begin{rclarray}         
 %	 \func{updateMKVS}{., ., ., .} & : & \MKVSs \times \Views \times  \\                        
-    \updateKV(\hh, \vi, \txid, \emptyset) & = & \hh \\
-    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \stub)}) & = &  
+    \updateKV(\hh, \vi, \cl, \emptyset) & = & \hh \\
+    \updateKV(\hh, \vi, \cl, \opset \uplus \Set{(\otR, \ke, \stub)}) & = &  
     \begin{array}[t]{@{}l}
-        \texttt{let } \txid \in \nextTxId(\cl, \hh), (\val, \txid', \txidset) = \hh(\ke, \vi(\ke)),  \\
+        \texttt{let } \txid \in \nextTxId(\cl, \hh), (\val, \txid', \txidset) = \hh(\ke, \vi),  \\
         \vilist_{\ke} = \hh(\ke)\rmto{\vi(\ke)}{(\val, \txid', \txidset \uplus \{ t \})}\\
         %\hh\rmto{\ke}{%
         %   \hh(\ke)\rmto{\vi(\addr)}{%
         %      (\val, \txid', \txidset \uplus \Set{\txid}) } } \\
         \texttt{ in } \updateKV(\hh\rmto{\ke}{\vilist_{\ke}}, \vi, \txid, \opset)
     \end{array} \\
-    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otW, \ke, \val)} & \defeq &  
+    \updateKV(\hh, \vi, \cl, \opset \uplus \Set{(\otW, \ke, \val)} & \defeq &  
     \begin{array}[t]{@{}l}
         \texttt{let } \txid \in \nextTxId(\cl, \hh), \hh' = \hh\rmto{\ke}{ ( \hh(\ke) \lcat \List{(\val, \txid, \emptyset)} ) } \\
         \texttt{ in } \updateKV(\hh', \vi, \txid, \opset)
@@ -60,19 +62,21 @@ the set of transaction identifiers $\{\txid_{\cl}^{n} \mid \forall m \geq n.\; t
 \]
 In the definition above, the operator $\lcat$ is used to append a new version at the tail of 
 a list of versions, while given a list of versions $\vilist = \ver_0\cdots \ver_n$ and $i=0,\cdots,n$, 
-$\vilist[i \mapsto \vi]$ denotes the list of versions $\vilist' = \ver_0 \cdots \ver_{i-1} \ver \ver_{i+1} \cdots 
+$\vilist[i \mapsto \ver]$ denotes the list of versions $\vilist' = \ver_0 \cdots \ver_{i-1} \ver \ver_{i+1} \cdots 
 \ver_{n}$
-Note that, under the assumption that fingerprint contain at most one read and one write 
+Note that, under the assumption that fingerprints contain at most one read and one write 
 operation for each key $\ke$, the function $\updateKV$ is well defined. Furthermore, 
 $\updateKV(\hh, \ver, \txid, \opset)$ is a valid 
 kv-store according to \cref{def:mkvs}.
 
 Let us discuss how the kv-store $\updateKV(\hh, \vi, \cl, \opset)$ is computed. 
 First, we select a transaction identifier $\txid \in \nextTxId(\cl, \hh)$ that we associate 
-with the fingerprint to be committed into the kv-store. The fact that $\txid$ is greater, 
-according to the partial order $\xrightarrow{\PO}$, than any of the transaction identifier 
-of the form $\txid_{\cl}^{n}$ appearing in $\hh$, denotes the fact that $\txid$ is the 
-most recent transactions executed by $\cl$.
+with the fingerprint to be committed into the kv-store. We choose $\txid$ to be 
+greater (w.r.t. the session order $\xrightarrow{\SO}$) than any transaction identifier 
+of the form $\txid_{\cl}^{\_}$ appearing in $\hh$, as to reflect the fact that 
+%according to the partial order $\xrightarrow{\PO}$, than any of the transaction identifier 
+%of the form $\txid_{\cl}^{n}$ appearing in $\hh$, denotes the fact that 
+$\txid$ is the most recent transactions executed by $\cl$.
 For each read operation $(\otR, \ke, \val) \in \opset$, we need to select in $\hh$ the version 
 from which $\txid$ read its value, and update the set of read transactions to include $\txid$. 
 Because clients reads the values of keys in transaction, from the atomic 
@@ -85,13 +89,13 @@ transactions commit is standard \cite{adya,framework-concur,seebelieve}.
 
 \paragraph{Execution Tests and Specification of Consistency Models.}
 Formally, a \emph{consistency model} $\CMs$ is a 
-set of kv-store. Each $\hh \in \CM$ represents a possible scenario that 
-can be obtained as a result of multiple clients committing a transactions. 
+set of kv-stores. Each $\hh \in \CM$ represents a possible scenario that 
+can be obtained as a result of multiple clients committing a transaction. 
 For example, \emph{serialisability} can be described as the set 
 of kv-stores for which it is possible to recover a total schedule of transactions, 
 such that each read operation on key $\ke$ fetches its value from the 
 most recent write on the same key.
-In this sense, the kv-store $\hh_0$ from \cref{fig:hheap-a} is not serialisable: 
+In this sense, the kv-store $\hh$ from \cref{fig:hheap-a} is not serialisable: 
 transaction $\txid_1$ reads the initial version $\val'_0$ for key $\ke_{2}$, 
 and installs a new version fof $\ke_{2}$ carrying value $\val_1$. Similarly, transaction $\txid_2$ 
 reads the initial version $\val'_0$, and therefore (assuming $\val_1 \neq \val'_0$), 
@@ -102,7 +106,9 @@ commit only upon passing a \emph{commit test}.
 The nature of the commit test determines the consistency model of 
 the key-value store.
 Similarly, to specify consistency models we adopt the notion of 
-\emph{execution tests}. An execution test 
+\emph{execution tests}. 
+\ac{I start believing that \emph{commit test} may be more appropriate}
+An execution test 
 $\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
 is a set of tuples of the form $(\hh, \vi, \opset, \vi')$, 
 which is downward-closed with respect to set inclusion over fingerprints: 

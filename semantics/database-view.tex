@@ -52,17 +52,23 @@ I have also paraphrased, please double check.  }
 
 %We model the state of a system using \emph{multi-version key-value stores} (MKVSs). 
 We assume a countably infinite set of \emph{keys} $\Keys = \{\ke, \ke', \cdots\}$, 
-a set of \emph{values} $\Val = \{\val, \val', \cdots\}$, a set of clients $\Clients = \{\cl, \cl',\cdots\}$. 
+a set of \emph{values} $\Val = \{\val, \val', \cdots\}$ which for simplicity we instantiate to be 
+$\Nat \uplus \Keys$, a set of clients $\Clients = \{\cl, \cl',\cdots\}$. 
 We also assume a set of transaction identifiers $\TxID = \{ \txid_{\cl}^{n} \mid \cl \in \Clients \wedge n \geq 0 \} 
 \uplus \{\txid_{0}\}$,
 each of which is either a special transaction identifier $\txid_0$, 
-or it is indexed by a client identifier and a natural number. This particular structure is chosen to 
-embed the session order of transactions executed by individual clients (\cref{sec:exectest}). Elements 
-of $\TxID$ are ranged over by $\txid, \txid', \cdots$, while subsets of $TxID$ are ranged over 
-$\txidset, \txidset', \cdots$. Given a set $X$, then $\powerset{X}$ denotes 
+or it is indexed by a client identifier and a natural number. 
+Elements of $\TxID$ are ranged over by $\txid, \txid', \cdots$, 
+while subsets of $TxID$ are ranged over $\txidset, \txidset', \cdots$. 
+The structure of the set $\TxID$  
+embeds the order in which transactions are executed by individual clients, or \emph{session order}. 
+Specifically, we let $\txid \xrightarrow{\PO} \txid' \iff \exists \cl, n,m. \txid = \txid_{\cl}^{n} \wedge 
+\txid' = \txid_{\cl}^{m} \wedge n < m$ to denote that client $\cl$ has executed $\txid$ prior to $\txid'$.
+
+Given a set $X$, then $\powerset{X}$ denotes 
 the powerset of $X$, while $X^{\ast}$ is the free monoid induced by $X$.
 
-\begin{definition}[Multi-version key-value stores]
+\begin{definition}[Multi-version Key-value Stores]
 \label{def:his_heap}
 \label{def:mkvs}
 %Assuming a countably infinite set of keys $\Keys = \Set{\ke_1, \cdots}$, \emph{transactions identifiers} \( \TxID \defeq \Set{\txid_{1}, \cdots}\) and natural numbers \(\nat \in \Nat \), 
@@ -76,35 +82,39 @@ Elements of $\Versions^{\ast}$ are ranged over by $\vilist, \vilist',\cdots$.
 \ac{Is it safe to assume that key-value stores are partial functions? What happens if we execute a program 
 that tries to access a key that is not in the key-value store? In his Thesis, Viktor had the notion of fault to distinguish cases 
 where non-allocated variables were used. Check. \sx{I think it has no semantics in our case.}}
-Intuitively, a version $\ver = (\val, \txid, \txidset)$ consists of a value and the meta-data of the transactions 
+\ac{Also, in $\parfinfun$ the text above is out of sync. Fix. You may want to look at the extensible arrow package 
+(I think it's extpfeil, but I'm not sure and I am currently on a plane with no internet. Will Check.}
+Intuitively, a version $\ver = (\val, \txid, \txidset)$ consists of a value $\val = \value(\ver)$, and the meta-data of the transactions 
 that accessed such a version; specifically, $\txid = \WTx(\ver)$ denotes the transaction identifier corresponding to the 
-writer of the version, while $\txidset = \RTx(\ver)$ contains the set of the transaction identifier that read a version. 
-A key-value store is then a mapping from keys to the list of versions that have been installed by 
+writer of the version, while $\txidset = \RTx(\ver)$ contains the set of the transaction identifiers that read a version. 
+A key-value store, or \emph{kv-store} in short, is then a mapping from keys to the list of versions that have been installed by 
 transactions for such a key. For a given kv-store, $\hh$, key $\ke$ and index $i \geq 0$, we use the notation $\hh(\ke, i)$ 
 the $i$-th version (starting from $0$) installed for $\ke$; that is, if $\hh(\ke) = \ver_0 \cdots\ver_{n}$, then 
 $\hh(\ke, i) = \ver_{i}$ if $i \leq n$, it is undefined otherwise. We also let $\lvert \hh(\ke) \rvert = n +1 $ denote 
 the length of $\hh(\ke)$.
 
 It will be often convenient to depict key-value stores graphically: an 
-example is given by the kv-store $\hh_{0}$ of Figure \cref{fig:hheap-a}.
-Ignoring the lines labelled $\client_1$ and $\client_2$, $\hh_{0}$ contains two keys \( \ke_1\) and \( \ke_2 \), 
-each of which associated with two versions (with values $v_0$ and $v_1$ for $\ke_1$, and values $v'_0$ and $v'_1$ for $\ke_2$).
+example is given by the kv-store $\hh$ of Figure \cref{fig:hheap-a} (ignore for the moment 
+the vertical lines labelled $\client_1$ and $\client_2$). 
+$\hh$ comprises two keys \( \ke_1\) and \( \ke_2 \), 
+each of which with two versions carrying values $\val_0$ and $\val_1$, and $\val'_0$ and $\val'_1$, respectively.
 The versions of a key are listed in %chronological 
 order from left to right. 
 We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
+For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_2$.
 
 In this paper we only focus on kv-stores whose consistency model ensures that transactions enjoy 
 \emph{atomic visibility} \cite{framework-concur}. We also assume that the special transaction identifier $\tsid_0$ is used 
 to install the initial version of a key. This amounts to require from a kv-store $\hh$ that \textbf{(i)} for each 
-key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (v_0, \txid_0, \_)$ for some initial value $v_0$,
+key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (\val_0, \txid_0, \_)$ for some initial value $v_0$,
 \textbf{(ii)} transactions never write more than one version per key - $\forall \ke \in \dom(\hh)\; \forall i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert.\; 
 \WTx(\ke, i) = \WTx(\ke, j) \implies i = j$, \textbf{(iii)} transactions never read different versions 
 for the same key - $\forall \ke \in \dom(\hh).\; \forall i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert.\; 
 \RTx(\ke, i) \cap \RTx(\ke, j) \neq \emptyset \implies i = j$, and 
-\textbf{(iv)} all the reads of a transactions precede the writes of the same transaction. $\forall \ke \in \dom(\hh). 
+\textbf{(iv)} all the reads of a transactions precede the writes of the same transaction: $\forall \ke \in \dom(\hh). 
 \forall i : 0 \leq i < \lvert \hh(k) \rvert.\; \WTx(\hh, k) \notin \RTx(\hh,k)$. We also require that \textbf{(v)} the order 
 in which transactions issued by the same client install different versions for some key $\ke$, is consistent with the order in which 
-such transactions have been invoked by the client  - $\forall \ke \in \dom(\hh), \cl \in \Clients.\;\forall i,j; 0 \leq i < j < \lvert \hh(\ke) \rvert. 
+such transactions have been invoked: $\forall \ke \in \dom(\hh), \cl \in \Clients.\;\forall i,j; 0 \leq i < j < \lvert \hh(\ke) \rvert. 
 \forall n, m \geq 0.\; (\WTx(\ke(k,i)) = \txid_{\cl}^{n} \wedge \WTx(\ke(k,j)) = \txid_{\cl}^{m}) \implies n < m$.
 We call kv-stores that satisfy the conditions (i-v) \emph{well-formed}. Henceforth, we always assume that kv-stores 
 are well formed, and let $\HisHeaps$ be the set of well-formed kv-stores.
@@ -294,89 +304,116 @@ are well formed, and let $\HisHeaps$ be the set of well-formed kv-stores.
 %   };
 \end{pgfonlayer}
 \end{centertikz}
-\caption{A configuration with a well-formed MSKV and two views}
+\caption{A configuration with a well-formed kv-store $\hh$ and two views $\vi,\vi'$.}
 \label{fig:hheap-a}
 \end{halfsubfig}
+\hspace{30pt}
 &
 
 \begin{halfsubfig} 
-\begin{centertikz}
+\begin{center}
+\begin{tikzpicture}
+%\draw[help lines] grid(6,4);
 
-\begin{pgfonlayer}{foreground}
-%Uncomment line below for help lines
-%\draw[help lines] grid(5,4);
+\node(t0wx) at (-1,2) {$(\otW, \ke_1, \val_0)$}; 
+\path (t0wx.south) + (0,-0.2) node[anchor=north] (t0wy) {$(\otW, \ke_2, \val'_0)$};
+\path (t0wx.north east) + (1,0.5) node[anchor = west] (t1ry) {$(\otR, \ke_2, \val'_0)$}; 
+\path (t1ry.east) + (0.2,0) node[anchor = west] (t1wx) {$(\otW, \ke_1, \val_1)$};
+\path (t0wy.south east) + (1,-0.5) node[anchor = west] (t2rx) {$(\otR, \ke_1, \val_0)$};
+\path (t2rx.east) + (0.2,0) node[anchor = west] (t2wy) {$(\otW, \ke_2, \val'_1$)};
 
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
+\begin{pgfonlayer}{background}
+\node[background, fit=(t0wx) (t0wy)] (t0) {};
+\node[background, fit= (t1ry) (t1wx)] (t1) {};
+\node[background, fit= (t2rx) (t2wy)] (t2) {};
 
-\matrix(versionx) [version list, text width=7mm, anchor=west]
-    at ([xshift=\tikzkvspace]locx.east) {
-    {a} & $\txid_0$ & {a} & $\txid_1$\\
-    {a} & $\emptyset$ & {a} & $\{\txid_2\}$ \\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+\path(t0.west) node[anchor=east] (t0lbl) {$\txid_0$};
+\path(t1.north) node[anchor=south] (t1lbl) {$\txid_1$};
+\path(t2.south) node[anchor=north] (t2lbl) {$\txid_2$};
 
-%Location y
-\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-\matrix(versiony) [version list, text width=7mm, anchor=west]
-    at ([xshift=\tikzkvspace]locy.east) {
-    {a} & $\txid_0$ & {a} & $\txid_2$ \\
-    {a} & $\emptyset$ & {a} & $\{\txid_1\}$\\
-};
-\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-\tikzvalue{versiony-1-3}{versiony-2-3}{locu-v1}{$v'_1$};
-
-% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
-%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
-
-%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
-%\draw[-, blue, very thick, rounded corners=10pt]
-% ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
-% ([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
-% ([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
-% ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
-% 
-% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\txid_1$};
-%
-%%red view
-%\draw[-, red, very thick, rounded corners = 10pt]
-% ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
-%% ([xshift=-16pt, yshift=-5pt]locx-v0.south east) --
-%% ([xshift=-16pt, yshift=5pt]locy-v1.north east) -- 
-% ([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
-% 
-%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\txid_2$};
-
-%%Stack for clients tid_1 and tid_2
-%
-%\draw[-, dashed] let 
-%   \p1 = ([xshift=0pt]locy.west),
-%   \p2 = ([yshift=-5pt]locycells.south),
-%   \p3 = ([xshift=10pt]locycells.east) in
-%   (\x1, \y2) -- (\x3, \y2);
-%   
-%\matrix(stacks) [
-%   matrix of nodes,
-%   anchor=north, 
-%   text=blue, 
-%   font=\normalsize, 
-%   row 1/.style = {text = blue}, 
-%   row 2/.style = {text = red}, 
-%   text width= 13mm ] 
-%   at ([xshift=-10pt,yshift=-8pt]locycells.south) {
-%   $\txid_1:$ & $\retvar = 0$\\
-%   $\txid_2:$ & $\retvar = 0$\\
-%   };
+\path[->]
+(t0.north) edge[bend left=70] node[above, yshift=0.5pt, xshift=-1pt, pos=0.3] {$\RF(\ke_2), \VO(\ke_1)$} (t1.west)
+(t0.south) edge[bend right=70] node[below, yshift=-1pt, xshift=-1pt, pos=0.3] {$\RF(\ke_1), \VO(\ke_2)$} (t2.west)
+([xshift=-8pt]t2.north) edge[bend left=40] node[left] {$\AD(\ke_1)$} ([xshift=-8pt]t1.south) 
+([xshift=8pt]t1.south) edge[bend left=40] node[right] {$\AD(\ke_2)$} ([xshift=8pt]t2.north);
 \end{pgfonlayer}
-\end{centertikz}
-\caption{An ill-formed MKVS}
+
+%\begin{pgfonlayer}{foreground}
+%%Uncomment line below for help lines
+%%\draw[help lines] grid(5,4);
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%
+%\matrix(versionx) [version list, text width=7mm, anchor=west]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%    {a} & $\txid_0$ & {a} & $\txid_1$\\
+%    {a} & $\emptyset$ & {a} & $\{\txid_2\}$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+%
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%\matrix(versiony) [version list, text width=7mm, anchor=west]
+%    at ([xshift=\tikzkvspace]locy.east) {
+%    {a} & $\txid_0$ & {a} & $\txid_2$ \\
+%    {a} & $\emptyset$ & {a} & $\{\txid_1\}$\\
+%};
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
+%\tikzvalue{versiony-1-3}{versiony-2-3}{locu-v1}{$v'_1$};
+%
+%% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+%
+%%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+%%\draw[-, blue, very thick, rounded corners=10pt]
+%% ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+%% ([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
+%% ([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
+%% ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
+%% 
+%% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\txid_1$};
+%%
+%%%red view
+%%\draw[-, red, very thick, rounded corners = 10pt]
+%% ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+%%% ([xshift=-16pt, yshift=-5pt]locx-v0.south east) --
+%%% ([xshift=-16pt, yshift=5pt]locy-v1.north east) -- 
+%% ([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
+%% 
+%%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\txid_2$};
+%
+%%%Stack for clients tid_1 and tid_2
+%%
+%%\draw[-, dashed] let 
+%%   \p1 = ([xshift=0pt]locy.west),
+%%   \p2 = ([yshift=-5pt]locycells.south),
+%%   \p3 = ([xshift=10pt]locycells.east) in
+%%   (\x1, \y2) -- (\x3, \y2);
+%%   
+%%\matrix(stacks) [
+%%   matrix of nodes,
+%%   anchor=north, 
+%%   text=blue, 
+%%   font=\normalsize, 
+%%   row 1/.style = {text = blue}, 
+%%   row 2/.style = {text = red}, 
+%%   text width= 13mm ] 
+%%   at ([xshift=-10pt,yshift=-8pt]locycells.south) {
+%%   $\txid_1:$ & $\retvar = 0$\\
+%%   $\txid_2:$ & $\retvar = 0$\\
+%%   };
+%\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+\caption{The dependency graph induced by $\hh$.}
 \label{fig:hheap-b}
 \end{halfsubfig} \\
 \end{tabular}
 \end{center}
 \hrule\vspace{5pt}
-\ac{Remove ill-formed heap. Insert Configuration with non-atomic view. Refer to the figure 
+\ac{Insert Configuration with non-atomic view (?). Refer to the figure 
 when explaining the notion of atomic view.}
 \caption{Multi-version key-value stores}
 \label{fig:hheap}
@@ -504,8 +541,8 @@ $V(\ke) < \lvert \hh(\ke) \rvert$, and
 \tag{AtomicView}
 \end{equation}
 The set of views of $\hh$ is denoted 
-as $\Views_{\hh}$, and we let $\Views = \bigcup_{\hh \in \HisHeaps} 
-\Views_{\hh}$.
+as $\Views(\hh)$, and we let $\Views = \bigcup_{\hh \in \HisHeaps} 
+\Views(\hh)$.
 
 A configuration $\conf$ is a pair $(\hh, \viewFun)$, where $\viewFun: 
 \Clients \parfinfun \Views_{\hh}$.
@@ -516,16 +553,16 @@ In this case we say that $\vi$ is older than $\vi'$ ($\vi'$ is newer than $\vi$)
 
 Simply put, a configuration augments the notion of kv-stores with the information 
 about the version observed by each client of its clients. The view of a client $\cl$ in $\hh$ 
-keeps track of the most recent version of $\hh$ that $\cl$ can access when executing a 
+keeps track of the most recent version of $\hh$ that $\cl$ accesses when executing a 
 transaction. The constraint of \cref{eq:view.atomic} establishes that clients observe 
-either none or all the updates performed by a transaction, thus modelling atomic 
+either none or all the updates performed by a transaction, thus capturing atomic 
 visibility.
 We often depict configurations graphically by depicting views as client-labelled lines crossing 
 versions  of key-value stores. A line labelled $\cl$ crossing the $i$-th version of key $\ke$ defines a view 
 $\vi$ for client $\cl$, with $\vi(\ke) = i$. One example is given by the configuration 
 $\conf_0 = (\hh_0, [\cl_1 \mapsto \vi_1, \cl_2 \mapsto \vi_2])$ of \cref{fig:hheap-a}. 
 There are two clients, 
-$\cl_1$ and $\cl_2$, with views $\vi_1, \vi_2$ respectively. $\vi_1$ Crosses $\ke_1$ at its $0$-th 
+$\cl_1$ and $\cl_2$, with views $\vi_1, \vi_2$ respectively. $\vi_1$ crosses $\ke_1$ at its $0$-th 
 version, and $\ke_2$ at its $1$-st version. Therefore we have $\vi_1 = [\ke_1 \mapsto 0, \ke_2 \mapsto_1]$. 
 Similarly, $\vi_2 = [\ke_1 \mapsto 1, \ke_2 \mapsto 0]$. 
 \ac{Never refer to colors in text. People may read in black and white.}
