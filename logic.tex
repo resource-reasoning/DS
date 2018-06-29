@@ -7,39 +7,17 @@ Under serialisibility that transactions appear one after another, only one key, 
 While under SI, both keys \( \vx \) and \( \vy \) might be 1.
 Because both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and both can commit because the two transactions write different keys.
 
-In the sketch proof (\cref{fig:write-skew-si-proof}), \emph{A shared region assertion} also know as \emph{a boxed assertion} in the form of \( \boxass{\gpre}{\lrid}{\intass}\) describes that there is a region with \emph{a unique region identifier} \( \lrid \) and \emph{interference} \( \intass \), and the assertions inside \( \gpre \) satisfies views on key-value stores.
-Note that there might be many views on the same key-value store, some of which might be out-of-date.
-In the assertion, a value with a underline means \emph{a potentially out-of-date value}, otherwise it is the \emph{most recent value}.
-For instance, \( \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0} \lor \vy \pt \underline{1} ) }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vx \) points to the most recent value of 0, but \( \vy \) points to a potentially out-of-date value of either 0 or 1.
-Each region are shareable and indivisible, \ie \( \boxass{\gpre}{\lrid}{\intass} \sep \boxass{\gpost}{\lrid}{\intass} \iff \boxass{\gpre \land \gpost}{\lrid}{\intass}\).
-
-Regions are associated with \emph{interference} to specify how the regions can evolve.
-The \emph{interference} \( \intass \) is a set of actions, each of which has the form \( \kap : \fp \) where \( \kap \) is the \emph{client-specified capability} and \( \fp \) is the \emph{fingerprint}.
-A client is allowed to execute a transaction with the fingerprint \( \fp \), when the client holds the capability \( \kap \).
-The \emph{client-specified capability} forms \emph{a partial commutative monoid (PCM)} where \( \composeK \) denotes the composition function.
-In the write skew example, both \( \CB{L} \) and \( \CB{R} \) are unique because the compositions with themselves are undefined, and \( \CB{0} \) is the unit.
-The \( \CB{L}\) allows a client to read \( \vy \) when it is 0 and write 1 to \( \vx \), and similarly \( \CB{R} \) allows a client to read \( \vx \) when it is 0 and write 1 to \( \vy \).
-The unit \( \CB{0} \) allows clients to always read \( \vx \) or \( \vy \) no matter the values.
-
-When a transaction starts, it take a snapshot provided by the views.
-%For example the \( \txid_1 \) in \cref{fig:write-skew-si-proof} has precondition \( p1 \).
-The transactional assertions for a single key are combinations of the state of key and the fingerprint in one of the following forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \), where \( \otR \) and \( \otW \) are read and write labels.
-The first three asserts the key \( \vx \) in the local snapshot has value 0 and it has not been touched (no label), has been read (\(\otR\)) and has been written (\(\otW\)) respectively.
-The last one asserts that the key \( \vx \) currently has value 1, \emph{the first read preceding any write} fetches 0 and the \emph{the last write} updates the key to \( 1 \).
-For example the precondition \( p1 \) for the \( \txid_1 \) in \cref{fig:write-skew-si-proof} asserts that \( \vx \) initial is 0 and \( \vy \) initial is either 0 or 1.
-The postcondition  \( q1 \) for \( \txid_1 \) asserts that the transaction might write 1 to \( \vx \) and read \( \vy \) with value 0, or it might only read \( vy \) with value 1.
-
 \begin{figure}[!t]
 \hrule
 \[
 \intass :
 \begin{array}[t]{@{} c @{\quad} c @{\quad} c @{\quad} c @{} }
 \begin{rclarray}[t]
-    \CB{L} & : & \vx \fpW 1 \sep \vy \fpR 0  \\
+    \CB{L} & : & \vx \fpW 1 \sep \vy \fpR 0 \sep \null \fpA \cass{\CB{L}}{\lrid} \\
 \end{rclarray}
 &
 \begin{rclarray}[t]
-    \CB{R} & : & \vx \fpR 0 \sep \vy \fpW 1  \\
+    \CB{R} & : & \vx \fpR 0 \sep \vy \fpW 1 \sep \null \fpA \cass{\CB{R}}{\lrid} \\
 \end{rclarray}
 &
 \begin{rclarray}[t]
@@ -52,7 +30,7 @@ The postcondition  \( q1 \) for \( \txid_1 \) asserts that the transaction might
 \end{array}
 \]
 \[
-\CB{L} \composeK \CB{L} \ \text{is undefined} \quad  \CB{R} \composeK \CB{R} \ \text{is undefined} \quad \CB{0} \ \text{is the unit}
+\CB{L} \composeK \CB{L} \ \text{is undefined} \quad  \CB{R} \composeK \CB{R} \ \text{is undefined} \quad \CB{U} \ \text{is the unit}
 \]
 \hrule\vspace{5pt}
 \[
@@ -61,7 +39,8 @@ The postcondition  \( q1 \) for \( \txid_1 \) asserts that the transaction might
 \begin{parl}
 \begin{session}
     {\color{blue}P1 : } \specline{\cass{\CB{L}}{\lrid} \sep 
-            \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0}  \lor \vy \pt \underline{1} ) }{\lrid}{\intass} 
+            \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0}  \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
     } \\
     \txid_1 : \begin{transaction}
         {\color{blue}p1 : } \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
@@ -71,14 +50,17 @@ The postcondition  \( q1 \) for \( \txid_1 \) asserts that the transaction might
         \pife \\
         {\color{blue}q1 : } \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor \vx \fpI 0 \sep \vy \fpR 1 )} \\
     \end{transaction} \\
-    {\color{blue}Q1 : } \specline{\cass{\CB{L}}{\lrid} \sep 
-            \boxass{ \vx \pt 1 \sep \vy \pt \underline{0} \lor {} \\ \vx \pt 1 \sep \vy \pt \underline{1} \lor \vx \pt 0 \sep \vy \pt \underline{1} }{\lrid}{\intass} \\
+    {\color{blue}Q1 : } \specline{ 
+            \boxass{ \vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt 1 \sep ( \vy \pt \underline{0}  \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}  \\
+            {} \lor \cass{\CB{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \\
     } \\
 \end{session}
 &
 \begin{session}
     {\color{blue}P2 : } \specline{\cass{\CB{R}}{\lrid} \sep 
-            \boxass{ ( \vx \pt \underline{0} \lor \vx \pt \underline{1} ) \sep \vy \pt 0 }{\lrid}{\intass} 
+            \boxass{ ( \vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \\
+            {} \lor \boxass{ ( \vx \pt \underline{0} \lor \vx \pt 1 ) \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
     } \\
     \txid_2 : \begin{transaction}
         {\color{blue}p2 : } \specline{ ( \vx \fpI 0 \lor \vx \fpI 1 ) \sep \vy \fpI 0 )} \\
@@ -88,20 +70,85 @@ The postcondition  \( q1 \) for \( \txid_1 \) asserts that the transaction might
         \pife \\
         {\color{blue}q2 : } \specline{ \vx \fpR 0 \sep \vy \fpW 1 \lor \vx \fpR 1 \sep \vy \fpI 0 )} \\
     \end{transaction} \\
-    {\color{blue}Q2 : } \specline{\cass{\CB{R}}{\lrid} \sep 
-            \boxass{\vx \pt \underline{0} \sep \vy \pt 1 \lor {} \\ \vx \pt \underline{1} \sep \vy \pt 1 \lor \vx \pt \underline{1} \sep \vy \pt 0 }{\lrid}{\intass} \\
+    {\color{blue}Q2 : } \specline{ 
+            \boxass{ \vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
+            {} \lor \boxass{ ( \vx \pt \underline{0} \lor \vx \pt 1 ) \sep \vy \pt 1 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \\
+            {} \lor \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}  \\
     } \\
 \end{session}
 \end{parl} \\
-{\color{blue}Q : } \specline{%
-    \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep 
-    \boxass{\vx \pt 0 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 1 \lor \vx \pt 1 \sep \vy \pt 0 }{\lrid}{\intass} \\ } \\
+{\color{blue}Q : } \specline{ 
+        \cass{\CB{L}}{\lrid} \sep \boxass{ \vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
+        \lor \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}   \\
+        {} \lor \boxass{ ( \vx \pt \underline{0} \lor \vx \pt 1 ) \sep \vy \pt 1 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \\
+} \\
 \end{session}
 \]
 \hrule
 \caption{Interference, capabilities (the top), and sketch proof (the bottom) for write skew under snapshot isolation}
 \label{fig:write-skew-si-proof}
 \end{figure}
+
+In the sketch proof (\cref{fig:write-skew-si-proof}), \emph{A shared region assertion} also know as \emph{a boxed assertion} in the form of \( \boxass{\bar{\lpre}}{\lrid}{\intass}\) describes that there is a region with \emph{a unique region identifier} \( \lrid \) and \emph{interference  assertion} \( \intass \), and the assertions inside \( \bar{\lpre} \) describe views on key-value stores.
+Note that unlike serialisibility, the view might be out-of-date for SI.
+In the assertion, a value with a underline means \emph{a potentially out-of-date value}, otherwise it is the \emph{most recent value}.
+For instance, \( \boxass{\vx \pt 0 \sep ( \vy \pt \underline{0} \lor \vy \pt \underline{1} ) }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vx \) points to the most recent value of 0, but \( \vy \) points to a potentially out-of-date value of either 0 or 1.
+Each region are shareable and indivisible, \ie \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
+
+The \emph{interference assertion} \( \intass \) specifies how the regions can evolve.
+It is a set of actions, each of which has the form \( \kap : \fp \) where \( \kap \) is the \emph{client-specified capability} and \( \fp \) is the \emph{fingerprint}.
+A client is allowed to execute a transaction with the fingerprint \( \fp \), when the client holds the capability \( \kap \).
+The \( \CB{L}\) allows a client to read \( \vy \) when it is 0 and write 1 to \( \vx \), and similarly \( \CB{R} \) allows a client to read \( \vx \) when it is 0 and write 1 to \( \vy \).
+The \( \fp \) also specifies capabilities transformation, for example in the example, both \( \CB{L} \) and \( \CB{R} \) need to be move into the region once they have been used.
+The \emph{client-specified capability} forms \emph{a partial commutative monoid (PCM)} where \( \composeK \) denotes the composition function.
+In the write skew example, both \( \CB{L} \) and \( \CB{R} \) are unique because the compositions with themselves are undefined, and \( \CB{U} \) is the unit.
+The unit \( \CB{U} \) allows clients to always read \( \vx \) or \( \vy \) no matter the values.
+
+Given the interference, an assertion \( \gpre \) is \emph{stable}, iff it holds against the interference from the environment.
+Since the assertions describe views on key-value stores.
+Stabilisation has two meanings: the environment might change the key-value stores but not the views, since the views are local; consequentially, the views can be advanced.
+For example, \( P1 \) describes either the environment does nothing or the environment has performed the action associated with \( \cass{\CB{R}}{\lrid}\), 
+after which the environment cannot do any further actions since the capabilities \( \cass{\CB{R}}{\lrid}\) is in the shared region.
+Let discuss the assertions \( \vy \pt \underline{0}  \lor \vy \pt 1 \) from \( P1 \).
+The underline value \( \underline{0} \) means the environment changed the state of the key-value store which make the view out-of-date.
+Because the view can be advanced by stabilisation and the capability \( \cass{\CB{R}}{\lrid} \) is in the region, we get a up-to-date \( \vy \pt 1 \).
+
+Because of atomicity, A transaction works on it own snapshot and only commits the fingerprint by the end.
+We use \emph{transactional assertions} to describe the state of local snapshots for transactions and also the fingerprints.
+The transactional assertions for a single key have the following forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \), where \( \otR \) and \( \otW \) are read and write labels.
+The first three asserts the key \( \vx \) in the local snapshot has value 0 and it has not been touched (no label), has been read (\(\otR\)) and has been written (\(\otW\)) respectively.
+The last one asserts that the key \( \vx \) currently has value 1, \emph{the first read preceding any write} fetches 0 and the \emph{the last write} updates the key to \( 1 \).
+We extend the standard sequential separation logic rules in a ways that the first read before any write to a key adds a read label to the assertion; and a write to a key adds a write label to assertion and updates the value.
+Note that when writing to an key that has been read, the assertion after will have two values where the first corresponds to old read value and the second corresponds the written value.
+
+When a transaction starts, it takes a snapshot provided by the view.
+For example,  because of \( P1 \) where the view for the \( \vx \) has value 0 and \( \vy \) has value either 0 or 1, the precondition \( p1 \) for transaction \( \txid_1 \) describe exactly the same states, and initial all keys have no fingerprint.
+To verify the transaction, it means collecting the fingerprint.
+By the end, the postcondition \( q1 \) says the transaction \( \txid_1 \) either reads \( \vy \) with 0 and writes 1 to \( \vx \), or only reads \( \vy \) with 1 and does nothing to \( \vx \).
+
+To committing the fingerprint under SI, we first need to check the view from \( P1 \).
+SI requires that if a view observe some transactions, it should observe everything before.
+It holds for \( P1 \).
+Now given the view on the key-value store \( \gpre \), and committing the fingerprint of the transaction \( \lpost \) under SI means: 
+(i) for any key that has been over-written, the view before for the key should be up-to-date and the view after should points to the new version;
+(ii) for any key that has been read, the view before points to a version containing the same value and the view after remains the same;
+{iii) there are some local capabilities that allows the updates.
+This will give us the following assertion before stabilisation:
+\[
+\boxass{ \vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
+\lor \boxass{\vx \pt 1 \sep \vy \pt \underline{0}  \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}
+\lor \cass{\CB{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
+\]
+We need to stylise the assertions.
+The environment can still change the state that satisfies the first disjunction, because environment still has the ability  to change the value of \( \vy \), which yield the state satisfying the second disjunction.
+The second conduction can be stabilised by advancing the view.
+Now we have a stable assertions as \( Q1 \) in \cref{fig:write-skew-si-proof}.
+
+Following similar reasoning for right-hand-side client, we get \( Q2 \).
+The final \( Q \) is  \( Q = Q1 \sep Q2 \) provided that \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
+It means the final views and key-value stores are those come from both \( Q1 \) and \( Q2 \).
+
+
 
 %For serialisibility, the stable PL and PR rules out those views that cannot progress via any possible transactions.
 %This mean the view must at the end of the history heap.
@@ -160,11 +207,9 @@ The postcondition  \( q1 \) for \( \txid_1 \) asserts that the transaction might
 
 \input{\RootPath/logic/transaction.tex}
 \input{\RootPath/logic/program.tex}
-
-\section{Soundness of Logic}
-
-\input{\RootPath/logic/trans_sound.tex}
-\input{\RootPath/logic/prog_sound.tex}
+\input{\RootPath/logic/soundness.tex}
+%\input{\RootPath/logic/trans_sound.tex}
+%\input{\RootPath/logic/prog_sound.tex}
 
 %\input{./logic/assertion_graph.tex}
 %\input{./logic/rule_graph.tex}
