@@ -34,28 +34,29 @@ The first step in describing how a kv-store evolves under a given consistency mo
 is that of specifying how a client committing the effects of a transaction affects the kv-store. 
 Suppose that a client $\cl$, with view $\vi$ in the kv-store $\hh$,
 wants to apply to said kv-store the effects of a transaction, modelled by the fingerprint $\opset$. 
-We model this via the function $\updateKV: \HisHeaps \times \Views \times \Clients \times \powerset{\Ops}) 
-\rightarrow \HisHeaps$, defined recursively below and discussed presently. In the following, $\nextTxId(\cl, \hh) = 
-\min(\{\txid_{\cl}^{n} \mid \forall m \geq n.\; \txid_{\cl}^{m} \text{ does not appear in } \hh \})$.
-% denotes the set of transaction identifiers that client $\cl$ can associate to the fingerprint $\opset$
-\ac{I changed the definition of nextTxID to contain exactly one transacion identifier. In this way, 
-the function updateKV is well-defined - otherwise its codomain should be a set of kv-stores.}
+We model this via the function $\updateKV: \HisHeaps \times \Views \times \TxID \times \powerset{\Ops}) 
+\rightarrow \HisHeaps$, defined recursively below and discussed presently. 
+%In the following, $\nextTxId(\cl, \hh) = 
+%\min(\{\txid_{\cl}^{n} \mid \forall m \geq n.\; \txid_{\cl}^{m} \text{ does not appear in } \hh \})$.
+%% denotes the set of transaction identifiers that client $\cl$ can associate to the fingerprint $\opset$
+%\ac{I changed the definition of nextTxID to contain exactly one transacion identifier. In this way, 
+%the function updateKV is well-defined - otherwise its codomain should be a set of kv-stores.}
 \[
 \begin{rclarray}         
 %	 \func{updateMKVS}{., ., ., .} & : & \MKVSs \times \Views \times  \\                        
-    \updateKV(\hh, \vi, \cl, \emptyset) & = & \hh \\
-    \updateKV(\hh, \vi, \cl, \opset \uplus \Set{(\otR, \ke, \stub)}) & = &  
+    \updateKV(\hh, \vi, \txid, \emptyset) & = & \hh \\
+    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \stub)}) & = &  
     \begin{array}[t]{@{}l}
-        \texttt{let } \txid \in \nextTxId(\cl, \hh), (\val, \txid', \txidset) = \hh(\ke, \vi),  \\
+        \texttt{let } (\val, \txid', \txidset) = \hh(\ke, \vi),  \\
         \vilist_{\ke} = \hh(\ke)\rmto{\vi(\ke)}{(\val, \txid', \txidset \uplus \{ t \})}\\
         %\hh\rmto{\ke}{%
         %   \hh(\ke)\rmto{\vi(\addr)}{%
         %      (\val, \txid', \txidset \uplus \Set{\txid}) } } \\
         \texttt{ in } \updateKV(\hh\rmto{\ke}{\vilist_{\ke}}, \vi, \txid, \opset)
     \end{array} \\
-    \updateKV(\hh, \vi, \cl, \opset \uplus \Set{(\otW, \ke, \val)} & \defeq &  
+    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otW, \ke, \val)} & \defeq &  
     \begin{array}[t]{@{}l}
-        \texttt{let } \txid \in \nextTxId(\cl, \hh), \hh' = \hh\rmto{\ke}{ ( \hh(\ke) \lcat \List{(\val, \txid, \emptyset)} ) } \\
+        \texttt{let } \hh' = \hh\rmto{\ke}{ ( \hh(\ke) \lcat \List{(\val, \txid, \emptyset)} ) } \\
         \texttt{ in } \updateKV(\hh', \vi, \txid, \opset)
     \end{array} 
 %
@@ -67,10 +68,14 @@ $\vilist[i \mapsto \ver]$ denotes the list of versions $\vilist' = \ver_0 \cdots
 \ver_{n}$
 Note that, under the assumption that fingerprints contain at most one read and one write 
 operation for each key $\ke$, the function $\updateKV$ is well defined. Furthermore, 
-$\updateKV(\hh, \ver, \txid, \opset)$ is a valid 
-kv-store according to \cref{def:mkvs}.
+let $\nextTxId(\cl, \hh) = 
+\{\txid_{\cl}^{n} \mid \forall m \geq n.\; \txid_{\cl}^{m} \text{ does not appear in } \hh \}$, 
+and suppose that $\txid \in \nextTxId(\cl, \hh)$ for some $\cl$.
+Then $\updateKV(\hh, \ver, \txid, \opset)$ is a valid kv-store according to \cref{def:mkvs}.
+In the following, we commit an abuse of notation and write $\updateKV(\hh, \vi, \cl, \opset)$ 
+for the set $\{\hh' \mid \exists \txid \in \nextTxId(\cl) \wedge \hh' = \updateKV(\hh, \vi, \txid, \opset)\}$.
 
-Let us discuss how the kv-store $\updateKV(\hh, \vi, \cl, \opset)$ is computed. 
+Let us discuss how kv-stores in $\updateKV(\hh, \vi, \cl, \opset)$ are computed. 
 First, we select a transaction identifier $\txid \in \nextTxId(\cl, \hh)$ that we associate 
 with the fingerprint to be committed into the kv-store. We choose $\txid$ to be 
 greater (w.r.t. the session order $\xrightarrow{\PO}$) than any transaction identifier 
@@ -110,15 +115,16 @@ Similarly, to specify consistency models we adopt the notion of
 \emph{execution tests}. 
 \ac{I start believing that \emph{commit test} may be more appropriate}
 An execution test 
-$\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
-is a set of tuples of the form $(\hh, \vi, \opset, \vi')$, such that 
-whenever $(\otR, \ke, \val) \in \opset$ then $\hh(\ke, \vi) = \val$, and 
-which is downward-closed with respect to inclusion over fingerprints: 
-if $(\hh, \vi, \opset, \vi') \in \ET$ and $\opset' \subseteq \opset$, then 
+$\ET \subseteq \HisHeaps \times \Views \times  \times \powerset{\Ops} \times \Views$ 
+is a set of tuples of the form $(\hh, \vi, \opset, \vi')$, such that
+\textbf{(i)} whenever $(\otR, \ke, \val) \in \opset$ then $\hh(\ke, \vi) = \val$, and \textbf{(ii)} 
+it is downward-closed with respect to inclusion over fingerprints: 
+if $(\hh, \vi, \opset, \vi') \in \ET$, $\opset' \subseteq \opset$, then 
 $(\hh, \vi, \opset', \vi') \in \ET$.
 Intuitively, 
 $(\hh, \vi, \opset, \vi') \in \ET$ means that, under the execution test 
-$\ET$, a client whose view on the kv-store $\hh$ is $\vi$ can safely 
+$\ET$, provided that the overall set of views of other clients is $\viewSet$, 
+a client whose view on the kv-store $\hh$ is $\vi$ can safely 
 commit a transaction with fingerprint $\opset$, and the resulting 
 view for the client is updated to $\vi'$. 
 Even though in our framework transactions execute atomically, by applying 
@@ -147,10 +153,9 @@ such that
 \[
 \begin{array}{l}
 \forall \conf. \conf \text{ is initial} \implies \conf \in \mathsf{Configs}(\ET)\\
-\forall \hh, \cl \viewFun,\vi'.\; (\hh, \viewFun) \in \mathsf{Configs}(\ET) \wedge \viewFun(\cl) \viewleq \vi' \implies (\hh, \viewFun\rmto{\cl}{\vi'}) \in \mathsf{Configs}(\ET)\\
-\forall \hh, \cl, \viewFun, \opset, \vi, \vi'.\; \vi = (\viewFun(\cl) \wedge \ET \vdash (\hh, \vi) \triangleright \opset : \vi') \implies {}\\
-\hfill
-((\updateKV(\hh, \vi, \cl, \opset), \viewFun\rmto{\cl}{\vi'} \in \mathsf{Configs}(\ET) 
+\forall \hh, \cl, \vi'.\; (\hh, \viewFun) \in \mathsf{Configs}(\ET) \wedge \viewFun(\cl) \viewleq \vi' \implies (\hh, \viewFun\rmto{\cl}{\vi'}) \in \mathsf{Configs}(\ET)\\
+\forall \hh, \cl, \opset, \vi, \vi'.\; \vi = (\viewFun(\cl) \wedge \ET \vdash (\hh, \vi) \triangleright \opset : \vi') \implies {}\\
+\hfill \forall \hh' \in (\updateKV(\hh, \vi, \cl, \opset). (\hh', \viewFun\rmto{\cl}{\vi'}) \in \mathsf{Configs}(\ET) 
 \end{array}
 \]
 
@@ -162,32 +167,39 @@ The \emph{consistency model} induced by $\ET$ is defined as
 
 Thus, consistency models are computed from execution tests by closing the set of initial kv-stores with 
 respect to two operations: replacing the view of a client on the kv-store with a newer one, and committing 
-the effects of a transaction. Note that specifications of consistency models using execution tests 
-are compositional in the following way: 
-
+the effects of a transaction. 
+Execution tests are monotonic in the following sense: 
 \begin{proposition}
-\cref{prop:et.compositional}
-Let $\ET_1, \ET_2$ be two execution tests. Then $\CMs(\ET_1 \cap \ET_2) = \CMs(\ET_1) \cap \CMs(\ET_2)$.
+Let $\ET_1 \subseteq \ET_2$. Then $\CMs(\ET_1) \subseteq \CMs(\ET_2)$.
 \end{proposition}
+%Note that specifications of consistency models using execution tests 
+%are compositional in the following way: 
+%
+%\begin{proposition}
+%\label{prop:et.compositional}
+%Let $\ET_1, \ET_2$ be two execution tests. Then $\CMs(\ET_1 \cap \ET_2) = \CMs(\ET_1) \cap \CMs(\ET_2)$.
+%\end{proposition}
+%
+%\begin{example}
+%Let $\ET_{\top} = \HisHeaps \times \viewSet \times \powerset{\Ops} \times \viewSet$ 
+%be the most permissive execution test. Note that \cref{prop:et.compositional} ensures 
+%that, for any execution test $\ET$, then $\CMs(\ET) \subseteq \CMs(\ET_{\top})$. 
+%Consider the kv-store $\hh$ from \cref{fig:hheap-a}. 
+%If we assume that $\val'_0 = \val_0$, and $\val_0$ is the initial value of kv-stores, 
+%then $\hh$ is included in $\CMs(\ET_{\top})$. 
+%In fact, let $\opset_1 = \{(\otR, \ke_2, \val'_0), (\otW, \ke_1, \val_1)\}$, 
+%$\opset_2 = \{(\otR, \ke_1, \val_0), (\otW, \ke_2, \val'_1)\}$, and 
+%$\vi = [\ke_1 \mapsto 0, \ke_2 \mapsto 0]$. Assuming that 
+%$\hh_0$ is the initial kv-store with $\dom(\hh_0) = \{ \ke_1, \ke_2\}$, 
+%then $\updateKV(\updateKV(\hh_0, \vi, \_, \opset_1), \vi, \_, \opset_2)$ 
+%generates exactly the kv-store $\hh$, provided that transaction identifiers 
+%$\txid, \txid'$ are consistent with the clients that committed $\opset_1, \opset_2$, 
+%respectively.
+%\end{example}
+%\ac{Looking at compositionality gets us into problems that we will never solve before 
+%the deadline.}
 
-\begin{example}
-Let $\ET_{\top} = \HisHeaps \times \viewSet \times \powerset{\Ops} \times \viewSet$ 
-be the most permissive execution test. Note that \cref{prop:et.compositional} ensures 
-that, for any execution test $\ET$, then $\CMs(\ET) \subseteq \CMs(\ET_{\top})$. 
-Consider the kv-store $\hh$ from \cref{fig:hheap-a}. 
-If we assume that $\val'_0 = \val_0$, and $\val_0$ is the initial value of kv-stores, 
-then $\hh$ is included in $\CMs(\ET_{\top})$. 
-In fact, let $\opset_1 = \{(\otR, \ke_2, \val'_0), (\otW, \ke_1, \val_1)\}$, 
-$\opset_2 = \{(\otR, \ke_1, \val_0), (\otW, \ke_2, \val'_1)\}$, and 
-$\vi = [\ke_1 \mapsto 0, \ke_2 \mapsto 0]$. Assuming that 
-$\hh_0$ is the initial kv-store with $\dom(\hh_0) = \{ \ke_1, \ke_2\}$, 
-then $\updateKV(\updateKV(\hh_0, \vi, \_, \opset_1), \vi, \_, \opset_2)$ 
-generates exactly the kv-store $\hh$, provided that transaction identifiers 
-$\txid, \txid'$ are consistent with the clients that committed $\opset_1, \opset_2$, 
-respectively.
-\end{example}
-
-\paragraph{Examples of Execution Tests and Consistency Models.}
+\mypar{Examples of Execution Tests and Consistency Models.}
 
 \begin{figure}
 \begin{tabular}{| lr |}
@@ -246,7 +258,7 @@ All the variables in the formulas above are universally quantified.}
 We conclude this section by analysing the consistency tests for widely adopted 
 consistency models of distributed and replicated databases. These are summarised 
 in \cref{fig:execution.tests}.
-Following \cite{}, we distinguish among client-centric and data-centric consistency models. 
+Following \cite{distrprinciples}, we distinguish between client-centric and data-centric consistency models. 
 The former constrain the versions of keys that individual clients can observe, while the latter 
 impose conditions on the shape of the state of the database, in our case the structure of 
 the kv-store. Both kinds of models can be induced by execution tests. In \cref{sec:?} 
@@ -255,48 +267,202 @@ with respect to alternative specifications from the literature. Due to space con
 examples of allowed and disallowed kv-stores for relevant consistency models. A full account 
 of the anomalous behaviours permitted by each consistency model is deferred to \cref{app:?}.
 
-\subparagraph{Monotonic Reads.} 
-This is the first of four \emph{session guarantees} \cite{terry1994sessions}, i.e. guarantees on the individual behaviour of 
-clients.  A client ensures the monotonic read consistency guarantee (MR) if subsequent read operations always 
-return versions from a more up-to-date state of the system. Because the versions observed by a client of a kv-store 
-are determined by the view of the former, monotonic reads can be enforced in our framework by ensuring that 
-a client can never replace their view with an older one. According to the definition of $\CMs(\_)$, 
-a client can only update its view to an older one upon committing a transaction. The definition of 
-$\ET_{\MRd}$ in \cref{fig:execution.tests} forces clients to always update their views to newer ones.
+\paragraph{Monotonic Reads.} 
 
-\subparagraph{Monotonic Writes.}
-The second session guarantee that we formalise is given by \emph{monotonic writes.} This states that 
+\begin{wrapfigure}[5]{r}{0.33\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_1$\\
+    {a} & $\left\{\txid_{\cl}^{2}\right\}$ & {a} & $\left\{\txid_{\cl}^{1} \right\}$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
+This is the first of four \emph{session guarantees} \cite{terry1994sessions}, i.e. guarantees on the individual behaviour of 
+clients. A client ensures the monotonic reads consistency guarantee ($\MRd$) if subsequent read operations always 
+return versions from a more up-to-date state of the system. For example, the kv-store to the right is disallowed 
+by $\MRd$: client $\cl$ first observes the latest version of $\ke$ in $\txid_{\cl}^{1}$, then it later 
+observes the initial version of $\ke$ in $\txid_{\cl}^{2}$.
+Because the versions observed by a client of a kv-store 
+%are determined by the view of the former, monotonic reads can be enforced in our framework by ensuring that 
+%a client can never replace its view with an older one. According to the definition of $\CMs(\_)$, 
+%a client can only update its view to an older one upon committing a transaction. 
+The execution test $\ET_{\MRd}$ from \cref{fig:execution.tests} prevents this scenario by 
+forcing clients to always update their views to newer ones. 
+%$\ET_{\MRd}$ in \cref{fig:execution.tests} forces clients to always update their views to newer ones.
+
+\paragraph{Monotonic Writes.}
+
+\begin{wrapfigure}[9]{r}{0.33\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
+    {a} & $\left\{\txid' \right\}$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid_{\cl}^2$ \\
+  {a} & $\emptyset$ & {a} & $\{\txid'\}$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v_0$};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v_2$};
+
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx) (locy) (versiony), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
+The second session guarantee that we formalise is given by \emph{monotonic writes} ($\MW$). It states that 
 whenever a transaction observes the effects of a version installed by some client $\cl$, then 
-it must be able to observe all the previous updates performed by such a client. 
-The order of updates of transaction identifiers is embedded in the set of transaction identifiers, 
-and it is given by $\txid \xrightarrow{\PO} \txid' \iff \exists \cl, n,m. n < m \wedge \txid = \txid_{\cl}^{n} \wedge 
-\txid' = \txid_{\cl}^{m}$. The execution test $\ET_{\MW}$ from \cref{fig:execution.tests} ensures 
+it must be able to observe all the previous updates performed by such a client. It prevents 
+scenarios like the kv-store depicted to the right, where transaction $\txid'$ observes the 
+version of $\ke_2$ carrying value $\val_2$, written by client $\cl$; but it does not observe the version 
+of $\ke_1$ carrying value $\val_1$, previously written by the same client.
+%The order of updates of transaction identifiers is embedded in the set of transaction identifiers, 
+%and it is given by $\txid \xrightarrow{\PO} \txid' \iff \exists \cl, n,m. n < m \wedge \txid = \txid_{\cl}^{n} \wedge 
+%\txid' = \txid_{\cl}^{m}$. 
+The execution test $\ET_{\MW}$ from \cref{fig:execution.tests} ensures 
 that, prior to executing a transaction, the set of versions included in the view of the client 
 must be prefix-closed with respect to the relation $\xrightarrow{\PO}$, thus modelling 
 monotonic writes.
 
-\subparagraph{Read Your Writes.}
-The third session guarantees states that a client must always been able to read any version 
-of a key that he previously wrote. Because a client always appends the version written by  
-a transaction as the latest of a kv-store, to enforce this consistency guarantee we require from 
-the execution test $\ET_{\RYW}$ of \cref{fig:execution.tests} that, after committing a transaction, 
-a client brings its view to the latest version of each key it wrote.  
+\paragraph{Read Your Writes.}
+\begin{wrapfigure}[5]{r}{0.45\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
 
-\subparagraph{Write Follow Reads}
-The last session guarantee states that if a write of some version $\nu$ follows (or is performed by the same transaction performing ) 
-a read of a version $\nu'$ in a session, 
-then any client observing the version $\nu$ must also observe the version $\nu'$. This consistency guarantee is 
-captured by th execution test $\ET_{\WFR}$ from Figure \cref{fig:execution.tests}
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
 
-\ac{The session guarantees must be explained better. But for now this will do.}
+\matrix(versionx) [version list, column 2/.style={text width=14mm}]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$ & {a} & $\txid_{\cl}^{2}$\\
+    {a} & $\left\{\txid_{\cl}^{1}, \txid_{\cl}^{2}\right\}$ & {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+\tikzvalue{versionx-1-5}{versionx-2-5}{locx-v2}{$1$};
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
 
-\subparagraph{Causal Consistency: }
-Causal Consistency requires that the observations made if a client observes a version 
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
+The third session guarantee states that a client must always been able to read any version 
+of a key that he previously wrote. This prevents scenarios like the kv-store depicted to the right 
+(assuming that the initial version of $\ke$ carries value $0$): this can be though as the result 
+of client $\cl$ trying to increment the value of $\ke$ twice, by first reading its value $\nat$ and then 
+installing a new version carrying  value $\nat+1$. However, if the client is not ensured to read its 
+own writes, nothing prevents it to read the initial version of $\ke$ in the second increment 
+(corresponding to the transaction $\tx_{\cl}^2$), and 
+install a new version carrying value $1$.
+%A client always appends the version of a key written by  
+%a transaction at the tail of the version list for such a key. Therefore, to enforce the 
+The Read your Writes ($\RYW$) consistency guarantee can be enforced via 
+the execution test $\ET_{\RYW}$ of \cref{fig:execution.tests}: after committing a transaction, 
+a client brings its view to the latest version for each key it wrote.  
+
+\paragraph{Write Follows Reads.}
+\begin{wrapfigure}[9]{r}{0.33\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid'$\\
+    {a} & $\{\txid\}$ & {a} & $\left\{ \txid_{\cl}^1 \right\}$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$\val_0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$\val_1$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid_{\cl}^2$ \\
+  {a} & $\emptyset$ & {a} & $\{\txid\}$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v_0$};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v_2$};
+
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx) (locy) (versiony), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
+The last session guarantee states that if a write of some version $\ver$ follows (or is performed by the same transaction performing ) 
+a read of a version $\ver'$ in a session, 
+then any client observing the version $\ver$ must also observe the version $\ver'$. The Write Follow Reads ($\WFR$) 
+consistency guarantee disallows the kv-store depicted to the right: a transaction $\txid$ observes the version $\ver_2$ of $\ke_2$,  
+carrying value $\val_2$ and being written by client $\cl$. However, the same transaction $\txid$ does not observe 
+the version of $\ke_1$ carrying value $\val_1$, read by $\cl$ prior to writing $\ver$. 
+The execution test $\ET_{\WFR}$ from Figure \cref{fig:execution.tests} prevents this and similar scenarios to occur.
+
+\paragraph{Causal Consistency.}
+Causal Consistency requires that if a client observes a version 
 $\ver$ of some key $\ke$, then it must also observe any version $\ver'$ of some key $\ke'$ 
 from which $\ver$ potentially depends \cite{cops}. A necessary and sufficient condition to enforce 
-causal consistency is that of enforcing the consistency guarantees $\MRd, \MW, \RYW, \WFR$ 
+causal consistency is that of enforcing the four session guarantees $\MRd, \MW, \RYW, \WFR$ 
 discussed above \cite{session2causal}. Therefore, we let $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} 
-\cap \ET_{\RYW} \cap \ET_{\WFR}$.
+\cap \ET_{\RYW} \cap \ET_{\WFR}$. 
+\textbf{\color{red} Needs to be checked because we do not have compositionality. But in this case 
+it should be fine.}
+%By \cref{prop:et.compositional}, 
+%kv-stores disallowed by causal consistency are exactly the kv-stores disallowed by at least one of the 
+%four session guarantees.
 %However, for the sake of completeness we prefer to 
 %give a definition of execution test for causal consistency after the standard definition. 
 %The notion of \emph{potential dependency} $\xrightrrow{\pdep}$ between versions is defined by 
@@ -307,44 +473,189 @@ discussed above \cite{session2causal}. Therefore, we let $\ET_{\CC} = \ET_{\MRd}
 %The notion of \emph{potential data dependency} between versions is given 
 %by $\ver \xrightarrow{\ddep} \ver'$ if $\WTx(\ver') \in  \RTx(\ver)$.
 
-\subparagraph{Update Atomic.} 
+\paragraph{Update Atomic ($\UA$).}
+\begin{wrapfigure}[5]{r}{0.45\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list, column 2/.style={text width=14mm}]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid$ & {a} & $\txid'$\\
+    {a} & $\{\txid, \txid'\}$ & {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+\tikzvalue{versionx-1-5}{versionx-2-5}{locx-v2}{$1$};
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
 This consistency model has been proposed in \cite{framework-concur}, though we 
 are not aware of any implementation. However, many implemented consistency models 
 can be obtained by strengthening Update Atomic. Roughly speaking, in Update Atomic 
-concurrent transactions writing to the same key cannot execute concurrently; this property 
-is known as write conflict detection. In the kv-stores 
-framework, we can compute the set of transactions that are concurrent by transaction $\txid$ 
-immediately before executing such a transaction. At the moment a client $\cl$ tries to 
-commit the effects of transaction $\txid$, then any transaction $\txid'$ that read or wrote versions not included 
-in the view of $\cl$ is concurrent to $\txid$. Following this intuition, we can enforce write 
-conflict detection by requiring that whenever a client $\cl$ wants to commit the effect of 
-transactions writing key $\ke$ in the kv-store $\hh$, then the view of $\cl$ must include all the versions of $\ke$. 
-Formally, this leads to the execution test $\ET_{\UA}$ defined in \cref{fig:execution.tests}
+concurrent transactions writing to the same key cannot execute concurrently, a property 
+that is known as write conflict detection. For example, $\UA$ prevents the kv-store to 
+the right to occur. There two transactions $\txid, \txid'$ concurrently increment the initial 
+version of $\ke$ by $1$. Note that this scenario is more general than the one exhibited by 
+$\RYW$, in that we do not require $\txid, \txid'$ to be executed by the same client 
+(in fact, the kv-store to the right is allowed by causal consistency and monotonic writes).
+To prevent this scenario from happening, the execution test $\ET_{\UA}$ requires 
+that a client $\cl$ can write to key $\ke$ in a transaction, only if its view prior 
+to the execution of the transaction pointed to the last version of $\ke$.
 
-\subparagraph{Consistent Prefix.}
-This consistency model strengthens causal consistency by requiring that if a client 
-sees observes the effects of a transaction $\txid$, then it also observe the effects 
-of any transaction $\txid'$ that committed before $\txid$. By Looking at the structure 
-of a kv-store, it is not immediate to infer a total order in which transactions have been 
-executed (this problem has been analysed in a slightly different setting, see \cite{SIanalysis,laws} 
-for details). An equivalent definition of consistent prefix requires that different clients 
-never see updates to the kv-stores performed in different order. We can enforce this property 
-by strengthening causal consistency with the requirement that clients, 
-after committing the effects of a transaction, always shift their view to 
-the most recent version of each key.  The execution $\ET_{\CP}$ for consistent 
-prefix is defined in \cref{fig:execution.tests}.
+%framework, we can compute the set of transactions that are concurrent by transaction $\txid$ 
+%immediately before executing such a transaction. At the moment a client $\cl$ tries to 
+%commit the effects of transaction $\txid$, then any transaction $\txid'$ that read or wrote versions not included 
+%in the view of $\cl$ is concurrent to $\txid$. Following this intuition, we can enforce write 
+%conflict detection by requiring that whenever a client $\cl$ wants to commit the effect of 
+%transactions writing key $\ke$ in the kv-store $\hh$, then the view of $\cl$ must include all the versions of $\ke$. 
+%Formally, this leads to the execution test $\ET_{\UA}$ defined in \cref{fig:execution.tests}
 
-\subparagraph{Parallel Snapshot Isolation and Snapshot Isolation.} 
+\paragraph{Consistent Prefix ($\CP$).}
+\begin{wrapfigure}[9]{r}{0.33\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_1$\\
+    {a} & $\left\{\txid_3\right\}$ & {a} & $\left\{ \txid_4 \right\}$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$\val_0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$\val_1$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid_2$ \\
+  {a} & $\left\{\txid_4\right\}$ & {a} & $\left\{\txid_3\right\}$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$\val_0$};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$\val_2$};
+
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx) (locy) (versiony), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
+This consistency model strengthens causal consistency by requiring that, if a client 
+observes the effects of a transaction $\txid$, then it also observe the effects 
+of any transaction $\txid'$ that commits before $\txid$. This property is 
+difficult to formulate in our setting, because kv-stores do not contain any 
+information about the total order in which transactions are executed. 
+However, suppose that in the kv-store $\hh$, a client $\cl$ with view $\vi$
+wants to execute a transaction with fingerprint $\opset$. In the case 
+that $(\otR, \ke, ) \in \opset$, then we can observe the following: 
+\begin{itemize}
+\item{\color{red} note to self: in CP $\AR_{\CP} = (\PO \cup \RF \cup \VO \cup \PO;\AD \cup \RF;\AD)^{+}$}
+\item the client will read the value of $\ke$ from the version $\hh(\ke,u)$. 
+For this to be possible, the transaction $\WTx(\hh(\ke,u))$ must have committed 
+before the transaction to be executed by $\cl$, {\color{red} Note to self: base case}, 
+\item for any client $\cl'$ and index $n$, $\txid_{\cl'}^{m}$ commits before $\txid_{\cl}^{n}$ 
+for all $m < n$, {\color{red} - case $\PO \subseteq \AR_{\CP}$}
+\item for any key $\ke'$ and index $i$, the transaction $\WTx(\hh(\ke', i))$ commits 
+before all of the transactions in $\RTx(\hh(\ke', i))$, {\color{red} - case $\RF \subseteq \AR_{\CP}$), 
+\item for any $\ke'$ and index $i$, then $\WTx(\hh(ke', j))$ commits before $\WTx(\hh(\ke', i))$ for 
+any $j < i$  - case $\VO \subseteq \AR_{\CP}$}
+\item for any $\ke'$ and integers $i,n$, if $\txid_{\cl'}^{n} \in \RTx(\hh(\ke', i))$, 
+then for any $j: i < j \leq \lvert \hh(\ke') \rvert - 1$, and index $m < n$, then 
+$\txid_{\cl'}^{m}$ commits before $\WTx(\hh(\ke,j))$ {\color{red} - to be explained 
+why: intuitively if $\txid_{\cl'}^{m}$ committed after $\WTx(\hh(\ke, j))$, 
+then $\txid_{\cl}^{m}$ would start after $\WTx(\hh(\ke, j))$ committed, 
+hence it would not be able to read a former version of $\ke$. This case corresponds 
+to $\PO; \AD \subseteq \AR_{\CP}$},
+\item for any $\ke',\ke''$ and indexes $i,j$, if $\txid \in \RTx(\hh(\ke', i)) \cap 
+\RTx(\hh(\ke'', j))$, then for any $j': j < j' \leq \lvert \hh(\ke'') \rvert - 1$, 
+$\WTx(\hh(\ke',i))$ comitted before $\WTx(\hh(\ke'', j'))$ {\color{red} 
+explanation similar to the case above - this is the case $\RF ; \AD \subseteq \AR_{\CP}$}, 
+\item if $\txid$ committed before $\txid'$, and $\txid'$ committed before $\txid''$, 
+then $\txid$ committed before $\txid''$.
+\end{itemize}
+We can define a relation $\mathsf{CommitBefore}_{\CP}(\hh, \cl, \vi, \ke)$ that 
+includes all the transactions that we know must have committed prior to the 
+execution of a transaction from client $\cl$, whose view on $\hh$ is $\vi$, 
+assuming that said transaction will read value $\ke$.
+Using a technique similar to the one proposed in \cite{laws}, it is possible to prove 
+that for $\cl$ to execute safely a transaction with fingerprint $\opset$, 
+then for each $\ke$ that is read in $\opset$, the view of $\cl$ must include 
+at least the transactions in $\mathsf{CommitsBefore}_{\CP}$. Following this intuition, 
+we let 
+\[ 
+\ET_{\CP} \vdash \hh, \vi \triangleright \opset: \vi' \iff 
+\forall (\otR, \ke, \_) \in \opset.\; \forall \ke', j. \WTx(\hh(\ke', j)) \in \mathsf{CommitBefore}_{\CP}(\hh, \cl, \vi, \ke) 
+\implies j \leq \vi(\ke)
+\]
+
+%{\color{red} the execution test as it is right now does not enforce consistent 
+%prefix. An alternative would be to encode kv-stores into dependency graphs, 
+%define the relation $\mathsf{CB} = 
+%((\PO \cup \RF) ; \AD?) \cup \VO)^{+}$ - I know, it does not make any sense, 
+%will try to explain at the meeting - and require that if $\txid$ is included 
+%in a view $\vi$, then all the transactions $\txid'$ such that $\txid' \xrightarrow{\mathsf{CB}} 
+%\txid$ must also be included in $\txid$. This works, but the problem is going to be how 
+%to explain it to people.}
+%An alternative 
+%formulation is that concurrent transactions never observe updates on the kv-store 
+%in different order. Consistent Prefix prevents the scenario depicted to the right: 
+%transactions $\txid_4$ reads the up-to-date version of $\ke_1$ and a stale version 
+%of $\ke_2$; in contrast, transaction $\txid_3$ reads a stale version of $\ke_2$ and 
+%an up-to-date version of $\ke_1$.
+%The execution test $\ET_{\CP}$ prevents this scenario by requiring that, immediately 
+%after committing a transaction $\txid$, a client $\cl$ brings its view to point to the 
+%most recent version of each key: this amount to require that the next time that $\cl$ 
+%executes a transaction, it will observe at least the effects of all the transactions that 
+%committed before $\txid$.
+%By Looking at the structure 
+%of a kv-store, it is not immediate to infer a total order in which transactions have been 
+%executed (this problem has been analysed in a slightly different setting, see \cite{SIanalysis,laws} 
+%for details). An equivalent definition of consistent prefix requires that different clients 
+%never see updates to the kv-stores performed in different order. We can enforce this property 
+%by strengthening causal consistency with the requirement that clients, 
+%after committing the effects of a transaction, always shift their view to 
+%the most recent version of each key.  
+%The execution $\ET_{\CP}$ for consistent 
+%prefix is defined in \cref{fig:execution.tests}.
+
+\paragraph{Parallel Snapshot Isolation (PSI) and Strong Session Snapshot Isolation (SI).} 
 These two consistency models are obtained by combining causal consistency with update atomic, 
 and consistent prefix with update atomic, respectively. Formally, we have 
 $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$, and $\ET_{\SI} = \ET_{\CC} \cap \ET_{\UA}$.
+\textbf{\color{red} Here is where things go awry. Even if we replace $\CP$ with the right specification, 
+we cannot encode $\ET_\SI$ as $\ET_{\CP} \cap \ET_{\UA}$. The alternative would be to 
+encode $SI$ directly using dependency graphs, similarly as for the $\CP$ case.} 
 \ac{There should be one sentence saying that we actually capture strong-session SI. 
 Also, I need to check which of the four consistency guarantees are embedded in $\ET_{\UA}$. 
 MR and MW are immediate; RYW and WFR should also be guaranteed.}
 
-\subparagraph{(Strict) Serialisability}
+\paragraph{(Strict) Serialisability}
 The last consistency model that we consider is serialisability. This consistency model 
-requires that there exist a serial, or sequential schedule of transaction. It can be 
-enforced by requiring that clients always see the most up-to-date version of a key, 
-i.e. that the view of a client before executing a transaction is always the newest one. 
-The execution test $\ET_{\SER}$ of \cref{fig:exec.tests} models exactly this scenario.
+requires that there exist a serial, or sequential schedule of transaction. 
+This prevents scenarios like the kv-store of \cref{fig:hheap-a}, which is instead allowed 
+by all the other execution tests that we have presented.
+The execution test $\ET_{\SER}$ enforces serialisability by requiring clients to 
+execute transactions only when their view of the kv-store is up-to-date.
+
+%The execution test $\ET_{\SER}$ of \cref{fig:exec.tests} models exactly this scenario.

@@ -1,4 +1,4 @@
-\subsection{Programming Language}
+\subsection{Operational Semantics for Clients of Kv-stores.}
 \azalea{I rewrote most of this section.}
 In this section we define a simple programming language for client programs interacting with a kv-store. Clients may only interact with the kv-store by 
 issuing read and write requests via transactions. 
@@ -47,13 +47,13 @@ For simplicity, we abstract away from aborting transactions
 \]
 \hrulefill
 \[
-	\evalE{\val}  \defeq  \val 
+	\evalE{\val}  =  \val 
 	\qquad 
-	\evalE{\var} \defeq \stk(\var) 
+	\evalE{\var} = \stk(\var) 
 	\qquad 
-	\evalE{\expr_{1} + \expr_{2}}  \defeq  \evalE{\expr_{1}} + \evalE{\expr_{2}} 
+	\evalE{\expr_{1} + \expr_{2}}  =  \evalE{\expr_{1}} + \evalE{\expr_{2}} 
 	\qquad
-	\evalE{\expr_{1} \times \expr_{2}}  \defeq  \evalE{\expr_{1}} \times \evalE{\expr_{2}} 
+	\evalE{\expr_{1} \times \expr_{2}}  =  \evalE{\expr_{1}} \times \evalE{\expr_{2}} 
 	\qquad 
 	\dots
 \]
@@ -184,14 +184,16 @@ For simplicity, we abstract away from aborting transactions
 %\end{definition}
  
 %\mypar{Programming Language}
-\emph{A program} \( \prog \) consists of a finite number of clients, where each client is associated with a unique identifier \( \thid \in \ThreadID \), and executes a sequential \emph{command}. The syntax of command is given in \cref{fig:semantics}. 
+\emph{A program} \( \prog \) consists of a finite number of clients, where each client is associated with a unique identifier \( \thid \in \ThreadID \), and executes a sequential \emph{command}. The syntax of commands is given in \cref{fig:semantics}. 
 %The clause $\expr, \transpri, \cmdpri, \trans$ and $\cmd$ 
 %denote expressions, transactional and non-transactional primitive commands, transactions and commands, respectively.
 The syntax of commands in our programming language is roughly standard, exception made for the following: 
-primitive commands that can be invoked by clients are split into transactional (corresponding to the $\transpri$ clause, in the Figure), for reading 
-and writing keys of the kv-store, and non-transactional (corresponding to $\cmdpri$) ones, used for computations over client-local data; 
-the former can be invoked only within the boundaries of transactions (corresponding to $\ptrans{\trans}$), which can 
-be executed by clients in commands (corresponding to $\cmd$). 
+primitive commands that can be invoked by clients are split into transactional ones, corresponding to the $\transpri$ clause in the Figure, and which used for reading 
+and writing keys of the kv-store; and non-transactional ones, corresponding to the $\cmdpri$ clause, and which are used for computations over client-local data. 
+Transactional primitive commands can be invoked only within the boundaries of transactions (corresponding to $\ptrans{\trans}$) executed by clients in commands;
+non-transactional primitive commands can be invoked without restrictions.
+% which can 
+%be executed by clients in commands (corresponding to $\cmd$). 
 %Commands ($\cmd$) are being equipped with a $\ptrans{\trans}$ clause for executing transactions. 
 %Read and Write operations over a key-value store, corresponding to the  $\cexpr$
 %We thus model a program $\prog$ as a function from client identifiers to commands (\cref{def:language}).
@@ -199,8 +201,9 @@ For clarity, we often write \( \cmd_{1}\ppar \dots \ppar \cmd_{n}\) as a syntact
 
 As it is usual, we assume a language of expressions 
 built from \emph{values}, which can be either keys or natural number and are ranged over by $\val, \val', \cdots$; 
-and client-local variables, which are ranged over by $\pvar{x}, \pvar{y}, \cdots$. The evaluation $\evalE{\expr}$ of  expression 
-$\expr$  is parametric in the (client-local) \emph{stack} $s: \Stacks \parfun \Val$, which is a function from variables to values.
+and client-local variables from a set $\Vars$, which are ranged over by $\pvar{x}, \pvar{y}, \cdots$. The evaluation $\evalE{\expr}$ of  expression 
+$\expr$  is parametric in the (client-local) \emph{stack} $s: \Vars \parfun \Val$, which is a function from variables to values. 
+Henceforth we let $\Stacks = \Vars \parfun \Val$
 
 Both transactional and non-transactional commands are equipped with a transformer relation $\toLTS{\cmdpri} \subseteq 
 (\Stacks \times \Heaps) \times (\Stacks \times \Heaps)$, as well as a 
@@ -213,7 +216,8 @@ that a client executing $\cmdpri$  performs on the kv-store. Note that non-trans
 the empty operation $\varepsilon$. 
 
 In \cref{fig:semantics} we illustrate few selected rules of the operational semantics of programs. 
-The reader can refer to \cref{app:semantics} for the complete set of rules of the semantics of clients. 
+The reader can refer to \cref{app:semantics} {\color{red} appendix reference missing} 
+for the complete set of rules of the semantics of clients. 
 The first rule in \cref{fig:semantics}, \rl{TPrimitive}, models the execution of both transactional and 
 non-transactional primitive commands within the scope of a transaction: the client maintains 
 a local-stack $\stk$, a key-value mapping $\h$ which is used to fetch the value of read operations, 
@@ -221,9 +225,11 @@ and a set of operations $\opset$ to be applied to the kv-store upon committing t
 By executing a primitive command $\cmdpri$,  the first two components are updated to $\stk'$ and 
 $\h'$, respectively, according to the transformer of the command. The set of operations associated with 
 the transaction is also updated to include the new operation $\op$ associated with $\cmdpri$, 
-via the operator $\addO$. By using this operator, we make sure that clients only record, for each key, the first 
-read (before a write), and the last write. This is in line with our assumption that transactions read from an atomic 
-snapshot of the kv-store, and clients observe either none or all the effects of a transaction.
+via the operator $\addO$. This operator enforces transactions to record, for each key, the first 
+read (before a write) and the last write. This is in line with our assumption that transactions read from an atomic 
+snapshot of the kv-store,
+(for each key, only the first read before a write fetches its value from the kv-store), 
+and clients observe either none or all the effects of a transaction (only the last write of each key is committed).
 
 Rule \rl{PCommit} models the execution of a transaction $\ptrans{\trans}$ within a command, under the execution 
 test $\ET$. Given a stack $\stk$, a 
