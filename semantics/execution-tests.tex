@@ -227,7 +227,8 @@ $j \leq \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO} \WTx(\hh(\ke, j))
 \UA & $(\otW, \ke,  \_) \in \opset \implies \vi(\ke) = \lvert \hh(\ke) \rvert - 1$\\
 %$j \leq \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO(\cl)} \WTx(\hh(\ke, j)) 
 %\implies i \leq \vi(\ke')$  
-\CP & $\vi'(\ke) = \lvert \updateKV(\hh, \vi, \_, \opset) \rvert - 1$\\
+\CP & $\vi'(\ke) = \lvert \updateKV(\hh, \vi, \_, \opset) \rvert - 1 \wedge{}$\\
+& $i < \vi(\ke) \wedge \vi(\ke') < j \implies \RTx(\hh(\ke, i)) \cap \RTx(\hh(\ke', j)) \neq \emptyset$\\
 \SER & $\vi(\ke) = \lvert \hh(\ke) \rvert -1$\\
 \hline
 \hline
@@ -237,7 +238,9 @@ $j \leq \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO} \WTx(\hh(\ke, j))
 \hline
 \CC & $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$\\
 \PSI & $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$\\
-$\SI$ & $\ET_{\SI} = \ET_{\CP} \cap \ET_{\UA}$\\
+$\SI$ & $\vi'(\ke) = \lvert \updateKV(\hh, \vi, \_, \opset) \rvert - 1 \wedge \big( i < \vi(\ke) \wedge \vi(\ke') < j \implies $\\
+& $ \RTx(\hh(\ke, i)) \cap (\RTx(\hh(\ke', j)) \cup \{\WTx(\hh(\ke', j))\} \neq \emptyset \big) \wedge {}$\\
+& $(\otW, \ke,  \_) \in \opset \implies \vi(\ke) = \lvert \hh(\ke) \rvert - 1$\\
 \hline
 %\multicolumn{3}{|c|}{Composite Execution Tests}\\
 %\hline
@@ -561,53 +564,158 @@ to the execution of the transaction pointed to the last version of $\ke$.
 \end{pgfonlayer}
 \end{tikzpicture}
 \end{wrapfigure}
-This consistency model strengthens causal consistency by requiring that, if a client 
+In centralised databases, where there is a total order in which transactions commit, 
+consistent prefix is described  by the following property: if a client 
 observes the effects of a transaction $\txid$, then it also observe the effects 
 of any transaction $\txid'$ that commits before $\txid$. This property is 
 difficult to formulate in our setting, because kv-stores do not contain any 
-information about the total order in which transactions are executed. 
-However, suppose that in the kv-store $\hh$, a client $\cl$ with view $\vi$
-wants to execute a transaction with fingerprint $\opset$. In the case 
-that $(\otR, \ke, ) \in \opset$, then we can observe the following: 
-\begin{itemize}
-\item{\color{red} note to self: in CP $\AR_{\CP} = (\PO \cup \RF \cup \VO \cup \PO;\AD \cup \RF;\AD)^{+}$}
-\item the client will read the value of $\ke$ from the version $\hh(\ke,u)$. 
-For this to be possible, the transaction $\WTx(\hh(\ke,u))$ must have committed 
-before the transaction to be executed by $\cl$, {\color{red} Note to self: base case}, 
-\item for any client $\cl'$ and index $n$, $\txid_{\cl'}^{m}$ commits before $\txid_{\cl}^{n}$ 
-for all $m < n$, {\color{red} - case $\PO \subseteq \AR_{\CP}$}
-\item for any key $\ke'$ and index $i$, the transaction $\WTx(\hh(\ke', i))$ commits 
-before all of the transactions in $\RTx(\hh(\ke', i))$, {\color{red} - case $\RF \subseteq \AR_{\CP}$), 
-\item for any $\ke'$ and index $i$, then $\WTx(\hh(ke', j))$ commits before $\WTx(\hh(\ke', i))$ for 
-any $j < i$  - case $\VO \subseteq \AR_{\CP}$}
-\item for any $\ke'$ and integers $i,n$, if $\txid_{\cl'}^{n} \in \RTx(\hh(\ke', i))$, 
-then for any $j: i < j \leq \lvert \hh(\ke') \rvert - 1$, and index $m < n$, then 
-$\txid_{\cl'}^{m}$ commits before $\WTx(\hh(\ke,j))$ {\color{red} - to be explained 
-why: intuitively if $\txid_{\cl'}^{m}$ committed after $\WTx(\hh(\ke, j))$, 
-then $\txid_{\cl}^{m}$ would start after $\WTx(\hh(\ke, j))$ committed, 
-hence it would not be able to read a former version of $\ke$. This case corresponds 
-to $\PO; \AD \subseteq \AR_{\CP}$},
-\item for any $\ke',\ke''$ and indexes $i,j$, if $\txid \in \RTx(\hh(\ke', i)) \cap 
-\RTx(\hh(\ke'', j))$, then for any $j': j < j' \leq \lvert \hh(\ke'') \rvert - 1$, 
-$\WTx(\hh(\ke',i))$ comitted before $\WTx(\hh(\ke'', j'))$ {\color{red} 
-explanation similar to the case above - this is the case $\RF ; \AD \subseteq \AR_{\CP}$}, 
-\item if $\txid$ committed before $\txid'$, and $\txid'$ committed before $\txid''$, 
-then $\txid$ committed before $\txid''$.
-\end{itemize}
-We can define a relation $\mathsf{CommitBefore}_{\CP}(\hh, \cl, \vi, \ke)$ that 
-includes all the transactions that we know must have committed prior to the 
-execution of a transaction from client $\cl$, whose view on $\hh$ is $\vi$, 
-assuming that said transaction will read value $\ke$.
-Using a technique similar to the one proposed in \cite{laws}, it is possible to prove 
-that for $\cl$ to execute safely a transaction with fingerprint $\opset$, 
-then for each $\ke$ that is read in $\opset$, the view of $\cl$ must include 
-at least the transactions in $\mathsf{CommitsBefore}_{\CP}$. Following this intuition, 
-we let 
-\[ 
-\ET_{\CP} \vdash \hh, \vi \triangleright \opset: \vi' \iff 
-\forall (\otR, \ke, \_) \in \opset.\; \forall \ke', j. \WTx(\hh(\ke', j)) \in \mathsf{CommitBefore}_{\CP}(\hh, \cl, \vi, \ke) 
-\implies j \leq \vi(\ke)
-\]
+information about the total order in which transactions committed. 
+As an alternative, we can specify $\CP$ via two different properties: 
+first, clients agree on the 
+order in which transactions install versions in a kv-store; and a client $\cl$ always 
+observes all the transactions that executed before its last transaction. This property 
+disallow disallows the kv-store depicted to the right: there 
+transaction $\txid_{3}$ observes that the 
+update of $\ke_2$ carrying value $\val_2$ happens before 
+the update of $\ke_1$ carrying value $\val_2$; vice versa , 
+$\txid_{4}$ observes that the update of $\ke_1$ carrying value $\val_1$ 
+happens before the update of $\ke_2$ carrying value  $\val_2$. 
+\begin{wrapfigure}[9]{r}{0.33\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
+    {a} & $\left\{\txid_{\cl'}^{2}\right\}$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$\val_0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$\val_1$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid_{\cl'}^1$ \\
+  {a} & $\left\{\txid_{cl}^{2}\right\}$ & {a} & $\emptyset$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$\val_0$};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$\val_2$};
+
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx) (locy) (versiony), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
+The second property required by $\CP$ is that at any given time, 
+a client observes the effects of all the transactions that  
+executed before the last transaction that such a client executed. 
+This property prevents a scenario like the one depicted to the 
+right: client $\cl$ does not observe the update to $\ke_2$ performed 
+by $\cl'$, and $\cl'$ does not observe the update to $\ke_1$ performed 
+by $\cl$. This property can be formalised by requiring that, after 
+a client executes a transaction, its view is shifted to the most recent 
+view of the data. The execution test $\ET_{\CP}$ is defined formally 
+in \cref{fig:execution.tests}; in \cref{sec:?} we prove that our specification  
+of $\CP$ using execution tests is precise. 
+
+
+%Recall that in our setting clients shift their view upon executing the 
+%transaction: the initial view abstracts the starting point of the 
+%transaction, while the final view abstracts its commit point.
+%Following this intuition, we compute an 
+%under-approximation $\CBef_{\CP}(\cl, \vi, \hh, \opset)$ 
+%of the set of transactions that a client $\cl$ with view $u$ 
+%must observe to have committed, when executing a transaction with 
+%fingerprint $\opset$. The definition of $\CBef_{\CP}$ is recursive, 
+%and follows an approach similar to the one proposed in \cite{laws}.
+%Formally, we let $\CBef_{\CP}(\cl, \vi, \hh, \opset)$ 
+%be the smallest set such that for all $i, j, j', n, m \in \Nat$, $\ke, \ke' \in \Keys$, 
+%$\val \in \Val$ and $\cl' \in \Clients$:
+%\[
+%\begin{array}{l}
+%%Base Cases
+%(\otR, \ke, \val) \in  \opset \implies   \WTx(\hh(\ke, \vi)) \in \CBef_{\CP}(\cl, \vi, \hh, \opset)\\
+%%(\oTW, \ke, \val) \in \opset \implies  \WTx(\hh(\ke, i)) \in \CBef_{\CP}(\cl, \vi, \hh, \opset)\\
+%\txid_{\cl}^{n} \text{ appears in } \hh \implies \txid_{\cl}^{n} \in \CBef_{\CP}(\cl, \vi, \hh \opset)\\
+%%Inductive Cases
+%% \WR \subseteq \AR
+%(\RTx(\hh(\ke, i)) \cap \CBef_{\CP}(\cl, \vi, \hh, \opset) \neq \emptyset \implies  \WTx(\hh(\ke,i)) \in \CBef_{\CP}(\cl, \vi, \hh, \opset)\\
+%%\VO \subseteq \AR
+%i < j \wedge \WTx(\hh(\ke,j)) \in \CBef_{\CP}(\cl, \vi, \hh, \opset) \implies  \WTx(\hh(\ke, i)) \in \CBef_{\CP}(\cl, \vi, \hh, \opset)\\
+%% PO \subseteq \AR 
+%m \leq n \wedge \txid_{\cl}^{n} \in \CBef_{\CP}(\cl, \vi, \hh, \opset) \implies  \txid_{\cl}^{m} \in \CBef_{\CP}(\cl, \vi, \hh, \opset)\\
+%% RF;RW \subseteq \AR
+%\txid \in \RTx(\hh(\ke, i)) \cap \RTx(\hh(\ke', j)) \wedge j < j' \wedge \WTx(\hh(\ke', j')) \in \CBef_{\CP}(\cl, \vi, \hh, \opset) 
+%\implies \\ \hspace{20pt} \WTx(\hh(\ke, i)) \in \CBef_{\CP}(\cl, \vi, \hh, \opset)\\
+%%\PO;RW \subseteq \AR 
+%m < n \wedge \txid_{\cl}^{n} \in \RTx(\hh(\ke,i)) \wedge i < j \wedge \WTx(\hh(\ke, j)) \in \CBef_{\CP}(\cl, \vi, \hh, \opset) 
+%\implies \\ \hspace{20pt} \txid_{\cl}^{m} \in \CBef_{\CP}(\cl, \vi, \hh, \opset)
+%\end{array}
+%\]
+%\begin{itemize}
+%\item if $(\oTR, \ke, \_) \in \opset$, then $\WTx(\hh(\ke, u)) \in \CB(\hh, \vi, \opset)$: 
+%because the $\txid_{\mathsf{now}}$ reads the version of 
+%$\ke$ at $\hh(\ke, \vi)$, then the transaction $\txid$ that wrote such 
+%a version must commit before $\txid_{\mathsf{now}}$,
+%\item for any $\txid_{\cl}^{n}$ appearing in the kv-store, $\txid_{\cl}^{n} 
+%\in \CB(\cl, \vi, \hh, \opset)$: any previous transaction executed by $\cl$ 
+%must commit before $\txid_{\mathsf{now}}$, 
+%\item 
+%\end{itemize}
+%However, suppose that in the kv-store $\hh$, a client $\cl$ with view $\vi$
+%wants to execute a transaction with fingerprint $\opset$. In the case 
+%that $(\otR, \ke, ) \in \opset$, then we can observe the following: 
+%\begin{itemize}
+%\item{\color{red} note to self: in CP $\AR_{\CP} = (\PO \cup \RF \cup \VO \cup \PO;\AD \cup \RF;\AD)^{+}$}
+%\item the client will read the value of $\ke$ from the version $\hh(\ke,u)$. 
+%For this to be possible, the transaction $\WTx(\hh(\ke,u))$ must have committed 
+%before the transaction to be executed by $\cl$, {\color{red} Note to self: base case}, 
+%\item for any client $\cl'$ and index $n$, $\txid_{\cl'}^{m}$ commits before $\txid_{\cl}^{n}$ 
+%for all $m < n$, {\color{red} - case $\PO \subseteq \AR_{\CP}$}
+%\item for any key $\ke'$ and index $i$, the transaction $\WTx(\hh(\ke', i))$ commits 
+%before all of the transactions in $\RTx(\hh(\ke', i))$, {\color{red} - case $\RF \subseteq \AR_{\CP}$}, 
+%\item for any $\ke'$ and index $i$, then $\WTx(\hh(ke', j))$ commits before $\WTx(\hh(\ke', i))$ for 
+%any $j < i$,  {\color{red} - case $\VO \subseteq \AR_{\CP}$}
+%\item for any $\ke'$ and integers $i,n$, if $\txid_{\cl'}^{n} \in \RTx(\hh(\ke', i))$, 
+%then for any $j: i < j \leq \lvert \hh(\ke') \rvert - 1$, and index $m < n$, then 
+%$\txid_{\cl'}^{m}$ commits before $\WTx(\hh(\ke,j))$ {\color{red} - to be explained 
+%why: intuitively if $\txid_{\cl'}^{m}$ committed after $\WTx(\hh(\ke, j))$, 
+%then $\txid_{\cl}^{m}$ would start after $\WTx(\hh(\ke, j))$ committed, 
+%hence it would not be able to read a former version of $\ke$. This case corresponds 
+%to $\PO; \AD \subseteq \AR_{\CP}$},
+%\item for any $\ke',\ke''$ and indexes $i,j$, if $\txid \in \RTx(\hh(\ke', i)) \cap 
+%\RTx(\hh(\ke'', j))$, then for any $j': j < j' \leq \lvert \hh(\ke'') \rvert - 1$, 
+%$\WTx(\hh(\ke',i))$ comitted before $\WTx(\hh(\ke'', j'))$ {\color{red} 
+%explanation similar to the case above - this is the case $\RF ; \AD \subseteq \AR_{\CP}$}, 
+%\item if $\txid$ committed before $\txid'$, and $\txid'$ committed before $\txid''$, 
+%then $\txid$ committed before $\txid''$.
+%\end{itemize}
+%We can define a relation $\mathsf{CommitBefore}_{\CP}(\hh, \cl, \vi, \ke)$ that 
+%includes all the transactions that we know must have committed prior to the 
+%execution of a transaction from client $\cl$, whose view on $\hh$ is $\vi$, 
+%assuming that said transaction will read value $\ke$.
+%Using a technique similar to the one proposed in \cite{laws}, it is possible to prove 
+%that for $\cl$ to execute safely a transaction with fingerprint $\opset$, 
+%then for each $\ke$ that is read in $\opset$, the view of $\cl$ must include 
+%at least the transactions in $\mathsf{CommitsBefore}_{\CP}$. Following this intuition, 
+%we let 
+%\[ 
+%\ET_{\CP} \vdash \hh, \vi \triangleright \opset: \vi' \iff 
+%\forall (\otR, \ke, \_) \in \opset.\; \forall \ke', j. \WTx(\hh(\ke', j)) \in \mathsf{CommitBefore}_{\CP}(\hh, \cl, \vi, \ke) 
+%\implies j \leq \vi(\ke)
+%\]
 
 %{\color{red} the execution test as it is right now does not enforce consistent 
 %prefix. An alternative would be to encode kv-stores into dependency graphs, 
@@ -639,20 +747,93 @@ we let
 %The execution $\ET_{\CP}$ for consistent 
 %prefix is defined in \cref{fig:execution.tests}.
 
-\paragraph{Parallel Snapshot Isolation (PSI) and Strong Session Snapshot Isolation (SI).} 
+\paragraph{Parallel Snapshot Isolation (PSI)} 
 These two consistency models are obtained by combining causal consistency with update atomic, 
 and consistent prefix with update atomic, respectively. Formally, we have 
 $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$, and $\ET_{\SI} = \ET_{\CC} \cap \ET_{\UA}$.
-\textbf{\color{red} Here is where things go awry. Even if we replace $\CP$ with the right specification, 
-we cannot encode $\ET_\SI$ as $\ET_{\CP} \cap \ET_{\UA}$. The alternative would be to 
-encode $SI$ directly using dependency graphs, similarly as for the $\CP$ case.} 
-\ac{There should be one sentence saying that we actually capture strong-session SI. 
-Also, I need to check which of the four consistency guarantees are embedded in $\ET_{\UA}$. 
-MR and MW are immediate; RYW and WFR should also be guaranteed.}
+%\textbf{\color{red} Here is where things go awry. Even if we replace $\CP$ with the right specification, 
+%we cannot encode $\ET_\SI$ as $\ET_{\CP} \cap \ET_{\UA}$. The alternative would be to 
+%encode $SI$ directly using dependency graphs, similarly as for the $\CP$ case.} 
+
+\paragraph{Snapshot Isolation (SI)}
+\begin{wrapfigure}[18]{r}{0.44\textwidth}
+\vspace{-10pt}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_1$ & {a} & $\txid_2$\\
+    {a} & $\emptyset$ & {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$\val_0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$\val_1$};
+\tikzvalue{versionx-1-5}{versionx-2-5}{locx-v1}{$\val_2$};
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid_3$ \\
+  {a} & $\left\{\txid_2\right\}$ & {a} & $\emptyset$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$\val_0$};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$\val_1$};
+
+%Location z
+\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
+\matrix(versionz) [version list]
+   at ([xshift=\tikzkvspace]locz.east) {
+ {a} & $\txid_0$ & {a} & $\txid_3$ & {a} & $\txid_4$ \\
+  {a} & $\emptyset$ & {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+
+\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$\val_0$};
+\tikzvalue{versionz-1-3}{versionz-2-3}{locz-v1}{$\val_1$};
+\tikzvalue{versionz-1-5}{versionz-2-5}{locz-v2}{$\val_2$};
+
+%Location w
+\path (locz.south) + (0,\tikzkeyspace) node (locw) {$\ke_4 \mapsto$};
+\matrix(versionw) [version list]
+    at ([xshift=\tikzkvspace]locw.east) {
+    {a} & $\txid_0$ & {a} & $\txid_4$ \\
+    {a} & $\{\txid_1\}$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionw-1-1}{versionw-2-1}{locw-v0}{$\val_0$};
+\tikzvalue{versionw-1-3}{versionw-2-3}{locw-v1}{$\val_1$};
+%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{background}
+\node(b) [background, fit=(locx) (versionx) (locw) (versionw), inner sep = \pgflinewidth] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{wrapfigure}
+When the total order in which transactions commit is known, SI 
+can be specified as the weakest consistency model that guarantees both 
+prefix consistency and update atomic \cite{gsi,framework-concur}. 
+On the other hand, the same is not true in our framework, where 
+transactions are not totally ordered: for example, the kv-store to 
+the right is included both in $\CMs(\ET_{\CP})$ and $\CMs(\ET_{\UA})$, 
+but it is forbidden by SI.\footnote{This problem is not 
+limited to our setting: because kv-stores are isomorphic to Adya's dependency 
+graph, the same problem arises there.} To overcome this problem, we place in 
+$\ET_{\SI}$ one more constraint in addition to the ones that 
+define $\ET_{\CP}$ and $\ET_{\UA}$: if a version read by transaction $\txid$ 
+is to the left of the view $\vi$ of the client wishing to update a transaction, then 
+all the versions written by $\txid$ must be to the left of $\vi$. In \cref{sec:?} 
+we prove that the execution test $\ET_{\SI}$, defined in \cref{fig:execution.tests}, 
+precisely capture SI.
 
 \paragraph{(Strict) Serialisability}
 The last consistency model that we consider is serialisability. This consistency model 
-requires that there exist a serial, or sequential schedule of transaction. 
+requires that there exists a serial, or sequential schedule of transaction. 
 This prevents scenarios like the kv-store of \cref{fig:hheap-a}, which is instead allowed 
 by all the other execution tests that we have presented.
 The execution test $\ET_{\SER}$ enforces serialisability by requiring clients to 
