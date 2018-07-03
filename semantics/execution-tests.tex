@@ -65,7 +65,7 @@ We model this via the function $\updateKV: \HisHeaps \times \Views \times \TxID 
 In the definition above, the operator $\lcat$ is used to append a new version at the tail of 
 a list of versions, while given a list of versions $\vilist = \ver_0\cdots \ver_n$ and $i=0,\cdots,n$, 
 $\vilist[i \mapsto \ver]$ denotes the list of versions $\vilist' = \ver_0 \cdots \ver_{i-1} \ver \ver_{i+1} \cdots 
-\ver_{n}$
+\ver_{n}$. 
 Note that, under the assumption that fingerprints contain at most one read and one write 
 operation for each key $\ke$, the function $\updateKV$ is well defined. Furthermore, 
 let $\nextTxId(\cl, \hh) = 
@@ -93,10 +93,43 @@ which is appended to the tail of $\hh(\ke)$. The assumption that versions of
 a given key are totally ordered and consistent with the order in which 
 transactions commit is standard \cite{adya,framework-concur,seebelieve}. 
 
+Note that if two different clients $\cl_1$ and $\cl_2$ commit transactions 
+whose fingerprints $\opset_1$ and $\opset_2$ do not contain a write 
+to the same key, then the order in which the updates are executed is 
+not relevant. 
+%\begin{proposition}
+%Let $\hh \in \HisHeaps$, $\vi_1, \vi_2 \in \Views(\hh)$ and let $\txid_1, \txid_2 \in \TxID$ 
+%be two transaction identifiers that do not appear in $\hh$.
+%Let also $\opset_1, \opset_2 \in \powerset{\Ops}$ be such that 
+%whenever $(\otW, \ke, \_) \in \opset_1$ for some key $\ke$, then 
+%$(\otW, \ke, \val) \notin \opset_2$ for all $\val \in \Val$. Then 
+%\[
+%\begin{array}{l}
+%\big( \texttt{ let } \hh_1 = \updateKV(\hh, \vi_1, \txid_1, \opset_1) 
+%\texttt{ in } \updateKV(\hh_1, \vi_2, \txid_2, \opset_2) \big) = \\
+%\big( \texttt{ let } \hh_2 = \updateKV(\hh, \vi_2, \txid_2, \opset_2) 
+%\texttt{ in } \updateKV(\hh_1, \vi_1, \txid_1, \opset_1) \big)
+%\end{array}
+%\]
+%\end{proposition}
+\begin{proposition}
+Let $\hh \in \HisHeaps$, $\vi_1, \vi_2 \in \Views(\hh)$ and let $\cl_1, \cl_2 \in \Clients$ 
+be such that $\cl_1 \neq \cl_2$. 
+Let also $\opset_1, \opset_2 \in \powerset{\Ops}$ be such that 
+whenever $(\otW, \ke, \_) \in \opset_1$ for some key $\ke$, then 
+$(\otW, \ke, \val) \notin \opset_2$ for all $\val \in \Val$. Then 
+\[
+\begin{array}{l}
+\{ \updateKV(\hh_1, \vi_2, \cl_2, \opset_2) \mid \hh_1 \in \updateKV(\hh, \vi_1, \cl_1, \opset_1)\} = \\
+\{ \updateKV(\hh_2, \vi_1, \cl_1, \opset_1) \mid \hh_2 \in \updateKV(\hh, \vi_2, \cl_2, \opset_2)\}\\
+\end{array}
+\]
+\end{proposition}
+
 \mypar{Execution Tests and Specification of Consistency Models.}
 Formally, a \emph{consistency model} $\CMs$ is a 
 set of kv-stores. Each $\hh \in \CMs$ represents a possible scenario that 
-can be obtained as a result of multiple clients committing a transaction. 
+can be obtained as a result of multiple clients committing transactions. 
 For example, \emph{serialisability} can be described as the set 
 of kv-stores for which it is possible to recover a total schedule of transactions, 
 such that each read operation on key $\ke$ fetches its value from the 
@@ -115,7 +148,7 @@ Similarly, to specify consistency models we adopt the notion of
 \emph{execution tests}. 
 \ac{I start believing that \emph{commit test} may be more appropriate}
 An execution test 
-$\ET \subseteq \HisHeaps \times \Views \times  \times \powerset{\Ops} \times \Views$ 
+$\ET \subseteq \HisHeaps \times \Views  \times \powerset{\Ops} \times \Views$ 
 is a set of tuples of the form $(\hh, \vi, \opset, \vi')$, such that
 \textbf{(i)} whenever $(\otR, \ke, \val) \in \opset$ then $\hh(\ke, \vi) = \val$, and \textbf{(ii)} 
 it is downward-closed with respect to inclusion over fingerprints: 
@@ -143,28 +176,42 @@ in lieu of $(\hh, \vi, \opset, \vi') \in \ET$.
 Execution tests induce consistency models in the following way: 
 \begin{definition}
 \label{def:cm}
-A kv-store $\hh$ is \emph{initial} if for any key $\ke \in \dom(\hh)$, 
-$\hh(\ke) = (\val_0, \txid_0, \_)$. A configuration $\conf$ is 
-initial  if $\conf = (\hh, \viewFun)$ for some initial $\hh$.
-\ac{Initial kv-stores should have been defined before.}
-Let $\ET$ be an execution test. The set of all configurations 
-induced by $\ET$ is the smallest set $\mathsf{Configs}(\ET)$ 
-such that 
-\[
-\begin{array}{l}
-\forall \conf. \conf \text{ is initial} \implies \conf \in \mathsf{Configs}(\ET)\\
-\forall \hh, \cl, \vi'.\; (\hh, \viewFun) \in \mathsf{Configs}(\ET) \wedge \viewFun(\cl) \viewleq \vi' \implies (\hh, \viewFun\rmto{\cl}{\vi'}) \in \mathsf{Configs}(\ET)\\
-\forall \hh, \cl, \opset, \vi, \vi'.\; \vi = (\viewFun(\cl) \wedge \ET \vdash (\hh, \vi) \triangleright \opset : \vi') \implies {}\\
-\hfill \forall \hh' \in (\updateKV(\hh, \vi, \cl, \opset). (\hh', \viewFun\rmto{\cl}{\vi'}) \in \mathsf{Configs}(\ET) 
-\end{array}
-\]
+Given an execution test $\ET$, a client $\cl$, a view $\vi$ and a 
+fingerprint $\opset$, we define the relation $\xrightarrowtriangle{cl, \opset, \vi}_{\ET}
+\subseteq \Confs \times \Confs$ by letting $(\hh_1, \viewFun_1) \xrightarrowtriangle{cl,\opset, \vi}_{\ET} 
+(\hh_2, \viewFun_2)$ whenever $\ET \vdash (\hh_1, \vi') \triangleright \opset: \vi$ for some 
+$\vi': \viewFun_1(\cl) \viewleq \vi'$, $\hh_2 \in \updateKV(\hh_1, \vi', \cl, \opset)$ and 
+$\viewFun_2 = \viewFun_1\rmto{\cl}{\vi}$.
 
-The \emph{consistency model} induced by $\ET$ is defined as 
+The set of configurations induced by $\ET$ is given by 
 \[
-\CMs(\ET) = \{ \hh \mid \exists \vi.\; (\hh, \vi) \in \mathsf{Configs}(\ET) \}.
+\Confs(\ET) = \{ \conf \mid \exists \conf_0. \conf_0 \text{ is initial } \wedge \conf_0 \xrightarrowtriangle{\_}_{\ET} \cdots \xrightarrowtriangle{\_}_{\ET} \conf \}.
 \]
+The consistency model induced by $\ET$ is given by 
+\[ 
+\CMs(\ET) = \{ \hh \mid (\hh, \_) \in \Confs(\ET) \}.
+\]
+%A kv-store $\hh$ is \emph{initial} if for any key $\ke \in \dom(\hh)$, 
+%$\hh(\ke) = (\val_0, \txid_0, \_)$. A configuration $\conf$ is 
+%initial  if $\conf = (\hh, \viewFun)$ for some initial $\hh$. 
+%\ac{Initial kv-stores should have been defined before.}
+%Let $\ET$ be an execution test: the set of all configurations 
+%induced by $\ET$ is the smallest set $\mathsf{Configs}(\ET)$ 
+%such that 
+%\[
+%\begin{array}{l}
+%\forall \conf. \conf \text{ is initial} \implies \conf \in \mathsf{Configs}(\ET)\\
+%%\forall \hh, \cl, \vi'.\; (\hh, \viewFun) \in \mathsf{Configs}(\ET) \wedge \viewFun(\cl) \viewleq \vi' \implies (\hh, \viewFun\rmto{\cl}{\vi'}) \in \mathsf{Configs}(\ET)\\
+%\forall \hh, \cl, \opset, \vi, \vi', \vi''.\; \vi = (\viewFun(\cl) \wedge \vi \viewleq \vi' \wedge \ET \vdash (\hh, \vi') \triangleright \opset : \vi'') \implies {}\\
+%\hfill \forall \hh' \in (\updateKV(\hh, \vi', \cl, \opset). (\hh', \viewFun\rmto{\cl}{\vi''}) \in \mathsf{Configs}(\ET) 
+%\end{array}
+%\]
+%
+%The \emph{consistency model} induced by $\ET$ is defined as 
+%\[
+%\CMs(\ET) = \{ \hh \mid \exists \vi.\; (\hh, \vi) \in \mathsf{Configs}(\ET) \}.
+%\]
 \end{definition}
-
 Thus, consistency models are computed from execution tests by closing the set of initial kv-stores with 
 respect to two operations: replacing the view of a client on the kv-store with a newer one, and committing 
 the effects of a transaction. 
@@ -198,6 +245,82 @@ Let $\ET_1 \subseteq \ET_2$. Then $\CMs(\ET_1) \subseteq \CMs(\ET_2)$.
 %\end{example}
 %\ac{Looking at compositionality gets us into problems that we will never solve before 
 %the deadline.}
+
+\mypar{Compositionality for Execution Tests.} 
+A desirable property that one would request from execution 
+test is compositionality: the consistency model induced by 
+a composite execution test can be recovered from the consistency 
+models generated by each execution test: that is, 
+\[ 
+\forall \ET_1, \ET_2. \CMs(\ET_1 \cap \ET_2) = \CMs(\ET_1) \cap \CMs(\ET_2).
+\]
+Unfortunately, this property is not satisfied by execution tests in their 
+most general setting, as the following example shows: 
+\begin{example}
+\label{ex:noncompositional.et}
+Define the following terms: 
+\[
+\begin{array}{lcl}
+\hh_0 &=& [\ke_1 \mapsto \val_0, \txid_0, \emptyset]\\
+\hh_1 &=& \big[\ke_1 \mapsto \big( (\val_0, \txid_0, \emptyset) \lcat (\val_2, \txid_{\cl_1}^{1}, \emptyset)\big) , \ke_2 \mapsto (\val_0, \txid_0, \emptyset) \big]\\
+\hh_2 &=& \big[\ke_1, \mapsto (\val_0, \txid_0, \emptyset), \ke_2 \mapsto \big( (\val_0, \txid_0, \emptyset) \lcat (\val_2, \txid_{\cl_2}^{1}, \emptyset) \big) \big]\\
+\hh_3 &=& \big[\ke_1 \mapsto \big( (\val_0, \txid_0, \emptyset) \lcat (\val_2, \txid_{\cl_1}^{1}, \emptyset)\big), 
+                         \ke_2 \mapsto \big( (\val_0, \txid_0, \emptyset) \lcat (\val_2, \txid_{\cl_2}^{1}, \emptyset) \big) \big]\\
+&&\\
+\vi_0 &=& [\ke_1 \mapsto 0, \ke_2 \mapsto 0]\\
+\viewFun_0 &=& [\cl_1 \mapsto \vi_0, \cl_2 \mapsto \vi_0]\\
+&&\\
+\ET_1 &\vdash& (\hh_0, \vi_0) \triangleright \{(\otW, \ke_1, \val_1)\} : \vi_0\\
+\ET_1 &\vdash& (\hh_1, \vi_0) \triangleright \{(\otW, \ke_2, \val_2)\} : \vi_0\\
+&&\\
+\ET_2 &\vdash& (\hh_0, \vi_0) \triangleright \{(\otW, \ke_2, \val_2)\} : \vi_0\\
+\ET_2 &\vdash& (\hh_2, \vi_0) \triangleright \{(\otW, \ke_1, \val_1)\} : \vi_0.
+\end{array}
+\]
+There are no further constraints on $\ET_1, \ET_2$.
+For $\ET_1$, we have that 
+\[
+\begin{array}{l}
+(\hh_0, \viewFun_0) \xrightarrowtriangle{(\cl_1, \{(\otW, \ke_1, \val_1)\}, \vi_0)}_{\ET_1} 
+(\hh_1, \viewFun_0) \xrightarrowtriangle{(\cl_2, \{(\otW, \ke_2, \val_2)\}, \vi_0)}_{\ET_2} (\hh_3, \viewFun_0), \\
+(\hh_0, \viewFun_0) \xrightarrowtriangle{(\cl_2, \{(\otW, \ke_2, \val_2)\}, \vi_0)}_{\ET_2} 
+(\hh_2, \viewFun_0) \xrightarrowtriangle{(\cl_1, \{(\otW, \ke_1, \val_1)\}, \vi_0)}_{\ET_1} (\hh_3, \viewFun_0).\\
+\end{array}
+\] 
+Therefore, we have that $\hh_3 \in \CMs(\ET_1) \cap \CMs(\ET_2)$. On the other hand, it is immediate 
+to observe that $\ET_1 \cap \ET_2 = \emptyset$, and therefore $\hh_3 \notin \CMs(\ET_1 \cap \ET_2)$.
+\end{example}
+The reason why compositionality fails, for the execution tests of \cref{ex:noncompositional.et}, 
+is that both the execution tests $\ET_1, \ET_2$ require that the fingerprints 
+$\{(\otW, \ke_1, \_)\}, \{(\otW, \ke_2, \_)\}$ commit in different order: in $\ET_1$, the write to $\ke_1$ must commit 
+before the write to $\ke_2$, and vice versa for $\ET_2$. On the other hand, 
+because the two fingerprints above do not write to the same key, 
+the order in which they are committed should not be relevant: by changing the order 
+in which different clients commit such fingerprints to a kv-store, the result stays same. 
+\begin{definition}
+Two triples $(\cl_1, \opset_1, \vi_1)$ and $(\cl_2, \opset_2, \vi_2)$ are 
+conflicting if either $\cl_1 = \cl_2$, or there exists a key $\ke$ such that 
+$(\otW, \ke, \_) \in \opset_1, (\otW, \ke, \_) \in \opset_2$. 
+
+An execution test is \emph{commutative} if, whenever $(\cl_1, \opset_1, \vi_1)$, 
+$(\cl_2, \opset_2, \vi_2)$ are non-conflicting, then for any $\hh_0, \hh', \viewFun, 
+\vi_1, \vi_2, \vi_1', \vi_2'$ such that $\vi_1, \vi_2 \in \Views(\hh_0)$, we have that 
+\[
+\begin{array}{lr}
+(\hh_0, \viewFun[\cl_1 \mapsto \vi_1, \cl_2 \mapsto \vi_2]) \xrightarrowtriangle{(\cl_1, \opset_1, \vi_1')}_{\ET_1} 
+\_ \xrightarrowtriangle{(\cl_2, \opset_2, \vi_2')}_{\ET_2} (\hh', \viewFun) &\implies \\
+(\hh_0, \viewFun[\cl_1 \mapsto \vi_1, \cl_2 \mapsto \vi_2]) \xrightarrowtriangle{(\cl_2, \opset_2, \vi_2')}_{\ET_1} 
+\_ \xrightarrowtriangle{(\cl_1, \opset_1, \vi_1')}_{\ET_2} (\hh', \viewFun)
+\end{array}
+\]
+\end{definition}
+
+\begin{theorem}
+Let $\ET_1, \ET_2$ be two execution tests. If $\ET_1$ is commutative, 
+then $\CMs(\ET_1 \cap \ET_2) = \CMs(\ET_1) \cap \CMs(\ET_2)$. 
+Furthermore, if $\ET_1, \ET_2$ are commutative, then $\ET_1 \cap \ET_2$ 
+is commutative.
+\end{theorem}
 
 \mypar{Examples of Execution Tests and Consistency Models.}
 
@@ -397,7 +520,7 @@ The third session guarantee states that a client must always been able to read a
 of a key that he previously wrote. This prevents scenarios like the kv-store depicted to the right 
 (assuming that the initial version of $\ke$ carries value $0$): this can be though as the result 
 of client $\cl$ trying to increment the value of $\ke$ twice, by first reading its value $\nat$ and then 
-installing a new version carrying  value $\nat+1$. However, if the client is not ensured to read its 
+installing a new version carrying value $\nat+1$. However, if the client is not ensured to read its 
 own writes, nothing prevents it to read the initial version of $\ke$ in the second increment 
 (corresponding to the transaction $\tx_{\cl}^2$), and 
 install a new version carrying value $1$.
@@ -526,8 +649,8 @@ to the execution of the transaction pointed to the last version of $\ke$.
 %Formally, this leads to the execution test $\ET_{\UA}$ defined in \cref{fig:execution.tests}
 
 \paragraph{Consistent Prefix ($\CP$).}
-\begin{wrapfigure}[9]{r}{0.33\textwidth}
-\vspace{-10pt}
+\begin{wrapfigure}[17]{r}{0.33\textwidth}
+%\vspace{-10pt}
 \begin{tikzpicture}
 \begin{pgfonlayer}{foreground}
 %Uncomment line below for help lines
@@ -562,26 +685,7 @@ to the execution of the transaction pointed to the last version of $\ke$.
 \begin{pgfonlayer}{background}
 \node(b) [background, fit=(locx) (versionx) (locy) (versiony), inner sep = \pgflinewidth] {};
 \end{pgfonlayer}
-\end{tikzpicture}
-\end{wrapfigure}
-In centralised databases, where there is a total order in which transactions commit, 
-consistent prefix is described  by the following property: if a client 
-observes the effects of a transaction $\txid$, then it also observe the effects 
-of any transaction $\txid'$ that commits before $\txid$. This property is 
-difficult to formulate in our setting, because kv-stores do not contain any 
-information about the total order in which transactions committed. 
-As an alternative, we can specify $\CP$ via two different properties: 
-first, clients agree on the 
-order in which transactions install versions in a kv-store; and a client $\cl$ always 
-observes all the transactions that executed before its last transaction. This property 
-disallow disallows the kv-store depicted to the right: there 
-transaction $\txid_{3}$ observes that the 
-update of $\ke_2$ carrying value $\val_2$ happens before 
-the update of $\ke_1$ carrying value $\val_2$; vice versa , 
-$\txid_{4}$ observes that the update of $\ke_1$ carrying value $\val_1$ 
-happens before the update of $\ke_2$ carrying value  $\val_2$. 
-\begin{wrapfigure}[9]{r}{0.33\textwidth}
-\vspace{-10pt}
+\end{tikzpicture}\\
 \begin{tikzpicture}
 \begin{pgfonlayer}{foreground}
 %Uncomment line below for help lines
@@ -618,6 +722,60 @@ happens before the update of $\ke_2$ carrying value  $\val_2$.
 \end{pgfonlayer}
 \end{tikzpicture}
 \end{wrapfigure}
+In centralised databases, where there is a total order in which transactions commit, 
+consistent prefix is described  by the following property: if a client 
+observes the effects of a transaction $\txid$, then it also observe the effects 
+of any transaction $\txid'$ that commits before $\txid$. This property is 
+difficult to formulate in our setting, because kv-stores do not contain any 
+information about the total order in which transactions committed. 
+As an alternative, we can specify $\CP$ via two different properties: 
+first, clients agree on the 
+order in which transactions install versions in a kv-store; and a client $\cl$ always 
+observes all the transactions that executed before its last transaction. This property 
+disallow disallows the kv-store depicted to the right: there 
+transaction $\txid_{3}$ observes that the 
+update of $\ke_2$ carrying value $\val_2$ happens before 
+the update of $\ke_1$ carrying value $\val_2$; vice versa , 
+$\txid_{4}$ observes that the update of $\ke_1$ carrying value $\val_1$ 
+happens before the update of $\ke_2$ carrying value  $\val_2$. 
+%\begin{wrapfigure}[9]{r}{0.33\textwidth}
+%\vspace{-10pt}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%Uncomment line below for help lines
+%%\draw[help lines] grid(5,4);
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%
+%\matrix(versionx) [version list]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
+%    {a} & $\left\{\txid_{\cl'}^{2}\right\}$ & {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$\val_0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$\val_1$};
+%
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%\matrix(versiony) [version list]
+%   at ([xshift=\tikzkvspace]locy.east) {
+% {a} & $\txid_0$ & {a} & $\txid_{\cl'}^1$ \\
+%  {a} & $\left\{\txid_{cl}^{2}\right\}$ & {a} & $\emptyset$\\
+%};
+%
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$\val_0$};
+%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$\val_2$};
+%
+%%\node[version node, fit=(locxcells-1-1) (locxcells-2-1), fill=white, inner sep= 0cm, font=\Large] (locx-v0) {$0$};
+%%\node[version node, fit=(locxcells-1-3) (locxcells-2-3), fill=white, inner sep=0cm, font=\Large] (locx-v1) {$1$};
+%\end{pgfonlayer}
+%
+%\begin{pgfonlayer}{background}
+%\node(b) [background, fit=(locx) (versionx) (locy) (versiony), inner sep = \pgflinewidth] {};
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\end{wrapfigure}
 The second property required by $\CP$ is that at any given time, 
 a client observes the effects of all the transactions that  
 executed before the last transaction that such a client executed. 
@@ -756,7 +914,7 @@ $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$, and $\ET_{\SI} = \ET_{\CC} \cap \ET_{\U
 %encode $SI$ directly using dependency graphs, similarly as for the $\CP$ case.} 
 
 \paragraph{Snapshot Isolation (SI)}
-\begin{wrapfigure}[18]{r}{0.44\textwidth}
+\begin{wrapfigure}[17]{r}{0.44\textwidth}
 \vspace{-10pt}
 \begin{tikzpicture}
 \begin{pgfonlayer}{foreground}
@@ -801,8 +959,8 @@ $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$, and $\ET_{\SI} = \ET_{\CC} \cap \ET_{\U
 \path (locz.south) + (0,\tikzkeyspace) node (locw) {$\ke_4 \mapsto$};
 \matrix(versionw) [version list]
     at ([xshift=\tikzkvspace]locw.east) {
-    {a} & $\txid_0$ & {a} & $\txid_4$ \\
-    {a} & $\{\txid_1\}$ & {a} & $\emptyset$ \\
+    {a} & $\txid_0$ & {a} & $\txid_1$ \\
+    {a} & $\{\txid_4\}$ & {a} & $\emptyset$ \\
 };
 \tikzvalue{versionw-1-1}{versionw-2-1}{locw-v0}{$\val_0$};
 \tikzvalue{versionw-1-3}{versionw-2-3}{locw-v1}{$\val_1$};
