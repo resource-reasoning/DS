@@ -359,7 +359,7 @@ $j \leq \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO} \WTx(\hh(\ke, j))
 \implies i \leq \vi(\ke')$
 \\
 \RYW & $(\otW, \ke, \stub) \in \opset \implies \vi'(\ke) = \lvert \hh(\ke) \rvert$\\
-\WFR & $j \leq \vi(\ke) \wedge \txid \in \RTx(\hh(\ke', i)) \wedge \txid \xrightarrow{\PO} 
+\WFR & $j \leq \vi(\ke) \wedge \txid \in \RTx(\hh(\ke', i)) \wedge \txid {\xrightarrow{\PO}}^{*}
 \WTx(\ke, j) ) \implies i \leq \vi(\ke')$\\
 \hline
 %\multicolumn{2}{c}{ Data-centric Consistency Models }\\
@@ -665,76 +665,77 @@ All the variables in the formulas above are universally quantified.}
 \hrule
 \end{figure}
 
-We conclude this section by analysing the consistency tests for widely adopted 
+We conclude this section by giving the execution tests for widely adopted 
 consistency models of distributed and replicated databases. These are summarised 
 in \cref{fig:execution.tests}.
 Following \cite{distrprinciples}, we distinguish between client-centric and data-centric consistency models. 
-The former constrain the versions of keys that individual clients can observe, while the latter 
-impose conditions on the shape of the state of the database, in our case the structure of 
-the kv-store. Both kinds of models can be induced by execution tests. In \cref{sec:?} 
-we prove that specification of consistency models using execution tests are both sound and complete 
+The former constrain the versions of keys that individual clients can observe, 
+including \emph{monotonic reads} (\MRd), \emph{monotonic writes} (\MW), \emph{read your writes} (\RYW) and \emph{write follows reads} (\WFR).
+The client-centric consistency models is also known as \emph{session guarantees} \cite{terry1994sessions}.
+The latter impose conditions on the shape of the state of the database, in our case the structure of the kv-store.
+The data-centric consistency models includes \emph{update atomic} (\UA), \emph{consistent prefix} (\CP) and \emph{serialisibility} (\SER).
+The remained models are combinations of both types, including \emph{causal consistency} (\CC), \emph{parallel snapshot Isolation} (\PSI) and \emph{snapshot Isolation} (\(\SI\)).
+%Both kinds of models can be induced by execution tests. 
+In \cref{sec:?} we prove that specification of consistency models using execution tests are both sound and complete 
 with respect to alternative specifications from the literature. Due to space constraints, we only give 
 examples of allowed and disallowed kv-stores for relevant consistency models. A full account 
 of the anomalous behaviours permitted by each consistency model is deferred to \cref{app:?}.
 
-\paragraph{Monotonic Reads.} 
-This is the first of four \emph{session guarantees} \cite{terry1994sessions}, i.e. guarantees on the individual behaviour of 
-clients. A client ensures the monotonic reads consistency guarantee ($\MRd$) if subsequent read operations always 
-return versions from a more up-to-date state of the system. For example, the kv-store to the right is disallowed 
-by $\MRd$: client $\cl$ first observes the latest version of $\ke$ in $\txid_{\cl}^{1}$, then it later 
+\paragraph{Monotonic Reads ($\MRd$)}
+A client ensures the monotonic reads consistency guarantee if subsequent read operations always 
+return versions from a more up-to-date state of the system. For example, the \cref{fig:mr-disallowed} is disallowed 
+by $\MRd$.
+Because client $\cl$ first observes the latest version of $\ke$ in $\txid_{\cl}^{1}$, then it
 observes the initial version of $\ke$ in $\txid_{\cl}^{2}$.
-Because the versions observed by a client of a kv-store 
+%Because the versions observed by a client of a kv-store 
 %are determined by the view of the former, monotonic reads can be enforced in our framework by ensuring that 
 %a client can never replace its view with an older one. According to the definition of $\CMs(\_)$, 
 %a client can only update its view to an older one upon committing a transaction. 
-The execution test $\ET_{\MRd}$ from \cref{fig:execution.tests} prevents this scenario by 
+The execution test $\ET_{\MRd}$ (\cref{fig:execution.tests}) prevents this scenario by 
 forcing clients to always update their views to newer ones. 
 %$\ET_{\MRd}$ in \cref{fig:execution.tests} forces clients to always update their views to newer ones.
 
-\paragraph{Monotonic Writes.}
-The second session guarantee that we formalise is given by \emph{monotonic writes} ($\MW$). It states that 
-whenever a transaction observes the effects of a version installed by some client $\cl$, then 
-it must be able to observe all the previous updates performed by such a client. It prevents 
-scenarios like the kv-store depicted to the right, where transaction $\txid'$ observes the 
-version of $\ke_2$ carrying value $\val_2$, written by client $\cl$; but it does not observe the version 
+\paragraph{Monotonic Writes ($\MW$)}
+It states that whenever a transaction observes the effects of a version installed by some client $\cl$, then 
+the transaction observes all the transactions executed by the client. It prevents 
+scenarios in \cref{fig:mw-disallowed}, where transaction $\txid'$ observes the 
+second version of $\ke_2$ carrying value $\val_2$, written by client $\cl$; but it does not observe the second version 
 of $\ke_1$ carrying value $\val_1$, previously written by the same client.
 %The order of updates of transaction identifiers is embedded in the set of transaction identifiers, 
 %and it is given by $\txid \xrightarrow{\PO} \txid' \iff \exists \cl, n,m. n < m \wedge \txid = \txid_{\cl}^{n} \wedge 
 %\txid' = \txid_{\cl}^{m}$. 
-The execution test $\ET_{\MW}$ from \cref{fig:execution.tests} ensures 
+The execution test $\ET_{\MW}$ (\cref{fig:execution.tests}) ensures 
 that, prior to executing a transaction, the set of versions included in the view of the client 
-must be prefix-closed with respect to the relation $\xrightarrow{\PO}$, thus modelling 
-monotonic writes.
+must be prefix-closed with respect to the relation $\xrightarrow{\PO}$.
 
-\paragraph{Read Your Writes.}
-The third session guarantee states that a client must always been able to read any version 
-of a key that he previously wrote. This prevents scenarios like the kv-store depicted to the right 
-(assuming that the initial version of $\ke$ carries value $0$): this can be though as the result 
-of client $\cl$ trying to increment the value of $\ke$ twice, by first reading its value $\nat$ and then 
-installing a new version carrying  value $\nat+1$. However, if the client is not ensured to read its 
-own writes, nothing prevents it to read the initial version of $\ke$ in the second increment 
-(corresponding to the transaction $\tx_{\cl}^2$), and 
-install a new version carrying value $1$.
+\paragraph{Read Your Writes (\RYW)}
+It states that a client must always been able to read any version 
+of a key that he previously wrote by the same client. This prevents scenarios in \cref{fig:ryw-disallowed} where
+assuming that the initial version of $\ke$ carries value $0$, the client $\cl$ tried to increment the value of $\ke$ twice, 
+by first reading its value $\nat$ and then installing a new version carrying  value $\nat+1$.
+However, if the client does not read its 
+own writes, the client might read the initial version of $\ke$ in the second increment 
+(corresponding to the transaction $\tx_{\cl}^2$), and install a new version carrying value $1$.
 %A client always appends the version of a key written by  
 %a transaction at the tail of the version list for such a key. Therefore, to enforce the 
-The Read your Writes ($\RYW$) consistency guarantee can be enforced via 
-the execution test $\ET_{\RYW}$ of \cref{fig:execution.tests}: after committing a transaction, 
-a client brings its view to the latest version for each key it wrote.  
+The Read your Writes ($\RYW$) (\cref{fig:execution.tests}) enforces that after committing a transaction, 
+a client advances its view to the latest version for each key it wrote.  
 
-\paragraph{Write Follows Reads.}
-The last session guarantee states that if a write of some version $\ver$ follows (or is performed by the same transaction performing ) 
-a read of a version $\ver'$ in a session, 
-then any client observing the version $\ver$ must also observe the version $\ver'$. The Write Follow Reads ($\WFR$) 
-consistency guarantee disallows the kv-store depicted to the right: a transaction $\txid$ observes the version $\ver_2$ of $\ke_2$,  
-carrying value $\val_2$ and being written by client $\cl$. However, the same transaction $\txid$ does not observe 
+\paragraph{Write Follows Reads (\WFR)}
+It states that if a client writes to some version $\ver$ following (or is performed by the same transaction) 
+a read of some version $\ver'$, 
+then other who observes the version $\ver$ must also observe the version $\ver'$. The Write Follow Reads ($\WFR$) 
+consistency guarantee disallows scenario in \cref{fig:wfr-disallowed} 
+where a transaction $\txid$ observes the version $\ver_2$ of $\ke_2$ carrying value $\val_2$ written by client $\cl$,
+but the same transaction $\txid$ does not observe 
 the version of $\ke_1$ carrying value $\val_1$, read by $\cl$ prior to writing $\ver$. 
-The execution test $\ET_{\WFR}$ from Figure \cref{fig:execution.tests} prevents this and similar scenarios to occur.
+The execution test $\ET_{\WFR}$ (\cref{fig:execution.tests}) prevents this and similar scenarios to occur.
 
-\paragraph{Causal Consistency.}
+\paragraph{Causal Consistency (\CC)}
 Causal Consistency requires that if a client observes a version 
 $\ver$ of some key $\ke$, then it must also observe any version $\ver'$ of some key $\ke'$ 
-from which $\ver$ potentially depends \cite{cops}. A necessary and sufficient condition to enforce 
-causal consistency is that of enforcing the four session guarantees $\MRd, \MW, \RYW, \WFR$ 
+from which $\ver$ potentially depends \cite{cops}. A necessary and sufficient condition
+is that of enforcing the four session guarantees $\MRd, \MW, \RYW$ and $\WFR$ 
 discussed above \cite{session2causal}. Therefore, we let $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} 
 \cap \ET_{\RYW} \cap \ET_{\WFR}$. 
 \textbf{\color{red} Needs to be checked because we do not have compositionality. But in this case 
@@ -945,7 +946,7 @@ all the versions written by $\txid$ must be to the left of $\vi$. In \cref{sec:?
 we prove that the execution test $\ET_{\SI}$, defined in \cref{fig:execution.tests}, 
 precisely capture SI.
 
-\paragraph{(Strict) Serialisability}
+\paragraph{(Strict) Serialisibility (\SER)}
 The last consistency model that we consider is serialisability. This consistency model 
 requires that there exists a serial, or sequential schedule of transaction. 
 This prevents scenarios like the kv-store of \cref{fig:hheap-a}, which is instead allowed 
