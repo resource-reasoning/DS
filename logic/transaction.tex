@@ -1,11 +1,11 @@
 \subsection{Reasoning inside transactions}
 
-Transactions work on their own snapshots of the key-value store.
-Because of the atomicity, when a transaction commits, only the \emph{first reads preceding any write} and the \emph{last writes} of the transaction for keys affect the key-value store.
-The first read for a key come from the version that initial view points to.
-A transaction will install new version to a key with last written value.
+Recall that a transaction take a snapshot of the kv-store and commits the fingerprint by the end.
+Because of the atomicity, only the \emph{first reads preceding any write} and the \emph{last writes} of keys are contained in the fingerprint.
 All the intermediate reads and writes are not observable to other transactions and have no effect on the key-value store.
-The \emph{transactional assertions} (\cref{local_assertions}) extend normal sequential separate logic assertions with read and/or write labels, \eg \( \vx \fpR 0 \) or \( \vy \fpW 1 \), so to describe the fingerprints.
+To capture the state of the local snapshot as well as the fingerprint, 
+the \emph{transactional assertions} (\cref{local_assertions}) extend normal sequential separate logic assertions with read and/or write labels, 
+\eg \( \vx \fpR 0 \) or \( \vy \fpW 1 \).
 
 
 \begin{definition}[Transactional assertions]
@@ -13,13 +13,14 @@ The \emph{transactional assertions} (\cref{local_assertions}) extend normal sequ
 \label{def:local_assertions}
 \label{def:logical-expr}
 Assume a countably infinite set of \emph{logical variables} $\lvar \in \LVar$.
-The set of \emph{logical expressions}, $ \lexpr \in \LExpr$ is defined by the following inductive grammar, where \(\val \in \Val\) (\cref{def:program_values}) and \(\var \in \Vars\)(\cref{def:stacks}):
+The set of \emph{logical expressions} $\lexpr \in \LExpr$ is defined by the inductive grammar:
 \(
 \begin{rclarray}
    \lexpr & ::= & \val \mid \lvar \mid \var \mid \lexpr + \lexpr \mid  \dots 
 \end{rclarray}
-\).
-The \emph{logical expression evaluation} function, $\evalLE[(., .)]{.}:\LExpr \times \Stacks \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions as follows,
+\)
+where \(\val \in \Val\)  and \(\var \in \Vars\).
+The \emph{logical expression evaluation} function, $\evalLE[(., .)]{.}:\LExpr \times \Stacks \times \LEnv\rightharpoonup \Val$, is defined inductively over the structure of logical expressions,
 where the \emph{logical environments} \(\lenv \in \LEnv: \LVar \parfun \Val\) associates logical variables with values:
 %
 \[
@@ -53,7 +54,7 @@ The set of \emph{transactional assertions}, $\lpre,  \lpost, \fp \in \LAst$, is 
     & & \mid \Emp \mid \lexpr \fpI \lexpr \mid \lexpr \fpR \lexpr \mid \lexpr \fpW \lexpr \mid \lexpr \fpRW (\lexpr, \lexpr)  \mid \lpre \sep \lpost  \\
 \end{rclarray}	 
 \]
-The \emph{transactional assertion interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \Opsets} $, is defined over the structure of local assertions as follows, where the composition for snapshots \( \composeH \defeq \uplus \) is standard disjointed union on two functions (snapshots) and the composition for fingerprints \( \opset \composeO \opset' \defeq \opset \uplus \opset'\) when they contain different keys, \ie \( \opset\projection{2} \cap \opset'\projection{2} = \emptyset\):
+The \emph{transactional assertion interpretation function}, $\evalLS[(.,.)]{.}: \LAst \times \LEnv \times \LAst \parfun \powerset{\Heaps \times \Opsets} $, is defined over the structure of local assertions, where the composition for snapshots \( \composeH \defeq \uplus \) is standard disjointed union on two functions and the composition for fingerprints \( \opset \composeO \opset' \defeq \opset \uplus \opset'\) when they contain different keys, \ie \( \opset\projection{2} \cap \opset'\projection{2} = \emptyset\):
 \[
 \begin{array}{@{}c @{\qquad} c @{}}
 \begin{rclarray}
@@ -87,26 +88,34 @@ The \emph{transactional assertion interpretation function}, $\evalLS[(.,.)]{.}: 
 \]
 \end{definition}
 
-The \emph{transactional assertions} (\cref{def:local_assertions}) have true, false, conjunction \( \land \), disjunction \( \lor \), existential quantification \( \exists \), implication \( \implies  \), empty \( \assemp \), fingerprint assertions \( \stub \stackrel{\stub}{\hookrightarrow} \stub \) and separation conjunction \( \sep \).
+The \emph{transactional assertions} (\cref{def:local_assertions}) have \( \assfalse \), \(\asstrue \), conjunction \( \land \), disjunction \( \lor \), existential quantification \( \exists \), implication \( \implies  \), empty \( \assemp \), fingerprint assertions \( \stub \stackrel{\stub}{\hookrightarrow} \stub \) and separation conjunction \( \sep \).
 They describes the state of local snapshot used by a transaction and more importantly the fingerprint of the transaction.
 They are interpreted to pairs of snapshots and fingerprints.
 
 A \emph{fingerprint assertion} describes the possible global effect from a transaction.
 It includes the default \(\lexpr_{1} \fpI \lexpr_{2} \), the \emph{first read preceding any write} \( \lexpr_{1} \fpR \lexpr_{2} \), \emph{last write} \( \lexpr_{1} \fpW \lexpr_{2} \) for the key \( \lexpr_{1} \) and the combination of them \( \lexpr_{1} \fpRW \lexpr_{2} \).
-The \( \lexpr_{1} \fpI \lexpr_{2} \) means the key \( \lexpr_{1} \) has no associated fingerprint and the only key in the local snapshot has value \( \lexpr_{2} \).
-The \( \lexpr_{1} \fpR \lexpr_{2} \) means the key has been read before any other write and the current value is \( \lexpr_{2} \).
+The \( \lexpr_{1} \fpI \lexpr_{2} \) means the only key \( \lexpr_{1} \) in the local snapshot has value \( \lexpr_{2} \),
+and the key has no associated fingerprint.
+The \( \lexpr_{1} \fpR \lexpr_{2} \) means the key has been read before any other write carrying value \( \lexpr_{2} \) and the current value for the key is also \( \lexpr_{2} \).
 The \( \lexpr_{1} \fpW \lexpr_{2} \) means the key has been written at least once, and the last written value is \( \lexpr_{2} \).
-Because read does not change the state of snapshot, and the write fingerprint corresponds to the last write for the key, so the state of the snapshot matches the fingerprint for cases \( \lexpr_{1} \fpR \lexpr_{2} \) and  \( \lexpr_{1} \fpW \lexpr_{2} \).
-Last, The \( \lexpr_{1} \fpRW (\lexpr_{2}, \lexpr_{3}) \) means the key has been read and then written at least once, the first read fetched value \( \lexpr_{2} \), and the last written value and the current state of the local snapshot for the key are both \( \lexpr_{3} \).
+Because read does not change the state of snapshot, and the write fingerprint corresponds to the last write for the key,
+so the state of the snapshot matches the fingerprint for cases \( \lexpr_{1} \fpR \lexpr_{2} \) and  \( \lexpr_{1} \fpW \lexpr_{2} \).
+Last, The combined fingerprint \( \lexpr_{1} \fpRW (\lexpr_{2}, \lexpr_{3}) \) means the key has been read and then written at least once, the first read fetched value \( \lexpr_{2} \), and the last written value and the current state of the local snapshot for the key are both \( \lexpr_{3} \).
 
-Other part of transactional assertions have standard interpretations.
-Note that the separation conjunction \( \sep \) asserts two local snapshots and fingerprints where the keys are disjointed.
+Other transactional assertions have standard interpretations.
+Note that the separation conjunction \( \sep \) asserts two local snapshots and fingerprints when the keys are disjointed.
 Observe that program expressions $\Expr$ (\cref{def:language}) are contained in logical expressions $\LExpr$ (\cref{def:local_assertions}), \ie $\Expr \subset \LExpr$. 
 
 The proof rules for transactions (\cref{fig:rule-trans}) are standard except \rl{TRLookup} and \rl{TRMutate}.
-The \rl{TRLookup} rule adds read fingerprint only if there is no write fingerprint, because once a key has been written, the following reads are local.
-However, the local read always needs to match the current state of snapshot, especially for the case when the precondition is \( \lexpr \fpRW (\lexpr'', \lexpr') \) where the current state of the key is the last written value \( \lexpr' \).
-The\rl{TRMutate} rule adds write fingerprint if there no write fingerprint, otherwise throws the old value and keeps track the last written value.
+The \rl{TRLookup} rule adds read label only if there is no write label.
+Because once a key has been written, the following reads are local to the transaction.
+However, the local read always needs to match the current state of snapshot.
+Especially for the case when the precondition is \( \lexpr \fpRW (\lexpr'', \lexpr') \),
+the current state of the key is the last written value \( \lexpr' \).
+The\rl{TRMutate} rule changes the state of the key and more importantly adds write label.
+For the case when the precondition is \( \lexpr \fpRW (\lexpr'', \lexpr') \), 
+the rule changes the value \( \lexpr' \) to the new written value \( \lexpr''' \)
+but keeps the old read value \( \lexpr'' \) the same.
 
 \begin{figure}[!t]
 \sx{Font for E}
