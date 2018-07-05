@@ -1,11 +1,11 @@
 \section{Logic}
 
-We present a logic that is parametrised by any consistency model \emph{at least satisfying atomic  read and monotonic read}.
+We present a logic that is parametrised by consistency models \emph{at least satisfying monotonic read}.
 We motivate it by the \emph{write skew} example under snapshot isolation (\cref{fig:write-skew-si-proof}).
-This example distinguishes serialisibility from snapshot isolation (SI).
-Under serialisibility that transactions appear one after another, only one key, \( \vx \) or \( \vy \), will be 1 at the end.
-While under SI, both keys \( \vx \) and \( \vy \) might be 1.
-Because both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and both can commit because the two transactions write different keys.
+This example distinguishes snapshot isolation (SI) from serialisibility.
+For serialisibility that transactions appear one after another, only one key, \( \vx \) or \( \vy \), will be 1 at the end.
+While for SI, transactions take a snapshot when they start, and concurrent transactions can commit as long as they write to different keys.
+In \cref{fig:write-skew-si-proof}, both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and can commit, which yields result that \( vx \) and \( vy \) are 1.
 
 \begin{figure}[!t]
 \hrule
@@ -21,11 +21,11 @@ Because both transactions may take snapshots where \( \vx \) and \( \vy \) are 0
 \end{rclarray}
 &
 \begin{rclarray}[t]
-    \CB{0} & : & \exsts{\V n} \vx \fpR \V{n} \\
+    \CB{U} & : & \exsts{\V n} \vx \fpR \V{n} \\
 \end{rclarray} 
 &
 \begin{rclarray}[t]
-    \CB{0} & : & \exsts{\V n} \vy \fpR \V{n} \\
+    \CB{U} & : & \exsts{\V n} \vy \fpR \V{n} \\
 \end{rclarray} \\
 \end{array}
 \]
@@ -89,61 +89,71 @@ Because both transactions may take snapshots where \( \vx \) and \( \vy \) are 0
 \label{fig:write-skew-si-proof}
 \end{figure}
 
-In the sketch proof (\cref{fig:write-skew-si-proof}), \emph{A shared region assertion} also know as \emph{a boxed assertion} in the form of \( \boxass{\bar{\lpre}}{\lrid}{\intass}\) describes that there is a region with \emph{a unique region identifier} \( \lrid \) and \emph{interference  assertion} \( \intass \), and the assertions inside \( \bar{\lpre} \) describe views on key-value stores.
-Note that unlike serialisibility, the view might be out-of-date for SI.
-For instance, \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vx \) points to the most recent value of 0, but \( \vy \) might point to a out-of-date value of 0.
+In the sketch proof (\cref{fig:write-skew-si-proof}), the \emph{shared region assertions} also know as \emph{boxed assertions} are in the form of \( \boxass{\bar{\lpre}}{\lrid}{\intass}\), for example \( \boxass{\vx \pt 1 \sep \vy \pt 1}{\lrid}{\intass} \).
+The assertion \( \boxass{\bar{\lpre}}{\lrid}{\intass}\) describes that there is a region with \emph{a unique region identifier} \( \lrid \),
+the \emph{interference assertion} \( \intass \) specifies how the regions can evolve,
+and the assertions inside \( \bar{\lpre} \) describe the view of the client on the key-value store.
 Each region are shareable and indivisible, \ie \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
 
-The \emph{interference assertion} \( \intass \) specifies how the regions can evolve.
-It is a set of actions, each of which has the form \( \kap : \fp \) where \( \kap \) is the \emph{client-specified capability} and \( \fp \) is the \emph{fingerprint}.
+Interference assertion is a set of actions, each of which has the form \( \kap : \fp \) where \( \kap \) is the \emph{client-specified capability} and \( \bar{\fp} \) is the \emph{fingerprint}.
 A client is allowed to execute a transaction with the fingerprint \( \fp \), when the client holds the capability \( \kap \).
-The \( \CB{L}\) allows a client to read \( \vy \) when it is 0 and write 1 to \( \vx \), and similarly \( \CB{R} \) allows a client to read \( \vx \) when it is 0 and write 1 to \( \vy \).
-The \( \fp \) also specifies capabilities transformation, for example in the example, both \( \CB{L} \) and \( \CB{R} \) need to be move into the region once they have been used.
+The \( \CB{L}\) allows a client to read \( \vy \) when it is 0 (\(\vy \fpR 0\)) and write 1 to \( \vx \) (\(\vx \fpW 1\)),
+and similarly \( \CB{R} \) allows a client to read \( \vx \) when it is 0 and write 1 to \( \vy \).
+The fingerprint \( \bar{\fp} \) also specifies capabilities transformation.
+For example, \( \null \fpA \cass{\CB{L}}{\lrid} \) means that \( \CB{L} \) needs to return to the shared region once they have been used.
 The \emph{client-specified capability} forms \emph{a partial commutative monoid (PCM)} where \( \composeK \) denotes the composition function.
-In the write skew example, both \( \CB{L} \) and \( \CB{R} \) are unique because the compositions with themselves are undefined, and \( \CB{U} \) is the unit.
+In the write skew example, both \( \CB{L} \) and \( \CB{R} \) are unique and \( \CB{U} \) is the unit.
 The unit \( \CB{U} \) allows clients to always read \( \vx \) or \( \vy \) no matter the values.
 
-Given the interference, an assertion \( \gpre \) is \emph{stable}, iff it holds against the interference from the environment.
-Since the assertions describe views on key-value stores.
-Stabilisation has two meanings: the environment might change the key-value stores but not the views, since the views are local; consequentially, the views can be advanced.
-For example, \( P1 \) describes either the environment does nothing or the environment has performed the action associated with \( \cass{\CB{R}}{\lrid}\), 
-after which the environment cannot do any further actions since the capabilities \( \cass{\CB{R}}{\lrid}\) is in the shared region.
+The assertions inside \( \bar{\lpre} \) describe the view of the client on the key-value store with respect to the interference.
+Note that unlike serialisibility, the view might be out-of-date for SI.
+For instance, the assertion \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vy \) might point to either 0 or 1.
+Since the capability \( \cass{\CB{R}}{\lrid} \) has been returned to the region, the view where \( \vy \) point to 0 is out-of-date.
+
+An assertion \( \gpre \) is \emph{stable}, iff it holds against the interference.
+Specifically, stabilisation has two meanings: \textbf{(i)} the environment might interfere and change the state of key-value stores but not the views of the current client, since the views are local; 
+\textbf{(ii)} consequentially, the client can advance the views.
+For example, \( P1 \) is stable as it describes either the environment does nothing \( \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \),
+or the environment has performed the action associated with \( \cass{\CB{R}}{\lrid}\), 
+after which the environment cannot do any further actions since the capabilities \( \cass{\CB{R}}{\lrid}\) is in the shared region,
+\ie \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \).
 Let discuss the assertions \( \vy \pt 0  \lor \vy \pt 1  \sep \cass{\CB{R}}{\lrid} \) from \( P1 \).
-The environment returns the capability \( \cass{\CB{R}}{\lrid} \), it means the environment performs the action associated with the capability, thus  the value \( 0 \) is out-of-date .
-Because the view can be advanced by stabilisation and the capability \( \cass{\CB{R}}{\lrid} \) is in the region, we get a up-to-date \( \vy \pt 1 \).
+The environment returns the capability \( \cass{\CB{R}}{\lrid} \), it means the environment commits a transaction that writes 1 to \( vy \) and the capability \( \cass{\CB{R}}{\lrid} \), thus the value \( 0 \) is out-of-date.
+Because of stabilisation, the view might be advanced so we get an up-to-date view \( \vy \pt 1 \).
 
-Because of atomicity, A transaction works on it own snapshot and only commits the fingerprint by the end.
-We use \emph{transactional assertions} to describe the state of local snapshots for transactions and also the fingerprints.
-The transactional assertions for a single key have the following forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \), where \( \otR \) and \( \otW \) are read and write labels.
+We use \emph{transactional assertions}, such as \( p1 \) in \cref{fig:write-skew-si-proof}, to describe the state of local snapshots for transactions and more importantly the fingerprints.
+The fingerprint is the transaction's contribution to the kv-store, that is, \emph{the first read preceding any write} and \emph{last write} of each key.
+The transactional assertions for individual keys have the following forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \), where \( \otR \) and \( \otW \) are read and write labels respectively.
 The first three asserts the key \( \vx \) in the local snapshot has value 0 and it has not been touched (no label), has been read (\(\otR\)) and has been written (\(\otW\)) respectively.
-The last one asserts that the key \( \vx \) currently has value 1, \emph{the first read preceding any write} fetches 0 and the \emph{the last write} updates the key to \( 1 \).
-We extend the standard sequential separation logic rules in a ways that the first read before any write to a key adds a read label to the assertion; and a write to a key adds a write label to assertion and updates the value.
-Note that when writing to an key that has been read, the assertion after will have two values where the first corresponds to old read value and the second corresponds the written value.
+The last one asserts that the key \( \vx \) currently has value 1, \emph{the first read preceding any write} fetched 0 and the \emph{the last write} updated the key to \( 1 \).
+We extend the standard sequential separation logic rules in a ways that the first read to a key adds a read label to the assertion; and a write to a key adds a write label to assertion and updates the value.
 
-When a transaction starts, it takes a snapshot provided by the view.
-For example,  because of \( P1 \) where the view for the \( \vx \) has value 0 and \( \vy \) has value either 0 or 1, the precondition \( p1 \) for transaction \( \txid_1 \) describe exactly the same states, and initial all keys have no fingerprint.
-To verify the transaction, it means collecting the fingerprint.
-By the end, the postcondition \( q1 \) says the transaction \( \txid_1 \) either reads \( \vy \) with 0 and writes 1 to \( \vx \), or only reads \( \vy \) with 1 and does nothing to \( \vx \).
+Because of atomicity, a transaction takes a snapshot and afterword executes locally on the snapshot and only commits the fingerprint by the end.
+For example, \( P1 \) asserts views where \( \vx \) has value 0 and \( \vy \) has value either 0 or 1, the precondition \( p1 \) for transaction \( \txid_1 \) describes exactly the same states, and initial all keys have no fingerprint.
+By the end of the transaction, the postcondition \( q1 \) describes that the transaction \( \txid_1 \) either read \( \vy \) with 0 and wrote 1 to \( \vx \),
+or only read \( \vy \) with 0 and did nothing to \( \vx \).
 
-To committing the fingerprint under SI, we first need to check the view from \( P1 \).
+To commit the fingerprint under SI, we first need to check the view from \( P1 \) satisfies certain constraints with respect to the fingerprint.
 SI requires that if a view observe some transactions, it should observe everything before.
-It holds for \( P1 \).
-Now given the view on the key-value store \( \gpre \), and committing the fingerprint of the transaction \( \lpost \) under SI means: 
-(i) for any key that has been over-written, the view before for the key should be up-to-date and the view after should points to the new version;
-(ii) for any key that has been read, the view before points to a version containing the same value and the view after remains the same;
-{iii) there are some local capabilities that allows the updates.
-This will give us the following assertion before stabilisation:
+Also if there is a write fingerprint for a key, the view for that key must be up-to-date, so to avoid write-write conflict.
+Now given the view on the key-value store \( \gpre \), and we are about to commit the fingerprint given by the transaction \( \lpost \):
+\textbf{(i)} for any key that has been over-written, we create a new version with the value;
+\textbf{(ii)} for any key that has been read, the view before points to a version containing the same value;
+\textbf{(iii)} the view after moves the up-to-date versions for all keys;
+and last \textbf{(iv)} we need to check the update is allowed by the local capabilities and transfer the capabilities if necessary.
+This will give us the following assertions \emph{before stabilisation}:
 \[
 \boxass{ \vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
 \lor \boxass{\vx \pt 1 \sep \vy \pt 0  \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}
 \lor \cass{\CB{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
 \]
-We need to stylise the assertions.
-The environment can still change the state that satisfies the first disjunction, because environment still has the ability  to change the value of \( \vy \), which yield the state satisfying the second disjunction.
+We need to stabilise the assertions.
+The environment can still change the state that satisfies the first disjunction, 
+because environment still has the ability  to commit a new version for  \( \vy \) carrying value 1, which yields the state satisfying the second disjunction.
 The second conduction can be stabilised by advancing the view.
-Now we have a stable assertions as \( Q1 \) in \cref{fig:write-skew-si-proof}.
+Now we have a stable assertions \( Q1 \) shown in \cref{fig:write-skew-si-proof}.
 
-Following similar reasoning for right-hand-side client, we get \( Q2 \).
+Following similar reasoning, we get \( Q2 \) for right-hand-side client.
 The final \( Q \) is  \( Q = Q1 \sep Q2 \) provided that \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
 It means the final views and key-value stores are those come from both \( Q1 \) and \( Q2 \).
 
@@ -182,7 +192,7 @@ It means the final views and key-value stores are those come from both \( Q1 \) 
     \end{transaction} \\
     \specline{ 
             \boxass{ \vx \pt 1 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \lor {} \\
-            \boxass{ \vx \pt 1 \lor \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \\
+            \boxass{ \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \\
     } \\
 \end{session}
 &
@@ -199,12 +209,12 @@ It means the final views and key-value stores are those come from both \( Q1 \) 
     \end{transaction} \\
     \specline{ 
             \boxass{ \vx \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \lor {} \\
-            \boxass{ \vx \pt 1 \lor \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
+            \boxass{ \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
     } \\
 \end{session}
 \end{parl} \\
     \specline{ 
-            \boxass{ \vx \pt 1 \lor \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
+            \boxass{ \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
     } \\
 \end{session}
 \]
@@ -257,14 +267,13 @@ It means the final views and key-value stores are those come from both \( Q1 \) 
 \label{fig:increment-proof}
 \end{figure}
 
-The \cref{fig:increment-proof} shows proofs for the same concurrent increments under different consistency model. 
-The one in the bottom is the sketch proof under serialisibility, and the one in the middle is under causal consistency.
-Under causal consistency, a transaction can start with a view that is out-of-date and still able to write a new value for keys.
-That means, the fingerprint \( \vx \fpW 1\) is allowed to commit when the shared state is \( \vx \pt 0 \).
-The same situation will be disallowed under serialisibility.
+The \cref{fig:increment-proof} shows sketch proofs for the same \emph{concurrent increments} under different consistency models, causal consistency (the middle) and serialisibility (the bottom).
+For causal consistency, a transaction can update keys even if started with an out-of-date view on those keys.
+That means, the fingerprint \( \vx \fpW 1\) is allowed to commit when the view for \( \vx \) is out-of-date, \ie \( \vx \pt 0 \).
+The same situation is disallowed under serialisibility and snapshot isolation.
 
 Using the similar pattern by putting back the capabilities to the region once it has been used,
-We can also prove the long fork, which distinguish snapshot isolation from parallel isolation.
+We can also prove the \emph{long fork} (\cref{fig:long-fork-proof}), which distinguish snapshot isolation (SI) from parallel snapshot isolation (PSI).
 
 \begin{figure}[!t]
 \hrule
@@ -297,7 +306,6 @@ We can also prove the long fork, which distinguish snapshot isolation from paral
 \end{array}
 \]
 
-\( \CB{U} \) is the unit and other capabilities are unique.
 
 \hrule\vspace{5pt}
 \[
@@ -380,7 +388,7 @@ We can also prove the long fork, which distinguish snapshot isolation from paral
 \label{fig:long-fork-proof}
 \end{figure}
 
-In \cref{fig:long-fork-proof}, when left client observe that the shared state has \( \cass{\CB{R1}}{\lrid} \sep \cass{\CB{R2}}{\lrid} \sep \cass{\CB{L1}}{\lrid} \), the view must be update to both one for two key.
+In \cref{fig:long-fork-proof}, when left client observes that the shared state has \( \cass{\CB{R1}}{\lrid} \sep \cass{\CB{R2}}{\lrid} \sep \cass{\CB{L1}}{\lrid} \), the view must be update to both one for two key.
 Because both \( \cass{\CB{L1}}{\lrid} \) and \( \cass{\CB{L2}}{\lrid} \), it means the environment has updated \( \vy \) to 1 and then read \( \vx \) with value 0 in order.
 Because the left client updated the \( \vy \) to 1, while the environment successfully read \( \vx \) with a old value 0, the snapshot isolation requires the view must include all transaction before the read, therefore the view must include the write of \( \vy \).
 
