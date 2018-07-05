@@ -1,7 +1,7 @@
 \subsection{Reasoning programs}
 
 Each region has \emph{client-specified capabilities} \( \kap \in \Kaps \) that forms \emph{a partial commutative monoid (PCM)} (\cref{def:capabilities}).
-To recall, \emph{a PCM} is a partially ordered set that is closed under a commutative binary operation \( \compose \) and has a set of identify elements \( \unitelem \).
+To recall, \emph{a PCM} is a partially ordered set that is closed under a commutative binary operation \( \compose \) and has a set of unit elements \( \unitelem \).
 The client-specified capabilities are lifted to \emph{capability composition function} \( \ca \in \Caps \) with their associated region identifiers (\cref{def:capabilities}).
 For brevity, we often say \emph{capabilities} for \emph{capability composition function}.
 The composition function for \emph{capabilities} \( \ca_l \composeC \ca_r \) is defined as compositing each region point-wise
@@ -60,7 +60,7 @@ The existential quantification is for binding variables between the capability \
 \ie tuples consisting of key-value stores, views, and (shared) capabilities (\cref{def:intf}). 
 Given a interpretation of an action \( (\fp, \ca_d, \ca_a) \in \evalF[\lenv',\stk]{\bar{\fp}} \) and any initial state \( (\hh, \vi, \ca_r \composeC \ca_f ) \),
 the final states \( (\hh',\vi', \ca_f \composeC \ca_a) \) are defined by committing the fingerprint \( \opset \) through \( \HHupdate \) function,
-updating the view \( \vi \leq \vi' \), taking out \( \ca_r \) and adding \( \ca_a \).
+updating the view \( \vi \sqsubseteq \vi' \), taking out \( \ca_r \) and adding \( \ca_a \).
 Note that \( \ca_f \) are frames of capabilities as long as they are compatible before and after the update.
 All the read values should match to the versions with respect to the view \( \vi \).
 For technical reasons, the view \( \vi' \) after updating is any view greater than before.
@@ -121,7 +121,7 @@ The interference assertions are interpreted to interference environments via \em
 \[
 \begin{array}{@{}l}
 	\evalI{\Set{ \exsts{\vec{\lvar}} \perm{\kap} : \fp } \cup \intass }(\kap') \eqdef \\
-    	\quad \left\{ 
+    	\qquad \left\{ 
             \begin{array}{@{}l @{\qqquad} l}
             \multicolumn{2}{@{}l@{}}{
                     \Setcon{
@@ -131,12 +131,11 @@ The interference assertions are interpreted to interference environments via \em
                         \end{B}
                     }{ 
                         \pred{atomic}{\hh, \vi} 
-                        \land \exsts{\txid, \opset, \cl} 
+                        \land \exsts{\opset, \cl} 
                         ( \opset, \ca_{a}, \ca_{r} ) \in \evalF[\lenv',\stk]{\fp} \\
-                        \quad {} \land \txid \in \func{nextTxid}{\hh, \cl}
-                        \land \hh' = \updM{\hh, \vi, \txid, \opset}  \\
+                        \quad {} \land \hh' \in \updM{\hh, \vi, \cl, \opset}
+                        \land \vi \sqsubseteq \vi'  \\
                         \quad {} \land \pred{readFrom}{\hh, \vi, \opset} 
-                        \land \vi \sqsubseteq \vi' 
                         \land \pred{atomic}{\hh', \vi'}
                         \\
                     } 
@@ -154,7 +153,7 @@ The interference assertions are interpreted to interference environments via \em
 where the \( \predn{readFrom} \) asserts the fingerprint makes sense with respect to the view:
 \[
 \begin{rclarray}
-    \pred{readFrom}{\hh, \vi, \opset} & \defeq & \fora{\ke, \val} (\otR, \ke, \val) \in \opset \implies \valueOf(\hh(\ke,\vi(\ke))) = \val
+    \pred{readFrom}{\hh, \vi, \opset} & \defeq & \fora{\ke, \val} (\otR, \ke, \val) \in \opset \implies \valueOf(\hh(\ke,\vi)) = \val
 \end{rclarray}
 \]
 \end{definition}
@@ -212,14 +211,23 @@ The \( \funcn{collapse}\) function is defined as the follows:
 \end{rclarray}
 \] 
 where the composition for kv-store are standard disjointed union for functions \( \composeHH \defeq \uplus\).
-Assuming a global function \( \funcn{init} : \RegionID \to \HisHeaps \times \Views \times \Caps \) that returns the initial state for a region,
-the \( ( \mkvs, \vi, \ca ) \in \func{inv}{\rid, \intf} \) iff:
+Assume a global function \( \funcn{initCap} : \RegionID \to \Caps \) that returns the initial capabilities for a region.
+Let \( \caset \in \Clients \parfinfun \Caps \).
+Assuming \( \dom(\viewFun) = \dom(\caset) \), the \( ( \mkvs, \viewFun, \caset ) \in \func{inv}{\rid, \intf} \) iff:
 \[
 \begin{array}[t]{@{}l}
-    ( \mkvs, \vi, \ca ) = \func{init}{\rid} 
-    \lor \exsts{\mkvs', \vi', \ca'}
-    ( \mkvs' , \vi', \ca' ) \in \func{inv}{\rid, \intf} \land (( \mkvs' , \vi', \ca' ), ( \mkvs, \vi, \ca )) \in \intf(\kap) 
+    (\mkvs, \viewFun) \text{ is initial }
+    \land \func{init}{\rid}  = \prod\limits_{\cl \in \dom(\caset)} \caset(\cl) \\
+    {} \lor \exsts{\mkvs', \viewFun', \caset', \vi, \ca, \cl'} 
+    ( \mkvs' , \viewFun', \caset' ) \in \func{inv}{\rid, \intf} \\
+    \quad {} \land (( \mkvs' , \viewFun'(\cl'), \caset'(\cl') ), ( \mkvs, \vi, \ca )) \in \intf(\kap) 
+    \land \viewFun = \viewFun'\rmto{\cl'}{\vi}
+    \land \caset = \caset'\rmto{\cl'}{\ca}
 \end{array}
+\]
+The \( ( \mkvs, \vi, \ca ) \in \func{inv}{\rid, \intf} \) is a short-hand for:
+\[ 
+\exsts{\viewFun, \caset, \cl} \vi = \viewFun(\cl)  \land \ca = \caset(\cl) \land ( \mkvs, \viewFun, \caset ) \in \func{inv}{\rid, \intf}
 \]
 % 
 The \emph{world composition function}, $\composeW: \World \times \World \parfun \World$, is defined component-wise as: $\composeW \eqdef (\composeC, \composeS)$.
@@ -425,23 +433,23 @@ The guarantee allows to update several regions, but each region can be updated a
 A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\setworld, \como}$, if and only if it is closed under the rely relation: 
 \[
     \begin{rclarray}
-        \stable{\setworld, \como} & \eqdef & 
+        \stable{\gpre, \como} & \eqdef & 
         \begin{array}[t]{@{}l}
-            \fora{\w, \w', \mkvs, \mkvs', \vi, \vi', \vi''} 
-            \w \in \setworld 
+            \fora{\stk, \lenv, \w, \w', \mkvs, \mkvs', \vi, \vi', \vi''} 
+            \w \in \evalW{\gpre} 
             \land (\w, \w') \in \Rely  
             \land (\hh, \vi) = \eraseW{\w} \\
             \quad \land (\hh', \vi') = \eraseW{\w'} 
             \land \hh' \in \mathcal{CM}(\como)
             \land \et \vdash (\mkvs', \vi') \csat \unitO :  \vi'' 
-            \implies \w' \in \setworld
+            \implies \w' \in \evalW{\gpre}
         \end{array} \\
     \end{rclarray}
 \]
 \end{definition}
 
 Assertions are \emph{stable} if they remain true against the rely (\cref{def:stable}).
-Formally speaking, a set of worlds \( \setworld \) is stable under certain execution test \( \et \) if the set is closed under rely relation \( (\w, \w') \in \Rely \) with the side conditions:
+Formally speaking, a set of worlds \( \evalW{\gpre} \) is stable under certain execution test \( \et \) if the set is closed under rely relation \( (\w, \w') \in \Rely \) with the side conditions:
 \textbf{(i)} the new key-value store after a rely step is allowed by the consistency model induced by the execution test \( \mkvs' \in \CMs(\et) \);
 and \textbf{(ii)} the new view under the new key-value store is able to progress, \ie \( \et \vdash (\mkvs', \vi') \csat \unitO :  \vi'' \).
 Given the progress condition the new view is at least able to execute a \emph{dummy transaction}, \ie a transaction with empty fingerprint.
@@ -541,13 +549,11 @@ and, the update is allowed by the guarantee \( (\w, \w') \in \Guar\).
         \land (\mkvs, \vi) = \eraseW{\w}
         \implies 
         (\getSN{\mkvs, \vi}, \unitO) \in \evalLS{\lpre}  \\
-        \quad {} \land \fora{\w', \mkvs', \vi', \stk', \txid, \opset, \cl} 
-        \txid \in \fresh{\mkvs, \cl} 
-        \land (\stub, \opset) \in \evalLS[\lenv, \stk']{\lpost} \\
-        \qquad {} \land \mkvs' = \updM{\mkvs, \vi, \txid, \opset}
-        %\land \eraseW{\w}\projection{2} \leq \eraseW{\w'}\projection{2} 
-        \land \et \vdash (\mkvs, \vi) \csat \opset : \vi' \\
-        \qquad {} \land (\mkvs', \vi') = \eraseW{\w'} 
+        \quad {} \land \fora{\w', \mkvs', \vi', \stk', \opset, \cl} 
+        (\stub, \opset) \in \evalLS[\lenv, \stk']{\lpost} 
+        \land \mkvs' \in \updM{\mkvs, \vi, \cl, \opset} \\
+        \qquad {} \land \et \vdash (\mkvs, \vi) \csat \opset : \vi' 
+        \land (\mkvs', \vi') = \eraseW{\w'} 
         \land (\w, \w') \in \Guar
         \implies \w' \in \evalW[\lenv, \stk']{\gpost}
     \end{array} 
