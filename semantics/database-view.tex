@@ -63,6 +63,7 @@ each of which is either a special transaction identifier $\txid_0$,
 or it is indexed by a client identifier and a natural number. 
 Elements of $\TxID$ are ranged over by $\txid, \txid', \cdots$, 
 while subsets of $\TxID$ are ranged over $\txidset, \txidset', \cdots$. 
+We let $\TxID_{0} = \TxID \setminus \{ \txid_0\}$.
 The structure of the set $\TxID$  
 embeds the order in which transactions are executed by individual clients, or \emph{session order}. 
 Specifically, we let $\PO = \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid = \txid_{\cl}^{n} \wedge 
@@ -118,12 +119,12 @@ the length of $\hh(\ke)$.
 
 It will be often convenient to depict key-value stores graphically: an 
 example is given by the kv-store $\hh$ depicted in \cref{fig:hheap-a}
-(ignore for the moment the vertical lines labelled $\client_1$ and $\client_2$). 
+(ignore for the moment the vertical lines labelled $\client$ and $\client'$). 
 It comprises two keys \( \ke_1\) and \( \ke_2 \), 
 each of which is associated with two versions carrying values $\val_0$ and $\val_1$, and $\val'_0$ and $\val'_1$, respectively.
 The versions of a key are listed in order from left to right. 
 We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
-For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_2$.
+For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_{\cl'}^1$.
 
 In this paper we focus on key-value stores whose consistency model enforces the  
 \emph{atomic visibility} of transactions \cite{framework-concur}. 
@@ -134,8 +135,8 @@ written by the special transaction identifies $\txid_0$.
 %install the initial version of each key. 
 A \emph{well-formed} kv-store $\hh$ requires that:
 \begin{enumerate}[(i)]
-\item for each key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (\val_0, \txid_0, \stub)$, where $\val_0$ is a default value from $\Val$;
-\item transactions never write more than one version per key,  
+\item\label{kv:wf.init} for each key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (\val_0, \txid_0, \stub)$, where $\val_0$ is a default value from $\Val$;
+\item\label{kv:wf.onewrite} transactions never write more than one version per key,  
 \[
 \fora{\ke \in \dom(\hh)} \fora{ i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert}
 \WTx(\ke, i) = \WTx(\ke, j) \implies i = j \]
@@ -143,10 +144,10 @@ A \emph{well-formed} kv-store $\hh$ requires that:
 %\item transactions never read different versions 
 %for the same key $\fora{ \ke \in \dom(\hh)} \fora{ i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert}
 %\RTx(\ke, i) \cap \RTx(\ke, j) \neq \emptyset \implies i = j$;
-\item transactios never read different versions for the same key, 
+\item\label{kv:wf.oneread} transactions never read different versions for the same key, 
 \[
 \fora{\ke \in \dom(\hh)} \fora{ i,j : 0 \leq i, j < \lvert \hh(\ke) \rvert} 
-\WTx(\ke, i) = \WTx(\ke, j) \implies i = j
+\RTx(\ke, i) \cap \RTx(\ke, j) \neq \emptyset \implies i = j
 \]
 \ac{I am leaving this comment here: to change the macro from the standard \textbackslash forall 
 to \textbackslash fora, you elided the comma that separated the formula from the rest of the text. 
@@ -155,16 +156,16 @@ and nicely written. This happened also in the previous item.}
 \ac{Also, why do you insist on using the \textbackslash fora and \textbackslash exsts macros, when LaTeX has 
 its own predefined ones (that everybody understands and knows)? Remember that you are working with other people, 
 that will prefer the standard, well-known alternative.}
-\item all the reads of a transaction precede the writes of the same transaction, 
-\[\fora{ \ke \in \dom(\hh)}
-\fora{ i : 0 \leq i < \lvert \hh(k) \rvert} \WTx(\hh, k) \notin \RTx(\hh,k)
-\]
-\item the order 
+%\item all the reads of a transaction precede the writes of the same transaction, 
+%\[\fora{ \ke \in \dom(\hh)}
+%\fora{ i : 0 \leq i < \lvert \hh(k) \rvert} \WTx(\hh, k) \notin \RTx(\hh,k)
+%\]
+\item\label{kv:wf.so} the order 
 in which transactions issued by the same client install different versions for some key $\ke$, is consistent with the order in which 
-such transactions have been invoked, 
+such transactions have been invoked; similarly, a client can read the version of a key $\ke$ only after it installed it. 
 \begin{multline*}
 \fora{ \ke \in \dom(\hh), \cl \in \Clients} \fora{ i,j; 0 \leq i < j < \lvert \hh(\ke) \rvert}
-\fora{ n, m \geq 0}\\ (\WTx(\hh(\ke,i)) = \txid_{\cl}^{n} \wedge \WTx(\hh(\ke,j)) = \txid_{\cl}^{m}) \implies n < m.
+\fora{ n, m \geq 0}\\ (\txid_{\cl}^{n} = \WTx(\hh(\ke,i)) \wedge \txid_{\cl}^{m} \in \{\WTx(\hh(\ke,j))\} \cup \RTx(\hh(\ke, i)) \implies n < m.
 \end{multline*}
 \end{enumerate}
 We always assume that kv-stores are well-formed, and let $\HisHeaps$ be the set of well-formed kv-stores.
@@ -315,7 +316,7 @@ We always assume that kv-stores are well-formed, and let $\HisHeaps$ be the set 
  ([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
  ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
  
- \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client_1$};
+ \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client$};
 
 %red view
 \draw[-, red, very thick, rounded corners = 10pt]
@@ -324,7 +325,7 @@ We always assume that kv-stores are well-formed, and let $\HisHeaps$ be the set 
 % ([xshift=-16pt, yshift=5pt]locy-v1.north east) -- 
  ([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
  
-\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client_2$};
+\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client'$};
 
 \end{pgfonlayer}
 \end{tikzpicture}
@@ -559,7 +560,7 @@ $\vi: \dom(\hh) \to \Nat$ such that, for any $\ke \in \dom(\hh)$,
 $\vi(\ke) < \lvert \hh(\ke) \rvert$ and 
 \begin{equation}
 \label{eq:view.atomic}
-\fora{ \ke,\ke' \in \dom(\hh)}, \fora{ i,j \in \Nat} (j \leq \vi(\ke) \wedge 
+\fora{ \ke,\ke' \in \dom(\hh)} \fora{ i,j \in \Nat} (j \leq \vi(\ke) \wedge 
 \WTx(\hh(\ke, v(\ke))) = \WTx(\hh(\ke', i)) \implies i \leq \vi(\ke')
 \tag{Atomic}
 \end{equation}
@@ -621,7 +622,7 @@ they are not necessary.}
 %about the version observed by each client of its clients. 
 The view of the client $\cl$ in $\hh$ reflects the particular version for each key 
 that the client \(\cl \) observes upon executing a transaction. 
-The constraint of \cref{eq:view.atomic} establishes that If a client observes 
+The constraint of \cref{eq:view.atomic} establishes that if a client observes 
 a version of some key written by a transaction $\txid$, then it must observe all the versions of 
 all keys that $\txid$ wrote. This constraint captures the \emph{atomic visibility} of transactions.
 
@@ -768,25 +769,29 @@ definitions only as a last resort - they tend to be scary.}
 %\sx{From Andrea: introduce the execution test here with a table, also introduce fingerprint here}
 
 \mypar{Relationship between kv-stores and dependency graphs.}
-\emph{Dependency graphs} are introduced by Adya \cite{adya} to specify 
-consistency models. They are direct graphs consisting of transactions as nodes, 
+\ac{It could be that this subsection gets moved to a different section, where 
+we also relate specifications of consistency models using dependency graphs
+with execution tests.}
+\emph{Dependency graphs} are a formalism  introduced by Adya to specify 
+consistency models of transactional databases \cite{adya}. They are direct graphs consisting of transactions as nodes, 
 each of which is labelled with the respective fingerprint, and labelled edges 
 between transactions for specifying how information flows within a computation. 
 Specifically, a transaction $\txid$ may read a version for a key $\ke$ that has been written by another transaction $\txid'$ 
-(\emph{write-read dependency}), overwrite a version  of $\ke$ written by $\txid'$ (\emph{write-write dependency}), or 
+(\emph{write-read dependency}), overwrite a version of $\ke$ written by $\txid'$ (\emph{write-write dependency}), or 
 read a version of $\ke$ that is later overwritten by $\txid'$ (\emph{read-write anti-dependency}).
 \begin{definition}
 A \emph{dependency graph} is a quadruple $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, where
 \begin{itemize}
-\item $\TtoOp{T}: (\TxID \setminus \{\txid_0\}) \rightharpoonup \powerset{\Ops}$ is a partial function 
-mapping transaction identifiers to the operation they perform, 
+\item $\TtoOp{T}: \TxID_{0} \rightharpoonup \powerset{\Ops}$ is a partial function 
+mapping transaction identifiers to the set of operations they perform, 
 \item $\RF : \Keys \rightarrow \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is a function that 
 maps each key $\ke$ into a relation between transactions, such that for any $\txid, \txid_1, \txid_2, 
 \ke, \cl, m, n$: 
 \begin{itemize}
-\item for any $\txid$ such that $(\otR, \ke, \val) \in \TtoOp{T}(\txid)$, either $\val = \val_0$, 
+\item if $(\otR, \ke, \val) \in \TtoOp{T}(\txid)$, either $\val = \val_0$ 
+and there exists no $\txid'$ such that $\txid' \xrightarrow{\RF(\ke)} \txid$,  
 or there exists $\txid'$ such that $(\otW, \ke, \val) \in \TtoOp{T}(\txid')$, and $\txid' \xrightarrow{\RF(\ke)} \txid$, 
-\item if $\txid_1 \xrightarrow{\RF(\ke)} \txid$ and $\txid_2 \xrightarrow{\RF(\ke)} \txid_1$, then 
+\item if $\txid_1 \xrightarrow{\RF(\ke)} \txid$ and $\txid_2 \xrightarrow{\RF(\ke)} \txid$, then 
 $\txid_2 = \txid_1$, 
 \item if $\txid_{\cl}^{m} \xrightarrow{\RF(\ke)} \txid_{\cl}^{n}$, then $m < n$.
 \end{itemize}
@@ -794,7 +799,7 @@ $\txid_2 = \txid_1$,
 that maps each key into a relation between transactions, such that for any $\txid, \txid', \ke, \cl, m, n$, 
 \begin{itemize}
 \item if $\txid \xrightarrow{\VO(\ke)} \txid'$, then $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, 
-\item if $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid)$, then either $\txid = \txid'$, 
+\item if $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, then either $\txid = \txid'$, 
 $\txid \xrightarrow{\VO(\ke)} \txid'$, or $\txid' \xrightarrow{\VO(\ke)} \txid$, 
 \item if $\txid_{\cl}^{m} \xrightarrow{\RF(\ke)} \txid_{\cl}^{n}$, then $m < n$.
 \end{itemize}
@@ -806,7 +811,7 @@ $\txid'' \xrightarrow{\RF(\ke)} \txid$, $\txid'' \xrightarrow{\VO(\ke)} \txid'$ 
 some $\txid''$.
 \end{itemize}
 \end{definition}
-GIven a dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, we often 
+Given a dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, we often 
 commit an abuse of notation and use $\RF$ to denote the relation 
 $\bigcup_{\ke \in \Keys} \RF_{\ke}$; a similar notation is adopted for $\VO, \AD$. 
 It will always be clear from the context whether the symbol $\RF$ refers to a function 
@@ -821,10 +826,11 @@ graph. For example, \cref{fig:hheap-b} illustrates the dependency graph construc
 from the kv-store depicted in \cref{fig:hheap-a}.
 
 \begin{definition}
-Given a kv-store $\hh$, the \emph{dependent graph} $\graphof(\hh) = (\TtoOp{T}_{\hh}, \RF_{\hh}, 
+\label{def:kv2graph}
+Given a kv-store $\hh$, the \emph{dependency graph} $\Gr_{\hh} = (\TtoOp{T}_{\hh}, \RF_{\hh}, 
 \VO_{\hh}, \AD_{\hh})$ is defined as follows: 
 \begin{itemize}
-\item for any $\txid \neq \txid_0$, $\TtoOp{T}(\txid)$ is defined if and only if there exists an index $i$ and a key 
+\item for any $\txid \neq \txid_0$, $\TtoOp{T}_{\hh}(\txid)$ is defined if and only if there exists an index $i$ and a key 
 $\ke$ such that either $\txid = \WTx(\hh(\ke, i))$, or $\txid \in \RTx(\hh(\ke,i))$; furthermore, 
 $(\otW, \ke, \val) \in \TtoOp{T}(\txid)$ if and only 
 if $\txid = \WTx(\hh(\ke, i))$ for some $i$, and 
@@ -839,7 +845,8 @@ such that $\txid \in \RTx(\ke, i)$ and $\txid' = \WTx(\ke, j)$.
 \end{definition}
 
 \begin{theorem}
-The function $\graphof(\stub)$ is a bijection from kv-stores and well-formed dependency graphs.
+\label{thm:kv2graph}
+The function $\graphof_{(\stub)}$ is a bijection from kv-stores and well-formed dependency graphs.
 \end{theorem}
 
 \ac{Both the formal definition of dependency graph and the function $\graphof$ will need to go in the appendix.}
