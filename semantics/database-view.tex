@@ -108,10 +108,10 @@ $\WTx(\ver) = \txid$ and $\RTx(\ver) = \txidset$.
 %$\WTx(\ver)$ for its writer ($\txid$) and $\RTx(\ver)$ for its readers ($\txidset$).
 %, $\txid = \WTx(\ver)$ denotes the transaction identifier corresponding to the 
 %writer of the version, while $\txidset = \RTx(\ver)$ contains the set of the transaction identifiers that read a version. 
-Lists of versions $\Versions^{\ast}$ are ranged over by $\vilist, \vilist',\cdots$.
+Lists of versions, that is elements of $\Versions^{\ast}$, are ranged over by $\vilist, \vilist',\cdots$.
 
 \emph{A multi-version key-value store}, or \emph{kv-store}, 
-is a mapping from keys to the lists of versions. 
+is a mapping from keys to lists of versions. 
 For a given kv-store, $\hh$, key $\ke$ and index $i \geq 0$, we use the notation $\hh(\ke, i)$ 
 to denote the $i$-th version (starting from $0$) installed for $\ke$; that is, if $\hh(\ke) = \ver_0 \cdots\ver_{n}$, then 
 $\hh(\ke, i) = \ver_{i}$ if $i \leq n$, it is undefined otherwise. We also let $\lvert \hh(\ke) \rvert = n +1 $ denote 
@@ -551,20 +551,46 @@ but when executing transactions, different \emph{clients} may observe
 different versions of the same key. To keep track of 
 the versions they observe, clients are associated with \emph{views} (\cref{def:view}). 
 
+%\begin{definition}[Views and configurations]
+%\label{def:view}
+%\label{def:cuts}
+%\label{def:views}
+%\label{def:configuration}
+%Given a key-value store $\hh$, \emph{a view} in $\hh$ is a function  
+%$\vi: \dom(\hh) \to \Nat$ such that, for any $\ke \in \dom(\hh)$, 
+%$\vi(\ke) < \lvert \hh(\ke) \rvert$ and 
+%\begin{equation}
+%\label{eq:view.atomic}
+%\fora{ \ke,\ke' \in \dom(\hh)} \fora{ i,j \in \Nat} (j \leq \vi(\ke) \wedge 
+%\WTx(\hh(\ke, v(\ke))) = \WTx(\hh(\ke', i)) \implies i \leq \vi(\ke')
+%\tag{Atomic}
+%\end{equation}
+
 \begin{definition}[Views and configurations]
 \label{def:view}
 \label{def:cuts}
 \label{def:views}
 \label{def:configuration}
-Given a key-value store $\hh$, \emph{a view} in $\hh$ is function  
-$\vi: \dom(\hh) \to \Nat$ such that, for any $\ke \in \dom(\hh)$, 
-$\vi(\ke) < \lvert \hh(\ke) \rvert$ and 
+Given a key-value store $\hh$, \emph{a view} in $\hh$ is a function  
+$\vi: \dom(\hh) \to\powerset{\Nat}$ such that  
+\[
+\forall \ke \in \dom(\hh).\; \vi(\ke) \neq \emptyset \wedge \forall i \in \vi(\ke).\; i < \lvert \hh(\ke) \rvert.
+\]
+and 
 \begin{equation}
 \label{eq:view.atomic}
-\fora{ \ke,\ke' \in \dom(\hh)} \fora{ i,j \in \Nat} (j \leq \vi(\ke) \wedge 
-\WTx(\hh(\ke, v(\ke))) = \WTx(\hh(\ke', i)) \implies i \leq \vi(\ke')
+\fora{ \ke,\ke' \in \dom(\hh)} \fora{ i,j \in \Nat} (j \in \vi(\ke) \wedge 
+\WTx(\hh(\ke, \vi(\ke))) = \WTx(\hh(\ke', i)) \implies i \in \vi(\ke')
 \tag{Atomic}
 \end{equation}
+
+\ac{Now views map keys to sets of indexes. In plain terms, we lifted 
+an assumption in the model that required that once a client observes 
+a version for key $\ke$, it must also observe any transaction that 
+installed a previous version for $\ke$.\\
+ALL THE FIGURES THAT USED VIEWS MUST BE DRAWN AGAIN. WE ALSO NEED A 
+GRAPHIC FORMALISM FOR THE NEW NOTION OF VIEWS.}
+
 
 %and \( \pred{atomic}{\mkvs,\vi} \),
 %\[
@@ -611,18 +637,19 @@ If you insist on using atomic as a predicate, then it should be introduced prope
 For example: [..] and \( \pred{atomic}{\mkvs, \vi} \), \textbf{WHERE} \( \pred{atomic}{\mkvs, \vi} \defeq \cdots \)
 }
 Given $\hh \in \HisHeaps$ and two views $\vi, \vi' \in \Views(\hh)$, 
-we let $\vi \viewleq \vi'$ if, for any $\ke \in \dom(\hh)$, $\vi(k) \leq \vi'(\ke)$. 
-In this case we say that $\vi$ is older than $\vi'$ ($\vi'$ is newer than $\vi$).
+we let $\vi \viewleq \vi'$ if, for any $\ke \in \dom(\hh)$, $\vi(k) \subseteq \vi'(\ke)$. 
+\ac{Note that the definition of $\viewleq$ has been changed to reflect the new definition of views.}
+%In this case we say that $\vi$ is older than $\vi'$ ($\vi'$ is newer than $\vi$).
 
 %\emph{A configuration} (\cref{def:configuration} augments the notion of kv-stores with the information 
 %about the version observed by each client. 
 \emph{A configuration}
-includes a kv-store and the views for clients.
+includes a kv-store and a partial mapping from clients from clients to views.
 \ac{Before it was: \emph{A configuration} (\cref{def:configuration}).\\
 Configurations were introduced literally two lines ago. Do not include references when 
 they are not necessary.}
 %about the version observed by each client of its clients. 
-The view of the client $\cl$ in $\hh$ reflects the particular version for each key 
+The view of the client $\cl$ in $\hh$ reflects the set of versions for each key 
 that the client \(\cl \) observes upon executing a transaction. 
 The constraint of \cref{eq:view.atomic} establishes that if a client observes 
 a version of some key written by a transaction $\txid$, then it must observe all the versions of 
@@ -636,12 +663,16 @@ There are two clients,
 $\cl_1$ and $\cl_2$, with views $\vi_1$, and $\vi_2$ respectively. $\vi_1$ crosses $\ke_1$ at its $0$-th 
 version, and $\ke_2$ at its $1$-st version. Therefore we have $\vi_1 = \Set{\ke_1 \mapsto 0, \ke_2 \mapsto 1}$. 
 Similarly, we have $\vi_2 = \Set{\ke_1 \mapsto 1, \ke_2 \mapsto 0}$. 
+\ac{Paragraph Above must be rewritten when we decide on a graphic notation for 
+the new notion of views.}
 %\ac{Never refer to colors in text. People may read in black and white.}
 
 Given a kv-store $\hh$, a view $\vi$ and a key $\ke \in \dom(\hh)$, 
 we commit an abuse of notation and write $\hh(\ke, \vi)$ as a shorthand 
-for $\hh(\ke, \vi(\ke))$. The view $\vi$ naturally induces a \emph{snapshot} 
-by extracting the value of the $\vi(\ke)$-th version for each key $\ke \in \dom(\hh)$. 
+for $\hh(\ke, \max(\vi(\ke)))$. Note that such a version is well-defined because 
+we are assuming that $\vi(\ke) \neq \emptyset$.
+The view $\vi$ naturally induces a \emph{snapshot} 
+by extracting the value of the most up-to-date version it observes for each key $\ke \in \dom(\hh)$. 
 %As we will see presently, snapshots are used to determine the value of keys returned 
 %by read operations of transactions. 
 As we will see presently, transactions operate on their own snapshots.

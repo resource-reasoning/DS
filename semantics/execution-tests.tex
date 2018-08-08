@@ -63,8 +63,8 @@ We model this via the function $\updateKV: \HisHeaps \times \Views \times \TxID 
     \updateKV(\hh, \vi, \txid, \emptyset) &\defeq & \hh \\
     \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \stub)}) & \defeq &  
     \begin{array}[t]{@{}l}
-        \texttt{let } (\val, \txid', \txidset) = \hh(\ke, \vi), 
-        \vilist_{\ke} = \hh(\ke)\rmto{\vi(\ke)}{(\val, \txid', \txidset \uplus \{ t \})}\\
+        \texttt{let } (\val, \txid', \txidset) = \hh(\ke, \max(\vi(\ke))), 
+        \vilist_{\ke} = \hh(\ke)\rmto{\max(\vi(\ke))}{(\val, \txid', \txidset \uplus \{ t \})}\\
         %\hh\rmto{\ke}{%
         %   \hh(\ke)\rmto{\vi(\addr)}{%
         %      (\val, \txid', \txidset \uplus \Set{\txid}) } } \\
@@ -102,19 +102,19 @@ as to reflect the fact that $\txid$ is the most recent transaction executed by $
 %according to the partial order $\xrightarrow{\PO}$, than any of the transaction identifier 
 %of the form $\txid_{\cl}^{n}$ appearing in $\hh$, denotes the fact that 
 Then for every read operation $(\otR, \ke, \stub)$ in $\opset$,
-the readers of $\ke$ at index $\vi(\ke)$ are extended with $\txid$.
+the readers of $\ke$ at index $\max(\vi(\ke))$ are extended with $\txid$.
 %For each read operation $(\otR, \ke, \val) \in \opset$, we need to select in $\hh$ the version 
 %from which $\txid$ read its value, and update the set of read transactions to include $\txid$. 
 Because a transaction reads the values of keys from the atomic 
 snapshot determined by the view of the client, the version read by $\txid$ for key $\ke$ 
-corresponds to $\hh(\ke, \vi)$.
+corresponds to $\hh(\ke, \max(\vi(\ke)))$.
 For every write operation $(\otW, \ke, \val)$ in fingerprint $\opset$, 
 the list of versions $\mkvs(\ke)$ is extended with a new version $(\val, \txid, \emptyset)$, 
 denoting that $\txid$ is responsible for creating this version which has no readers as of yet. 
 %For write operations of the form $(\otW, \ke, \val)$, 
 %we create a new version, carrying value $\val$ and written by the transaction $\txid$, 
 %which is appended to the tail of $\hh(\ke)$.
-Note that, the assumption that versions of 
+Note that the assumption that versions of 
 a given key are totally ordered and consistent with the order in which 
 transactions commit is standard \cite{adya,framework-concur,seebelieve}. 
 
@@ -177,13 +177,13 @@ To specify consistency models we adopt the notion of \emph{execution tests}.
 \label{def:execution.test}
 An execution test is a set of tuples $\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
 such that whenever $(\hh, \vi, \opset, \vi') \in \ET$, then 
-\textbf{(i)} whenever $(\otR, \ke, \val) \in \opset$ then $\hh(\ke, \vi) = \val$, 
+\textbf{(i)} whenever $(\otR, \ke, \val) \in \opset$ then $\hh(\ke, \max(\vi(\ke))) = \val$, 
 and \textbf{(ii)}  $\forall \ke. \; \vi(\ke) \neq \vi'(\ke) \implies ( (\otR, \ke, \_) \in \opset \vee (\otW, \ke, \_)) \in \opset)$.
 %\textbf{(iii)} $\forall \opset' \subseteq \opset.\; (\hh, \vi, \opset', \vi') \in \ET$
 \end{definition}
 \sx{The definition has a problem that for the subset \( \f'\) the post-view \( \vi' \) might point to an undefined version, I also thing it should satisfy \( \fora{\vi''} \vi \sqsubseteq \vi'' \implies (\hh, \vi, \opset', \vi'') \)}.
 \ac{I removed this condition, as I do not think that it was used anywhere. The new definition requires that 
-you cannot shift a view for keys that you do not read nor write.}
+you cannot change the view for keys that you do not read nor write.}
 Let $\ET$ be an execution test: $(\hh, \vi, \opset, \vi') \in \ET$ means 
 that a client whose view over the kv-store $\hh$ is $\vi$, can commit a 
 transaction whose fingerprint is $\opset$; as a result of this operation, the 
@@ -247,6 +247,8 @@ as the smallest relation such that
 \end{itemize}
 Such relations take the name of $\ET$-reductions, or simply reductions.
 \end{definition}
+Given an execution test $\ET$, sequences of $\ET$-reductions of the form $\conf_{0} \xrightarrowtriangle{\alpha_{0}}_{\ET} \cdots 
+\xrightarrow{\alpha_{n-1}} \conf_{n}$ take the name of \emph{$\ET$-traces}.
 %we define the relation $\xrightarrowtriangle{cl, \opset, \vi}_{\ET}
 %\subseteq \Confs \times \Confs$ by letting 
 %the relation $(\hh_1, \viewFun_1) \xrightarrowtriangle{cl,\vi, \opset}_{\ET} 
@@ -287,15 +289,36 @@ The consistency model induced by $\ET$ is given by:
 %\]
 \end{definition}
 Thus, consistency models are computed from execution tests by closing the set of initial kv-stores with 
-respect to two operations: replacing the view of a client on the kv-store with an advanced one, and committing 
+respect to two operations: replacing the view of a client on the kv-store with a more up-to-date one, and committing 
 the effects of a transaction. 
+
+Consistency models induced by execution tests are monotonic in the following sense.
+\begin{proposition}
+\label{prop:mono-et}
+Let $\ET_1 \subseteq \ET_2$. Then $\CMs(\ET_1) \subseteq \CMs(\ET_2)$.
+\end{proposition}
+%In particular, let $\ET_{\bot} = \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
+%be the most permissive execution test. Then for any execution test $\ET_{\bot}$, we have that 
+%$\CMs(\ET) \subseteq \CMs(\ET_{\bot})$. Intuitively, we expect that any kv-store 
+%$\hh$ is allowed by $\ET_{\bot}$. This is stated formally in the next result. 
+%\begin{proposition}
+%\label{prop:et.bot}
+%$\CMs(\ET_{\bot}) = \HisHeaps$.
+%\end{proposition}
+%
+%\begin{example}
+%As we will see later, Proposition \ref{prop:et.bot} plays an important role in ensuring 
+%that specification of consistency models given using execution tests are equivalent 
+%to those previously defined in the literature. 
+%\end{example}
+
 For technical reasons, it will be convenient to adopt a reduction strategy for inferring kv-stores induced by an 
 execution test: such an execution strategy require that clients only commit transactions with non-empty fingerprints, 
 and a client updates its view only immediately before committing a transaction. 
 The next proposition states that all kv-stores induced by an execution test $\ET$ can be 
 obtained via a sequence of reductions that adhere to the reduction strategy outlined above. 
 \begin{definition}
-Let $\ET$ be an execution test. A sequence of reductions 
+Let $\ET$ be an execution test. The $\ET$-trace
 \[
 \conf_0 \xrightarrowtriangle{\alpha_0}_{\ET} \conf_1 \xrightarrowtriangle{\alpha_1}_{\ET} \cdots \xrightarrowtriangle{\alpha_{n-1}}_{\ET} \conf_{n}
 \]
@@ -306,23 +329,18 @@ $\alpha_{2 \cdot i} = (\cl_{i}, \varepsilon)$, and $\alpha_{2 \cdot i + 1}$ is d
 
 
 \ac{Note that the fact that $\alpha_{2 \cdot \lfloor{\frac{n-1}{2}}\rfloor + 1}$ is defined implies that $n-1$ must be odd, or alternatively that 
-the number of reductions in the sequence must be even.}
+the number of reductions in the $\ET$-trace must be even.}
 
 \begin{proposition}
 \label{prop:et.normalform}
-Let $\ET$ be an execution test, and suppose that $\hh \in \CMs(\ET)$. Then there exists a sequence of 
-reductions 
+Let $\ET$ be an execution test, and suppose that $\hh \in \CMs(\ET)$. Then there exists a $\ET$-trace  
 \[
 (\hh_0, \viewFun_0) \xrightarrowtriangle{\stub}_{\ET} \cdots \xrightarrowtriangle{\stub}_{\ET} (\hh_n, \viewFun_{n})
 \]
 that is in normal form, and such that $\hh_{n} = \hh$.
 \end{proposition}
 
-Consistency models induced by execution tests are monotonic in the following sense.
-\begin{proposition}
-\label{prop:mono-et}
-Let $\ET_1 \subseteq \ET_2$. Then $\CMs(\ET_1) \subseteq \CMs(\ET_2)$.
-\end{proposition}
+
 %Note that specifications of consistency models using execution tests 
 %are compositional in the following way: 
 %
@@ -371,7 +389,7 @@ Define the following terms:
 \hh_3 &=& \big[\ke_1 \mapsto \big( (\val_0, \txid_0, \emptyset) \lcat (\val_2, \txid_{\cl_1}^{1}, \emptyset)\big), 
                          \ke_2 \mapsto \big( (\val_0, \txid_0, \emptyset) \lcat (\val_2, \txid_{\cl_2}^{1}, \emptyset) \big) \big]\\
 &&\\
-\vi_0 &=& [\ke_1 \mapsto 0, \ke_2 \mapsto 0]\\
+\vi_0 &=& [\ke_1 \mapsto \{0\}, \ke_2 \mapsto \{0\}]\\
 \viewFun_0 &=& [\cl_1 \mapsto \vi_0, \cl_2 \mapsto \vi_0]\\
 &&\\
 \ET_1 &\vdash& (\hh_0, \vi_0) \triangleright \{(\otW, \ke_1, \val_1)\} : \vi_0\\
@@ -426,19 +444,22 @@ for commutative execution tests.
 
 \begin{example}
 \label{ex:noblindwrites}
+For any $n \in \Nat$, let $[n] = \{0,\cdots, n\}$.
 Consider the execution tests $\ET_1, \ET_2$ defined below: 
 \[
 \begin{array}{lcl}
-\ET_1 \vdash (\hh, \vi) \triangleright \opset : \vi &\iff& 
-\forall \ke.\;(\otW, \ke, \_) \in \opset \implies \vi(\ke) = 0\\
+\ET_1 \vdash (\hh, \vi) \triangleright \opset : \vi' &\iff& 
+\forall \ke.\;(\otW, \ke, \_) \in \opset \implies \vi(\ke) = \vi'(\ke) = [0]\\
 \ET_2 \vdash (\hh, \vi) \triangleright \opset : \vi'(\ke) &\iff& 
-\forall \ke. \;(\otW, \ke, \_ ) \in \opset \implies \vi(\ke) = \lvert \hh(\ke) \rvert - 1 \wedge \vi'(\ke) = \vi'(ke)\\
+\forall \ke. \;(\otW, \ke, \_ ) \in \opset \implies \vi(\ke) = [ \lvert \hh(\ke) \rvert - 1] \wedge \vi'(\ke) = [\lvert \hh(\ke) \rvert ] \\
 \end{array}
 \]
 It is immediate to observe that both $\ET_1$ and $\ET_2$ are commutative. However, 
 consider the kv-store $\hh_2 = [\ke \mapsto (\val_0, \txid_0, \emptyset) \lcat (\val_1, \txid_{\cl}^1, \emptyset) \lcat (\val_2, \txid_{\cl}^2, \emptyset)]$. 
 We have that $\hh \in \CMs(\ET_1)$ and $\hh \in \CMs(\ET_2)$.
-Let in fact $\hh_1 = [\ke \mapsto (\val_0, \txid_0, \emptyset) \lcat (\val_1, \txid_{\cl}^1, \emptyset)]$, $\vi_{i} = [\ke \mapsto i]$.
+Let in fact $\hh_1 = [\ke \mapsto (\val_0, \txid_0, \emptyset) \lcat (\val_1, \txid_{\cl}^1, \emptyset)]$, $\vi_{i} = [\ke \mapsto [i] ]$.
+\ac{Seriously, square brackets are being used everywhere (though all of this is standard notation. Maybe $\langle n \rangle$ for $\{0,\cdots, n\}$ is 
+a better notation?}
 We have the following sequences of reductions: 
 \[
 \begin{array}{l}
@@ -448,15 +469,18 @@ We have the following sequences of reductions:
 (\hh_2, \vi_2)
 \end{array}
 \]
-On the other hand, we can observe that $\hh_2 \notin \CMs(\ET_1 \cap \ET_2)$. $\ET_1$ only allows a client to 
-commit a transaction if its view points to the initial version of each key it writes. $\ET_2$ only allows a client 
-to commit a transaction when its view points to the last version of each key it writes. In $\ET_1 \cap \ET_2$ 
-a client can commit a transaction only if the initial version of each key it writes is also the most up-to-date version 
-(i.e. there is only one version for each key written by the transaction): as a result, $\CMs(\ET_1 \cap \ET_2)$ 
-never contains a  kv-stores $\hh$ such that $\hh(ke) > 1$ for some key $\ke$; in particular, $\hh_2 \notin \CMs(\ET_1 \cap \ET_2)$.
+On the other hand, we can observe that $\hh_2 \notin \CMs(\ET_1 \cap \ET_2)$. $\ET_1$ allows a client to 
+commit a transaction if its view only includes the initial version of each key it writes. $\ET_2$ allows a client 
+to commit a transaction when its view include all the versions for each key it writes. In $\ET_1 \cap \ET_2$ 
+a client can commit a transaction only if the initial version of each key it writes is also the only version in the kv-store: 
+as a result, $\CMs(\ET_1 \cap \ET_2)$ never contains a  kv-stores $\hh$ such that $\hh(ke) > 1$ for some key $\ke$; 
+in particular, $\hh_2 \notin \CMs(\ET_1 \cap \ET_2)$.
 \end{example}
+\ac{Two possible reasons why compositionality fails: because of blind writes, or because the test $\ET_1$ hinders progress, 
+i.e. it is not possible to replace a view with a more up-to-date one to enable progress. We must choose which assumption 
+we make on the consistency model.}
 
-The reason why compositionality fails in \cref{ex:noblindwrites} is that the execution tests $\ET_1$ and $\ET_2$ do not contain 
+One reason why compositionality fails in \cref{ex:noblindwrites} is that the execution tests $\ET_1$ and $\ET_2$ do not contain 
 any information about the the views that client $\cl$ used to commit the transactions $\txid_{\cl}^1, \txid_{\cl}^2$. 
 To solve this problem we adopt the \emph{no blind writes} assumption, that requires that a client never commits 
 a transaction that writes a key, without reading such a key beforehand. Many implementations of consistency models 
