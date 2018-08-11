@@ -87,7 +87,7 @@ h = \lambda \ke. \text{let } \T_{\ke} = ( \T \cap \{\txid \mid (\otW,\ke, \_) \i
 %\ac{I know that the symbol $\anarchic$ will change in the future. This is just a comment to let you know that, when it 
 %will happen, I will be very sad.}
 
-\subparagraph{Compatibility of kv-Stores and Abstract Executions.}
+\mypar{Compatibility of kv-Stores and Abstract Executions.}
 Throughout this section we focus on abstract executions that satisfy the 
 resolution policy $\RP_{\LWW}$.
 Such abstract executions can be converted into dependency graphs \cite{SIanaysis,laws}, 
@@ -168,6 +168,160 @@ $\getView(\aexec, \T) = \lambda \ke. \{0\} \cup \{ i \mid i \in [\lvert \hh_{\ae
 \WTx(\hh_{\aexec}(\ke, i)) \in \T\}$.
 We give details of the proof of the Theorem in \cref{app:aexec2kv}.
 
+\mypar{Relating $\ET$-traces to Abstract Executions.}
+%We have already argued that, in contrast to abstract executions, kv-stores do not contain 
+%any information about the total order in which transactions have been executed.
+Let $,\ET_\top$ be the most permissive execution test, that is 
+$\ET_\top \vdash (\hh, \vi) \triangleright \opset: \vi'$ for any $\hh, \vi, \opset, \vi'$. 
+In this Section, we relate $\ET_{\top}$-traces to abstract executions that satisfy the last write wins 
+resolution policy. Specifically, we prove the following: 
+\begin{theorem}
+\label{thm:kvtrace2aexec}
+Let $\tr$ be a $\ET_{\top}$-trace; there exists an abstract execution $\aexec_{\tr}$ 
+whose last configuration is $(\hh_{\aexec}, \_)$.
+
+Let $\aexec$ be an abstract execution that satisfies the last write wins resolution policy. 
+There exists a kv-trace $\tr_{\aexec}$ in normal form, whose last configuration $(\hh_{\aexec}, \_)$. 
+Furthermore, for any $\aexec_{\tr_{\aexec}} = \aexec$.
+\end{theorem}
+
+\begin{corollary} 
+\label{cor:kvtrace2aexec}
+$\CMs(\ET_{\top}) = \{\hh_{\aexec} \mid \aexec \text{ satisfies } \RP_{\LWW}\}$.
+\end{corollary}
+
+A consequence of Theorem \ref{thm:kvtrace2aexec} is that $\ET_{\top}$-traces are isomorphic 
+to abstract executions that satisfy the last write wins policy.
+Note that our definition of views (\cref{def:views}) is critical to the validity of Theorem \ref{thm:kvtrace2aexec}, 
+as the following example shows. 
+
+\begin{figure}
+\begin{center}
+\hrule
+\begin{tabular}{@{}c @{\qquad}|@{\qquad} c@{}}
+\begin{tikzpicture}[scale=0.85, every node/.style={transform shape}]
+%\draw[help lines] grid(6,4);
+
+\node (t1wx) {$(\otW, \ke_1, \val_1)$}; 
+\path (t1wx.east) + (0.2,0) node[anchor = west] (t1wy) {$(\otW, \ke_2, \val_1)$};
+\path (t1wx.south east) + (0.1, -1) node[anchor = north] (t2wx) {$(\otW, \ke_1, \val_2)$};
+\path (t1wy.south east) + (1,-1) node[anchor = north west] (t3rx) {$(\otR, \ke_1, \val_2$)};
+\path (t3rx.east) + (0,0) node[anchor=west] (t3ry) {$(\otR, \ke_2, \val_0)$};
+
+\begin{pgfonlayer}{background}
+\node[background, fit=(t1wx) (t1wy)] (t1) {};
+\node[background, fit= (t2wx)] (t2) {};
+\node[background, fit= (t3rx) (t3ry)] (t3) {};
+
+\path(t1.north) node[anchor=south] (t1lbl) {$\txid_{\cl_1}^{1}$};
+\path(t2.south) node[anchor=north] (t2lbl) {$\txid_{\cl_2}^{1}$};
+\path(t3.east) node[anchor=west] (t3lbl) {$\txid_{\cl_3}^{1}$};
+
+\path[->]
+(t1.south) edge node[right] {$\AR$} (t2.north)
+(t2.east) edge node[above] {$\AR, \VIS$} (t3.west);
+\end{pgfonlayer}
+\end{tikzpicture}
+&
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%Uncomment line below for help lines
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid_{\cl_1}^{1}$ & {a} & $\txid_{\cl_2}^{1}$\\
+    {a} & $\emptyset$ & {a} & $\emptyset$ & {a} & $\left\{\txid_{\cl_3}^{1}\right\}$\\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$\val_0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$\val_1$};
+\tikzvalue{versionx-1-5}{versionx-2-5}{locx-v2}{$\val_2$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid_{\cl_1}^{1}$ \\
+  {a} & $\left\{\txid_{\cl_3}^1\right\}$ & {a} & $\emptyset$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$\val_0$};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$\val_1$};
+
+% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+
+%%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+%\draw[-, blue, very thick, rounded corners=10pt]
+% ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+% ([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
+% ([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
+% ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
+% 
+% \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client$};
+%
+%%red view
+%\draw[-, red, very thick, rounded corners = 10pt]
+% ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+%% ([xshift=-16pt, yshift=-5pt]locx-v0.south east) --
+%% ([xshift=-16pt, yshift=5pt]locy-v1.north east) -- 
+% ([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
+% 
+%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client'$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{tabular}
+\end{center}
+\hrule
+\caption{An example of abstract execution and associated kv-store.}
+\label{fig:aexec.noncontiguous}
+\end{figure}
+
+\begin{example}
+\label{ex:badviews}
+At an earlier stage of this research, views of kv-stores were defined to include only contiguous sets of versions 
+for any key $\ke$: that is, for given a kv-store $\hh$, we required from a view $\vi \in \Views(\hh)$ that 
+$\vi(\ke) = [i]$ for some $i: 0 \leq < \lvert \hh(\ke) \rvert$, in addition to the constraints posed by \cref{def:views}. 
+In this setting, the most permissive execution test $\ET$ was the following: 
+\[
+\left(\ET \vdash (\hh, \vi) \triangleright \opset \vi' \right) \iff \forall \ke.\;\exists i_{\ke}, j_{\ke}.\; \vi(\ke) = [ i ] \wedge \vi'(\ke) = [ j ].
+\]
+
+Consider the abstract execution $\aexec$ depicted in Figure \ref{fig:aexec.noncontiguous}, 
+and the associated kv-store $\hh_{\aexec}$, depicted to the right in the same Figure.
+We argue that $\hh_{\aexec} \notin \CMs(\ET)$. According to \cref{thm:et.normalform} it suffices to prove 
+that there exists no $\ET$-trace that is in normal form, and whose last configuration is $(\hh_{\aexec} ,\_)$. 
+Suppose that such an $\ET$-trace $\tr$ existed: because we require that the last configuration in $\tr$ is 
+$(\hh_{\aexec}, \_)$, then it must be the case that in $\tr$ transaction $\txid_{\cl_1}^{1}$ is executed 
+before $\txid_{\cl_2}^{1}$, and the latter is executed before $\txid_{\cl_3}^1$. This is because 
+$\txid_{\cl_2}^{1}$ installs a newer version of $\ke_1$ than the one read by $\txid_{\cl_2}^1$, 
+and $\txid_{\cl_3}^{1}$ reads the version of $\ke_1$ installed by $\txid_{\cl_2}^{1}$. Because, 
+$\tr$ is in normal form, we have the following: 
+\[
+\begin{array}{ll}
+\tr = & (\hh_{0}, \viewFun_{0}) \xrightarrowtriangle{(\cl_1, \varepsilon)}_{\ET} (\hh_0, \viewFun_0') 
+\xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh_1, \viewFun_1) \xrightarrowtriangle{(\cl_2, \varepsilon)}_{\ET} \\
+& (\hh_1, \viewFun_1') \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh_2, \viewFun_2) \xrightarrowtriangle{(\cl_3, \varepsilon)}_{\ET} 
+(\hh_2, \viewFun_2')\xrightarrowtriangle{(\cl_3, \opset_3)}_{\ET} (\hh_3, \viewFun_3),
+\end{array}
+\]
+where $\opset_1 = \{(\otW, \ke_1, \val_1), (\otW, \ke_2, \val_1)\}$, $\opset_2 = \{(\otW, \ke_1, \val_2)\}$, 
+$\opset_3 = \{(\otR, \ke_1, \val_2), (\otR, \ke_2, \val_0)\}$,\\ $\hh_1 = \updateKV(\hh_0, \cl_1, \_, \opset_1)$, 
+$\hh_2 = \updateKV(\hh_1, \cl_2, \_, \opset_2)$, and $\hh_3 = \updateKV(\hh_2, \cl_3, \viewFun_2'(\cl_3), \opset_3)$ 
+for a suitable $\viewFun_2'$.
+Furthermore, we require that $\hh_3 = \hh_{\aexec}$, which is possible only if $\viewFun_2'(\cl_3) = [\ke_1 \mapsto [2], \ke_2 \mapsto [0] ]$ 
+(recall that by definition of $\ET$, it must be that for any key $\ke$, $\viewFun_2'(\cl)(\ke) = [i_{\ke}]$ for some $i_{\ke} \geq 0$); 
+this is because, in $\hh_3 = \hh_{\aexec}$, transaction $\txid_{\cl}^3$ reads the $2$-nd version of $\ke_1$ and the $0$-th version of 
+$\ke_2$. It remains to note that the view $\viewFun_{2}'(\cl_3)$ is not atomic w.r.t. $\hh_2$, causing a contradiction: 
+in fact, we have that $\WTx(\hh_{2}(\ke_1, 1) = \txid_{\cl_1}^{1} = \WTx(\hh_2(\ke_2, 1))$. However, 
+$1 \in \viewFun_{2}'(\cl_3)(\ke_1)$, but $1 \notin \viewFun_{2}'(\cl_3)(\ke_2)$: the view $\viewFun_{2}'(\cl_3)$ 
+contains the update of $\ke_1$ performed by $\txid_{\cl_1}^{1}$, but not the update of $\ke_2$ performed by the 
+same transaction.
+\end{example}
 
 \mypar{Specification of Consistency Models via Abstract Executions.}
 In the abstract execution framework, specifications of consistency models are given by placing \emph{axioms} that the 
