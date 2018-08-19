@@ -285,7 +285,7 @@ as the following example shows.
 \label{ex:badviews}
 At an earlier stage of this research, views of kv-stores were defined to include only contiguous sets of versions 
 for any key $\ke$: that is, for given a kv-store $\hh$, we required from a view $\vi \in \Views(\hh)$ that 
-$\vi(\ke) = [i]$ for some $i: 0 \leq < \lvert \hh(\ke) \rvert$, in addition to the constraints posed by \cref{def:views}. 
+$\vi(\ke) = [i]$ for some $i: 0 < \lvert \hh(\ke) \rvert$, in addition to the constraints posed by \cref{def:views}. 
 In this setting, the most permissive execution test $\ET$ was the following: 
 \[
 \left(\ET \vdash (\hh, \vi) \triangleright \opset \vi' \right) \iff \forall \ke.\;\exists i_{\ke}, j_{\ke}.\; \vi(\ke) = [ i ] \wedge \vi'(\ke) = [ j ].
@@ -326,27 +326,61 @@ same transaction.
 We now turn our attention to the proof of \cref{thm:kvtrace2aexec}. 
 The first step is that of constructing, given a $\ET_{\top}$-trace $\tr$, 
 an abstract execution $\aexec_{\tr}$ whose last configuration $(\hh, \_)$ 
-is such that $\hh = \hh_{\aexec}$. In practice, we map each $\ET_{\top}$-trace 
-$\tr$ into an abstract execution $\aexec_{\tr}$, and a function $\visibleTx: \Clients \parfun \T_{\aexec}$. 
-The latter are to abstract execution what view functions are to kv-stores in configurations: they keep 
-track of what transactions would be observed by a client, if it were to execute a transaction. 
-The definition of $\aexec_{\tr}$ is given inductively below: 
+is such that $\hh = \hh_{\aexec}$. 
+%In practice, we map each $\ET_{\top}$-trace 
+%$\tr$ into an abstract execution $\aexec_{\tr}$, and a function $\visibleTx: \Clients \parfun \T_{\aexec}$. 
+%The latter are to abstract execution what view functions are to kv-stores in configurations: they keep 
+%track of what transactions would be observed by a client, if it were to execute a transaction. 
+The definition of $\aexec_{\tr}$ is natural, and is given inductively below: 
 
 \begin{definition}
 Let $\hh$ be a kv-store, and $\vi$ be a view. We let $\Tx(\hh, \vi) = \{ \WTx(\hh(\ke, i)) \mid \ke \in \Keys \wedge 
 i = 0,\cdots, \lvert \hh(\ke) \rvert - 1 \wedge i \in \vi(\ke) \}$. 
-Let $\aexec_0 = ( [ ], \emptyset, \emptyset)$. Given an abstract execution $\aexec$, a function 
-$\visibleTx$, a transaction identifier $\txid_{\cl}^{n}$ and a set of operations $\opset$, we let 
-$\cdots$.
+Let $\aexec_0 = ( [ ], \emptyset, \emptyset)$. Given an abstract execution $\aexec$, a set of transactions  
+$\T \subseteq \T_{\aexec}$, a transaction identifier $\txid$ and a set of operations $\opset$, we let 
+\[
+\extend(\aexec, \txid, \T, \opset) = 
+\begin{cases}
+\textit{undefined} &\impliedby \txid = \txid_{0}\\
+(\TtoOp{T}_{\aexec}\rmto{\txid_{\cl}^{n}}{\opset}, \VIS', \AR') & \impliedby \txid = \txid_{\cl}^{n} \wedge {}\\
+& \VIS' = \VIS_{\aexec} \cup \{(\txid', \txid) \mid \txid \in \T)\} \wedge {}\\
+& \AR' = \AR_{\aexec} \cup \{(\txid', \txid) \mid \txid' \in \T_{\aexec})\}\\
+\end{cases}
+\]
 
-Given a $\ET_{\top}$ trace $\tr$, we let $\aexec_{\tr}$ be defined inductively on $\tr$ as follows:
+Given a $\ET_{\top}$ trace $\tr$, we let $\lastConf(\tr)$ to be the last configuration appearing in 
+$\tr$. The abstract execution $\aexec_{\tr}$ and function $\visibleTx_{\tr}$ are defined 
+simultaneously, by induction on $\tr$ as follows:
+%\[
+%\begin{array}{lcl}
+%(\aexec_{(\hh_0, \viewFun_0)}, \visibleTx_{(\hh_0, \viewFun_0)} &=& (\aexec_0, \lambda \cl.(\Tx(\hh, \viewFun(\cl))\\
+%(\aexec_{\tr \xrightarrow{(\cl, \varepsilon)}_{\ET_{\top}} (\hh, \viewFun)}, \visibleTx_{\tr \xrightarrow{(\cl, \varepsilon)}_{\ET_{\top}} (\hh, \viewFun)} &=& 
+%(\aexec_{\tr}, \visibleTx_{\tr}\rmto{\cl}{\Tx(\hh)}
+%\end{array}
+%\]
 \[
 \begin{array}{lcl}
-\aexec_{(\hh_0, \viewFun_0)} &=& (\aexec_0, \lambda \cl.(\Tx(\hh, \viewFun(\cl))
+\aexec_{(\hh_0, \viewFun_0)} &=& \aexec_0\\
+\left(\aexec_{\left(\tr \xrightarrow{(\cl, \varepsilon)}_{\ET_{\top}} (\hh, \viewFun)\right)}\right) &=& 
+\aexec_{\tr}\\
+\left(\aexec_{\left(\tr \xrightarrow{(\cl, \opset)}_{\ET_{\top}} (\hh, \viewFun)\right)}\right) &=& 
+\begin{cases}
+\aexec_{\tr} &\impliedby \opset = \emptyset\\
+\extend(\aexec_{\tr}, \txid, \Tx(\hh', \vi'), \opset) &\impliedby \opset \neq \emptyset \wedge {}\\
+& \txid \in \hh \wedge \txid \notin \hh' \wedge{}\\
+& \txid (\hh', \_\rmto{\cl}{\vi'}) = \lastConf(\tr)
+\end{cases}
 \end{array}
 \]
 
 \end{definition}
+
+\begin{proposition}
+\label{prop:kvtrace2aexec}
+For any $\ET_{\top}$-trace $\tau$, $\aexec_{\tau}$ is an abstract execution that 
+satisfies the last write wins policy. Furthermore, $\hh_{\aexec_{\tau}} = \hh$, where 
+$(\hh, \_) = \lastConf(\tau)$.
+\end{proposition}
 
 \mypar{Specification of Consistency Models via Abstract Executions.}
 In the abstract execution framework, specifications of consistency models are given by placing \emph{axioms} that the 
