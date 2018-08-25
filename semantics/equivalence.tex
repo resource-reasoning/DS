@@ -183,16 +183,39 @@ whose last configuration is $(\hh_{\aexec}, \_)$.
 
 Let $\aexec$ be an abstract execution that satisfies the last write wins resolution policy. 
 There exists a kv-trace $\tr_{\aexec}$ in normal form, whose last configuration $(\hh_{\aexec}, \_)$. 
-Furthermore, for any $\aexec_{\tr_{\aexec}} = \aexec$.
+%Furthermore, for any $\aexec_{\tr_{\aexec}} = \aexec$.
 \end{theorem}
+
+\ac{Actually it is the case that each abstract execution defines several kv-traces in normal form. 
+In particular, the view of a client after executing a transaction should be irrelevant, as long as it's 
+included in the view associated with the set of transactions that are seen by the next transaction 
+executed by the same client, as per the definition of $\getView$.}
+\ac{Random though of 10:30pm - so maybe not so random... the comment above is because in the construction of 
+$\aexec_{\tr}$ I define, for a given transaction $\txid$, $\VIS_{\aexec_{\tr}}^{-1}(\txid)$ to contain 
+exactly the transactions that wrote a version included in the view of the client executing $\txid$, at the 
+moment it executed $\txid$. However, here I could be loose and allow also read-only transactions 
+to be included in $\VIS_{\aexec_{\tr}}^{-1}(\txid)$ - thus a trace would induce a set of 
+abstract executions, rather than a single abstract execution. I need to think about it more carefully. }
 
 \begin{corollary} 
 \label{cor:kvtrace2aexec}
 $\CMs(\ET_{\top}) = \{\hh_{\aexec} \mid \aexec \text{ satisfies } \RP_{\LWW}\}$.
 \end{corollary}
 
+
 A consequence of Theorem \ref{thm:kvtrace2aexec} is that $\ET_{\top}$-traces in normal form are isomorphic 
 to abstract executions that satisfy the last write wins policy.
+\ac{Not true. I thought that $\aexec_{\tr_{\aexec}} = \aexec$ for any $\aexec$, but this is not 
+the case. If in $\aexec$ there is a read-only transaction $\txid$ and $\txid \xrightarrow{\VIS_{\aexec}} \txid'$, 
+then it won't be the case that $\txid \xrightarrow{\VIS_{\aexec_{\tr_{\aexec}}}} \txid'$. This will have some 
+consequences when proving the correctness of axiomatic specifications of consistency models.}
+\ac{Random though of 10:45pm - following the previous random thought: given an abstract execution $\aexec$, 
+I define a set of traces $\KVtrace(\aexec)$. Given a trace $\tr$, I define a set of abstract executions $\aeset(\tr)$. 
+For any given $\aexec$ and $\tr \in \KVtrace(\aexec)$, $\aexec \in \aeset(\tr)$. More specifically, I can lift 
+$\aeset$ and $\traces$ to operate on sets of traces and abstract executions $\mathbb{X}, \mathbb{T}$, respectively. 
+For any $\mathbb{X}$ and $\mathbb{T}$ such that $\aeset(\mathbb{T}) \subseteq \mathbb{X}$, then 
+$\mathbb{T} \subseteq \traces(\mathbb{X}).$ It follows that $(\aeset, \traces)$ form a Galois Connection.}
+
 Note that our definition of views (\cref{def:views}) is critical to the validity of Theorem \ref{thm:kvtrace2aexec}, 
 as the following example shows. 
 
@@ -396,9 +419,9 @@ and for each $\ke$, $[(\otW, \ke, \_)]_{\aexec} ; \AR_{\aexec} ; [(\otW, \ke, \_
 Actual specifications of consistency models using this formalism are outside the scope of this article, and we 
 refer the reader to \cite{laws} for a comprehensive list of axioms for specifying different consistency models.
 
-In the same way dependency graphs are isomorphic to kv-stores, abstract executions that satisfy 
-the last write win resolution policy are isomorphic 
-to \emph{kv-traces}. These are sequences of the form 
+We show that there is a Galois connection between the set of  abstract executions that satisfy 
+the last write win resolution policy, and the set of \emph{kv-traces}. 
+These are sequences of the form 
 \[ 
 \conf_0 \xrightarrowtriangle{\_}_{\ET_{\bot}} \cdots \xrightarrowtriangle{\_}_{\ET_{\bot}} \conf_n.
 \]
@@ -429,3 +452,74 @@ Then we let $\conf_{m+1} = \hh_{m+1}, \viewFun_{m}\rmto{\cl}{\vi'_{m}}$, and def
 \conf^{m+1}.
 \]
 \end{definition}
+
+Next, we show to construct, given an abstract execution $\aexec$, 
+a set of $\ET_{\top}$-traces $\KVtrace(\ET_{\top}, \aexec)$ in normal form such that for any 
+$\tr \in \KVtrace(\ET_{\top}, \aexec)$, $\lastConf(\tr) = (\hh_{\aexec}, \_)$. 
+To define the function $\KVtrace(\ET_{\top}, \_)$ formally, we first provide a principle 
+to reason about abstract executions inductively. 
+%\begin{proposition}
+%Let $\aexec$ be an abstract execution. Then either $\T_{\aexec} = \emptyset$, 
+%or $\aexec = \extend(\aexec', \VIS^{-1}_{\aexec}(\txid), \txid, \TtoOp{T}_{\aexec}(\txid))$ 
+%for some $\aexec'$ such that $\T_{\aexec'} = \T_{\aexec} \setminus \txid$, and $\txid = \max_{\AR}(\T_{\aexec})$.
+%\end{proposition}
+\begin{definition}
+\label{def:aexec.inductive}
+Let $\aexec$ be an abstract execution, let $n = \lvert \T_{\aexec} \rvert$, and let 
+$\{\txid_{i}\}_{i=1}^{n} \subseteq \T_{\aexec}$ be such that for any $i=1,\cdots,n-1$, 
+$\txid_{i} \xrightarrow{\AR_{\aexec}} \txid_{i+1}$. 
+For $i = 0,\cdots, n-1$, define 
+\[
+\begin{array}{lll}
+\cut(\aexec, 0) &=& ([], \emptyset, \emptyset)\\
+\cut(\aexec , i+1) &=& \extend(\cut(\aexec, i)), \txid_{i+1}, \VIS^{-1}_{\aexec}(\txid_{i+1}), \TtoOp{T}_{\aexec}(\txid_{i+1}))
+\end{array}
+\]
+\end{definition}
+
+\begin{proposition}
+\label{prop:aexec.inductive}
+For any abstract execution $\aexec$, $\aexec = \cut(\aexec, \lvert \T_{\aexec} \rvert)$.
+\end{proposition}
+
+\begin{definition}
+\label{def:aexec2kvtrace}
+Given an abstract execution $\aexec$, a client $\cl$ and an integer $i=0,\cdots, \lvert \aexec \rvert$, 
+define $\nextTx(\aexec, \cl, i) = \min_{\AR_{\aexec}}\{\txid_{\cl}^{j} \mid \txid_{\cl}^{n} \notin \T_{\cut(\aexec, i)}\}$. 
+Note that $\nextTx(\aexec, \cl, i)$ could be undefined. 
+We also let $\Clients(\aexec) = \{\cl \mid \txid_{\cl}^{\_} \in \T_{\aexec}\}$.
+
+Given an abstract execution $\aexec$ and an integer $i = 0,\cdots, \lvert \T_{\aexec} \rvert$, let 
+$\KVtrace(\ET_{\top}, \aexec, i)$ be the smallest set such that 
+\begin{itemize}
+\item 
+$(\hh_{0}, \lambda \cl \in \Clients(\aexec). \lambda \ke.\{0\}) \in \KVtrace(\ET_{\top}, \aexec, 0)$, 
+\item suppose that $\tr \in \KVtrace(\ET_{\top}, \aexec, i)$ for some $i = 0,\cdots, \lvert \T_{\aexec} \rvert - 1$.  
+Let
+\begin{itemize} 
+\item $\txid = \min_{\AR_{\aexec}}(\T_{\aexec} \setminus T_{\cut(\aexec, i)})$, 
+\item  $\cl, n$ be such that $\txid = \txid_{\cl}^{n}$, 
+\item  $\vi = \getView(\aexec, \VIS^{-1}_{\aexec}(\txid_{\cl}^{n}))$, 
+\item $\vi' = \getView(\aexec, \T)$, where $\T$ is an arbitrary subset of $\T_{\aexec}$ if 
+$\nextTx(\aexec, \cl, i+1)$ is undefined, or is such that 
+$\T \subseteq (\AR?)^{-1}(\txid) \cap \VIS^{-1}_{\aexec}(\nextTx(\cl, i+1))$, 
+\item $\opset = \TtoOp{T}_{\aexec}(\txid)$, 
+\item $(\hh_{\tr}, \viewFun_{\tr}) = \lastConf(\tr)$, 
+\item $\hh = \updateKV(\hh_{\tr}, \vi, \txid, \opset)$.
+\end{itemize}
+Then
+\[
+\big( \tr \xrightarrowtriangle{(\cl, \varepsilon)}_{\ET_{\top}} (\hh_{\tr}, \viewFun_{\tr}\rmto{\cl}{\vi}) 
+\xrightarrowtriangle{(\cl, \opset)}_{\ET_{\top}} (\hh, \viewFun_{\tr}\rmto{\cl}{\vi'}) \big) \in \KVtrace(\ET_{\top}, \aexec, i+1)
+\]
+\end{itemize}
+
+Finally, we let $\KVtrace(\ET_{\top}, \aexec) = \KVtrace(\ET_{\top}, \aexec, \lvert \aexec \rvert)$.
+\end{definition}
+
+\begin{proposition}
+\label{prop:aexec2kvtrace}
+Let $\aexec$ be an abstract execution that satisfies $\RP_{\LWW}$, 
+and let $\tr \in \KVtrace(\ET_{\top}, \aexec)$. Then $\tr \in \CMs(\ET_{\top})$. 
+Furthermore, $\lastConf(\tr) = (\hh_{\aexec}, \_)$.
+\end{proposition}
