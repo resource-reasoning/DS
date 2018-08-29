@@ -60,7 +60,7 @@ An abstract execution $\aexec$ satisfies the execution policy $\RP$ if,
 \end{definition}
 
 Throughout this report we will work mainly with the \emph{Last Write Wins} resolution policy, 
-defined below. When discussing operational semantics for transactions and their adequacy, we will also 
+defined below. When discussing the operational semantics of transactional programs, we will also 
 introduce the \emph{Anarchic} resolution policy.
 
 \begin{definition}
@@ -178,48 +178,68 @@ $\getView(\aexec, \T) \in \Views(\hh_{\aexec})$.
 %We have already argued that, in contrast to abstract executions, kv-stores do not contain 
 %any information about the total order in which transactions have been executed.
 Let $,\ET_\top$ be the most permissive execution test, that is 
-$\ET_\top \vdash (\hh, \vi) \triangleright \opset: \vi'$ for any $\hh, \vi, \opset, \vi'$. 
+$\ET_\top \vdash (\hh, \vi) \triangleright \opset: \vi'$ for any $\hh, \vi, \opset, \vi'$ 
+such that whenever $\vi(\ke) \neq \vi'(\ke)$ then either $(\otW, \ke, \_) \in \opset$ 
+or $(\otR, \ke, \_) \in \opset$.
+{\color{red} I forgot this last constraint in the latest version of the document, definitions 
+and proofs of theorems that follow must be re-factored to take the constraint into account.}
 In this Section, we relate $\ET_{\top}$-traces to abstract executions that satisfy the last write wins 
 resolution policy. Specifically, we prove the following: 
 \begin{theorem}
 \label{thm:kvtrace2aexec}
-Let $\tr$ be a $\ET_{\top}$-trace; there exists an abstract execution $\aexec_{\tr}$ 
-whose last configuration is $(\hh_{\aexec}, \_)$.
+Let $\tr$ be a $\ET_{\top}$-trace; there exists a set of abstract executions $\aeset({\tr})$ 
+such that, for any $\hh \in \aeset(\tr)$, $\lastConf(\tr) = (\hh, \_)$.
 
 Let $\aexec$ be an abstract execution that satisfies the last write wins resolution policy. 
-There exists a kv-trace $\tr_{\aexec}$ in normal form, whose last configuration $(\hh_{\aexec}, \_)$. 
+There exists a set of $\ET_{\top}$-traces $\KVtrace({\aexec})$ in normal form, 
+such that for any $\tr \in \KVtrace({\aexec})$, $\lastConf(\tr) = (\hh_{\aexec}, \_)$. 
 %Furthermore, for any $\aexec_{\tr_{\aexec}} = \aexec$.
-\end{theorem}
 
-\ac{Actually it is the case that each abstract execution defines several kv-traces in normal form. 
-In particular, the view of a client after executing a transaction should be irrelevant, as long as it's 
-included in the view associated with the set of transactions that are seen by the next transaction 
-executed by the same client, as per the definition of $\getView$.}
-\ac{Random though of 10:30pm - so maybe not so random... the comment above is because in the construction of 
-$\aexec_{\tr}$ I define, for a given transaction $\txid$, $\VIS_{\aexec_{\tr}}^{-1}(\txid)$ to contain 
-exactly the transactions that wrote a version included in the view of the client executing $\txid$, at the 
-moment it executed $\txid$. However, here I could be loose and allow also read-only transactions 
-to be included in $\VIS_{\aexec_{\tr}}^{-1}(\txid)$ - thus a trace would induce a set of 
-abstract executions, rather than a single abstract execution. I need to think about it more carefully. }
+{\color{red} Given a $\ET_{\top}$-trace $\tr$ and a kv-store $\aexec \in \aeset(\tr)$, then 
+$\tr \in \KVtrace(\aexec)$. Given an abstract execution $\aexec$ that satisfies 
+the last write wins policy and a $\ET_{\top}$-trace $\tr \in \KVtrace(\hh)$, 
+then $\aexec \in \aeset(\tr)$. }
+\end{theorem}
 
 \begin{corollary} 
 \label{cor:kvtrace2aexec}
 $\CMs(\ET_{\top}) = \{\hh_{\aexec} \mid \aexec \text{ satisfies } \RP_{\LWW}\}$.
 \end{corollary}
 
+The last statement in \cref{thm:kvtrace2aexec} implies that there is a \emph{Galois connection}
+between the set of $\ET_{\top}$-traces, and the set of abstract executions that satisfy the 
+last write wins policy. The lower and upper adjoints of this connection are the 
+lifting of the functions $\aeset(\cdot)$ and $\KVtrace(\cdot)$ to sets of $\ET_{\top}$-traces 
+and abstract executions, respectively. Note however that these two sets are not isomorphic: 
+when converting a set of abstract executions into kv-traces, we abstract away the 
+pairs $\txid \xrightarrow{\VIS} \txid'$ in the visibility relation where $\txid$ is a read-only 
+transaction. When converting a $\ET_{\top}$-trace into a set of abstract executions, 
+we (partially) lose the information about the view that a clients has, immediately after it executed a transaction.
 
-A consequence of Theorem \ref{thm:kvtrace2aexec} is that $\ET_{\top}$-traces in normal form are isomorphic 
-to abstract executions that satisfy the last write wins policy.
-\ac{Not true. I thought that $\aexec_{\tr_{\aexec}} = \aexec$ for any $\aexec$, but this is not 
-the case. If in $\aexec$ there is a read-only transaction $\txid$ and $\txid \xrightarrow{\VIS_{\aexec}} \txid'$, 
-then it won't be the case that $\txid \xrightarrow{\VIS_{\aexec_{\tr_{\aexec}}}} \txid'$. This will have some 
-consequences when proving the correctness of axiomatic specifications of consistency models.}
-\ac{Random though of 10:45pm - following the previous random thought: given an abstract execution $\aexec$, 
-I define a set of traces $\KVtrace(\aexec)$. Given a trace $\tr$, I define a set of abstract executions $\aeset(\tr)$. 
-For any given $\aexec$ and $\tr \in \KVtrace(\aexec)$, $\aexec \in \aeset(\tr)$. More specifically, I can lift 
-$\aeset$ and $\traces$ to operate on sets of traces and abstract executions $\mathbb{X}, \mathbb{T}$, respectively. 
-For any $\mathbb{X}$ and $\mathbb{T}$ such that $\aeset(\mathbb{T}) \subseteq \mathbb{X}$, then 
-$\mathbb{T} \subseteq \traces(\mathbb{X}).$ It follows that $(\aeset, \traces)$ form a Galois Connection.}
+%\ac{Actually it is the case that each abstract execution defines several kv-traces in normal form. 
+%In particular, the view of a client after executing a transaction should be irrelevant, as long as it's 
+%included in the view associated with the set of transactions that are seen by the next transaction 
+%executed by the same client, as per the definition of $\getView$.}
+%\ac{Random though of 10:30pm - so maybe not so random... the comment above is because in the construction of 
+%$\aexec_{\tr}$ I define, for a given transaction $\txid$, $\VIS_{\aexec_{\tr}}^{-1}(\txid)$ to contain 
+%exactly the transactions that wrote a version included in the view of the client executing $\txid$, at the 
+%moment it executed $\txid$. However, here I could be loose and allow also read-only transactions 
+%to be included in $\VIS_{\aexec_{\tr}}^{-1}(\txid)$ - thus a trace would induce a set of 
+%abstract executions, rather than a single abstract execution. I need to think about it more carefully. }
+
+
+%A consequence of Theorem \ref{thm:kvtrace2aexec} is that $\ET_{\top}$-traces in normal form are isomorphic 
+%to abstract executions that satisfy the last write wins policy.
+%\ac{Not true. I thought that $\aexec_{\tr_{\aexec}} = \aexec$ for any $\aexec$, but this is not 
+%the case. If in $\aexec$ there is a read-only transaction $\txid$ and $\txid \xrightarrow{\VIS_{\aexec}} \txid'$, 
+%then it won't be the case that $\txid \xrightarrow{\VIS_{\aexec_{\tr_{\aexec}}}} \txid'$. This will have some 
+%consequences when proving the correctness of axiomatic specifications of consistency models.}
+%\ac{Random though of 10:45pm - following the previous random thought: given an abstract execution $\aexec$, 
+%I define a set of traces $\KVtrace(\aexec)$. Given a trace $\tr$, I define a set of abstract executions $\aeset(\tr)$. 
+%For any given $\aexec$ and $\tr \in \KVtrace(\aexec)$, $\aexec \in \aeset(\tr)$. More specifically, I can lift 
+%$\aeset$ and $\traces$ to operate on sets of traces and abstract executions $\mathbb{X}, \mathbb{T}$, respectively. 
+%For any $\mathbb{X}$ and $\mathbb{T}$ such that $\aeset(\mathbb{T}) \subseteq \mathbb{X}$, then 
+%$\mathbb{T} \subseteq \traces(\mathbb{X}).$ It follows that $(\aeset, \traces)$ form a Galois Connection.}
 
 Note that our definition of views (\cref{def:views}) is critical to the validity of Theorem \ref{thm:kvtrace2aexec}, 
 as the following example shows. 
@@ -354,13 +374,13 @@ same transaction.
 
 We now turn our attention to the proof of \cref{thm:kvtrace2aexec}. 
 The first step is that of constructing, given a $\ET_{\top}$-trace $\tr$, 
-an abstract execution $\aexec_{\tr}$ whose last configuration $(\hh, \_)$ 
-is such that $\hh = \hh_{\aexec}$. 
+a set of abstract execution $\aeset(\tr)$ such that, for any $\aexec \in \aeset(\tr)$, 
+the last configuration of $\tr$ is $(\hh_{\aexec}, \_)$. 
 %In practice, we map each $\ET_{\top}$-trace 
 %$\tr$ into an abstract execution $\aexec_{\tr}$, and a function $\visibleTx: \Clients \parfun \T_{\aexec}$. 
 %The latter are to abstract execution what view functions are to kv-stores in configurations: they keep 
 %track of what transactions would be observed by a client, if it were to execute a transaction. 
-The definition of $\aexec_{\tr}$ is natural, and is given inductively below: 
+The definition of $\aeset(\aexec)$ is natural, and is given inductively below: 
 
 \begin{definition}
 \label{def:kvtrace2aexec}
@@ -379,8 +399,7 @@ $\T \subseteq \T_{\aexec}$, a transaction identifier $\txid$ and a set of operat
 \]
 
 Given a $\ET_{\top}$ trace $\tr$, we let $\lastConf(\tr)$ to be the last configuration appearing in 
-$\tr$. The abstract execution $\aexec_{\tr}$ and function $\visibleTx_{\tr}$ are defined 
-simultaneously, by induction on $\tr$ as follows:
+$\tr$. The set of abstract executions $\aeset(\tr)$ is defined as the smallest set such that:
 %\[
 %\begin{array}{lcl}
 %(\aexec_{(\hh_0, \viewFun_0)}, \visibleTx_{(\hh_0, \viewFun_0)} &=& (\aexec_0, \lambda \cl.(\Tx(\hh, \viewFun(\cl))\\
@@ -388,27 +407,35 @@ simultaneously, by induction on $\tr$ as follows:
 %(\aexec_{\tr}, \visibleTx_{\tr}\rmto{\cl}{\Tx(\hh)}
 %\end{array}
 %\]
-\[
-\begin{array}{lcl}
-\aexec_{(\hh_0, \viewFun_0)} &=& \aexec_0\\
-\left(\aexec_{\left(\tr \xrightarrow{(\cl, \varepsilon)}_{\ET_{\top}} (\hh, \viewFun)\right)}\right) &=& 
-\aexec_{\tr}\\
-\left(\aexec_{\left(\tr \xrightarrow{(\cl, \opset)}_{\ET_{\top}} (\hh, \viewFun)\right)}\right) &=& 
-\begin{cases}
-\aexec_{\tr} &\impliedby \opset = \emptyset\\
-\extend(\aexec_{\tr}, \txid, \Tx(\hh', \vi'), \opset) &\impliedby \opset \neq \emptyset \wedge {}\\
-& \txid \in \hh \wedge \txid \notin \hh' \wedge{}\\
-& (\hh', \_\rmto{\cl}{\vi'}) = \lastConf(\tr)
-\end{cases}
-\end{array}
-\]
+\begin{itemize}
+\item $\aexec_{0} \in \aeset((\hh_{0}, \viewFun_{0}))$, 
+\item if $\aexec \in \aeset(\tr)$, then $\aexec \in \aeset\left(\tr \xrightarrowtriangle{(\cl, \varepsilon)}_{\ET_{\top}} (\hh, \viewFun) \right)$, 
+\item if $\aexec \in \aeset(\tr)$, then $\aexec \in \aeset\left(\tr \xrightarrowtriangle{(\cl, \emptyset)}_{\ET_{\top}} (\hh, \viewFun) \right)$, 
+\item if $\aexec \in \aeset(\tr)$, and $\T = \Tx(\hh, \vi') \cup \T'$ is a set of transactions such that 
+$\forall \txid' \in \T', \forall \ke, \forall \val.(\otW, \ke, \val) \notin \opset$, then 
+$\extend(\aexec, \txid, \T, \opset) \in \aeset\left(\tr \xrightarrowtriangle{(\cl, \opset)}_{\ET_{\top}} (\hh, \viewFun) \right)$.
+\end{itemize}
+%\[
+%\begin{array}{lcl}
+%\aexec_{(\hh_0, \viewFun_0)} &\ni& \aexec_0\\
+%\left(\aexec_{\left(\tr \xrightarrow{(\cl, \varepsilon)}_{\ET_{\top}} (\hh, \viewFun)\right)}\right) &=& 
+%\aexec_{\tr}\\
+%\left(\aexec_{\left(\tr \xrightarrow{(\cl, \opset)}_{\ET_{\top}} (\hh, \viewFun)\right)}\right) &=& 
+%\begin{cases}
+%\aexec_{\tr} &\impliedby \opset = \emptyset\\
+%\extend(\aexec_{\tr}, \txid, \Tx(\hh', \vi'), \opset) &\impliedby \opset \neq \emptyset \wedge {}\\
+%& \txid \in \hh \wedge \txid \notin \hh' \wedge{}\\
+%& (\hh', \_\rmto{\cl}{\vi'}) = \lastConf(\tr)
+%\end{cases}
+%\end{array}
+%\]
 
 \end{definition}
 
 \begin{proposition}
 \label{prop:kvtrace2aexec}
-For any $\ET_{\top}$-trace $\tau$, $\aexec_{\tau}$ is an abstract execution that 
-satisfies the last write wins policy. Furthermore, $\hh_{\aexec_{\tau}} = \hh$, where 
+For any $\ET_{\top}$-trace $\tau$, and$\aexec \in \aeset(\tau)$ is an abstract execution that 
+satisfies the last write wins policy. Furthermore, $\hh_{\aexec} = \hh$, where 
 $(\hh, \_) = \lastConf(\tau)$.
 \end{proposition}
 

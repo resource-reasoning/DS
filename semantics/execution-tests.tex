@@ -84,16 +84,20 @@ a list of versions. Given a list of versions $\vilist = \ver_0\cdots \ver_n$ and
 $\vilist[i \mapsto \ver]$ denotes the list of versions $\vilist' = \ver_0 \cdots \ver_{i-1} \ver \ver_{i+1} \cdots 
 \ver_{n}$. 
 Note that, under the assumption that fingerprints contain at most one read and one write 
-operation for each key, the function $\updateKV$ is well defined. Furthermore, 
+operation for each key, and assuming that $\txid \notin \hh$\footnote{
+Here we are committing an abuse of notation, and let $\txid \in \hh$ if there exists a key 
+$\ke$ and an index $i=0,\cdots, \lvert \hh(\ke) \rvert -1$ such that $\txid \in \{\WTx(\hh(\ke, i)\} 
+\cup \RTx(\hh(\ke, i))$.}, 
+the function $\updateKV$ is well defined. Furthermore, 
 let $\nextTxId(\cl, \hh) \defeq
-\Setcon{\txid_{\cl}^{n}}{\fora{m} \text{ if } \txid_{\cl}^{m} \text{ appears in } \hh \text{ then } m < n }$, 
+\Setcon{\txid_{\cl}^{n}}{\fora{m} \txid_{\cl}^{m} \in \hh \implies m < n }$, 
 and suppose that $\txid \in \nextTxId(\cl, \hh)$ for some $\cl$;
 then $\updateKV(\hh, \ver, \txid, \opset)$ produces a valid kv-store according to \cref{def:mkvs}.
 In the following, we commit an abuse of notation and write $\updateKV(\hh, \vi, \cl, \opset)$ 
 for the set $\{\hh' \mid \exsts { \txid \in \nextTxId(\cl, \mkvs) } \hh' = \updateKV(\hh, \vi, \txid, \opset)\}$.
 
 Let us discuss how kv-stores in $\updateKV(\hh, \vi, \cl, \opset)$ are computed. 
-Suppose that client \( \cl \) want to commit a transaction.
+Suppose that client \( \cl \) wants to commit a transaction.
 First, we select a fresh transaction identifier $\txid \in \nextTxId(\cl, \hh)$ that we associate 
 with the fingerprint to be committed into the kv-store. We choose any $\txid$ to be 
 greater (w.r.t. the session order $\xrightarrow{\PO}$) than any transaction identifier 
@@ -102,7 +106,7 @@ as to reflect the fact that $\txid$ is the most recent transaction executed by $
 %according to the partial order $\xrightarrow{\PO}$, than any of the transaction identifier 
 %of the form $\txid_{\cl}^{n}$ appearing in $\hh$, denotes the fact that 
 Then for every read operation $(\otR, \ke, \stub)$ in $\opset$,
-the readers of $\ke$ at index $\max(\vi(\ke))$ are extended with $\txid$.
+the set of transactions reading the  $\max(\vi(\ke))$-th version of $\ke$ is extended with $\txid$.
 %For each read operation $(\otR, \ke, \val) \in \opset$, we need to select in $\hh$ the version 
 %from which $\txid$ read its value, and update the set of read transactions to include $\txid$. 
 Because a transaction reads the values of keys from the atomic 
@@ -118,7 +122,7 @@ Note that the assumption that versions of
 a given key are totally ordered and consistent with the order in which 
 transactions commit is standard \cite{adya,framework-concur,seebelieve}. 
 
-Note that if two different clients $\cl_1$ and $\cl_2$ commit transactions 
+Note also that if two different clients $\cl_1$ and $\cl_2$ commit transactions 
 whose fingerprints $\opset_1$ and $\opset_2$ do not contain a write 
 to the same key, then the order in which the updates are executed is 
 not relevant. 
@@ -157,7 +161,7 @@ $(\otW, \ke, \val) \notin \opset_2$ for all $\val \in \Val$. Then
 Formally, a \emph{consistency model} $\CMs$ is a 
 set of kv-stores. Each $\hh \in \CMs$ represents a possible scenario that 
 can be obtained as a result of multiple clients committing transactions. 
-For example, \emph{serialisibility} can be described as the set 
+For example, \emph{serialisability} can be described as the set 
 of kv-stores for which it is possible to recover a total schedule of transactions, 
 such that each read operation on key $\ke$ fetches its value from the 
 most recent write on the same key \cite{}.
@@ -241,10 +245,10 @@ Given an execution test $\ET$, for any action $\alpha \in \Act$ we define the ac
 relation $\xrightarrowtriangle{\alpha}_{\ET} \subseteq \Confs \times \Confs$ 
 as the smallest relation such that
 \begin{itemize}
-\item $\forall \vi, \vi', \cl, \hh, \viewFun.\; \viewFun(\cl) = \vi \wedge \vi \sqsubseteq \vi' \implies (\hh, \viewFun) \xrightarrowtriangle{(\cl, \varepsilon)} 
+\item $\forall \vi, \vi', \cl, \hh, \viewFun.\; \viewFun(\cl) = \vi \wedge \vi \sqsubseteq \vi' \implies (\hh, \viewFun) \xrightarrowtriangle{(\cl, \varepsilon)}_{\ET} 
 (\hh, \viewFun\rmto{\cl}{\vi'})$, 
 \item $\forall \vi, \vi', \cl, \opset, \hh, \hh', \viewFun.\; \viewFun(\cl) = \vi \wedge (\ET \vdash (\hh, \vi) \triangleright \opset: \vi') \wedge 
-\hh' \in \updateKV(\hh, \vi, \cl, \opset) \implies (\hh, \conf) \xrightarrowtriangle{(\cl, \opset)} (\hh', \viewFun\rmto{\cl}{\vi'})$.
+\hh' \in \updateKV(\hh, \vi, \cl, \opset) \implies (\hh, \viewFun) \xrightarrowtriangle{(\cl, \opset)}_{\ET} (\hh', \viewFun\rmto{\cl}{\vi'})$.
 \end{itemize}
 Such relations take the name of $\ET$-reductions, or simply reductions.
 \end{definition}
@@ -487,7 +491,7 @@ in particular, $\hh_2 \notin \CMs(\ET_1 \cap \ET_2)$.
 i.e. it is not possible to replace a view with a more up-to-date one to enable progress. We must choose which assumption 
 we make on the consistency model.}
 
-One reason why compositionality fails in \cref{ex:noblindwrites} is that the execution tests $\ET_1$ and $\ET_2$ do not contain 
+{\color{red} One reason why compositionality fails in \cref{ex:noblindwrites} is that the execution tests $\ET_1$ and $\ET_2$ do not contain 
 any information about the the views that client $\cl$ used to commit the transactions $\txid_{\cl}^1, \txid_{\cl}^2$. 
 To solve this problem we adopt the \emph{no blind writes} assumption, that requires that a client never commits 
 a transaction that writes a key, without reading such a key beforehand. Many implementations of consistency models 
@@ -508,13 +512,14 @@ then $\CMs(\ET_1 \cap \ET_2) = \CMs(\ET_1) \cap \CMs(\ET_2)$.
 Furthermore, if $\ET_1, \ET_2$ are commutative, then $\ET_1 \cap \ET_2$ 
 is commutative.
 \end{theorem}
-\begin{proof}
-See \cref{thm:appendix-et-composition-1} and \cref{thm:appendix-et-composition-2}.
-\end{proof}
+%\begin{proof}
+%See \cref{thm:appendix-et-composition-1} and \cref{thm:appendix-et-composition-2}.
+%\end{proof}
+}
 
 
 \mypar{Examples of Execution Tests and Consistency Models.}
-
+{\color{red} Did not proofread this section, we know it's going to change eventually.}
 \begin{figure}
 \begin{tabular}{ l @{} r }
 \hline
