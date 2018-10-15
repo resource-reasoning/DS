@@ -260,73 +260,74 @@ which means \( i \in \vi(\ke')\) by the definition of \( \getView \).
     \[
         (\WR_\aexec \cup \SO_\aexec)^{+} ; \VIS_\aexec \subseteq \VIS_\aexec \quad \WR_\aexec \subseteq \VIS_\aexec \quad \SO_\aexec \subseteq \VIS_\aexec
     \]
-    There exists a new abstract execution \( \aexec' \) where \( \T_\aexec = \T_{\aexec'} \) and \( \AR_\aexec = \AR_{\aexec'} \).
-    Let the visibility relation be \( \VIS_{\aexec'} = \WR_\aexec \cup \SO_\aexec \), so that \( \VIS_{\aexec'} ; \VIS_{\aexec'} \subseteq \VIS_{\aexec'} \).
-    Under last-write-win, \( \fora{\txid} \TtoOp{T}_{\aexec}(\txid) = \TtoOp{T}_{\aexec'}(\txid) \).
+    There exists a new abstract execution \( \aexec' \) where \( \T_\aexec = \T_{\aexec'} \), \( \AR_\aexec = \AR_{\aexec'} \),
+    \( \VIS_{\aexec'} ; \VIS_{\aexec'} \subseteq \VIS_{\aexec'} \), and
+    under last-write-win, \( \fora{\txid} \TtoOp{T}_{\aexec}(\txid) = \TtoOp{T}_{\aexec'}(\txid) \).
 \end{lemma}
 \begin{proof}
     To recall, the write-read relation under a key \( \WR(\aexec, \ke) \) is defined as 
     \( \WR(\aexec, \ke) \defeq \Setcon{ (\txid, \txid') }{ \exsts{\val} (\otW, \ke, \val) \in_\aexec \txid \land (\otR, \ke, \val) \in_\aexec \txid' \land \txid = \max_\AR(\VIS^{-1}(\txid')) }\).
-    For any transaction \( \txid \) in the abstract execution \( \aexec\),
-    if it read a key, \( (\otR, \ke, \val ) \in_{\aexec} \txid  \),
-    since \( \WR_{\aexec} \in \VIS_{\aexec'} \), the same transaction \( \txid \) must read the same value in the new abstract execution \( \aexec' \).
-    Note that a transaction can always write to a key, since there is no constraint for write.
+    %For any transaction \( \txid \) in the abstract execution \( \aexec\),
+    %if it read a key, \( (\otR, \ke, \val ) \in_{\aexec} \txid  \),
+    %since \( \WR_{\aexec} \subseteq \VIS_{\aexec'} \), the same transaction \( \txid \) must read the same value in the new abstract execution \( \aexec' \).
+    %Note that a transaction can always write to a key, since there is no constraint for write.
+    %Thus we have the proof.
+    Given an \( \aexec \) that satisfies the following
+    \[
+        (\WR_\aexec \cup \SO_\aexec )^{+} ; \VIS_\aexec \subseteq \VIS_\aexec \quad \WR_\aexec \subseteq \VIS_\aexec \quad \SO_\aexec \subseteq \VIS_\aexec
+    \]
+    we erase some visibility relation for each transaction following the order of arbitration \( \AR \) until the visibility is transitive.
+    Let \( R_i \) denote the new visibility for transaction \( \txid_i \) such that
+    the visibility relation before (including) the i-\emph{th} transaction \( \txid_i \) is transitive, 
+    thus \( R_i\projection{2} = \Set{\txid_i}\).
+
+    Suppose that $\T_{\aexec} = \Set{\txid_{i}}_{i=1}^{n}$, and for any $i=1,\cdots, n-1$,
+    $\txid_{i} \xrightarrow{\AR_{\aexec}} \txid_{i+1}$.
+    Let \( \aexec_i = \mkvs_\cut(\aexec, i) \) and \( \VIS_i = \bigcup\limits_{ 0 \leq k \leq i} R_i \).
+    For each step, says i-\emph{th} step, we  preserve the following:
+    \begin{gather}
+        \VIS_i ; \VIS_i \subseteq \VIS_i \label{equ:vis-i-transitive} \\
+        \fora{\txid} (\txid,\txid_i) \in R_i \implies (\txid, \txid_i) \in (\WR_i \cup \SO_i)^{+}
+        \label{equ:last-read-correct}
+    \end{gather}
+    
+    Let start with \( i = 1 \) and \( R_1 = \emptyset \).
+    Assume it is from client \( \cl \).
+    There is no transaction committed before, so \( \VIS_1 = \emptyset \) and \( \VIS_1 ; \VIS_1 \subseteq \VIS_1 \) as \cref{equ:vis-i-transitive}.
+
+    Suppose the (i-1)-\emph{th} step satisfies \cref{equ:vis-i-transitive} and \cref{equ:last-read-correct}.
+    Let consider i-\emph{th} step and the transaction \( \txid_i \).
+    Initially we take \( R_i \) as empty set.
+    We first extend \( R_i \) by closing with respect to \( \WR_i \)
+    and prove that it does not affect any read from the transaction \( \txid_i \).
+    Then we will do the same for \( \SO_i \).
+
+    For any read \( (\otR, \ke, \val ) \in \txid_i \),
+    there must be a transaction \( \txid_j \) that \( \txid_j \toEdge{\WR(\aexec_i,\ke), \AR} \txid_i \) and \( j < i \).
+    We include \( (\txid_j, \txid_i) \in R_i \).
+    Let consider all the visible transactions of \( \txid_j \).
+    Assume a transaction \( \txid' \in \VIS_{i-1}^{-1}(\txid_j) \), 
+    thus \( \txid' \in \VIS_{j}^{-1}(\txid_j) = R_j^{-1}(\txid_j) \).
+    It is safe to include \( (\txid', \txid_i) \in R_i \) without affecting the read result.
+    Because those transaction \( \txid' \) is visible for \( \txid_i \)  in \( \aexec \),
+    as by \cref{equ:last-read-correct} we know \( R_j \subseteq (\WR_j \cup \SO_j)^{+} \subseteq (\WR_\aexec \cup \SO_\aexec)^{+}\),
+    and by the definition of \( \WR(\aexec_i,\ke) \), we know \( \WR(\aexec_i,\ke) \subseteq \VIS_\aexec\).
+
+    Given \( \SO_\aexec \subseteq \VIS_\aexec \), we include \( (\txid_j,\txid_i) \) for some \( \txid_j \)
+    such that \( \txid_j \toEdge{\SO_\aexec} \txid_i\).
+    For the similar reason as \( \WR \),
+    it is safe to includes all the visible transactions \( \txid' \) for \( \txid_j \), \ie \( \txid' \in R_j^{-1}\).
+    It means to include \( (\txid', \txid_i) \in R_i \).
+    
+    By the contraction, both \cref{equ:mw-complete} and \cref{equ:last-read-correct} are preserved.
     Thus we have the proof.
-    
-    %Given an \( \aexec \) that satisfies the following
-    %\[
-        %(\WR_\aexec \cup \SO)_\aexec^{+} ; \VIS_\aexec \subseteq \VIS_\aexec \quad \WR_\aexec \subseteq \VIS_\aexec \quad \SO_\aexec \subseteq \VIS_\aexec
-    %\]
-    %we add more visibility relation to each transaction following the order of arbitration \( \AR \) until the visibility is transitive.
-    %Let \( R_i \) denote the new visibility for transaction \( \txid_i \) such that
-    %the visibility relation before (including) the i-\emph{th} transaction \( \txid_i \) is transitive, 
-    %thus \( R_i\projection{2} = \Set{\txid_i}\).
-    %Let notation \( lr^{\cl}_i \) be a function associated with the client \( \cl \) when i-\emph{th} transaction commits.
-    %The function keeps tracks of the most recent read of keys from the client \( \cl \).
-    %Note that if a key is not in the domain of the function \( lr^{\cl}_i \), 
-    %it means the client \( \cl \) have not read such key.
-
-    %Now initial let \( lr^\cl_0 = \emptyset \) for all possible clients \( \cl \) appear in the \( \aexec \).
-    %Suppose that $\T_{\aexec} = \Set{\txid_{i}}_{i=1}^{n}$, and for any $i=1,\cdots, n-1$,
-    %$\txid_{i} \xrightarrow{\AR_{\aexec}} \txid_{i+1}$.
-    %Let \( \aexec_i = \Cuts(\aexec, i) \) and \( \VIS_i = \WR_{\aexec_i} \cup \SO_{\aexec_i} \cup \bigcup\limits_{ 0 \leq k \leq i} R_i \).
-    %For each step, says i-\emph{th} step, we add more visibility \( R_i \) and preserve the following:
-    %\begin{gather}
-        %\VIS_i ; \VIS_i \subseteq \VIS_i \label{equ:vis-i-transitive} \\
-        %\fora{\txid} (\txid,\txid_i) \in R_i \implies (\txid, \txid_i) \in (\WR_i \cup \SO_i)^{+}
-        %\label{equ:last-read-correct}
-    %\end{gather}
-    
-    %Let start with \( i = 1 \) and \( R_1 = \emptyset \).
-    %Assume it is from client \( \cl \).
-    %There is no transaction committed before, so \( \VIS_1 = \emptyset \) and \( \VIS_1 ; \VIS_1 \subseteq \VIS_1 \) as \cref{equ:vis-i-transitive}.
-    %For any read \( (\otR, \ke, \val ) \in \txid_1 \), let \( lr^{\cl}_1 = lr^{\cl}_0\rmto{\ke}{\val} \).
-    %For other clients \( \cl' \) different from \( \cl \), let \( lr^{\cl'}_1 = lr^{\cl'}_0 \), thus \cref{equ:last-read-correct} holds.
-
-    %Suppose the (i-1)-\emph{th} step satisfies \cref{equ:vis-i-transitive} and \cref{equ:last-read-correct}.
-    %Let consider i-\emph{th} step and the transaction \( \txid_i \).
-    %We first extend more visibility by closing with respect to \( \WR_i \)
-    %and prove those extension does not affect any read from the transaction \( \txid_i \).
-    %Then we will do the same for \( \SO_i \).
-
-    %For any read \( (\otR, \ke, \val ) \in \txid_i \),
-    %there must be a transaction \( \txid_j \) that \( \txid_j \toEdge{\WR(\aexec_i,\ke), \AR} \txid_i \) and \( j < i \).
-    %Let consider all the visible transactions of \( \txid_j \).
-    %Assume a transaction \( \txid' \in \VIS_{i-1}^{-1}(\txid_j) \), 
-    %thus \( \txid' \in \VIS_{j}^{-1}(\txid_j) = ( \WR_j \cup \SO_j \cup R_j )^{-1}(\txid_j) \).
-    %If \( \txid' \in \WR_j^{-1}(\txid_j) \), then \( \txid' \in \WR_i^{-1}(\txid_j) \).
-    %Because \( \WR_i \subseteq \VIS_i \) and \( \WR_i ; \VIS_i \subseteq \VIS_i \),
-    %we know \( \txid' \in  \VIS_{\aexec_i}^{-1}(\txid_i) \).
-    %It is the same when \( \txid' \in \SO_j^{-1}(\txid_j) \).
-    %Now if \( \txid' \in R_j^{-1}(\txid_j) \), by \cref{equ:last-read-correct}, \( \WR_i^{-1}(\txid_j) \subseteq \VIS_i\) 
-    %and \( (\WR_i \cup \SO_i)^{+} ; \VIS_i \subseteq \VIS_i \), we know \( \)
 \end{proof}
 
 The execution test $\ET_\CC$ is sound with respect to the axiomatic specification 
 \( (\RP_{\LWW}, \Set{\lambda \aexec. \VIS_{\aexec} ; \VIS_{\aexec}, \lambda \aexec \ldotp \SO_\aexec })\).
 By \cref{lem:aexec-spec-cc}, 
 It is sufficient to prove soundness with respect to 
-\( (\RP_{\LWW}, \Set{\lambda \aexec. ( \SO_{\aexec} \cup \WR_{\aexec} ) ; \VIS_{\aexec}, \lambda \aexec \ldotp \SO_\aexec })\).
+\( (\RP_{\LWW}, \Set{\lambda \aexec. ( \SO_{\aexec} \cup \WR_{\aexec} )^{+} ; \VIS_{\aexec}, \lambda \aexec \ldotp \SO_\aexec })\).
 We pick an invariant for the \( \ET_\CC \) as the union of those for \( \MRd\) and \( \RYW \) shown in the following:
 \[  
 \begin{rclarray}
@@ -346,24 +347,24 @@ Let a new abstract execution \( \aexec' = \extend(\aexec, \txid_\cl^n, \f, \Tx(\
 We are about to prove there exists an extra set of read-only transaction \( \T'_\rd \) such that:
 \begin{gather}
     \fora{\txid} (\txid, \txid_\cl^n) \in \SO_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \label{equ:cc-sound-update-so}\\
-    \fora{\txid} (\txid, \txid_\cl^n) \in ( \SO_{\aexec'} \cup \WR_{\aexec'} ) ; \VIS_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \label{equ:cc-sound-update-visvis}\\
+    \fora{\txid} (\txid, \txid_\cl^n) \in ( \SO_{\aexec'} \cup \WR_{\aexec'} )^{+} ; \VIS_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \label{equ:cc-sound-update-visvis}\\
     I_1(\aexec',\cl) \cup I_2(\aexec',\cl) \subseteq \Tx(\mkvs_{\aexec'}, \vi') \label{equ:ryw-sound-inv} 
 \end{gather}
 The invariant \( I_2 \) implies \cref{equ:cc-sound-update-so} as the same as \cref{sec:sound-complete-ryw}.
 To prove \cref{equ:cc-sound-update-visvis}, let \( \T'_\rd = \emptyset \) initially,
 and more more read-only transactions will be added in \( \T'_\rd \) until the \cref{equ:cc-sound-update-visvis} holds.
-Assume transaction \( \txid \) such that \( ((\txid, \txid_\cl^n) \in ( \SO_{\aexec'} \cup \WR_{\aexec'} ) ; \VIS_{\aexec'}) \).
+Assume transaction \( \txid \) such that \( ((\txid, \txid_\cl^n) \in ( \SO_{\aexec'} \cup \WR_{\aexec'} )^{+} ; \VIS_{\aexec'}) \).
 That is, there exists some transaction \( \txid' \) such that
 \( \txid \toEdge{( \SO_{\aexec'} \cup \WR_{\aexec'} )}  \txid' \toEdge{\VIS_{\aexec'}} \txid_\cl^n\).
 We consider two cases for \( \txid' \): \textbf{(i)} \( \txid' \) is also visible by previous transactions from the same client; 
 \textbf{(ii)} \( \txid' \) is a newly visible transaction for the client.
 For the first case, it means \( \txid' \toEdge{\VIS_{\aexec'}} \txid_\cl^m\) for some \( m < n \) and then \( \txid_\cl^m \toEdge{\SO} \txid_\cl^n \).
-Since \( \txid \toEdge{( \SO_{\aexec'} \cup \WR_{\aexec'} )}  \txid' \) and \( \SO_{\aexec'} \cup \WR_{\aexec'} \subseteq \VIS_{\aexec'} \),
-now we have \( \txid \toEdge{ \VIS_{\aexec'} }  \txid'  \).
+Since \( \txid \toEdge{( \SO_{\aexec'} \cup \WR_{\aexec'} )^{+}}  \txid' \) and \( ( \SO_{\aexec'} \cup \WR_{\aexec'} )^{+} ; \VIS_{\aexec'} \subseteq \VIS_{\aexec'} \),
+now we have \( \txid \toEdge{ \VIS_{\aexec'} }  \txid_\cl^m  \).
 Because of \( I_1 \), then \( \txid \in I_1 \cup \T_\rd \subseteq \Tx(\mkvs, \vi) \cup \T_\rd \).
-
 For the second case where \( \txid' \) is a newly visible transaction for the client \( \cl \).
-Since \( \txid' \VIS_{\aexec'} \txid_\cl^n \) so \( \txid' \in Tx(\mkvs, \vi) \T_\rd \cup \T'_\rd\).
+It suffices to prove \( ( \SO_{\aexec'} \cup \WR_{\aexec'} )^{+} ; \VIS_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \).
+Since \( \txid' \toEdge{\VIS_{\aexec'}} \txid_\cl^n \) so \( \txid' \in Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd\).
 More specifically, \( \txid' \) is not visible for the client before, we know \( \txid' \in Tx(\mkvs, \vi) \cup \T'_\rd\).
 If \( \txid' \) writes to some keys, \ie \( \txid' \in Tx(\mkvs, \vi) \), 
 by the execution tests for \( \MW \) and \( \WFR \) (the proofs follows \cref{sec:sound-complete-mw} and \cref{sec:sound-complete-wfr}),
@@ -380,6 +381,23 @@ By previous case we already know \( \txid \in \Tx(\mkvs, \vi) \cup \T'_\rd \).
 
 Finally the new abstract execution test preserve the invariant \( I_1 \) and \( I_2 \) because of \( \MW \) and \( \RYW \).
 The proofs are the same as those in \cref{sec:sound-complete-mr} and \cref{sec:sound-complete-ryw}.
+
+The execution test $\ET_\CC$ is complete with respect to the axiomatic specification 
+\( (\RP_{\LWW}, \Set{\lambda \aexec. \VIS_{\aexec} ; \VIS_{\aexec}, \lambda \aexec \ldotp \SO_\aexec })\).
+By \cref{lem:aexec-spec-cc}, 
+It is sufficient to prove completeness with respect to 
+\( (\RP_{\LWW}, \Set{\lambda \aexec. ( \SO_{\aexec} \cup \WR_{\aexec} )^{+} ; \VIS_{\aexec}, \lambda \aexec \ldotp \SO_\aexec })\).
+
+For \( \MW \), since \( \SO_\aexec ; \VIS_\aexec \subseteq  ( \SO_{\aexec} \cup \WR_{\aexec} )^{+} ; \VIS_{\aexec} \subseteq \VIS_\aexec \),
+the proof is as the same proof as in \cref{sec:sound-complete-mw}.
+For \( \RYW \), since \( \SO_\aexec \subseteq \VIS_\aexec \),
+the proof is as the same proof as in \cref{sec:sound-complete-ryw}.
+For \( \WFR \), since \( \WR_\aexec ; \SO_\aexec? ; \VIS_\aexec \subseteq ( \SO_{\aexec} \cup \WR_{\aexec} )^{+} ; \VIS_\aexec \subseteq \VIS_\aexec \),
+the proof is as the same proof as in \cref{sec:sound-complete-wfr}.
+
+
+
+
 
 \subsection{\( \UA \)}
 The set of transactions in the abstract execution \( \aexec \)  that write to a key \( \ke \) is defined as \( \WTa(\aexec, \ke) \defeq \Setcon{\txid}{(\otW, \stub, \stub) \in_\aexec \txid} \).
