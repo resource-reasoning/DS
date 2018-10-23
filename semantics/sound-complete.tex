@@ -457,6 +457,280 @@ It means
 \]
 thus we have the proof.
 
+\subsection{ \( \CP \) }
+An abstract execution \( \aexec \) satisfies consistency prefix (\(\CP\)), 
+if it satisfies \( \AR_\aexec ; \VIS_\aexec \subseteq \VIS_\aexec \) and \( \SO_\aexec \subseteq \VIS_\aexec \).
+Given the specification, there is a corresponding specification on dependency graph by solve the following inequalities:
+\[
+    \begin{array}{@{}l@{}}
+        \WR \subseteq \VIS \\
+        \WW \subseteq \AR \\
+        \VIS \subseteq \AR \\
+        \VIS ; \RW \subseteq \AR \\
+        \AR ; \AR \subseteq \AR  \\
+        \SO \subseteq \VIS \\
+        \AR ; \VIS \subseteq \VIS
+    \end{array}
+\]
+By solving the inequalities the visibility and arbitration relations are:
+\[
+    \begin{rclarray}
+        \AR & \defeq & \left( (\SO \cup \WR ) ; \RW? \cup \WW \cup R \right)^+ \\
+        \VIS & \defeq & \left( (\SO \cup \WR ) ; \RW? \cup \WW \cup R \right)^* ; (\SO \cup \WR )
+    \end{rclarray}
+\]
+for some relation \( R \subseteq \AR \).
+When \( R = \emptyset \), it is the smallest solution therefore the minimum visibility required.
+
+Then, to prove soundness and completeness of \( \ET_\CP \), it is sufficient to use the specification:
+\[
+    (\RP_{\LWW}, \Set{\lambda \aexec. \left( (\SO \cup \WR ) ; \RW? \cup \WW \right)^* ; \VIS_\aexec, \lambda \aexec \ldotp \SO_\aexec }) 
+\]
+Now recall the specification on key-value store for \( \CP \):
+\[
+    \Setcon{(\mkvs, \vi, \f, \vi')}{\ddagger}  \cap \MRd \cap \RYW
+\]
+where the \( \ddagger \) (and auxiliary relation under key-value store \( \mkvs\)) is defined as the following:
+\[
+    \begin{rclarray}
+        \func{RW^{-1}}{\mkvs, \ke, i} & \defeq & \Setcon{\txid}{\exsts{ j \leq i } \txid \in \RTx(\mkvs(\ke,j))} \\
+        \ddagger & \equiv &
+        \begin{array}[t]{@{}l@{}}
+            \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
+            \left( \begin{array}{@{}l@{}}
+            i \in \vi(\ke) 
+            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
+            \quad \left(
+                \begin{array}{@{}l @{}}
+                    \left( \begin{array}{@{}l@{}}
+                        \txid' \in \func{SO^{-1}}{\txid}
+                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \end{array} \right)  \lor {} \\
+                    \left( \begin{array}{@{}l@{}}
+                            \txid \in \RTx(\mkvs(\ke',j)) \land \txid' = \WTx(\mkvs(\ke',j))
+                    \end{array} \right)
+                    \end{array} \right) 
+                \end{array}
+                \right)  \\
+                {} \lor \left( \begin{array}{@{}l@{}}
+                        i \in \vi(\ke) \land \ke = \ke' \land j < i
+                \end{array} \right) \\
+                \qquad \implies j \in \vi(\ke') 
+        \end{array} \\
+    \end{rclarray}
+\]
+
+For the soundness, we pick the invariant as the following:
+\[  
+\begin{rclarray}
+    I_1(\aexec, \cl) & = & \left( \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \VIS_{\aexec}^{-1}(\txid^i_\cl) \right) \setminus \T_\rd \\
+    I_2(\aexec, \cl) & = & \left( \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} (\SO_{\aexec}^{-1})?(\txid^i_\cl) \right) \setminus \T_\rd
+\end{rclarray}
+\]
+where \( \T_\rd \) is all the read-only transactions included in both 
+\( \left( \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \VIS_{\aexec}^{-1}(\txid^i_\cl) \right)\) 
+and \( \left( \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} (\SO_{\aexec}^{-1})?(\txid^i_\cl) \right) \).
+Suppose a kv-store \( \mkvs \), an abstract execution \( \aexec \) and a view \( \vi \)
+such that \( \mkvs_\aexec = \mkvs \) and \( I_1(\aexec, \cl) \cup I_2(\aexec, \cl) \subseteq \Tx(\mkvs, \vi) \).
+Assume that a fresh transaction identifier \( \txid_\cl^n \) with fingerprint \( \f \) commits to 
+the kv-store \( \mkvs \) under view \( \vi \) and the view after is updated to \( \vi' \), that is, 
+\( \ET_\CP \vdash (\mkvs, \vi) \csat \f : \vi' \).
+Let a new abstract execution \( \aexec' = \extend(\aexec, \txid_\cl^n, \f, \Tx(\mkvs, \vi) \cup \T_\rd) \).
+We are about to prove there exists an extra set of read-only transaction \( \T'_\rd \) such that:
+\begin{gather}
+    \fora{\txid} (\txid, \txid_\cl^n) \in \SO_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \label{equ:cp-sound-update-so}\\
+    \fora{\txid} (\txid, \txid_\cl^n) \in \left( (\SO_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \cup \WW_{\aexec'} \right)^* ; \VIS_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \label{equ:cp-sound-update-arvis}\\
+    I_1(\aexec',\cl) \cup I_2(\aexec',\cl) \subseteq \Tx(\mkvs_{\aexec'}, \vi') \label{equ:cp-sound-inv} 
+\end{gather}
+the invariant \( I_2 \) implies the \cref{equ:cp-sound-update-so} where the proof is the same as in \cref{sec:sound-complete-ryw}.
+For \cref{equ:cp-sound-update-arvis}, it is sufficient to prove one step inclusion, \ie
+\[
+    \fora{\txid} (\txid, \txid_\cl^n) \in \left( (\SO_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \cup \WW_{\aexec'} \right) ; \VIS_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd 
+\]
+To prove above, let \( \T'_\rd \) initially be empty set.
+We will add more read-only transactions until it satisfies \cref{equ:cp-sound-update-arvis}.
+Assume a transaction \( \txid \) such that 
+\( (\txid, \txid_\cl^n) \in \left( (\SO_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \cup \WW_{\aexec'} \right) ; \VIS_{\aexec'}\).
+There exists a transaction \( \txid' \) such that \( \txid \toEdge{(\SO_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \cup \WW_{\aexec'}} \txid' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n \).
+It follows \( \txid'  \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd  \).
+There are two cases: \textbf{(i)} \( \txid' \) writes to at least a key; \textbf{(ii)} \( \txid' \) is a read-only transaction.
+\begin{itemize}
+    \item
+    If \( \txid' \) writes to at least a key, then \( \txid' \in \Tx(\mkvs, \vi)\).
+    By the \( \ddagger \) constraint, \( \txid \in \Tx(\mkvs, \vi)\) if it contains write,
+    otherwise we add \( \txid \) into the \( \T'_\rd \).
+    \item 
+    if \( \txid' \) is a read-only transaction, then either \( \txid' \in \T_\rd \) or \( \txid' \in \T'_\rd \).
+    More specifically we have three cases: \textbf{(i)} \( \txid' \in \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \VIS_{\aexec}^{-1}(\txid^i_\cl) \), \textbf{(ii)} \( \txid' \in \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} (\SO_{\aexec}^{-1})?(\txid^i_\cl) \) or \textbf{(iii)} \( \txid' \in \T'\_\rd\).
+    \begin{itemize}
+        \item
+        Assume \( \txid' \in \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \VIS_{\aexec}^{-1}(\txid^i_\cl) \).
+        It means \( \txid' \) is visible for some previous transaction \( \txid_\cl^m \) (\( m < n \)) from the same client \( cl \), 
+        \ie \( \txid \toEdge{(\SO_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \cup \WW_{\aexec'}} \txid' \toEdge{\VIS_{\aexec'}}  \txid_\cl^m \).
+        Note that all the edges before \( \txid_\cl^m \) must exist in \( \aexec \).
+        Since \( \aexec \) satisfies the \( \left( (\SO \cup \WR ) ; \RW? \cup \WW \right)^* ; \VIS_\aexec \subseteq \VIS_\aexec \),
+        we have \( \txid \toEdge{\VIS_{\aexec'}} \txid_\cl^m \), and then \( \txid \in \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \VIS_{\aexec}^{-1}(\txid^i_\cl)\).
+        It means \( \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \).
+    \item 
+    Assume  \( \txid' \in \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \SO_{\aexec}^{-1}(\txid^i_\cl) \)
+    Since \( \txid' \) is a read-only transaction, 
+    the edges can be simplified to \( \txid \toEdge{(\SO_{\aexec'} \cup \WR_{\aexec'} )} \txid' \toEdge{\SO_{\aexec'}}  \txid_\cl^n \)
+    Given that \( \SO \) is transitive, then  either \( \txid \toEdge{\SO_{\aexec'}} \txid_\cl^n \) or \( \txid \toEdge{\WR_{\aexec'} } \txid' \toEdge{\SO_{\aexec'}}  \txid_\cl^n \).
+    For the first case, \( \txid \in \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \SO_{\aexec}^{-1}(\txid^i_\cl) = \Tx(\mkvs, \vi) \cup \T_\rd \).
+    For the second case, the \( \WR \) edge must exists before update.
+    Because \( \WR_\aexec \subseteq \VIS_\aexec \) then  \( \txid \toEdge{\VIS_{\aexec} } \txid' \toEdge{\SO_{\aexec'}}  \txid_\cl^n  \).
+    It means \( \txid \in \bigcup\limits_{\{\txid_{\cl}^{i} \in \T_{\aexec} \mid i \in \Nat\}} \VIS_{\aexec}^{-1}(\txid^i_\cl) = \Tx(\mkvs, \vi) \cup \T_\rd \).
+    \item 
+    Last, assume \( \txid' \in \T'_\rd \).
+    Since \( \T'_\rd \) initially is empty set, there exists another write transaction \( \txid'' \) such that:
+    \[
+        \txid \toEdge{(\SO_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \cup \WW_{\aexec'}} \txid' \toEdge{(\SO_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \cup \WW_{\aexec'}} \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n
+    \]
+    Given that \( \txid' \) is a read-only and \( \txid'' \) has write, the edges can be simplified:
+    \[
+        \txid \toEdge{(\SO_{\aexec'} \cup \WR_{\aexec'} )} \txid' \toEdge{\SO_{\aexec'} ; \RW_{\aexec'}?} \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n
+    \]
+    Because transitivity of  \( \SO \), we have the following two cases:
+    \[
+        \begin{array}{@{}l@{}}
+            \txid \toEdge{ \WR_{\aexec'} } \txid' \toEdge{\SO_{\aexec'} ; \RW_{\aexec'}?} \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n \\
+            \txid \toEdge{\SO_{\aexec'} ; \RW_{\aexec'}?} \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n 
+        \end{array}
+    \]
+    for both cases, if \( \txid \) has write, by \( \ddagger \), then \( \txid \in \Tx(\mkvs, \vi) \).
+    Otherwise we add \( \txid \) into \(\T'_\rd \).
+    \end{itemize}
+\end{itemize}
+Since \( \CP \) satisfies \( \RYW \) and \( \MRd \), thus invariants \( I_1 \) and  \( I_2 \) are preserved after update.
+    
+For completeness,
+Since \( \SO_\aexec \subseteq \VIS_\aexec  \), the prove for \( \ET_\RYW \) is the as in \cref{sec:sound-complete-mr}.
+For any \( \VIS_\aexec \)  satisfies the constraint for \( \CP \), it satisfies that 
+\[
+    \VIS \defeq \left( (\SO \cup \WR ) ; \RW? \cup \WW \cup R \right)^* ; (\SO \cup \WR )
+\]
+for some relation \( R \).
+It means \( \VIS_\aexec ; \SO_\aexec \subseteq \VIS_\aexec \).
+Therefore it is complete with respect to \( \ET_\MRd \).
+Let consider the \( \ddagger \).
+Suppose that $\T_{\aexec} = \Set{\txid_{i}}_{i=1}^{n}$, and for any $i=1,\cdots, n-1$,
+$\txid_{i} \xrightarrow{\AR_{\aexec}} \txid_{i+1}$.
+Fix $i=1,\cdots,n$, and let a view $\vi_{i} = \getView(\aexec, \VIS^{-1}_{\aexec}(\txid_{i}))$.
+We need to prove there exists \( \vi'_i \) such that 
+\( \ET_\CP \vdash ( \mkvs_{\cut(\aexec, i-1)}, \vi_i ) \csat \TtoOp{T}_{\aexec}(\txid_{i}) : \vi'_{i} \).
+Recall the \( \ddagger \):
+\[
+    \begin{rclarray}
+        \ddagger & \equiv &
+        \begin{array}[t]{@{}l@{}}
+            \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
+            \left( \begin{array}{@{}l@{}}
+            i \in \vi(\ke) 
+            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
+            \quad \left(
+                \begin{array}{@{}l @{}}
+                    \left( \begin{array}{@{}l@{}}
+                        \txid' \in \func{SO^{-1}}{\txid}
+                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \end{array} \right)  \lor {} \\
+                    \left( \begin{array}{@{}l@{}}
+                            \txid \in \RTx(\mkvs(\ke',j)) \land \txid' = \WTx(\mkvs(\ke',j))
+                    \end{array} \right)
+                    \end{array} \right) 
+                \end{array}
+                \right)  \\
+                {} \lor \left( \begin{array}{@{}l@{}}
+                        i \in \vi(\ke) \land \ke = \ke' \land j < i
+                \end{array} \right) \\
+                \qquad \implies j \in \vi(\ke') 
+        \end{array} \\
+    \end{rclarray}
+\]
+Assume \( j \in \vi_i(\ke) \) for some key \(\ke \) and index \( i \).
+It means the writer  of the version is visible by the transaction \( \txid_i\),
+\ie \( \WTx(\mkvs(\ke,i)) \in \VIS^{-1}_{\aexec}(\txid_{i}) \).
+We need to prove the following:
+\begin{gather}
+    \label{equ:cp-complete-arvis}
+    \begin{rclarray}
+        \begin{array}[t]{@{}l@{}}
+            \fora{\ke, \ke', i, j, \txid, \txid'} \\
+            \left( \begin{array}{@{}l@{}}
+            i \in \vi(\ke) 
+            \land \WTx(\mkvs(\ke,i)) \in \VIS_\aexec^{-1}(\txid_i)
+            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
+            \quad \left(
+                \begin{array}{@{}l @{}}
+                    \left( \begin{array}{@{}l@{}}
+                        \txid' \in \func{SO^{-1}}{\txid}
+                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \end{array} \right)  \lor {} \\
+                    \left( \begin{array}{@{}l@{}}
+                            \txid \in \RTx(\mkvs(\ke',j)) \land \txid' = \WTx(\mkvs(\ke',j))
+                    \end{array} \right)
+                    \end{array} \right) 
+                \end{array}
+                \right)  \\
+                {} \lor \left( \begin{array}{@{}l@{}}
+                        i \in \vi(\ke) \land \ke = \ke' \land j < i
+                \end{array} \right) \\
+                \qquad \implies \WTx(\mkvs(\ke',j)) \in \VIS_\aexec^{-1}(\txid_i)
+        \end{array} \\
+    \end{rclarray}
+\end{gather}
+Note that \( \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \) 
+means \( \txid \toEdge{\RW_{\aexec}?} \WTx(\mkvs(\ke,i)) \),
+the formulae \(\left( \begin{array}{@{}l@{}} \txid \in \RTx(\mkvs(\ke',j)) \land \txid' = \WTx(\mkvs(\ke',j)) \end{array} \right) \) 
+means \( \txid \toEdge{\WR_\aexec} \txid' \),
+and \( \left( \begin{array}{@{}l@{}} \txid = \WTx(\mkvs(\ke',m)) \land \txid' = \WTx(\mkvs(\ke',j)) \land m > j \end{array} \right) \) 
+means \( \txid \toEdge{\WW_\aexec} \txid' \).
+The \cref{equ:cp-complete-arvis} holds, if the following holds:
+\[
+    \begin{rclarray}
+        \begin{array}[t]{@{}l@{}}
+            \fora{\ke, \ke', i, j, \txid, \txid'} \\
+            \left( \begin{array}{@{}l@{}}
+            i \in \vi(\ke) 
+            \land \WTx(\mkvs(\ke,i)) \in \VIS_\aexec^{-1}(\txid_i) \\
+            {} \land \txid' = \WTx(\mkvs(\ke',j))
+            \land \txid \toEdge{\RW_{\aexec}?} \WTx(\mkvs(\ke,i)) \land {} \\
+            \left(
+                \begin{array}{@{}l @{}}
+                    \txid' \toEdge{\WR_\aexec ; \SO_\aexec}\txid \lor
+                    \txid' \toEdge{\SO_\aexec}\txid \lor
+                    \txid' \toEdge{\WR_\aexec}\txid
+                    \end{array} \right) 
+                \end{array}
+                \right)  \\
+                {} \lor \txid' \toEdge{\WW_\aexec} \WTx(\mkvs(\ke,i)) \\
+                \qquad \implies \txid' \in \VIS_\aexec^{-1}(\txid_i)
+        \end{array} \\
+    \end{rclarray}
+\]
+The above holds, if the following holds:
+\begin{gather}
+    \label{equ:cp-complete-arvis-2}
+    \begin{rclarray}
+        \begin{array}[t]{@{}l@{}}
+            \fora{\ke, i, \txid} \\
+            \left( \begin{array}{@{}l@{}}
+            i \in \vi(\ke) 
+            \land \WTx(\mkvs(\ke,i)) \in \VIS_\aexec^{-1}(\txid_i) \\
+            {} \land \txid \toEdge{( (\WR_\aexec; \SO_\aexec) \cup \SO_\aexec \cup \WR_\aexec) ; \RW_{\aexec}? \cup \WW_\aexec} \WTx(\mkvs(\ke,i)) 
+                \end{array}
+                \right)  \\
+                \qquad \implies \txid \in \VIS_\aexec^{-1}(\txid_i)
+        \end{array} \\
+    \end{rclarray}
+\end{gather}
+
+By \( \left( (\SO \cup \WR ) ; \RW? \cup \WW \right)^* ; \VIS_\aexec \subseteq \VIS_\aexec \),
+It implies \cref{equ:cp-complete-arvis-2}, and then \cref{equ:cp-complete-arvis} holds.
+
+
+\subsection{\(\PSI\)}
+
+
 \subsection{\( \SI \)}
 Given abstract execution \( \aexec \), we define write-write read-write relation:
 \[
@@ -474,7 +748,7 @@ the following holds:
     \RW_\aexec = \Setcon{(\txid, \txid')}{\exsts{\ke, i,j } \txid \in \RTx(\mkvs(\ke, i)) \land \txid' = \WTx(\mkvs(\ke, j)) \land i < j}
 \]
 
-The specification for \( \SI \) is \( (\RP_{\LWW}, \Set{\lambda \aexec. \AR_\aexec ; \VIS_\aexec, \lambda \aexec \ldotp \SO_\aexec }) \).
+The specification for \( \SI \) is \( (\RP_{\LWW}, \Set{\lambda \aexec. \AR_\aexec ; \VIS_\aexec, \lambda \aexec \ldotp \SO_\aexec, \lambda \aexec \ldotp \WW_\aexec }) \).
 By \cite{cerone:snapshot}, for any \( \aexec \) satisfies the \( \SI \),
 there exists a minimum visibility \( \VIS_{\aexec}' \subseteq \VIS_\aexec \) satisfying 
 \[ (\RP_{\LWW}, \Set{\lambda \aexec. \left( (\SO_\aexec \cup \WW_\aexec \cup \WR_\aexec ) ; \RW_\aexec? \right)^+ ; \VIS'_\aexec, \lambda \aexec \ldotp (\WW_\aexec \cup \SO_\aexec) }) \]
@@ -491,22 +765,27 @@ where the \( \dagger \) (and auxiliary relation under key-value store \( \mkvs\)
         \dagger & \equiv &
         \begin{array}[t]{@{}l@{}}
             \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
-            \left( \begin{array}{@{}l@{}}
+            \begin{array}{@{}l@{}}
             i \in \vi(\ke) 
-            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \\
+            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
             \quad \left(
                 \begin{array}{@{}l @{}}
-                    \txid' \in \func{SO^{-1}}{\txid} \lor
                     \left( \begin{array}{@{}l@{}}
-                            \txid \in \RTx(\mkvs(\ke',j)) \land \txid' = \WTx(\mkvs(\ke',j))
-                    \end{array} \right) \\
-                    {} \lor \left( \begin{array}{@{}l@{}}
-                            \txid = \WTx(\mkvs(\ke',m)) \land \txid' = \WTx(\mkvs(\ke',j)) \land m > j
+                        \txid' \in \func{SO^{-1}}{\txid}
+                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \end{array} \right)  \lor {} \\
+                    \left( \begin{array}{@{}l@{}}
+                        \txid \in \RTx(\mkvs(\ke',j)) 
+                        \land \txid' = \WTx(\mkvs(\ke',j))
+                    \end{array} \right) \lor {} \\ 
+                    \left( \begin{array}{@{}l@{}}
+                        \txid = \WTx(\mkvs(\ke',m)) 
+                        \land \txid' = \WTx(\mkvs(\ke',j)) \land m > j
                     \end{array} \right) 
                 \end{array}
                 \right)  \\
             \qquad \implies j \in \vi(\ke') 
-            \end{array} \right)
+            \end{array}
         \end{array} \\
     \end{rclarray}
 \]
@@ -534,10 +813,10 @@ We are about to prove there exists an extra set of read-only transaction \( \T'_
     \fora{\txid} (\txid, \txid_\cl^n) \in \left( (\SO_{\aexec'} \cup \WW_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \right) ; \VIS_{\aexec'} \implies \txid \in \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \label{equ:si-sound-update-arvis}\\
     I_1(\aexec',\cl) \cup I_2(\aexec',\cl) \subseteq \Tx(\mkvs_{\aexec'}, \vi') \label{equ:si-sound-inv} 
 \end{gather}
-Note that for \cref{equ:si-sound-update-arvis}, it is sufficient to prove one step instead of transitive 
-because \( \VIS_{\aexec'}(\txid_\cl^n) =  \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \).
 The invariant \( I_2 \) implies \cref{equ:si-sound-update-so} as the same in \cref{sec:sound-complete-ryw}.
 Since \( \SI \) also satisfies \( \UA \), the \cref{equ:si-sound-update-ww} can be proven as the same in \cref{sec:sound-complete-ua}.
+Note that for \cref{equ:si-sound-update-arvis}, it is sufficient to prove one step instead of transitive 
+because \( \VIS_{\aexec'}(\txid_\cl^n) =  \Tx(\mkvs, \vi) \cup \T_\rd \cup \T'_\rd \).
 To prove \cref{equ:si-sound-update-arvis}, 
 let \( \T'_\rd \) initially be empty set.
 More read-only transactions will be added in until \cref{equ:si-sound-update-arvis} holds.
@@ -564,7 +843,7 @@ otherwise \( \txid \) is a read-only transaction and will be added into \( \T'_\
             The path from \( \txid \) to \( \txid_\cl^m \) must exist in the abstract execution before update and they satisfy the constraint, so \( \txid \toEdge{\VIS_\aexec} \txid_\cl^m \).
             Therefore by the invariant \( I_1 \), either \( \txid \in \Tx(\mkvs, \vi) \) if \( \txid \) has writes, otherwise \(\txid \in \T_\rd \).
         \end{itemize}
-    \item If \( \txid' \in \T'_\rd \), given that \( \T'_rd \) initially is empty, there is anther transaction \( \txid'' \) that has at least a write such that:
+    \item If \( \txid' \in \T'_\rd \), given that \( \T'_\rd \) initially is empty, there is anther transaction \( \txid'' \) that has at least a write such that:
         \[
             \txid \toEdge{\left( (\SO_{\aexec'} \cup \WW_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \right) } \txid' \toEdge{\left( (\SO_{\aexec'} \cup \WW_{\aexec'} \cup \WR_{\aexec'} ) ; \RW_{\aexec'}? \right) } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n 
         \]
@@ -572,27 +851,16 @@ otherwise \( \txid \) is a read-only transaction and will be added into \( \T'_\
         \[
             \txid \toEdge{\left( \SO_{\aexec'} \cup \WR_{\aexec'} \right) } \txid' \toEdge{\left( \SO_{\aexec'} ; \RW_{\aexec'}? \right) } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n 
         \]
-        \begin{itemize}
-            \item 
-            Let first consider no \( \RW \), \ie  \( \txid \toEdge{\left( \SO_{\aexec'} \cup \WR_{\aexec'} \right) } \txid' \toEdge{\SO_{\aexec'} } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n  \).
-            Since \( \SO \) is transitive, we have the following two cases where the first can be prove by invariant \( I_1 \) and the second case has been prove before since \( \txid'' \) has a write:
-            \[
-                \begin{array}{@{}c@{}}
-                    \txid \toEdge{\WR_{\aexec'} } \txid' \toEdge{\SO_{\aexec'} } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n  \\
-                    \txid \toEdge{\SO_{\aexec'} } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n 
-                \end{array}
-            \]
-            \item 
-            Now let consider \( \txid \toEdge{\left( \SO_{\aexec'} \cup \WR_{\aexec'} \right) } \txid' \toEdge{\left( \SO_{\aexec'} ; \RW_{\aexec'} \right) } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n \).
-            Since \( \SO \) is transitive, we have the following two cases where the second case has been prove before since \( \txid'' \) has a write:
-            \[
-                \begin{array}{@{}c@{}}
-                    \txid \toEdge{\WR_{\aexec'} } \txid' \toEdge{\SO_{\aexec'} ; \RW_{\aexec'} } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n  \\
-                    \txid \toEdge{\SO_{\aexec'} ; \RW_{\aexec'}} \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n 
-                \end{array}
-            \]
-            For the first case by the \( \dagger \), \( \txid \in \Tx(\mkvs, \vi) \) if \( \txid \) has a writes, or we add \( \txid \) into \( \T'_\rd \).
-        \end{itemize}
+        Let first consider no \( \RW \), \ie  \( \txid \toEdge{\left( \SO_{\aexec'} \cup \WR_{\aexec'} \right) } \txid' \toEdge{\SO_{\aexec'} } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n  \).
+        Since \( \SO \) is transitive, we have the following two cases:
+        \[
+            \begin{array}{@{}c@{}}
+                \txid \toEdge{\WR_{\aexec'} } \txid' \toEdge{\SO_{\aexec'} ; \RW_{\aexec'}? } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n  \\
+                \txid \toEdge{\SO_{\aexec'} ; \RW_{\aexec'}? } \txid'' \toEdge{\VIS_{\aexec'}}  \txid_\cl^n 
+            \end{array}
+        \]
+        for both cases, if \( \txid \) has write, by \( \dagger \), then \( \txid \in \Tx(\mkvs, \vi) \).
+        Otherwise we add \( \txid \) into \(\T'_\rd \).
     \end{itemize}
 \end{itemize}
 Since \( \SI \) satisfies \( \RYW \) and \( \MRd \), thus invariants \( I_1 \) and  \( I_2 \) are preserved after update.
@@ -613,23 +881,27 @@ Now we need to prove the following:
     \label{equ:si-complete-arvis}
     \begin{array}{@{}l@{}}
         \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
-        \left( \begin{array}{@{}l@{}}
+        \begin{array}{@{}l@{}}
         i \in \vi(\ke) 
-        \land \WTx(\mkvs(\ke,i)) \in \VIS^{-1}_{\aexec}(\txid_{i}) \\
-        {} \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
-        \quad \left(
-            \begin{array}{@{}l @{}}
-                \txid' \in \func{SO^{-1}}{\txid} \lor
-                \left( \begin{array}{@{}l@{}}
-                        \txid \in \RTx(\mkvs(\ke',j)) \land \txid' = \WTx(\mkvs(\ke',j))
-                \end{array} \right) \\
-                {} \lor \left( \begin{array}{@{}l@{}}
-                        \txid = \WTx(\mkvs(\ke',m)) \land \txid' = \WTx(\mkvs(\ke',j)) \land m > j
-                \end{array} \right) 
-            \end{array}
-            \right)  \\
+        \land \WTx(\mkvs(\ke,i)) \in \VIS^{-1}_{\aexec}(\txid_{i}) 
+        \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
+            \quad \left(
+                \begin{array}{@{}l @{}}
+                    \left( \begin{array}{@{}l@{}}
+                        \txid' \in \func{SO^{-1}}{\txid}
+                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \end{array} \right)  \lor {} \\
+                    \left( \begin{array}{@{}l@{}}
+                        \txid \in \RTx(\mkvs(\ke',j)) 
+                    \end{array} \right) \lor 
+                    \left( \begin{array}{@{}l@{}}
+                        \txid = \WTx(\mkvs(\ke',m)) 
+                        \land m > j
+                    \end{array} \right) 
+                \end{array}
+                \right)  \\
         \qquad \implies \WTx(\mkvs(\ke',j)) \in \VIS^{-1}_{\aexec}(\txid_{i})
-        \end{array} \right)
+        \end{array} 
     \end{array} 
 \end{gather}
 Note that \( \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \) 
@@ -638,10 +910,10 @@ the formulae \(\left( \begin{array}{@{}l@{}} \txid \in \RTx(\mkvs(\ke',j)) \land
 means \( \txid \toEdge{\WR_\aexec} \txid' \),
 and \( \left( \begin{array}{@{}l@{}} \txid = \WTx(\mkvs(\ke',m)) \land \txid' = \WTx(\mkvs(\ke',j)) \land m > j \end{array} \right) \) 
 means \( \txid \toEdge{\WW_\aexec} \txid' \).
-Therefore we have the following:
+So \cref{equ:si-complete-arvis} holds if the following holds:
 \[
     \begin{array}{@{}l@{}}
-        \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
+        \fora{\ke, \ke', i, j, \txid, \txid'} \\
         \left( \begin{array}{@{}l@{}}
         i \in \vi(\ke) 
         \land \WTx(\mkvs(\ke,i)) \in \VIS^{-1}_{\aexec}(\txid_{i}) 
@@ -650,16 +922,30 @@ Therefore we have the following:
         \left(
         \begin{array}{@{}l @{}}
             \txid' \toEdge{\SO_\aexec} \txid \lor
+            \txid' \toEdge{\WR_\aexec ; \SO_\aexec} \txid \lor
             \txid' \toEdge{\WR_\aexec} \txid \lor
-            \txid' \toEdge{\RW_\aexec} \txid 
+            \txid' \toEdge{\WW_\aexec} \txid 
         \end{array}
         \right)  \\
         \qquad \implies \txid' \in \VIS^{-1}_{\aexec}(\txid_{i})
         \end{array} \right)
     \end{array} \\
 \]
-Given \( \left( (\SO_{\aexec} \cup \WW_{\aexec} \cup \WR_{\aexec} ) ; \RW_{\aexec}? \right) ; \VIS_{\aexec}  \subseteq \VIS_\aexec \),
-we have the proof for \cref{equ:si-complete-arvis}.
+The above holds, if the following holds:
+\begin{gather}
+    \label{equ:si-complete-arvis-2}
+    \begin{array}{@{}l@{}}
+        \fora{\ke, i, \txid} \\
+        \left( \begin{array}{@{}l@{}}
+        i \in \vi(\ke) 
+        \land \WTx(\mkvs(\ke,i)) \in \VIS^{-1}_{\aexec}(\txid_{i})  \\
+        {} \land \txid \toEdge{(\SO_\aexec \cup (\WR_\aexec ; \SO_\aexec ) \cup \WR_\aexec \cup \WW_\aexec ) ; \RW_{\aexec}?} \WTx(\mkvs(\ke,i))  \\
+        \quad \implies \txid \in \VIS^{-1}_{\aexec}(\txid_{i})
+        \end{array} \right)
+    \end{array} 
+\end{gather}
+Note that the constraint \( \left( (\SO_{\aexec} \cup \WW_{\aexec} \cup \WR_{\aexec} ) ; \RW_{\aexec}? \right)^* ; \VIS_{\aexec}  \subseteq \VIS_\aexec \) implies the \cref{equ:si-complete-arvis-2}.
+Therefore we have the proof for \cref{equ:si-complete-arvis}.
 
 By the \cite{cerone:snapshot}, we know that for any abstract execution that satisfies \( (\WW_\aexec \cup \SO_\aexec) \subseteq \VIS_\aexec \)
 and \( \left( (\SO_\aexec \cup \WW_\aexec \cup \WR_\aexec ) ; \RW_{\aexec}? \right) ; \VIS_\aexec \subseteq \VIS_\aexec \),
@@ -669,18 +955,6 @@ the visibility relation will have have the following form for some relation \( R
 \]
 Given above, it is easy to see \( \VIS_\aexec ; \SO_\aexec \subseteq \VIS_\aexec \) since \( \SO \) is transitive, 
 thus we have the proof for \( \MRd \) where the detail is in \cref{sec:sound-complete-mr}.
-
-%Now let assume there exists one more transaction from the same client, 
-%says \( \txid \) such that \( \txid_i \toEdge{\SO_\aexec} \txid\).
-%Let \( \vi' = \getView(\aexec, (\AR_\aexec^{-1})?(\txid_{i}) \cap \VIS_{\aexec}^{-1}(\txid) ) \).
-%Note that \( \SO_\aexec \in \VIS_\aexec \)
-%so \( \left( (\SO_{\aexec} \cup \WW_{\aexec} \cup \WR_{\aexec} ) ; \RW_{\aexec}? \right) ; \SO_{\aexec} \subseteq \VIS_\aexec \).
-%Because \( \txid_i \toEdge{\SO_\aexec} \txid\), we have the following:
-%\[
-    %\left( (\SO_{\aexec} \cup \WW_{\aexec} \cup \WR_{\aexec} ) ; \RW_{\aexec}? \right)^{-1}(\txid_i) \subseteq  (\AR_\aexec^{-1})?(\txid_{i}) \cap \VIS_{\aexec}^{-1}(\txid)
-%\]
-
-
 
 
 \subsection{ \( \SER \)}
