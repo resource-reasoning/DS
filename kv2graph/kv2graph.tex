@@ -1,0 +1,86 @@
+\subsection{Relationship between kv-stores and dependency graphs.}
+\ac{It could be that this subsection gets moved to a different section, where 
+we also relate specifications of consistency models using dependency graphs
+with execution tests.}
+\emph{Dependency graphs} are a formalism  introduced by Adya to specify 
+consistency models of transactional databases \cite{adya}. 
+They are directed graphs consisting of transactions as nodes, 
+each of which is labelled with a set of read and write operations, 
+$\Ops \defeq \Setcon{(\otR, \ke, \val), (\otW, \ke, \val) }{ \ke \in \Keys \wedge \val \in \Val }$
+and labelled edges between transactions for specifying how information flows within a computation. 
+Specifically, a transaction $\txid$ may read a version for a key $\ke$ that has been written by another transaction $\txid'$ 
+(\emph{write-read dependency} \( \WR\)), overwrite a version of $\ke$ written by $\txid'$ (\emph{write-write dependency} \( \WW \)), or 
+read a version of $\ke$ that is later overwritten by $\txid'$ (\emph{read-write anti-dependency} \( \RW \)).
+\begin{definition}
+A \emph{dependency graph} is a quadruple $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, where
+\begin{itemize}
+\item $\TtoOp{T}: \TxID_{0} \parfinfun \powerset{\Ops}$ is a partial finite function 
+mapping transaction identifiers to the set of operations they perform, where there are at most one read operation and one write operation for each key,
+\item $\RF : \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function that 
+maps each key $\ke$ into a relation between transactions, such that for any $\txid, \txid_1, \txid_2, 
+\ke, \cl, m, n$: 
+\begin{itemize}
+\item if $(\otR, \ke, \val) \in \TtoOp{T}(\txid)$, either $\val = \val_0$ 
+and there exists no $\txid'$ such that $\txid' \xrightarrow{\RF(\ke)} \txid$,  
+or there exists $\txid'$ such that $(\otW, \ke, \val) \in \TtoOp{T}(\txid')$, and $\txid' \xrightarrow{\RF(\ke)} \txid$, 
+\item if $\txid_1 \xrightarrow{\RF(\ke)} \txid$ and $\txid_2 \xrightarrow{\RF(\ke)} \txid$, then 
+$\txid_2 = \txid_1$, 
+\item if $\txid_{\cl}^{m} \xrightarrow{\RF(\ke)} \txid_{\cl}^{n}$, then $m < n$.
+\end{itemize}
+\item $\VO: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function 
+that maps each key into an irreflexive relation between transactions, such that for any $\txid, \txid', \ke, \cl, m, n$, 
+\begin{itemize}
+\item if $\txid \xrightarrow{\VO(\ke)} \txid'$, then $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, 
+\item if $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, then either $\txid = \txid'$, 
+$\txid \xrightarrow{\VO(\ke)} \txid'$, or $\txid' \xrightarrow{\VO(\ke)} \txid$, 
+\item if $\txid_{\cl}^{m} \xrightarrow{\RF(\ke)} \txid_{\cl}^{n}$, then $m < n$.
+\end{itemize}
+\item $\AD: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is defined 
+by letting $\txid \xrightarrow{\AD(\ke)} \txid'$ if and only if $(\otR, \ke, \_) \in \TtoOp{T}(\txid)$, 
+$(\otW, \ke, \_) \in \TtoOp{T}(\txid')$ and 
+either there exists no $\txid''$ such that $\txid'' \xrightarrow{\RF(\ke)} \txid$, or 
+$\txid'' \xrightarrow{\RF(\ke)} \txid$, $\txid'' \xrightarrow{\VO(\ke)} \txid'$ for 
+some $\txid''$.
+\end{itemize}
+\end{definition}
+Given a dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, we often 
+commit an abuse of notation and use $\RF$ to denote the relation 
+$\bigcup\limits_{\ke \in \Keys} \RF(\ke)$; a similar notation is adopted for $\VO, \AD$. 
+It will always be clear from the context whether the symbol $\RF$ refers to a function 
+from keys to relations, or to a relation between transactions. 
+
+%A dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$ is well-formed if 
+%$(\PO \cup \RF \cup \VO)$ is acyclic, i.e. its transitive closure is irreflexive. 
+%Henceforth, we always assume that dependency graphs are well-formed, 
+%and we let 
+We let $\Dgraphs$ be the set of all dependency graphs.
+It is always possible to convert a kv-store $\hh$ into a well-formed dependency 
+graph. For example, \cref{fig:hheap-b} illustrates the dependency graph constructed 
+from the kv-store depicted in \cref{fig:hheap-a}.
+
+\begin{definition}
+\label{def:kv2graph}
+Given a kv-store $\hh$, the \emph{dependency graph} $\Gr_{\hh} = (\TtoOp{T}_{\hh}, \RF_{\hh}, 
+\VO_{\hh}, \AD_{\hh})$ is defined as follows: 
+\begin{itemize}
+\item for any $\txid \neq \txid_0$, $\TtoOp{T}_{\hh}(\txid)$ is defined if and only if there exists an index $i$ and a key 
+$\ke$ such that either $\txid = \WTx(\hh(\ke, i))$, or $\txid \in \RTx(\hh(\ke,i))$; furthermore, 
+$(\otW, \ke, \val) \in \TtoOp{T}(\txid)$ if and only 
+if $\txid = \WTx(\hh(\ke, i))$ for some $i$, and 
+$(\otR, \ke, \val) \in \TtoOp{T}(\txid)$ if and only if $\txid \in \RTx(\hh(\ke, i))$ for some $i$, 
+\item $\txid \xrightarrow{\RF(\ke)} \txid'$ if and only if there exists an index $i: 0 < i < \lvert \hh(\ke) \rvert$ 
+such that $\txid = \WTx(\hh(\ke, i))$, and $\txid' \in \RTx(\hh(\ke, i))$, 
+\item $\txid \xrightarrow{\VO(\ke)} \txid'$ if and only if there exist two indexes $i,j$: $0 < i < j < \lvert \hh(\ke) \rvert$ 
+such that $\txid = \WTx(\ke, i)$, $\txid' = \WTx(\ke, j)$, 
+\item $\txid \xrightarrow{\AD(\ke)} \txid'$ if and only if there exist two indexes $i,j$: $0 < i < j < \lvert \hh(\ke) \rvert$ 
+such that $\txid \in \RTx(\ke, i)$ and $\txid' = \WTx(\ke, j)$.
+\end{itemize}
+\end{definition}
+
+\begin{theorem}
+\label{thm:kv2graph}
+The function $\Gr_{(\stub)}$ is a bijection between kv-stores and well-formed dependency graphs.
+\end{theorem}
+\begin{proof}
+See \cref{sec:kv2graph-proof}.
+\end{proof}
