@@ -1,263 +1,206 @@
 \subsection{Multi-version Key-value Stores and Views}
 \label{sec:mkvs-view}
 
-\subsubsection{Key-value Stores} 
+\subsubsection{Multi-version Key-value Stores} 
 
 We assume a countably infinite set of \emph{keys} $\Keys \defeq \Set{\ke, \ke', \cdots}$, 
-a set of \emph{values} $\Val \defeq \{\val, \val', \cdots\}$ which for simplicity we instantiate to be 
-$\Nat \uplus \Keys$, a set of clients $\Clients \defeq \Set{\cl, \cl',\cdots}$. 
-We also assume a set of transaction identifiers $\TxID \defeq \Set{ \txid_{\cl}^{n} \mid \cl \in \Clients \wedge n \geq 0 } 
-\uplus \Set{\txid_{0}}$,
-each of which is either a special transaction identifier $\txid_0$, 
+a set of \emph{values} $\Val \defeq \{\val, \val', \cdots\}$ 
+which for simplicity we instantiate to be $\Nat \uplus \Keys$, 
+and a set of clients $\Clients \defeq \Set{\cl, \cl',\cdots}$. 
+We also assume a set of transaction identifiers 
+$\TxID \defeq \Set{ \txid_{\cl}^{n} \mid \cl \in \Clients \wedge n \geq 0 } \uplus \Set{\txid_{0}}$,
+each of which is either a special transaction identifier $\txid_0$ for initialisation, 
 or it is indexed by a client identifier and a natural number. 
 Elements of $\TxID$ are ranged over by $\txid, \txid', \cdots$, 
 while subsets of $\TxID$ are ranged over $\txidset, \txidset', \cdots$. 
 We let $\TxID_{0} \defeq \TxID \setminus \{ \txid_0\}$.
 The structure of the set $\TxID$  
 embeds the order in which transactions are executed by individual clients, or \emph{session order}. 
-Specifically, we let $\PO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid = \txid_{\cl}^{n} \wedge \txid' = \txid_{\cl}^{m} \wedge n < m}$; 
-$(\txid, \txid') \in \PO$ means that 
-some client $\cl$ has executed $\txid$ prior to $\txid'$. For $\PO$ (and in general  
-for relations between transaction identifiers) we will often adopt the more graphic notation 
+Specifically, the session order is defined as
+$\PO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid = \txid_{\cl}^{n} \wedge \txid' = \txid_{\cl}^{m} \wedge n < m}$; 
+thus $(\txid, \txid') \in \PO$ means that 
+some client $\cl$ has executed $\txid$ prior to $\txid'$.
+For readability, we often adopt the more graphic notation as
 $\txid \xrightarrow{\PO} \txid'$ in lieu of $(\txid, \txid') \in \PO$.
 
 Given a set $X$, then $\powerset{X}$ denotes 
 the powerset of $X$, while $X^{\ast}$ is the free monoid induced by $X$.
+The \emph{multi-version key-value store} is defined as the following (\cref{def:mkvs}).
 
 
 \begin{definition}[Multi-version Key-value Stores]
 \label{def:his_heap}
 \label{def:mkvs}
-A \emph{version} is a triple $\ver = (\val, \txid, \txidset)$. The set of versions is denoted by $\Versions \defeq \Val \times \TxID \times \powerset{\TxID_{0}}$, 
-and a \emph{key-value store} is a mapping $\hh \in \MKVSs \defeq \Keys \rightarrow \Versions^{\ast}$. 
-\ac{ The superscript fin over the $\rightharpoonup$ needs to be fixed. You may want to look at the package extpfeil.}
-%The set of key-value stores is denoted as $\HisHeaps$.
+A \emph{version} is a triple $\ver \in \Versions \defeq \Val \times \TxID \times \powerset{\TxID_{0}}$. 
+%The set of versions is denoted by $$.
+A \emph{key-value store} is a mapping $\hh \in \MKVSs \defeq \Keys \rightarrow \Versions^{\ast}$. 
+%\ac{ The superscript fin over the $\rightharpoonup$ needs to be fixed. You may want to look at the package extpfeil.}
 \end{definition}
 
-\emph{A version} $\ver = (\val, \txid, \txidset)$ consists of a value $\val$, and the meta-data of the transactions 
-that accessed the version; specifically, $\txid$ is the identifier of the transaction that wrote such a version, 
-and $\txidset$ is the set of identifiers of transactions that read the version.
-Given a version $\ver = (\val, \txid, \txidset)$, we let $\valueOf(\ver) \defeq \val$. 
+A \emph{version} $\ver = (\val, \txid, \txidset)$ consists of a value $\val$,
+and the meta-data of the transactions that accessed the version; 
+specifically, the \emph{writer} $\txid$ is the identifier of the transaction that wrote such a version, 
+and the \emp{readers} $\txidset$ is the set of identifiers of transactions that read the version.
+Given a version $\ver = (\val, \txid, \txidset)$, let $\valueOf(\ver) \defeq \val$,
 $\WTx(\ver) \defeq \txid$ and $\RTx(\ver) \defeq \txidset$.
 Lists of versions, that is elements of $\Versions^{\ast}$, are ranged over by $\vilist, \vilist',\cdots$.
 
-\emph{A multi-version key-value store}, or \emph{kv-store}, 
+A \emph{multi-version key-value store}, or \emph{kv-store}, 
 is a mapping from keys to lists of versions. 
-For a given kv-store $\hh$, key $\ke$ and index $i \geq 0$, we use the notation $\hh(\ke, i)$ 
-to denote the $i$-th version (starting from $0$) installed for $\ke$; that is, if $\hh(\ke) = \ver_0 \cdots\ver_{n}$, then 
-$\hh(\ke, i) \defeq \ver_{i}$ if $i \leq n$, it is undefined otherwise. We also let $\lvert \hh(\ke) \rvert \defeq n +1 $ denote 
-the length of $\hh(\ke)$.
+For a given kv-store $\hh$, key $\ke$ and index $i \geq 0$, 
+the notation $\hh(\ke, i)$ denotes the $i$-th version (starting from $0$) installed for $\ke$;
+that is, if $\hh(\ke) = \ver_0 \cdots\ver_{n}$, then $\hh(\ke, i) \defeq \ver_{i}$ if $i \leq n$, it is undefined otherwise. 
+We also let $\lvert \hh(\ke) \rvert \defeq n +1 $ denote the length of $\hh(\ke)$.
 
-{\color{red} 
-It will be often convenient to depict key-value stores graphically: an 
-example is given by the kv-store $\hh$ depicted in \cref{fig:hheap-a}
-{\color{red} (ignore for the moment the vertical lines labelled $\client$ and $\client'$)}. 
-It comprises two keys \( \ke_1\) and \( \ke_2 \), 
-each of which is associated with two versions carrying values $\val_0$ and $\val_1$, and $\val'_0$ and $\val'_1$, respectively.
-The versions of a key are listed in order from left to right. 
-We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
-For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_{\cl'}^1$.
-}
-
-In this paper we focus on key-value stores whose consistency model enforces the  
-\emph{atomic visibility} of transactions \cite{framework-concur}. 
-We also assume that in kv-stores, keys with a defined list of versions, have an initial version carrying  a default value $\val_0 \in \Val$, 
+In this paper we focus on key-value stores whose consistency model enforces the \emph{atomic visibility} of transactions \cite{framework-concur}. 
+We also assume that each key has an initial version carrying a default value $\val_0 \in \Val$, 
 written by the special transaction identifies $\txid_0$.
 A \emph{well-formed} kv-store $\hh$ requires that:
 \begin{enumerate}[(i)]
-\item\label{kv:wf.init} for each key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (\val_0, \txid_0, \stub)$, where $\val_0$ is a default value from $\Val$;
-\item\label{kv:wf.onewrite} transactions never write more than one version per key,  
+\item\label{kv:wf.init} 
+    for each key $\ke \in \dom(\hh)$, $\hh(\ke, 0) = (\val_0, \txid_0, \stub)$, where $\val_0$ is a default value from $\Val$;
+\item\label{kv:wf.onewrite} 
+    transactions never write more than one version per key:
 \[
-\fora{\ke \in \dom(\hh), i,j : 0 \leq i, j < \abs{ \hh(\ke) }}
-\WTx(\hh(\ke, i)) = \WTx(\hh(\ke, j)) \implies i = j 
+\fora{\ke, i,j }
+0 \leq i, j < \abs{ \hh(\ke) }
+\land \WTx(\hh(\ke, i)) = \WTx(\hh(\ke, j))
+\implies i = j 
 \]
-\item\label{kv:wf.oneread} transactions never read different versions for the same key, 
+\item\label{kv:wf.oneread} 
+    transactions never read different versions for the same key:
 \[
-\fora{\ke \in \dom(\hh), i,j : 0 \leq i, j < \abs{ \hh(\ke) }} 
-\RTx(\hh(\ke, i)) \cap \RTx(\hh(\ke, j)) \neq \emptyset \implies i = j
+\fora{\ke, i,j } 
+0 \leq i, j < \abs{ \hh(\ke) }
+\land \RTx(\hh(\ke, i)) \cap \RTx(\hh(\ke, j)) \neq \emptyset 
+\implies i = j
 \]
-\item\label{kv:wf.so} the order 
-in which transactions issued by the same client install different versions for some key $\ke$, is consistent with the order in which 
-such transactions have been invoked; similarly, a client can read the version of a key $\ke$ only after it installed it. 
+\item\label{kv:wf.so} 
+    the order in which transactions issued by the same client install different versions for a key $\ke$, 
+    is consistent with the session order;
+    also, a client can read a version, if the writer of such version comes from the same client, only after it is installed:
 \begin{multline*}
-    \fora{ \ke \in \dom(\hh), \cl \in \Clients, i,j: 0 \leq i < j < \abs{\hh(\ke)}, n, m} \\
-(\txid_{\cl}^{n} = \WTx(\hh(\ke,i)) \wedge \txid_{\cl}^{m} \in \{\WTx(\hh(\ke,j))\} \cup \RTx(\hh(\ke, i)) \implies n < m.
+    \fora{ \ke, \cl, i,j, n, m} 
+    0 \leq i < j < \abs{\hh(\ke)} 
+    \land \txid_{\cl}^{n} = \WTx(\hh(\ke,i)) \\
+    {} \wedge \txid_{\cl}^{m} \in \Set{\WTx(\hh(\ke,j))} \cup \RTx(\hh(\ke, i))
+    \implies n < m.
 \end{multline*}
 \end{enumerate}
 We always assume that kv-stores are well-formed, and let $\HisHeaps$ be the set of well-formed kv-stores.
 
+\subsubsection{Views and Configurations}
 
-\begin{figure}
-\begin{center}
-\hrule
-\begin{tabular}{@{}c @{\qquad} c@{}}
-\begin{halfsubfig}
-\begin{tikzpicture}
-\begin{pgfonlayer}{foreground}
-%\draw[help lines] grid(5,4);
-
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
-
-\matrix(versionx) [version list]
-    at ([xshift=\tikzkvspace]locx.east) {
-    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
-    {a} & $\left\{\txid_{\cl'}^{1}\right\}$ & {a} & $\emptyset$ \\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
-
-%Location y
-\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-\matrix(versiony) [version list]
-   at ([xshift=\tikzkvspace]locy.east) {
- {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
-  {a} & $\left\{\txid_{\cl}^1\right\}$ & {a} & $\emptyset$\\
-};
-
-\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
-
-% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
-%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
-
-%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
-\draw[-, blue, very thick, rounded corners=10pt]
- ([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
- ([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
- ([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
- ([xshift=-3pt, yshift=-5pt]locy-v0.south east);
- 
- \path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client$};
-
-%red view
-\draw[-, red, very thick, rounded corners = 10pt]
- ([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
-% ([xshift=-16pt, yshift=-5pt]locx-v0.south east) --
-% ([xshift=-16pt, yshift=5pt]locy-v1.north east) -- 
- ([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
- 
-\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client'$};
-
-\end{pgfonlayer}
-\end{tikzpicture}
-\caption{A configuration with a well-formed kv-store $\hh$ and two views $\vi,\vi'$.}
-\label{fig:hheap-a}
-\end{halfsubfig}
-&
-
-\begin{halfsubfig} 
-\begin{center}
-\begin{tikzpicture}[scale=0.85, every node/.style={transform shape}]
-%\draw[help lines] grid(6,4);
-
-\node(t0wx) at (-1,2) {$(\otW, \ke_1, \val_0)$}; 
-\path (t0wx.south) + (0,-0.2) node[anchor=north] (t0wy) {$(\otW, \ke_2, \val'_0)$};
-\path (t0wx.north east) + (1,0.5) node[anchor = west] (t1ry) {$(\otR, \ke_2, \val'_0)$}; 
-\path (t1ry.east) + (0.2,0) node[anchor = west] (t1wx) {$(\otW, \ke_1, \val_1)$};
-\path (t0wy.south east) + (1,-0.5) node[anchor = west] (t2rx) {$(\otR, \ke_1, \val_0)$};
-\path (t2rx.east) + (0.2,0) node[anchor = west] (t2wy) {$(\otW, \ke_2, \val'_1$)};
-
-\begin{pgfonlayer}{background}
-\node[background, fit=(t0wx) (t0wy)] (t0) {};
-\node[background, fit= (t1ry) (t1wx)] (t1) {};
-\node[background, fit= (t2rx) (t2wy)] (t2) {};
-
-\path(t0.west) node[anchor=east] (t0lbl) {$\txid_0$};
-\path(t1.north) node[anchor=south] (t1lbl) {$\txid_1$};
-\path(t2.south) node[anchor=north] (t2lbl) {$\txid_2$};
-
-\path[->]
-(t0.north) edge[bend left=70] node[above, yshift=7pt, xshift=-1pt, pos=0.3] {$\RF(\ke_2), \VO(\ke_1)$} (t1.west)
-(t0.south) edge[bend right=70] node[below, yshift=-8pt, xshift=-1pt, pos=0.3] {$\RF(\ke_1), \VO(\ke_2)$} (t2.west)
-([xshift=-8pt]t2.north) edge[bend left=40] node[left] {$\AD(\ke_1)$} ([xshift=-8pt]t1.south) 
-([xshift=8pt]t1.south) edge[bend left=40] node[right] {$\AD(\ke_2)$} ([xshift=8pt]t2.north);
-\end{pgfonlayer}
-
-\end{tikzpicture}
-\end{center}
-\caption{The dependency graph induced by $\hh$.}
-\label{fig:hheap-b}
-\end{halfsubfig} \\
-\end{tabular}
-\end{center}
-\hrule
-\caption{Multi-version key-value stores}
-\label{fig:hheap}
-\end{figure}
-
-\mypar{Views, Configurations and Snapshots.}
 The key-value store tracks the global state, 
-but when executing transactions, different \emph{clients} may observe 
-different versions of the same key. To keep track of 
-the versions they observe, clients are associated with \emph{views} (\cref{def:view}). 
+but when executing transactions,
+different \emph{clients} may observe different versions of the same key. 
+To keep track of the versions they observe,
+clients are associated with \emph{views} (\cref{def:view}). 
 
 \begin{definition}[Views and configurations]
 \label{def:view}
 \label{def:cuts}
 \label{def:views}
 \label{def:configuration}
-Given a key-value store $\hh$, \emph{a view} of $\hh$ is a function  
-$\vi: \dom(\hh) \to\powerset{\Nat}$ such that  
+Given a key-value store $\hh$, a \emph{view} of $\hh$ is a mapping  
+$\vi \in \Views(\mkvs) \defeq \dom(\hh) \to\powerset{\Nat}$ such that  
 \[
-\forall \ke \in \dom(\hh).\; 0 \in \vi(\ke) \wedge \forall i \in \vi(\ke).\; i < \lvert \hh(\ke) \rvert.
+    \fora{ \ke } 
+    0 \in \vi(\ke) 
+    \wedge \fora{ i \in \vi(\ke) } 
+    i < \abs{ \hh(\ke) }
+    %\Set{0} \subseteq \vi(\ke) \subseteq \Setcon{i}{ 0 \leq i < \abs{\mkvs(\ke)}}
 \]
 and 
 \begin{equation}
 \label{eq:view.atomic}
 \begin{array}{@{}l@{}}
-\fora{ \ke,\ke' \in \dom(\hh), i,j \in \Nat} \\
-\quad (j \in \vi(\ke) \wedge \WTx(\hh(\ke, j)) = \WTx(\hh(\ke', i)) \implies i \in \vi(\ke')
+\fora{ \ke,\ke', i,j} \\
+\quad j \in \vi(\ke) 
+\wedge \WTx(\hh(\ke, j)) = \WTx(\hh(\ke', i) 
+\implies i \in \vi(\ke')
 \end{array}
 \tag{Atomic}
 \end{equation}
-
-The set of views of $\hh$ is denoted 
-as $\Views(\hh)$, and \emph{the set of views} is defined as:
+\emph{The set of views} is defined as:
 \[
 \Views \defeq \bigcup_{\hh \in \HisHeaps} \Views(\hh)
 \]
-A \emph{configuration} $\conf$ is a pair $(\hh, \viewFun)$, where $\viewFun: 
-\Clients \parfinfun \Views(\hh)$. The configuration $\conf_{0} = (\hh_{0}, \viewFun_{0})$ is 
-initial if, for any $\ke$, $\hh_{0}(\ke) = (\val_0, \txid_0, \emptyset)$, for some 
-initial value $\val_0$. 
-The set of configurations is denoted as $\Confs$.
+A \emph{configuration} $\conf \in \Confs$ is a pair $(\hh, \viewFun)$, 
+where $\viewFun : \Clients \parfinfun \Views(\hh)$. 
+The configuration $\conf_{0} = (\hh_{0}, \viewFun_{0})$ is 
+initial if, for any key $\ke$, $\hh_{0}(\ke) = (\val_0, \txid_0, \emptyset)$, 
+for some initial value $\val_0$. 
 \end{definition}
-Given $\hh \in \HisHeaps$ and two views $\vi, \vi' \in \Views(\hh)$, 
-we let $\vi \viewleq \vi'$ if, for any $\ke \in \dom(\hh)$, $\vi(k) \subseteq \vi'(\ke)$. 
 
-\emph{A configuration} includes a kv-store and a partial mapping from clients from clients to views.
+\emph{A configuration} includes a kv-store and a partial mapping from clients to views.
 The view of the client $\cl$ in $\hh$ reflects the set of versions for each key 
 that the client \(\cl \) observes upon executing a transaction. 
 The constraint of \cref{eq:view.atomic} establishes that if a client observes 
 a version of some key written by a transaction $\txid$, then it must observe all the versions of 
 all keys that $\txid$ wrote. This constraint captures the \emph{atomic visibility} of transactions.
 
-{\color{red} We often depict views of clients graphically by drawing client-labelled lines crossing 
-versions of key-value stores. A line crossing the $i$-th version of key $\ke$ defines a view 
-$\vi$ for client $\cl$, with $\vi(\ke) = i$. One example is given by \cref{fig:hheap-a} where the configuration is
-$\conf_0 = (\hh_0, \Set{\cl_1 \mapsto \vi_1, \cl_2 \mapsto \vi_2})$. 
-There are two clients, 
-$\cl_1$ and $\cl_2$, with views $\vi_1$, and $\vi_2$ respectively. $\vi_1$ crosses $\ke_1$ at its $0$-th 
-version, and $\ke_2$ at its $1$-st version. Therefore we have $\vi_1 = \Set{\ke_1 \mapsto 0, \ke_2 \mapsto 1}$. 
-Similarly, we have $\vi_2 = \Set{\ke_1 \mapsto 1, \ke_2 \mapsto 0}$. }
-
-Given a kv-store $\hh$, a view $\vi$ and a key $\ke \in \dom(\hh)$, 
-we commit an abuse of notation and write $\hh(\ke, \vi)$ as a shorthand 
+Given a kv-store $\hh$ and two views $\vi, \vi' \in \Views(\hh)$, 
+let $\vi \viewleq \vi'$ if, for any key $\ke$, $\vi(k) \subseteq \vi'(\ke)$. 
+Also, we commit an abuse of notation and write $\hh(\ke, \vi)$ as a shorthand 
 for $\hh(\ke, \max_{<}(\vi(\ke)))$. Note that such a version is well-defined because 
 we are assuming that $\vi(\ke) \neq \emptyset$.
-The view $\vi$ naturally induces a \emph{snapshot} 
-by extracting the value of the most up-to-date version it observes for each key $\ke \in \dom(\hh)$. 
-As we will see presently, transactions are executed relatively 
-to a snapshot of a kv-store, which maps each key to a single value.
-Views are used to determine the snapshot in which a transaction 
-is executed, according to the following definition.
+
+\subsubsection{Snapshots and Fingerprints}
+Transactions are executed relatively to a \emph{snapshot} of a kv-store, 
+which maps each key to a single value.
+The snapshot \( \h \) is defined as the follows (\cref{def:snapshot}).
+A view $\vi$ naturally induces the initial state of \emph{snapshot} of a transaction
+by extracting the value of the latest observable version for each key $\ke \in \dom(\hh)$. 
+%Views are used to determine the snapshot in which a transaction 
+%is executed, according to the following definition.
+
+
 \begin{definition}[Snapshots]
 \label{def:heaps}
 \label{def:snapshot}
+A snapshot is a mapping from keys to values \( \ss \in \Snapshots  \defeq \Keys \to \Val\).
 Given $\hh \in \HisHeaps$ and $\vi \in \Views(\hh)$, the \emph{snapshot} of $\vi$ in 
 $\hh$ is defined as $\snapshot(\hh, \vi) \defeq \lambda \ke \ldotp \valueOf(\hh(\ke, \max_{<}(\vi(\ke)))$.
 \end{definition}
+
+A transaction only commits its effect to the key-value store.
+The effects of transactions are modelled as \emph{a fingerprint},
+which is a set of reads \( \otR \) and writes \( \otW \) operations over keys.
+
+\begin{definition}[Fingerprints]
+Assuming a set of \emph{operations}
+$\Ops \defeq \Setcon{(\otR, \ke, \val), (\otW, \ke, \val) }{ \ke \in \Keys \wedge \val \in \Val }$.
+The \emph{fingerprint} of a transaction is a subset of operations $\opset \subseteq \Ops$, 
+such that for any key $\ke \in \Keys$ and label \( l \in \Set{\otW, \otR} \),
+if $(l, \ke, \val_1) \in \opset$ and $(l, \ke, \val_2) \in \opset$, then $\val_1 = \val_2$.
+\end{definition}
+
+Intuitively, $(\otR, \ke, \val) \in \opset$ means that 
+the transaction requested to read key $\ke$ from the kv-store, 
+and it fetched a version carrying value $\val$.
+There is at most one read operation per key; 
+it formalises the intuition that, in our setting, 
+transactions always read from an atomic snapshot of the key-value store. 
+Similarly, there is at msot one write operation per key;
+because a client either observes none or all the updates of a transaction.
+
+
+%\ac{Note that I now require fingerprints to be non-empty sets of transactions. This simplifies a lot the development of 
+%the theory of kv-stores, and it fixes a problem that was spotted by Shale, that breaks the compositionality of 
+%execution tests (see later). The main reason why we allowed empty fingerprints is that in the semantics, a client can 
+%execute a transaction with no access to the memory. In practice, in the semantics we can require that at least 
+%one access to the database must be performed in transactions. This can be checked syntactically, and nobody 
+%should complain about that. I can put a remark about how this is a natural requirement that, if violated, 
+%breaks the compositionality of consistency models.\\ 
+%\textbf{Update 02/08/2018}: empty fingerprints are now allowed again. We still had some problems with compositionality, 
+%one of which has to do with the fact that we allow the view of a client over some key to move freely after executing a transaction, 
+%even if such a key was not accessed by the transaction. Later, I forbid this behaviour by requiring in execution tests that the 
+%view of an client for a given key cannot be shifted if the transaction executed by the client did not access such a key.}
+%$(\otW, \ke, \val) \in \opset$ means that the transaction writes a new version, carrying value $\val$, for key $\ke$. 
+
+
+
 
 %of $\vi$ by accessing the value of 
 %A view $\vi$ in $\hh$ naturally defines a snapshot $\snapshot(\hh, \nu)$
