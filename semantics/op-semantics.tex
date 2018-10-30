@@ -7,40 +7,6 @@ rather than assuming that a transaction may abort due to a violation of the cons
 we only allow the execution of a transaction when its effects are guaranteed to not violate the consistency model. 
 This emulates the setting in which clients always restart a transaction if it aborts.
 
-\begin{figure}
-\hrulefill
-\[
-    \inferrule[\rl{TPrimitive}]{%
-        (\stk, \h) \toLTS{\transpri} (\stk', \h')
-        \\ \op = \func{fp}{\stk, \h, \transpri}
-    }{%
-        (\stk, \h, \opset) , \transpri \ \toL \  (\stk', \h', \opset \addO \op) , \pskip \rangle
-    }
-\]
-\[
-    \inferrule[\rl{PCommit}]{%
-        \vi \orderVI  \vi''
-        \qquad \h = \clpsHH{\hh,\vi''}
-        \\\\ (\stk, \h, \emptyset), \trans \ \toL^{*} \  (\stk', \stub,  \opset) , \pskip
-        \\ \ET \vdash (\hh, \vi'') \triangleright \opset : \vi'
-    }{%
-        \cl \vdash ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{(\cl, \vi'', \opset)}_{\ET} \ ( \updateKV(\hh, \vi, \cl, \opset),\vi', \stk' ) , \pskip
-    }
-\]
-\[
-    \inferrule[\rl{PSingleThread}]{%
-         \cl \vdash ( \mkvs, \vi, \thdenv(\thid) ) , \prog(\thid), \ \toT{\lambda}_{\ET} \  ( \mkvs', \vi', \stk' ) , \cmd'  
-    }{%
-         (\mkvs, \viewFun\rmto{\thid}{\vi}, \thdenv ), \prog  \ \toT{\lambda}_{\ET} \  ( \mkvs', \viewFun\rmto{\thid}{\vi'}, \thdenv\rmto{\thid}{\stk'} ) , \prog\rmto{\thid}{\cmd'} ) 
-    }
-\]
-\hrulefill
-\caption{Syntax and Selected Rules of the Semantics for Clients of Kv-stores}
-\ac{I had to introduce labels for transitions in the semantics. These is because I need 
-to carry the information about the view in which a transaction is executed: this cannot be 
-recovered from the pre and post configurations of the transition.}
-\label{fig:semantics}
-\end{figure}
 
 \subsubsection{Programming Language}
 
@@ -50,7 +16,7 @@ and executes a sequential \emph{command}.
 The syntax of commands is given as the following:
 \[
 \begin{array}{c}
-   \cmdpri  ::=  
+   \cmdpri ::=  
    		\pass{\txvar}{\expr} \mid 
    		\passume{\expr} 
     \quad \cmd ::=  
@@ -73,10 +39,8 @@ The syntax of commands is given as the following:
         \trans\prepeat    \\
  \end{array} 
 \]
-The syntax of commands in our programming language is roughly standard, 
-exception made for the following: 
-primitive commands that can be invoked by clients are split into transactional ones,
-corresponding to the $\transpri$ clause \cref{fig:semantics},
+Primitive commands that can be invoked by clients are split into transactional ones,
+corresponding to the $\transpri$ clause,
 and which is used for reading and writing keys of the key-value store; 
 and non-transactional ones, corresponding to the $\cmdpri$ clause, 
 and which are used for computations over client-local data. 
@@ -106,6 +70,54 @@ $\stk \in \Stacks \defeq \Vars \to \Val$, which is a function from variables to 
 \dots
 \]
 
+\ifTechReport
+    \input{\RootPath/semantics/semantics-fig.tex}
+\else
+\begin{figure}[t]
+\hrulefill
+\[
+    \inferrule[\rl{TPrimitive}]{%
+        (\stk, \h) \toLTS{\transpri} (\stk', \h')
+        \\ \op = \func{fp}{\stk, \h, \transpri}
+    }{%
+        (\stk, \h, \opset) , \transpri \ \toL \  (\stk', \h', \opset \addO \op) , \pskip \rangle
+    }
+\]
+\hrulefill
+\[
+    \inferrule[\rl{PCommit}]{%
+        \vi \orderVI  \vi''
+        \qquad \h = \clpsHH{\hh,\vi''}
+        \\\\ (\stk, \h, \emptyset), \trans \ \toL^{*} \  (\stk', \stub,  \opset) , \pskip
+        \\ \ET \vdash (\hh, \vi'') \triangleright \opset : \vi'
+    }{%
+        \cl \vdash ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{(\cl, \vi'', \opset)}_{\ET} \ ( \updateKV(\hh, \vi, \cl, \opset),\vi', \stk' ) , \pskip
+    }
+\]
+\[
+    \inferrule[\rl{PPrimitive}]{
+        \stk \toLTS{\cmdpri} \stk'
+    }{%
+    \cl \vdash ( \hh, \vi, \stk ) , \cmdpri \ \toT{(\cl,\iota)}_{\como} \  ( \hh, \vi, \stk' ) , \pskip
+    }
+\]
+\hrulefill
+\[
+    \inferrule[\rl{PSingleThread}]{%
+         \cl \vdash ( \mkvs, \vi, \thdenv(\thid) ) , \prog(\thid), \ \toT{\lambda}_{\ET} \  ( \mkvs', \vi', \stk' ) , \cmd'  
+    }{%
+         (\mkvs, \viewFun\rmto{\thid}{\vi}, \thdenv ), \prog  \ \toT{\lambda}_{\ET} \  ( \mkvs', \viewFun\rmto{\thid}{\vi'}, \thdenv\rmto{\thid}{\stk'} ) , \prog\rmto{\thid}{\cmd'} ) 
+    }
+\]
+\hrulefill
+\caption{Selected Rules of the Operational Semantics}
+\ac{I had to introduce labels for transitions in the semantics. These is because I need 
+to carry the information about the view in which a transaction is executed: this cannot be 
+recovered from the pre and post configurations of the transition.}
+\label{fig:semantics}
+\end{figure}
+\fi
+
 \subsubsection{Operational Semantics of Transactions}
 
 Transactional commands are equipped with a transformer relation 
@@ -114,7 +126,6 @@ The transformer $(\stk, \h)  \toLTS{\transpri} (\stk, \h')$ describes how the st
 evolve upon executing the primitive command $\transpri$.
 \[
 \begin{array}{rcl @{\quad} rcl}
-%(\Stacks \times \Heaps)\!\!\! & \toLTS{\trans_p} &   (\Stacks \times \Heaps)  \vspace{5pt}\\
 (\stk, \h)  & \toLTS{\passign{\var}{\expr}}          & (\stk\rmto{\var}{\evalE{\expr}}, \h)                  &
 (\stk, \h)  & \toLTS{\passume{\expr}}                & (\stk, \h) \text{ where } \evalE{\expr} \neq 0        \\
 (\stk, \h)  & \toLTS{\pderef{\var}{\expr}}           & (\stk\rmto{\var}{\h(\evalE{\expr})}, \h)              &
@@ -139,16 +150,17 @@ because they only read or write the local stack.
 \func{fp}{\stk, \h, \pmutate{\expr_{1}}{\expr_{2}}} & \defeq & (\etW, \evalE{\expr_{1}}, \evalE{\expr_{2}}) \\
 \end{array}
 \]
-The fingerprint composition operator \( \addO \) enforces transactions to record,
-for each key, the first read (before a write) and the last write. 
-This is in line with our assumption that transactions read from an atomic snapshot of the kv-store,
-(for each key, only the first read before a write fetches its value from the kv-store), 
-and clients observe either none or all the effects of a transaction (only the last write of each key is committed).
+The fingerprint composition operator \( \addO \) enforces transactions to record
+the first read (before a write) and the last write for each key. 
+This is in line with our assumption that transactions read from an atomic snapshot of the key-value store.
+Because only the first read before a write fetches its value from the key-value store,
+and clients observe either none or all the effects of a transaction,
+which means only the last write of each key is committed.
 \[
 \begin{rclarray}
     \opset \addO (\etR, \addr, \val) & \defeq & 
     \begin{cases}
-        \opset \cup \{(\etR, \addr, \val)\} & \for{\mathit{tg}, v'} (\mathit{tg}, \addr, v') \notin \opset \\
+        \opset \cup \{(\etR, \addr, \val)\} & \text{if } \for{l, v'} (l, \addr, v') \notin \opset \\
         \opset &  \text{otherwise} \\
     \end{cases} \\
     \opset \addO (\etW, \addr, \val) & \defeq & 
@@ -157,46 +169,34 @@ and clients observe either none or all the effects of a transaction (only the la
 \end{rclarray}
 \]
 
-In \cref{fig:semantics} we illustrate few selected rules of the operational semantics of programs. 
-The reader can refer to \cref{app:semantics} {\color{red} appendix reference missing} 
-for the complete set of rules of the semantics of clients. 
-The first rule in \cref{fig:semantics}, \rl{TPrimitive}, models the execution of both transactional and 
-non-transactional primitive commands within the scope of a transaction: the client maintains 
-a local-stack $\stk$, a key-value mapping $\h$ which is used to fetch the value of read operations, 
-and a set of operations $\opset$ to be applied to the kv-store upon committing the transaction. 
-By executing a primitive command $\cmdpri$,  the first two components are updated to $\stk'$ and 
-$\h'$, respectively, according to the transformer of the command. The set of operations associated with 
-the transaction is also updated to include the new operation $\op$ associated with $\cmdpri$, 
-via the operator $\addO$. 
+\ifTechReport%
+In \cref{fig:semantics} we illustrate rules of the operational semantics of transactions. 
+\else%
+In \cref{fig:semantics} we illustrate few selected rules of the operational semantics of transactions. 
+The reader can refer to \cref{sec:full-semantics} for the complete set of rules of the semantics of transactions. 
+\fi%
+The \rl{TPrimitive} is the most important rule which models the execution of primitive transactional.
+The transaction maintains a client-local-stack $\stk$, 
+a snapshot $\h$ which is used to fetch the value of read operations, 
+and a set of operations $\opset$ to be applied to the key-value store upon committing the transaction. 
+By executing a primitive command $\transpri$, 
+the first two components are updated to $\stk'$ and $\h'$, respectively,
+according to the transformer of the command. 
+The set of operations associated with the transaction is also updated 
+so to include the new operation $\op$ associated with $\transpri$ via the operator $\addO$. 
 
-Transitions for commands executed by individual clients, and transitions of programs in general, are labelled 
-either as $(\cl, \iota)$, meaning that some computation that did not require an access to the kv-store 
-has been performed by $\cl$ (for example, resolving a non-deterministic choice), or as 
-$(\cl, \vi, \opset)$, meaning that client $\cl$ executed a transaction with fingerprint $\opset$ using 
-the view $\vi$.
- 
-Rule \rl{PCommit} models the execution of a transaction $\ptrans{\trans}$ within a command, under the execution 
-test $\ET$. Given a stack $\stk$, a 
-kv-store $\hh$ and a view $\vi$, a key-value mapping is created for the transaction by taking the 
-snapshot $\h$ of $\hh$ induced by $\vi$. Then a fingerprint $\opset$ is calculated by executing the command $\trans$ using 
-$\stk$ and $\h$ as an initial state. If there exists a view $\vi'$ such that the $\ET \vdash (\hh, \vi) \triangleright \opset : \vi'$, 
-then the effects of $\opset$ are committed to $\hh$, using the function $\updateKV$ from \cref{sec:execution.tests}. 
-Note that, because it may be that no such view $\vi'$ exists, Rule \rl{PCommit} allows to update the view $\vi$ to a 
-newer one, before executing the transaction $\ptrans{\trans}$.
+\subsubsection{Operational Semantics of Programs}
 
-The last rule, \rl{PSingleThread}, models the execution of a command bound to a client in programs. 
-This rule models the standard interleaving semantics of programs, that is a client that is able to 
-perform a reduction, can do so in an atomic step, without affecting the state of other clients.
-
-\subsubsection{Committing Transactions.}
-First we introduce how a client committing the effects of a transaction affects the kv-store. 
-Suppose that a client $\cl$, with view $\vi$ in the kv-store $\hh$,
-wants to commit the effects of a transaction whose fingerprint is $\opset$.
-We model this via the function $\updateKV: \HisHeaps \times \Views \times \TxID \times \powerset{\Ops} 
-\to \HisHeaps$, defined recursively below:
+First we introduce a function \( \updateKV \) 
+for a client to commit the effects of a transaction to the key-value store. 
+Suppose that a client $\cl$, with a view $\vi$ of a key-value store $\hh$,
+wants to commit a transaction with a freshly picked identifier \( \txid \)
+whose fingerprint is $\opset$.
+The function 
+$\updateKV: \HisHeaps \times \Views \times \TxID \times \powerset{\Ops} \to \HisHeaps$
+is defined recursively below:
 \begin{equation*}
 \begin{rclarray}         
-%	 \func{updateMKVS}{., ., ., .} & : & \MKVSs \times \Views \times  \\                        
     \updateKV(\hh, \vi, \txid, \emptyset) &\defeq & \hh \\
     \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \stub)}) & \defeq &  
     \begin{array}[t]{@{}l}
@@ -209,45 +209,100 @@ We model this via the function $\updateKV: \HisHeaps \times \Views \times \TxID 
         \texttt{let } \hh' = \hh\rmto{\ke}{ ( \hh(\ke) \lcat (\val, \txid, \emptyset) ) } \\
         \quad \texttt{in } \updateKV(\hh', \vi, \txid, \opset)
     \end{array} 
-%
 \end{rclarray}
 \label{eq:updatekv}
 \end{equation*}
-In the definition above, the operator $\lcat$ is used to append a new version at the tail of 
-a list of versions. Given a list of versions $\vilist = \ver_0\cdots \ver_n$ and $i=0,\cdots,n$, 
-$\vilist[i \mapsto \ver]$ denotes the list of versions $\vilist' = \ver_0 \cdots \ver_{i-1} \ver \ver_{i+1} \cdots 
-\ver_{n}$. 
+\sx{List notation? simply put all the elements one after another or we use \List{} to wrap them??}
+In the definition above,
+the operator $\lcat$ concatenates two lists. 
+Given a list of versions $\vilist = \ver_0\cdots \ver_n$ and $i=0,\cdots,n$, 
+$\vilist\rmto{i}{\ver}$ denotes the list of versions 
+$\vilist' = \ver_0 \cdots \ver_{i-1} \ver \ver_{i+1} \cdots \ver_{n}$. 
 Note that, under the assumption that fingerprints contain at most one read and one write 
-operation for each key, and assuming that $\txid \notin \hh$\footnote{
+operation per key, and the identifier is fresh $\txid \notin \hh$%
+\footnote{%
 Here we are committing an abuse of notation, and let $\txid \in \hh$ if there exists a key 
-$\ke$ and an index $i=0,\cdots, \lvert \hh(\ke) \rvert -1$ such that $\txid \in \{\WTx(\hh(\ke, i)\} 
-\cup \RTx(\hh(\ke, i))$.}, 
-the function $\updateKV$ is well defined. Furthermore, 
-let $\nextTxId(\cl, \hh) \defeq
-\Setcon{\txid_{\cl}^{n}}{\fora{m} \txid_{\cl}^{m} \in \hh \implies m < n }$, 
-and suppose that $\txid \in \nextTxId(\cl, \hh)$ for some $\cl$;
-then $\updateKV(\hh, \ver, \txid, \opset)$ produces a valid kv-store according to \cref{def:mkvs}.
-In the following, we commit an abuse of notation and write $\updateKV(\hh, \vi, \cl, \opset)$ 
-for the set $\{\hh' \mid \exsts { \txid \in \nextTxId(\cl, \mkvs) } \hh' = \updateKV(\hh, \vi, \txid, \opset)\}$.
+$\ke$ and an index $i=0,\cdots, \lvert \hh(\ke) \rvert -1$ such that $\txid \in \{\WTx(\hh(\ke, i)\} \cup \RTx(\hh(\ke, i))$.}, 
+the function $\updateKV$ is well defined.
+\sx{well defined mean??? Confluence?}
+Furthermore, a client \( \cl \) always picks a greater transaction identifier,
+via function $\nextTxId(\cl, \hh) \defeq \Setcon{\txid_{\cl}^{n}}{\fora{m} \txid_{\cl}^{m} \in \hh \implies m < n }$.
+Given a fresh transaction identifier $\txid \in \nextTxId(\cl, \hh)$ for some $\cl$,
+then $\updateKV(\hh, \vi, \txid, \opset)$ produces a valid key-value store according to \cref{def:mkvs}.
+For brevity, we commit an abuse of notation $\updateKV(\hh, \vi, \cl, \opset)$ 
+for the set 
+$\Setcon{\hh'}{\exsts { \txid \in \nextTxId(\cl, \mkvs) } \hh' = \updateKV(\hh, \vi, \txid, \opset)}$.
 
-Let us discuss how kv-stores in $\updateKV(\hh, \vi, \cl, \opset)$ are computed. 
+Let us discuss how key-value stores in $\updateKV(\hh, \vi, \cl, \opset)$ are computed. 
 Suppose that client \( \cl \) wants to commit a transaction.
-First, we select a fresh transaction identifier $\txid \in \nextTxId(\cl, \hh)$ that we associate 
-with the fingerprint to be committed into the kv-store. We choose any $\txid$ to be 
-greater (w.r.t. the session order $\xrightarrow{\PO}$) than any transaction identifier 
-of the form $\txid_{\cl}^{n}$ (indexed by the same client) appearing in $\hh$,
-as to reflect the fact that $\txid$ is the most recent transaction executed by $\cl$.
-Then for every read operation $(\otR, \ke, \stub)$ in $\opset$,
-the set of transactions reading the  $\max_{<}(\vi(\ke))$-th version of $\ke$ is extended with $\txid$.
-Because a transaction reads the values of keys from the atomic 
-snapshot determined by the view of the client, the version read by $\txid$ for key $\ke$ 
-corresponds to $\hh(\ke, \max_{<}(\vi(\ke)))$.
+First, we select a fresh transaction identifier $\txid_\cl^n \in \nextTxId(\cl, \hh)$ 
+that we associate with the fingerprint to be committed into the key-value store.
+The $\txid_\cl^n$ is greater than any transaction identifier 
+(w.r.t. the session order $\xrightarrow{\PO}$) 
+of the form $\txid_{\cl}^{i}$ appearing in $\hh$,
+as to reflect the fact that $\txid_\cl^n$ is the most recent transaction executed by $\cl$.
+For every read operation $(\otR, \ke, \stub)$ in fingerprint $\opset$,
+because a transaction reads the values of keys from 
+the atomic snapshot determined by the view of the client, 
+the version read by $\txid$ for key $\ke$ corresponds to $\hh(\ke, \max_{<}(\vi(\ke)))$.
+Thus to commit the transaction, 
+the readers set of the version $\hh(\ke, \max_{<}(\vi(\ke)))$ is extended with a new reader $\txid_\cl^n$.
 For every write operation $(\otW, \ke, \val)$ in fingerprint $\opset$, 
 the list of versions $\mkvs(\ke)$ is extended with a new version $(\val, \txid, \emptyset)$, 
-denoting that $\txid$ is responsible for creating this version which has no readers as of yet. 
-Note that the assumption that versions of 
-a given key are totally ordered and consistent with the order in which 
-transactions commit is standard \cite{adya,framework-concur,seebelieve}. 
+denoting that $\txid_\cl^n$ is the writer of this version which has no readers yet. 
+Note that the assumption that 
+versions of a given key are totally ordered and consistent with the order in which 
+transactions commit is standard, 
+which corresponds to last-write-win resolution policy \cite{adya,framework-concur,seebelieve}. 
+
+\ifTechReport%
+In \cref{fig:semantics} we illustrate rules of the operational semantics of programs. 
+\else%
+In \cref{fig:semantics} we illustrate few selected rules of the operational semantics of programs. 
+The reader can refer to \cref{sec:full-semantics} for the complete set of rules of the semantics of programs. 
+\fi%
+Similarly to transactional commands,
+Program commands are equipped with a transformer relation 
+$\toLTS{\cmdpri} \subseteq \Stacks \times \Stacks$.
+The transformer $\stk \toLTS{\cmdpri} \stk$ describes how the stack of a client 
+evolve upon executing the primitive command $\cmdpri$.
+\[
+\begin{array}{rcl @{\qquad} rcl}
+\stk  & \toLTS{\passign{\var}{\expr}} & \stk\rmto{\var}{\evalE{\expr}} &
+\stk  & \toLTS{\passume{\expr}} & \stk \text{ where } \evalE{\expr} \neq 0 \\
+\end{array}                                                                                               
+\]
+
+The operational semantics of commands are parametrised by consistency model via \emph{execution test} \( \ET \).
+The execution test induces a set of transfers on key-value stores allowed by the consistency model.
+For technical reasons, the semantics are labelled either as $(\cl, \iota)$,
+meaning that some client-local computation that did not require an access to the key-value store,
+for example, primitive commands \( \cmdpri \), or as $(\cl, \vi, \opset)$, 
+meaning that client $\cl$ commits a transaction with fingerprint $\opset$ under the view $\vi$.
+ 
+The \rl{PCommit} rule (\cref{fig:semantics}) models the execution of a transaction $\ptrans{\trans}$, under the execution test $\ET$. 
+Given a client-local stack $\stk$, a key-value store $\hh$ and a view $\vi$,
+first it advances the view to a new one \( \vi'' \),
+takes the snapshot $\h$ of $\hh$ induced by the new view $\vi''$,
+executes the transaction command $\trans$ using $\stk$ and $\h$ as the initial state,
+and calculates the fingerprint $\opset$ for the transaction.
+Before committing, it checks if it is allowed by the execution test \( \ET \).
+The predicate \( \ET \vdash (\hh, \vi'') \triangleright \opset : \vi' \) is called execution test.
+Intuitively, it means that under a specific execution test \( \ET \),
+if the key-value store is \( \mkvs \) and view is \( \vi'' \),
+it is allowed to commit a transaction with fingerprint \( \f \) via \( \updateKV \) function,
+and after the commit, the view must also be updated to $\vi'$.
+%then the effects of $\opset$ are committed to $\hh$, using the function $\updateKV$ from \cref{sec:execution.tests}. 
+The formal definition and examples of execution tests are presented in \cref{sec:execution-tests}.
+%Note that, because it may be that no such view $\vi'$ exists, Rule \rl{PCommit} allows to update the view $\vi$ to a 
+%newer one, before executing the transaction $\ptrans{\trans}$.
+
+The last rule, \rl{PSingleThread}, models the execution of a command bound to a client in a program. 
+The \( \thdenv \) is a partial function from clients \( \ClientID \) to stacks \( \Stacks \).
+We assume \( \dom(\thdenv) = \dom(\prog) \).
+This rule models the standard interleaving semantics of programs, that is, a client that is able to 
+perform a reduction, can do so in an atomic step, without affecting the state of other clients.
+
 
 %\begin{definition}[Programming language]
 %\label{def:language}
