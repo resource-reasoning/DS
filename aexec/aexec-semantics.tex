@@ -1,0 +1,95 @@
+\subsection{Operational Semantics of Abstract Executions}
+
+Our solution requires defining an alternative semantics of programs under weak consistency models, 
+based on abstract executions.
+The operational semantics we propose is parametrised in the axiomatic specification $(\RP, \Ax)$ of a consistency model:
+transitions take the form $(\aexec, \Env, \prog) \toA{\_}_{(\RP, \Ax)} (\aexec', \Env', \prog')$. 
+
+\begin{figure}[t]
+\[
+\begin{rclarray}
+	\toA{}  & : &
+    \begin{array}[t]{@{}c@{}}
+    \ClientID \; \times \;
+	\left( ( \Aexecs \times \Stacks ) \times \Commands \right)  \\
+    \; \times\; \Como \; \times \; \sort{Label} \;\times 
+	\left( ( \Aexecs \times \Stacks ) \times \Commands \right) 
+    \end{array}
+\end{rclarray}
+\]
+\begin{mathpar}
+    \inferrule[\rl{ACommit}]{
+        \T \subseteq \T_{\aexec} \qquad \h \in \RP(\aexec, \T) \qquad
+		(\stk, \h, \emptyset), \trans \ \toL^{*} \  (\stk', \stub,  \opset) , \pskip \\\\
+		\txid \in \nextTxId(\T_{\aexec}, \cl) \qquad \aexec' = \extend(\aexec, \txid, \T, \opset) \qquad 
+		\forall A \in \Ax.\;\{\txid' \mid (\txid', \txid) \in \A(\aexec') \} \subseteq \T
+    }{
+    \cl \vdash ( \aexec, \stk ), \ptrans{\trans} \ \toA{(\cl, \T,\f)}_{(\RP, \Ax)} \ ( \aexec', \stk' ) , \pskip
+    }
+    \and
+    \inferrule[\rl{APrimitive}]{
+        \stk \toLTS{\cmdpri} \stk'
+    }{%
+    \cl \vdash ( \aexec, \stk ) , \cmdpri \ \toA{(\cl,\iota)}_{\como} \  ( \aexec, \stk' ) , \pskip
+    }
+    \and
+    \inferrule[\rl{AChoice}]{
+        i \in \Set{1,2}
+    }{%
+        \cl \vdash ( \aexec, \stk ) , \cmd_{1} \pchoice \cmd_{2} \ \toA{(\cl,\iota)}_{\como} \  ( \aexec, \stk ) , \cmd_{i}
+    }
+    \quad
+    \inferrule[\rl{AIter}]{ }{%
+        \cl \vdash ( \aexec, \stk ) , \cmd\prepeat \ \toA{(\cl,\iota)}_{\como} \  ( \aexec, \stk ) , \pskip \pchoice (\cmd \pseq \cmd\prepeat)
+    }
+    \and
+    \inferrule[\rl{ASeqSkip}]{ }{%
+        \cl \vdash ( \aexec, \stk ) , \pskip \pseq \cmd \ \toA{(\cl,\iota)}_{\como} \  ( \aexec, \stk ) , \cmd
+    }
+    \quad
+    \inferrule[\rl{ASeq}]{% 
+        \cl \vdash ( \aexec, \stk ) , \cmd_{1} \ \toA{(\cl,\iota)}_{\como} \  ( \aexec, \stk' ) , {\cmd_{1}}' 
+    }{%
+        \cl \vdash ( \aexec,\stk ) , \cmd_{1} \pseq \cmd_{2} \ \toA{(\cl,\iota)}_{\como} \ ( \aexec, \stk' ) , {\cmd_{1}}' \pseq \cmd_{2}
+    }
+\end{mathpar}
+
+\hrulefill
+
+\[
+	\toA{} : 
+    ( \Aexecs \times \ThdEnv \times \Programs) 
+    \;\times\; \Como \; \times \sort{Label} \times \;
+    ( \Aexecs \times \ThdEnv \times \Programs) 
+\]
+\[
+    \inferrule[\rl{ASingleThread}]{%
+         \cl \vdash ( \aexec, \thdenv(\thid) ) , \prog(\thid), \ \toA{\lambda}_{(\RP, \Ax)} \  ( \aexec', \stk' ) , \cmd'  
+    }{%
+         (\aexec, \thdenv ), \prog  \ \toA{\lambda}_{(\RP, \Ax)} \  ( \aexec', \thdenv\rmto{\thid}{\stk'} ) , \prog\rmto{\thid}{\cmd'} ) 
+    }
+\]
+\hrulefill
+\caption{Operational Semantics on Abstract Executions}
+\label{fig:aexec.semantics}
+\end{figure}
+
+In \cref{fig:aexec.semantics} we all rules of the operational semantics of programs based on abstract executions. 
+Rule \rl{ACommit} is the abstact execution counterpart of rule \rl{PCommit} for kv-stores, 
+in that it models how an abstract execution $\aexec$ evolves when a client wants to execute a transaction whose code is $\ptrans{\trans}$. 
+In this rule, $\T$ is the set of transactions of $\aexec$ that are visible to the client $\cl$ that wishes to execute $\ptrans{\trans}$.
+Such a set of transactions is used to determine a snapshot $\h \in \RP(\aexec, \T)$ that 
+the client $\cl$ uses to execute the code $\ptrans{\trans}$, and obtain a fingerprint $\opset$. 
+This fingerprint is then used to extend abstract execution $\aexec$ with a transaction from the set $\nextTxId(\T_{\aexec}, \cl)$.
+Another rule in \cref{fig:aexec.semantics} is Rule \rl{ASinglethread}; 
+the structure of this rule is analogous to \rl{PSingleThread}, and it models multi-thread concurrency in an interleaving fashion. 
+All the rest rules of the abstract operational semantics in \cref{fig:aexec.semantics} have a similar counterpart in the key-value store semantics.
+
+In some sense that is going to be made mathematically precise later, Rule \rl{ACommit} is more general 
+than Rule \rl{Pcommit} in the kv-store semantics. In the latter, the snapshot of a transaction is uniquely 
+determined from a view of the client, in a way that roughly corresponds to the last write wins policy 
+in the abstract execution framework. In contrast, in Rule \rl{ACommit} the snapshot of a transaction 
+is chosen non-deterministically from those made available to the client by the resolution policy 
+$\RP$ adopted by a weak consistency model, which may not necessarily be $\RP_{\LWW}$. 
+One example of resolution policy that we will use in this Section is given by the anarchic resolution policy. 
+
