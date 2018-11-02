@@ -1,9 +1,104 @@
 \subsection{Operational Semantics of Abstract Executions}
 
-Our solution requires defining an alternative semantics of programs under weak consistency models, 
-based on abstract executions.
-The operational semantics we propose is parametrised in the axiomatic specification $(\RP, \Ax)$ of a consistency model:
+Abstract executions are a framework originally introduced in \cite{ev-transactions} 
+to capture the run-time behaviour of clients interacting with a database. 
+In abstract execution, two relations between transactions are introduced: 
+the \emph{visibility} relation establishes when a transaction observes the effects of another transaction; 
+and the \emph{arbitration} relation helps to determine the value of a key $\ke$ read by a transaction, 
+in the case that the transaction observes multiple updates to $\ke$ performed by different transactions. 
+
+\begin{definition}
+\label{def:absexec}
+\label{def:aexec}
+An abstract execution is a triple $\aexec = (\TtoOp{T}, \VIS, \AR)$, where 
+\begin{itemize}
+    \item $\TtoOp{T}: \TxID_{0} \parfinfun \powerset{\Ops}$ is a partial, 
+finite function mapping transaction identifiers to the set of operations that they perform,
+\item $\VIS \subseteq \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is an irreflexive relation, 
+called \emph{visibility}, 
+\item $\AR \subseteq \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is a strict, total order 
+such that $\VIS \subseteq \AR$, and whenever $\txid_{\cl}^{n} \xrightarrow{\AR} 
+\txid_{\cl}^{m}$, then $n < m$.
+\end{itemize} 
+\end{definition}
+
+The set of abstract executions is denoted by $\aeset$.
+Given an abstract execution $\aexec = (\TtoOp{T}, \VIS, \AR)$, we let 
+$\TtoOp{T}_{\aexec} = \TtoOp{T}$, $\T_{\aexec} = \dom(\TtoOp{T})$, $\VIS_{\aexec} = \VIS$ 
+and $\AR_{\aexec} = \AR$. We also let $\PO_{\aexec}(\cl) = \Setcon{(\txid_{\cl}^{n}, \txid_{\cl}^{m})}{ \cl \in \Clients 
+\wedge \txid_{\cl}^{n} \in \T_{\aexec} \wedge \txid_{\cl}^{m} \in \T_{\aexec} \wedge n < m}$, and 
+$\PO_{\aexec} = \bigcup\limits_{\cl \in \Clients} \PO_{\aexec}(\cl)$.
+We also use the notation $(\otR, \ke, \val) \in_{\aexec} \txid$ for $(\otR, \ke, \val) \in \TtoOp{T}_{\aexec}(\txid)$, 
+and similarly for write operations. 
+Given an abstract execution $\aexec$, a transaction $\txid \in \T_{\aexec}$, and a key $\ke$, 
+we let $\visibleWrites_{\aexec}(\ke, \txid) = \{ \txid' \mid \txid' \xrightarrow{\VIS_{\aexec}} \txid \wedge 
+(\otW, \ke, \_) \in_{\aexec} \txid'\}$.
+
+The operational semantics (\cref{fig:aexec.semantics}) we propose is parametrised in the axiomatic specification $(\RP, \Ax)$ of a consistency model:
 transitions take the form $(\aexec, \Env, \prog) \toA{\_}_{(\RP, \Ax)} (\aexec', \Env', \prog')$. 
+An axiomatic specification of a consistency model is given by a pair $(\RP, \Ax)$, 
+where $\RP$ is a resolution policy and $\Ax$ is a set of axioms. An 
+abstract execution $\aexec$ satisfies the consistency model, 
+written $\aexec \models (\RP, \Ax)$ if it satisfies its individual components. 
+The set of abstract executions induced by an axiomatic specification is given 
+by $\CMa(\RP, \Ax) = \{ \aexec \mid \aexec \models (\RP, \Ax)\}$.
+
+Let $\aexec_1, \aexec_2 \in \aeset$, let $\T \subseteq \T_{\aexec_1} \cap \T_{\aexec_2}$: 
+$\aexec_1$ and $\aexec_2$ \emph{agree} on $\T$ if, and only if for any transactions \( \txid \) \( \txid' \) in \( \T \):
+\[
+\TtoOp{T}_{\aexec_1}(\txid) = \TtoOp{T}_{\aexec_2}(\txid) \wedge 
+((\txid \xrightarrow{\VIS_{\aexec_1}} \txid') \iff (\txid \xrightarrow{\VIS_{\aexec_2}} \txid'))
+\wedge ((\txid \xrightarrow{\AR_{\aexec_1}} \txid') \iff (\txid \xrightarrow{\AR_{\aexec_2}} \txid'))
+\]
+\begin{definition}
+\label{def:rp}
+A resolution policy $\RP$ is a function $\RP: \aeset \times \powerset{\TxID} \rightarrow \powerset{\Snapshots}$ 
+such that, for any $\aexec_1, \aexec_2$ that agree on a subset of transactions $\T$, then 
+$\RP(\aexec_1, \T) = \RP(\aexec_2, \T)$.
+An abstract execution $\aexec$ satisfies the execution policy $\RP$ if, 
+\[
+    \fora{\txid \in \T_{\aexec} } 
+    \exsts{ \h \in \RP(\aexec, \VIS_{\aexec}^{-1}(\txid)) }
+    \fora{ \ke,\val } (\otR, \ke, \val) \in_{\aexec} \txid 
+    \implies \h(\ke) = \val
+\]
+\end{definition}
+
+Axioms of a consistency model are constraints of the form $\A(\aexec) \subseteq \VIS_{\aexec}$. 
+
+\begin{definition}
+An axiom $\A$ is a function from abstract executions to relations between 
+transactions, $\A: \aeset \rightarrow \powerset{\TxID \times \TxID}$, 
+such that whenever $\aexec_1, \aexec_2$ agree on a subset of 
+transactions $\T$, then $\A(\aexec_1) \cap (\T \times \T) \subseteq \A(\aexec_2)$.
+\end{definition}
+
+For example, if we require $A(\aexec) = \AR_{\aexec}$, 
+then the corresponding axiom is given by $\AR_{\aexec} \subseteq \VIS_{\aexec}$,
+thus capturing the serialisability of transactions,
+\ie this axiom is equivalent to require that $\VIS_{\aexec}$ is a total order.
+The requirement on subsets of transactions on which 
+abstract executions agree will be needed later, 
+when we define an operational semantics of transactions where 
+clients can append a new transaction $\txid$ at the tail of an abstract execution $\aexec$,
+which satisfies an axiom $\A$. This requirement ensures that 
+we only need to check that the axiom is $\A$ is satisfied by the pre-visibility 
+and pre-arbitration relation of the transaction $\txid$ in $\aexec'$. 
+In fact, the resulting abstract execution $\aexec'$ agrees with $\aexec$ on the set $\T_{\aexec}$: 
+in this case we'll note that we can rewrite 
+$\A(\aexec') = \A(\aexec') \cap ((\T_{\aexec} \times \T_{\aexec}) ) \cup (\T_{\aexec} \times \{\txid\}))$.
+Then
+ $\A(\aexec') \cap ((\T_{\aexec} \times \T_{\aexec})) \subseteq \A(\aexec) \cap (\T_{\aexec} \times \T_{\aexec}) \subseteq \VIS_{\aexec} \cap (\T_{\aexec} \times \T_{\aexec}) \subseteq \VIS_{\aexec'}$, 
+hence we only need to check that $\A(\aexec') \cap (\T_{\aexec} \times \{\txid\}) \subseteq \VIS_{\aexec'}$.
+
+We say that an abstract execution $\aexec$ satisfies an axiom $\A$, written 
+$\aexec \models \A$, if 
+$\A(\aexec) \subseteq \VIS_{\aexec}$. An abstract execution $\aexec$ 
+satisfies a set of axioms $\Ax$, written $\aexec \models \Ax$,  if $\aexec \models 
+\A$ for all $\A \in \Ax$. 
+
+
+
 
 \begin{figure}[t]
 \[
@@ -92,4 +187,21 @@ in the abstract execution framework. In contrast, in Rule \rl{ACommit} the snaps
 is chosen non-deterministically from those made available to the client by the resolution policy 
 $\RP$ adopted by a weak consistency model, which may not necessarily be $\RP_{\LWW}$. 
 One example of resolution policy that we will use in this Section is given by the anarchic resolution policy. 
+
+Throughout this report we will work mainly with the \emph{Last Write Wins} resolution policy, defined below. 
+When discussing the operational semantics of transactional programs, 
+we will also introduce the \emph{Anarchic} resolution policy.
+
+\begin{definition}
+\label{def:lww}
+The Last Write Wins resolution policy $\RP_{\LWW}$ is defined as 
+$\RP_{\LWW}(\aexec, \T) \defeq \{\h\}$ where
+\[
+\h = \lambda \ke. \text{let } \T_{\ke} = ( \T \cap \{\txid \mid (\otW,\ke, \_) \in_{\aexec} \txid\})  \text{ in }
+\begin{cases}
+\val_{0} &\impliedby \T_{\ke} =  \emptyset\\
+\val &\impliedby (\otW, \ke, \val) \in_{\aexec} \max_{\AR_{\aexec}}(\T_{\ke})
+\end{cases}
+\]
+\end{definition}
 
