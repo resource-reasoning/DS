@@ -1,2 +1,218 @@
-\section{Relation to Dependency Graphs and Abstract Executions}
-\sx{also put soundness and complete of the semantics here}
+\section{Relations to Dependency Graphs and Abstract Executions}
+
+\subsection{Dependency Graphs}
+
+\emph{Dependency graphs} are introduced by Adya to specify consistency models of transactional databases \cite{adya}. 
+They are directed graphs consisting of transactions as nodes, 
+each of which is labelled with transaction identifier and a set of read and write operations,
+and labelled edges between transactions for specifying how information flows between nodes. 
+Specifically, a transaction $\txid$ reads a version for a key $\ke$ that has been written by another transaction $\txid'$ 
+(\emph{write-read dependency} \( \WR\)), overwrites a version of $\ke$ written by $\txid'$ (\emph{write-write dependency} \( \WW \)),
+or reads a version of $\ke$ that is later overwritten by $\txid'$ (\emph{read-write anti-dependency} \( \RW \)).
+Note that here we purposely use the same names \( \WR, \WW, \RW \) as those used in key-value store,
+since there is one-to-one map between key-value stores and dependency graphs.
+
+\input{\RootPath/dgraph/depend-aexec-fig.tex}
+
+\begin{definition}
+A \emph{dependency graph} is a quadruple $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, where
+\begin{itemize}
+\item 
+    $\TtoOp{T}_0: \TxID \parfinfun \powerset{\Ops}$ is a partial finite mapping from transaction identifiers 
+    to the set of operations, where there are at most one read operation and one write operation per key;
+\item 
+    $\RF : \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function that 
+maps each key $\ke$ into a relation between transactions, such that for any $\txid, \txid_1, \txid_2, 
+\ke, \cl, m, n$: 
+\begin{itemize}
+\item if $(\otR, \ke, \val) \in \TtoOp{T}(\txid)$, either $\val = \val_0$ 
+and there exists no $\txid'$ such that $\txid' \xrightarrow{\RF(\ke)} \txid$,  
+or there exists $\txid'$ such that $(\otW, \ke, \val) \in \TtoOp{T}(\txid')$, and $\txid' \xrightarrow{\RF(\ke)} \txid$, 
+\item if $\txid_1 \xrightarrow{\RF(\ke)} \txid$ and $\txid_2 \xrightarrow{\RF(\ke)} \txid$, then 
+$\txid_2 = \txid_1$.
+\item if $\txid_{\cl}^{m} \xrightarrow{\RF(\ke)} \txid_{\cl}^{n}$, then $m < n$.
+\end{itemize}
+\item $\VO: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function 
+that maps each key into an irreflexive relation between transactions, such that for any $\txid, \txid', \ke, \cl, m, n$, 
+\begin{itemize}
+\item if $\txid \xrightarrow{\VO(\ke)} \txid'$, then $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, 
+\item if $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, then either $\txid = \txid'$, 
+$\txid \xrightarrow{\VO(\ke)} \txid'$, or $\txid' \xrightarrow{\VO(\ke)} \txid$.
+\item if $\txid_{\cl}^{m} \xrightarrow{\WW(\ke)} \txid_{\cl}^{n}$, then $m < n$.
+\end{itemize}
+\item $\AD: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is defined 
+by letting $\txid \xrightarrow{\AD(\ke)} \txid'$ if and only if $(\otR, \ke, \_) \in \TtoOp{T}(\txid)$, 
+$(\otW, \ke, \_) \in \TtoOp{T}(\txid')$ and 
+either there exists no $\txid''$ such that $\txid'' \xrightarrow{\RF(\ke)} \txid$, or 
+$\txid'' \xrightarrow{\RF(\ke)} \txid$, $\txid'' \xrightarrow{\VO(\ke)} \txid'$ for 
+some $\txid''$.
+\end{itemize}
+\end{definition}
+Given a dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, we often 
+commit an abuse of notation and use $\RF$ to denote the relation 
+$\bigcup\limits_{\ke \in \Keys} \RF(\ke)$; a similar notation is adopted for $\VO, \AD$. 
+It will always be clear from the context whether the symbol $\RF$ refers to a function 
+from keys to relations, or to a relation between transactions. 
+
+We let $\Dgraphs$ be the set of all dependency graphs.
+It is always possible to convert a kv-store $\hh$ into a well-formed dependency 
+graph. For example, \cref{fig:hheap-b} illustrates the dependency graph constructed 
+from the kv-store depicted in \cref{fig:hheap-a}.
+
+\begin{definition}
+\label{def:kv2graph}
+Given a kv-store $\hh$, the \emph{dependency graph} $\Gr_{\hh} = (\TtoOp{T}_{\hh}, \RF_{\hh}, 
+\VO_{\hh}, \AD_{\hh})$ is defined as follows: 
+\begin{itemize}
+\item for any $\txid \neq \txid_0$, $\TtoOp{T}_{\hh}(\txid)$ is defined if and only if there exists an index $i$ and a key 
+$\ke$ such that either $\txid = \WTx(\hh(\ke, i))$, or $\txid \in \RTx(\hh(\ke,i))$; furthermore, 
+$(\otW, \ke, \val) \in \TtoOp{T}(\txid)$ if and only 
+if $\txid = \WTx(\hh(\ke, i))$ for some $i$, and 
+$(\otR, \ke, \val) \in \TtoOp{T}(\txid)$ if and only if $\txid \in \RTx(\hh(\ke, i))$ for some $i$, 
+\item $\txid \xrightarrow{\RF(\ke)} \txid'$ if and only if there exists an index $i: 0 < i < \lvert \hh(\ke) \rvert$ 
+such that $\txid = \WTx(\hh(\ke, i))$, and $\txid' \in \RTx(\hh(\ke, i))$, 
+\item $\txid \xrightarrow{\VO(\ke)} \txid'$ if and only if there exist two indexes $i,j$: $0 < i < j < \lvert \hh(\ke) \rvert$ 
+such that $\txid = \WTx(\ke, i)$, $\txid' = \WTx(\ke, j)$, 
+\item $\txid \xrightarrow{\AD(\ke)} \txid'$ if and only if there exist two indexes $i,j$: $0 < i < j < \lvert \hh(\ke) \rvert$ 
+such that $\txid \in \RTx(\ke, i)$ and $\txid' = \WTx(\ke, j)$.
+\end{itemize}
+\end{definition}
+
+\begin{theorem}
+\label{thm:main-body-kv2graph}
+There is a one-to-one map between key-value stores and dependency graphs.
+\end{theorem}
+\begin{proof}
+    See \cref{thm:kv2graph} in \cref{sec:dependent-graph}.
+\end{proof}
+
+\begin{definition}
+\label{def:main-body-absexec}
+\label{def:main-body-aexec}
+An abstract execution is a triple $\aexec = (\TtoOp{T}, \VIS, \AR)$, where 
+\begin{itemize}
+    \item $\TtoOp{T}: \TxID_{0} \parfinfun \powerset{\Ops}$ is a partial, 
+finite function mapping transaction identifiers to the set of operations that they perform,
+\item $\VIS \subseteq \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is an irreflexive relation, 
+called \emph{visibility}, 
+\item $\AR \subseteq \dom(\TtoOp{T}) \times \dom(\TtoOp{T})$ is a strict, total order 
+such that $\VIS \subseteq \AR$, and whenever $\txid_{\cl}^{n} \xrightarrow{\AR} 
+\txid_{\cl}^{m}$, then $n < m$.
+\end{itemize} 
+The set of abstract executions is denoted by $\aeset$.
+\end{definition}
+
+A semantics under \( \aexec \), where transaction satisfies the specification in the form of \( (\RP,\Ax) \).
+\( \RP \) is a function takes a set of transactions \( \T \) from abstract execution \( \aexec \), 
+and returns  a set of possible snapshots.
+A common one is last-write-win.
+
+\begin{definition}
+\label{def:lww}
+The Last Write Wins resolution policy $\RP_{\LWW}$ is defined as 
+$\RP_{\LWW}(\aexec, \T) \defeq \{\h\}$ where
+\[
+\h = \lambda \ke. \text{let } \T_{\ke} = ( \T \cap \{\txid \mid (\otW,\ke, \_) \in_{\aexec} \txid\})  \text{ in }
+\begin{cases}
+\val_{0} &\impliedby \T_{\ke} =  \emptyset\\
+\val &\impliedby (\otW, \ke, \val) \in_{\aexec} \max_{\AR_{\aexec}}(\T_{\ke})
+\end{cases}
+\]
+\end{definition}
+
+\( \Ax \) is a set of constraints on the shape of the abstract execution,
+which defines the minimum visibility relation.
+For example, the minimum visibility for serialisability is a singleton set
+\( \Ax_\SER = \Set{\lambda \aexec \ldotp \AR_\aexec } \),
+which means the minimum visibility should contain the arbitration \( \AR_\aexec \subseteq \VIS_\aexec \).
+In general, if an abstract execution \( \aexec \) satisfies a set of constraints  \( \Ax \),
+if \( \fora{\A \in \Ax} \A(\aexec) \subseteq \VIS_\aexec \).
+
+Through the dependency graph, we can relate key-value stores and abstract executions (\cref{def:main-body-aexec2graph}).
+Note that each abstract execution $\aexec$ determines a key-value store 
+$\hh_{\aexec}$, as per \cref{def:main-body-aexec2graph} and \cref{thm:kv2graph}. 
+
+\begin{definition}
+\label{def:main-body-aexec2graph}
+Given an abstract execution $\aexec$ that satisfies the last write wins policy,
+the dependency graph $\graphof(\aexec) \defeq (\TtoOp{T}_{\aexec}, \RF_{\aexec}, 
+\VO_{\aexec}, \AD_{\aexec})$ is defined by letting
+\begin{itemize}
+\item $\txid \xrightarrow{\RF_{\aexec}(\ke)} \txid'$ if and only if 
+    $\txid = \max_{\AR_{\aexec}}\left( \Setcon{\txid}{(\otW,\ke,\stub) \in \txid' \land \txid' \toEdge{\VIS_\aexec} \txid } \right)$, 
+\item $\txid \xrightarrow{\VO_{\aexec}(\ke)} \txid'$ if and only 
+$\txid, \txid' \in_{\aexec} (\otW, \;\ke: \_)$ 
+and $\txid \xrightarrow{\AR_{\aexec}} \txid'$,
+\item $\txid \xrightarrow{\AD_{\aexec}(\ke)} \txid'$ if and only if either 
+$(\otR, \ke, \_) \in_{\aexec} \txid, (\otW, \ke, \_) \in_{\aexec} \txid'$ and 
+whenever $\txid'' \xrightarrow{\RF_{\aexec}(\ke)} \txid$, 
+then $\txid'' \xrightarrow{\VO_{\aexec}(\ke)} \txid'$.
+\end{itemize}
+\end{definition}
+
+Let $\hh$ be the unique kv-store such that $\Gr_{\hh} = \graphof(\aexec)$: then 
+$\hh_{\aexec} = \hh$. 
+Yet this mapping $\hh_{(\stub)}$ is not a bijection, 
+in that several abstract executions may be encoded in the same key-value store. 
+This is because key-value stores abstract away the total arbitration order of transactions.
+
+\sx{explain \( \Tx \) and intuition of invariant \( I \). }
+
+\begin{definition}
+\label{def:main-body-et_sound}
+An execution test $\ET$ is sound with respect to an axiomatic 
+specification $(\RP_{\LWW}, \Ax)$ if and only if there exists an 
+invariant condition $I$ such that whenever $\ET \vdash (\hh, \vi) 
+\triangleright \opset: \vi'$, for any $\aexec$ such that 
+$\hh_{\aexec} = \hh$, for any client $\cl$, for any 
+transaction identifier $\txid \in \nextTxId(\hh, \cl)$, 
+such that  $I(\aexec, \cl) \subseteq \Tx(\hh, \vi)$, then  
+there exist two other sets of transactions $\T_{\rd}$, 
+such that 
+\begin{itemize}
+\item $\forall \A \in \Ax. \Setcon{\txid' }{ (\txid', \txid) \in \A(\aexec')} \subseteq \Tx(\hh, \vi) \cup \T_{\rd}$, 
+\item $I(\aexec', \cl) \subseteq \Tx(\mkvs_{\aexec'}, \vi')$
+\end{itemize}
+\end{definition}
+
+\begin{theorem}
+\label{thm:main-body-et_soundness}
+If $\ET$ is sound with respect to $(\RP_{\LWW}, \Ax)$, then 
+\[
+    \CMs(\ET) \subseteq \{ \hh \mid \exists \aexec \in \CMa(\RP_{\LWW}, \Ax)).\;\hh_{\aexec} = \hh\}
+\].
+\end{theorem}
+\begin{proof}
+    See \cref{thm:et_soundness} in \cref{sec:kv2aexec-sound-complete}.
+\end{proof}
+
+\sx{explain \( \getView\). }
+
+\begin{definition}
+\label{def:main-body-et_complete}
+An execution test $\ET$ is \emph{complete} with respect 
+to an axiomatic specification $(\RP_{\LWW}, \Ax)$ if, for any 
+abstract execution $\aexec \in \CMa(\RP_{\LWW}, \Ax)$ 
+such that $\AR_{\aexec} = \{(\txid_{i}, \txid_{i+1})\}_{i=1}^{\lvert \T_{\aexec} \rvert - 1}$, 
+and for any $i=1,\cdots, n$, there exist two views $\vi_{i}, \vi_{i}'$ such that 
+\begin{itemize}
+\item $\vi_{i} = \getView(\aexec, \VIS_{\aexec}^{-1}(\txid_{i}))$, 
+\item let $\txid_{i} = \txid_{\cl}^{n}$ for some $\cl, n$; if the
+transaction $\txid_{i}' = \min_{\PO_{\aexec}}\{\txid' \mid \txid_i \xrightarrow{\PO_{\aexec}} \txid'\}$  
+is defined, then $\vi' = \getView(\aexec, \T_{i})$, where $\T_{i} \subseteq (\AR_{\aexec}^{-1})?(\txid_{i}) \cap \VIS_{\aexec}^{-1}(\txid_{i}'))$; 
+otherwise $\vi' = \getView(\aexec, \T_{i})$, where $\T_{i} \subseteq (\AR_{\aexec}^{-1})?(\txid_{i})$, 
+\item $\ET \vdash (\hh_{\cut(\aexec, i-1)}, \vi_{i}) \triangleright \TtoOp{T}_{\aexec}(\txid_{i}) : \vi_{i}'$.
+\end{itemize}
+\end{definition}
+
+\begin{theorem}
+\label{thm:main-body-et_complete}
+Let $\ET$ be an execution test that is complete with respect to 
+an axiomatic specification $(\RP_{\LWW}, \Ax)$. Then 
+$\CMa(\RP_{\LWW}, \Ax) \subseteq \CMs(\ET)$.
+\end{theorem}
+\begin{proof}
+    See \cref{thm:et_complete} in \cref{sec:kv2aexec-sound-complete}.
+\end{proof}
+
+Given above, we have proven the specification in \cref{sec:spec-proof}.
