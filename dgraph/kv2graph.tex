@@ -1,5 +1,105 @@
-\section{Proof of \cref{thm:kv2graph}}
-\label{sec:kv2graph-proof}
+\emph{Dependency graphs} are introduced by Adya to specify consistency models of transactional databases \cite{adya}. 
+They are directed graphs consisting of transactions as nodes, 
+each of which is labelled with transaction identifier and a set of read and write operations,
+and labelled edges between transactions for specifying how information flows between nodes. 
+Specifically, a transaction $\txid$ reads a version for a key $\ke$ that has been written by another transaction $\txid'$ 
+(\emph{write-read dependency} \( \WR\)), overwrites a version of $\ke$ written by $\txid'$ (\emph{write-write dependency} \( \WW \)),
+or reads a version of $\ke$ that is later overwritten by $\txid'$ (\emph{read-write anti-dependency} \( \RW \)).
+Note that here we purposely use the same names \( \WR, \WW, \RW \) as those used in key-value store,
+since there is one-to-one map between key-value stores and dependency graphs.
+
+\input{\RootPath/dgraph/depend-aexec-fig.tex}
+
+\begin{definition}
+A \emph{dependency graph} is a quadruple $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, where
+\begin{itemize}
+\item 
+    $\TtoOp{T}_0: \TxID \parfinfun \powerset{\Ops}$ is a partial finite mapping from transaction identifiers 
+    to the set of operations, where there are at most one read operation and one write operation per key;
+\item 
+    $\RF : \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function that 
+maps each key $\ke$ into a relation between transactions, such that for any $\txid, \txid_1, \txid_2, 
+\ke, \cl, m, n$: 
+\begin{itemize}
+\item if $(\otR, \ke, \val) \in \TtoOp{T}(\txid)$, either $\val = \val_0$ 
+and there exists no $\txid'$ such that $\txid' \xrightarrow{\RF(\ke)} \txid$,  
+or there exists $\txid'$ such that $(\otW, \ke, \val) \in \TtoOp{T}(\txid')$, and $\txid' \xrightarrow{\RF(\ke)} \txid$, 
+\item if $\txid_1 \xrightarrow{\RF(\ke)} \txid$ and $\txid_2 \xrightarrow{\RF(\ke)} \txid$, then 
+$\txid_2 = \txid_1$.
+\item if $\txid_{\cl}^{m} \xrightarrow{\RF(\ke)} \txid_{\cl}^{n}$, then $m < n$.
+\end{itemize}
+\item $\VO: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function 
+that maps each key into an irreflexive relation between transactions, such that for any $\txid, \txid', \ke, \cl, m, n$, 
+\begin{itemize}
+\item if $\txid \xrightarrow{\VO(\ke)} \txid'$, then $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, 
+\item if $(\otW, \ke, \_) \in \TtoOp{T}(\txid), (\otW, \ke, \_) \in \TtoOp{T}(\txid')$, then either $\txid = \txid'$, 
+$\txid \xrightarrow{\VO(\ke)} \txid'$, or $\txid' \xrightarrow{\VO(\ke)} \txid$.
+\item if $\txid_{\cl}^{m} \xrightarrow{\WW(\ke)} \txid_{\cl}^{n}$, then $m < n$.
+\end{itemize}
+\item $\AD: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is defined 
+by letting $\txid \xrightarrow{\AD(\ke)} \txid'$ if and only if $(\otR, \ke, \_) \in \TtoOp{T}(\txid)$, 
+$(\otW, \ke, \_) \in \TtoOp{T}(\txid')$ and 
+either there exists no $\txid''$ such that $\txid'' \xrightarrow{\RF(\ke)} \txid$, or 
+$\txid'' \xrightarrow{\RF(\ke)} \txid$, $\txid'' \xrightarrow{\VO(\ke)} \txid'$ for 
+some $\txid''$.
+\end{itemize}
+\end{definition}
+Given a dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, we often 
+commit an abuse of notation and use $\RF$ to denote the relation 
+$\bigcup\limits_{\ke \in \Keys} \RF(\ke)$; a similar notation is adopted for $\VO, \AD$. 
+It will always be clear from the context whether the symbol $\RF$ refers to a function 
+from keys to relations, or to a relation between transactions. 
+
+We let $\Dgraphs$ be the set of all dependency graphs.
+It is always possible to convert a kv-store $\hh$ into a well-formed dependency 
+graph. For example, \cref{fig:hheap-b} illustrates the dependency graph constructed 
+from the kv-store depicted in \cref{fig:hheap-a}.
+
+\begin{definition}
+\label{def:kv2graph}
+Given a kv-store $\hh$, the \emph{dependency graph} $\Gr_{\hh} = (\TtoOp{T}_{\hh}, \RF_{\hh}, 
+\VO_{\hh}, \AD_{\hh})$ is defined as follows: 
+\begin{itemize}
+\item for any $\txid \neq \txid_0$, $\TtoOp{T}_{\hh}(\txid)$ is defined if and only if there exists an index $i$ and a key 
+$\ke$ such that either $\txid = \WTx(\hh(\ke, i))$, or $\txid \in \RTx(\hh(\ke,i))$; furthermore, 
+$(\otW, \ke, \val) \in \TtoOp{T}(\txid)$ if and only 
+if $\txid = \WTx(\hh(\ke, i))$ for some $i$, and 
+$(\otR, \ke, \val) \in \TtoOp{T}(\txid)$ if and only if $\txid \in \RTx(\hh(\ke, i))$ for some $i$, 
+\item $\txid \xrightarrow{\RF(\ke)} \txid'$ if and only if there exists an index $i: 0 < i < \lvert \hh(\ke) \rvert$ 
+such that $\txid = \WTx(\hh(\ke, i))$, and $\txid' \in \RTx(\hh(\ke, i))$, 
+\item $\txid \xrightarrow{\VO(\ke)} \txid'$ if and only if there exist two indexes $i,j$: $0 < i < j < \lvert \hh(\ke) \rvert$ 
+such that $\txid = \WTx(\ke, i)$, $\txid' = \WTx(\ke, j)$, 
+\item $\txid \xrightarrow{\AD(\ke)} \txid'$ if and only if there exist two indexes $i,j$: $0 < i < j < \lvert \hh(\ke) \rvert$ 
+such that $\txid \in \RTx(\ke, i)$ and $\txid' = \WTx(\ke, j)$.
+\end{itemize}
+\end{definition}
+
+\begin{definition}
+\label{def:dependency-to-kv-store}
+Given a dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, we define the kv-store $\hh_{\Gr}$ as follows: 
+\begin{enumerate}
+\item for any transaction $\txid \in \dom(\TtoOp{T})$ such that $(\otW, \ke, \val) \in \TtoOp{T}(\txid)$, 
+let $\T = \{ \txid' \mid \txid \xrightarrow{\RF(\ke)} \txid'\}$, and let $\ver(\txid, \ke) = (\val, \txid, \T)$, 
+\item For each key $\ke$, let $\ver_{\ke}^{0} = (\val_0, \txid_0, \T_k^{0})$, where $\T_{k}^{0} = \{ \txid \mid (\otR, \ke, \_) \in 
+\TtoOp{T}(\txid) \wedge \forall \txid'.\; \neg( \txid' \xrightarrow{\RF(\ke)} \txid \}$. 
+Let also  $\{ \ver_{\ke}^{i} \}_{i = 1}^{n}$ be the ordered set of versions such that, for any 
+$i=1,\cdots,n$, $\ver_{\ke}^{i} = \ver(\txid, \ke)$ for some $\txid$ such that $(\otW, \ke, \_) \in \TtoOp{T}(\txid)$, 
+and such that for any $i, j: 1 \leq i < j \leq n$, $\WTx(\ver_{\ke}^{i}) \xrightarrow{\VO(\ke)} \WTx(\ver_{\ke}^{j})$. 
+Then we let $\hh_{\Gr}= \lambda \ke. \prod_{i=0}^{n} \ver_{\ke}^{i}$.
+\end{enumerate}
+\end{definition}
+
+\begin{theorem}
+\label{thm:kv2graph}
+There is a one-to-one map between key-value stores and dependency graphs.
+\end{theorem}
+\begin{proof}
+    We prove that given any a well-formed kv-store \( \mkvs \), then $\Gr_{\hh}$ is a well-formed dependency graph in \cref{prop:well-formed-kv-store-to-dependency},
+    and given any \( \Gr \), then  $\hh_{\Gr}$ is a well-formed kv-store in \cref{prop:well-formed-dependency-to-kv-store}.
+    Then we prove the bijection that $\hh_{\Gr_{\hh}} = \hh$ in \cref{prop:bijection:mkvs-dgraph}.
+\end{proof}
+
+
 
 \begin{proposition}
 \label{prop:well-formed-kv-store-to-dependency}
@@ -74,20 +174,7 @@ follows that $n < m$.
 \end{itemize}
 \end{proof}
 
-\begin{definition}
-\label{def:dependency-to-kv-store}
-Given a dependency graph $\Gr = (\TtoOp{T}, \RF, \VO, \AD)$, we define the kv-store $\hh_{\Gr}$ as follows: 
-\begin{enumerate}
-\item for any transaction $\txid \in \dom(\TtoOp{T})$ such that $(\otW, \ke, \val) \in \TtoOp{T}(\txid)$, 
-let $\T = \{ \txid' \mid \txid \xrightarrow{\RF(\ke)} \txid'\}$, and let $\ver(\txid, \ke) = (\val, \txid, \T)$, 
-\item For each key $\ke$, let $\ver_{\ke}^{0} = (\val_0, \txid_0, \T_k^{0})$, where $\T_{k}^{0} = \{ \txid \mid (\otR, \ke, \_) \in 
-\TtoOp{T}(\txid) \wedge \forall \txid'.\; \neg( \txid' \xrightarrow{\RF(\ke)} \txid \}$. 
-Let also  $\{ \ver_{\ke}^{i} \}_{i = 1}^{n}$ be the ordered set of versions such that, for any 
-$i=1,\cdots,n$, $\ver_{\ke}^{i} = \ver(\txid, \ke)$ for some $\txid$ such that $(\otW, \ke, \_) \in \TtoOp{T}(\txid)$, 
-and such that for any $i, j: 1 \leq i < j \leq n$, $\WTx(\ver_{\ke}^{i}) \xrightarrow{\VO(\ke)} \WTx(\ver_{\ke}^{j})$. 
-Then we let $\hh_{\Gr}= \lambda \ke. \prod_{i=0}^{n} \ver_{\ke}^{i}$.
-\end{enumerate}
-\end{definition}
+
 
 \begin{proposition}
 \label{prop:well-formed-dependency-to-kv-store}
@@ -173,6 +260,7 @@ of dependency graph ensures that $n < m$.
 \end{proof}
 
 \begin{proposition}
+    \label{prop:bijection:mkvs-dgraph}
 For any kv-store $\hh$, $\hh_{\Gr_{\hh}} = \hh$.
 \end{proposition}
 \begin{proof}
