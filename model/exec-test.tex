@@ -1,0 +1,145 @@
+\subsection{Consistency Models and Execution Tests}
+We formalise the notion of \emph{consistency models}. 
+A consistency model $\CMs$ is a set of kv-stores. 
+Each $\hh \in \CMs$ represents a possible outcome that 
+can be obtained as a result of multiple clients committing transactions. 
+To specify consistency models, we introduce the notion of \emph{execution tests}. 
+Execution tests are used to determine whether a transaction may commit its effects (fingerprint) to a kv-store by ensuring that its  effects comply with the underlying consistency model.
+
+\subsubsection{Execution Tests}
+An execution test of a transaction is a quadruple $(\hh, \vi, \opset, \vi')$, where $\hh$ denotes a kv-store;
+the $\vi$ denotes the \emph{initial} view, recorded at the beginning of the transaction; 
+the $\opset$ denotes the fingerprint of the transaction; and 
+$\vi'$ demotes the \emph{final} view of the transaction, obtained after committing the transaction. 
+An execution test $(\mkvs, \vi, \opset, \vi')$ states that when the kv-store is described by $\hh$, a client with view $\vi$ is allowed to execute a single transaction with fingerprint $\opset$, commit the transaction and obtain an updated view $\vi'$. 
+%
+%
+%\azalea{What do we mean by at least $\vi'$? \sx{ meaning the lower bound of the view. The semantics  model this by shift the view at the beginning, so I think we should say update to the exact view.} }
+%
+%
+
+%A execution test \( \et \) is well-formed iff (a) the view monotonically increases; and (b) if a fingerprint \( \opset \) is allowed to execute, a smaller fingerprint \( \opset' : \opset' \subseteq \opset \) is allowed to execute:
+%\[
+%    \fora{\mkvs, \opset, \opset', \vi, \vi'} (\mkvs, \vi, \opset, \vi') \in \et \land \opset' \subseteq \opset \implies (\mkvs, \vi, \opset', \vi') \in \et \land \vi \leq \vi'
+%\]
+%%
+%We often write $(\mkvs, \vi) \etto \opset : \vi'$ for  $(\mkvs, \vi, \opset, \vi') \in \et$.
+%\sx{
+%    Maybe also some version of composition requirement.
+%    For example, the composition of two should be also included in the consistency model.
+%    \[
+%        \fora{m,m'} m \in \como \land m' \in \como \implies m \compose{} m' \in \como
+%    \]
+%    where \( \compose{} \defeq (\composeHH, \composeVI,\composeO, \composeVI)\).
+%}
+
+
+
+
+
+
+\ac{
+For example, \emph{serialisability} can be described as the set 
+of key-value stores for which it is possible to recover a total schedule of transactions, 
+such that each read operation on key $\ke$ fetches its value from the 
+most recent write on the same key \cite{??????}.
+In this sense, the kv-store $\hh$ from \cref{fig:hheap-a} is not serialisable: 
+transaction $\txid_1$ reads the initial version carrying value $\val'_0$ for key $\ke_{2}$, 
+and installs a new version of $\ke_{2}$ carrying value $\val_1$. The transaction $\txid_2$ 
+reads the initial version carrying value $\val'_0$, and therefore, 
+cannot be scheduled after $\txid_1$. Similarly, $\txid_2$ cannot be scheduled after $\txid_1$.
+}
+
+\begin{definition}
+\label{def:execution.test}
+An \emph{execution test} is a set of tuples $\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
+such that for all $(\hh, \vi, \opset, \vi') \in \ET$:
+\begin{enumerate}
+	\item for all $(\otR, \ke, \val) \in \opset$,  $\hh(\ke, \max_{<}(\vi(\ke))) = \val$; and
+	\item for all $\ke$ such that $\vi(\ke) \neq \vi'(\ke)$, 
+	$( (\otR, \ke, \_) \in \opset \vee (\otW, \ke, \_)) \in \opset)$.
+\end{enumerate}
+\end{definition}
+
+\azalea{Explain the two conditions in 1 and 2.}
+
+%Given an execution test $\ET$, 
+%then $(\hh, \vi, \opset, \vi') \in \ET$ means that 
+%a client whose view over the key-value store $\hh$ is $\vi$, 
+%can commit a transaction whose fingerprint is $\opset$;
+%as a result of this operation, the view of the client must be updated to $\vi'$.
+Hereafter, we adopt a more suggestive notation and write $\ET \vdash (\hh, \vi) \triangleright \opset: \vi'$ 
+for $(\hh, \vi, \opset, \vi') \in \ET$.
+Execution tests induce \emph{consistency models} \( \CMs(\ET) \) as defined in \cref{def:reduction,def:cm}.
+
+\azalea{Add an example of execution test, \eg for serialisability.}
+Later in \cref{sec:spec} we present several examples of execution tests of well-known consistency models in the literature. 
+
+
+\begin{definition}[$\ET$-reductions]
+\label{def:reduction}
+An \emph{action} $\alpha \in \Act$ has either the form $(\cl, \varepsilon)$, 
+or $(\cl, \opset)$, 
+where $\cl$ is a client and $\opset$ is a fingerprint. 
+Given an execution test $\ET$, the $\ET$-\emph{reduction}, 
+$\xrightarrowtriangle{}_{\ET} \subseteq \Confs \times \Act \times \Confs$, 
+is the smallest relation such that for all $\vi, \vi', \cl, \hh, \hh', \viewFun, \opset$:
+\begin{enumerate}
+	\item 
+    $
+    \viewFun(\cl) = \vi 
+    \wedge \vi \sqsubseteq \vi' 
+    \implies (\hh, \viewFun) \xrightarrowtriangle{(\cl, \varepsilon)}_{\ET} 
+    (\hh, \viewFun\rmto{\cl}{\vi'})$; and
+	\item 
+    $\viewFun(\cl) = \vi
+        \wedge (\ET \vdash (\hh, \vi) \triangleright \opset: \vi')  
+        \wedge \hh' \in \updateKV(\hh, \vi, \cl, \opset) \implies
+	$  \\
+	\phantom{a} \hfill 
+	$(\hh, \viewFun) \xrightarrowtriangle{(\cl, \opset)}_{\ET} (\hh', \viewFun\rmto{\cl}{\vi'})$
+\end{enumerate}
+%Such relations take the name of $\ET$-reductions, or simply reductions.
+%
+Given an execution test $\ET$, an \emph{$\ET$-trace} is a sequence of $\ET$-reductions of the form $\conf_{0} \xrightarrowtriangle{\alpha_{0}}_{\ET} \cdots 
+\xrightarrow{\alpha_{n-1}} \conf_{n}$.
+\end{definition}
+%
+%
+%
+%
+\subsubsection{Consistency Models}
+Consistency models are computed from execution tests by closing the set of initial key-value stores with respect to two operations: 
+\begin{enumerate*}[label=(\arabic*)]
+	\item advancing the view of a client; and 
+	\item committing a fingerprint of a transaction. 
+\end{enumerate*}
+Lastly, consistency models induced by execution tests are \emph{monotonic} (\cref{prop:mono-et}).
+%
+%
+\begin{definition}[Consistency Models]
+\label{def:cm}
+Given an execution test $\ET$, the set of configurations induced by $\ET$ is given by:
+\[
+\Confs(\ET) \defeq \Setcon{ \conf}{ \exsts{\conf_0} \conf_0 \text{ is initial } \wedge \conf_0 \xrightarrowtriangle{\stub}_{\ET} \cdots \xrightarrowtriangle{\stub}_{\ET} \conf }
+\]
+The \emph{consistency model} induced by $\ET$ is:
+\( 
+\CMs(\ET) \defeq \Setcon{ \hh }{ (\hh, \stub) \in \Confs(\ET) }
+\)
+\end{definition}
+
+
+
+
+\begin{proposition}
+\label{prop:mono-et}
+Let $\ET_1 \subseteq \ET_2$. Then $\CMs(\ET_1) \subseteq \CMs(\ET_2)$.
+\end{proposition}
+\begin{proof}
+    \ifTechReport
+    \input{\RootPath/semantics/et-mono.tex}
+    \else
+    See \cref{sec:mono-et}.
+    \fi
+\end{proof}
