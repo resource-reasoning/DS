@@ -1,69 +1,33 @@
 \subsection{Transaction Soundness}
 
-\begin{lemma}
-\label{lem:appendix-fingerprint-op}
-For \( \mathtt{O} \in \Set{\otR, \otW} \), the relation \( \toFP{\mathtt{O}(\ke,\val')}\) is sound with respect to the operator \( \addO \):
-\[
-\begin{array}{@{}l}
-    \fora{\lpre, \lpost, \lenv, \stk, \stk', \opset, \opset', \mathtt{O}, \ke, \val} \\
-    \quad \mathtt{O} \in \Set{\otR, \otW} 
-    \land \lpre \toFP{\mathtt{O}(\ke,\val)} \lpost
-    \land (\stub, \opset) \in \evalLS{\lpre}
-    \land (\stub, \opset') \in \evalLS{\lpost}
-    \implies \opset' = \opset \addO (\mathtt{O}, \ke, \val)
-\end{array}
-\]
-\end{lemma}
-\begin{proof}
-When \( \mathtt{O} = \otR\), we have four cases for pre- and post-conditions.
-If \( \lpre \equiv \ke \fpI \val \) , the only interpretation for pre-condition \( \lpre \) is \( (\Set{\addr \mapsto \val}, \emptyset) \).
-In this case, a read operation is added \( \opset' = \Set{(\otR, \addr, \val)} \) and it is included in the interpretation of the post condition \( \lpost \equiv \ke \fpR \val \).
-
-If \( \lpre \equiv \ke \fpR \val \) and \( \lpost \equiv \ke \fpR \val \), 
-since there is already a read operation in the fingerprint, adding a new read operation does not change the fingerprint, \ie \( \opset' = \Set{(\otR, \addr, \val)} \addO (\otR, \addr, \val ) = \Set{(\otR, \addr, \val)} \).
-This is exactly the post-condition.
-It is sound for the rest two cases that  when \( \lpre \equiv \ke \fpW \val \) and \( \lpost \equiv \ke \fpW \val \), and when \( \lpre \equiv \ke \fpRW (\lexpr,\val) \) and \( \lpost \equiv \ke \fpRW (\lexpr,\val) \), as the fingerprint remains the same in the rest two cases.
-
-When \( \mathtt{O} = \otW\), we also have four cases for pre- and post-conditions.
-If \( \lpre \equiv \ke \fpI \val' \) for some value \( \val' \), a new write operation is added to the initially empty fingerprint, that is, \( \opset' = \Set{(\otW, \addr, \val)}\).
-This is exactly the post-condition \( \lpost \equiv \ke \fpW \val \).
-If \( \lpre \equiv \ke \fpW \val' \) for some \( \val' \), the fingerprint before execution is \( \opset = \Set{(\otW, \addr, \val')}\).
-Since the fingerprint only has the last write for the key because of the property of the \( \addO \) operator,
-the fingerprint after is \( \opset' = \opset \addO (\otW, \addr, \val) = \Set{(\otW, \addr, \val)}\) which satisfies the postcondition \( \lpost \equiv \expr_{1} \fpW \expr_{2} \).
-The remaining two cases follow the same argument as the fingerprint only have the last write.
-\end{proof}
-
+The \cref{thm:transaction-soundness} is the soundness of for transactions, where the most interesting two rules \rl{TRLookup} and \rl{TRMutate} can be derived from the \cref{lem:fingerprint-op}.
+Note that the transactional semantics is defined on snapshots as total functions.
+Thus in the \cref{thm:transaction-soundness}, it is safe to extend \( h \) with \( \h'' \)  to make the snapshot a total function, as there is no allocation and deallocation.
 
 \begin{theorem}[Transaction soundness]
 \label{thm:transaction-soundness}
 The transaction soundness is as follows:
 \[
     \begin{array}{@{}l@{}}
-        \fora{ \lpre, \trans, \lpost } \tripleL{\lpre}{\trans}{\lpost} \implies \ \tripleSemL{\lpre}{\trans}{\lpost} \\
+        \fora{ \lpre, \trans, \lpost } \tripleL{\lpre}{\trans}{\lpost}
+        \implies 
+        \fora{\lenv, \stk, \stk', \h_\lpre, \h_\lpost, \h \opset, \opset' }  \\
+        \quad (\h_\lpre, \opset) \in \evalLS[\lenv, \stk]{\lpre}
+        \land \dom(\h) = \Keys \setminus \dom(\h) \\
+        \quad {} \land \vdash (\stk, \h_\lpre \composeH \h, \opset ), \trans \toL^{*}  (\stk', \h_\lpost \composeH \h, \opset' ), \pskip  \\
+        \qqquad \implies (\h', \opset') \in \evalLS[\lenv, \stk']{\lpost}
     \end{array}
-\]
-where,
-\[
-    \begin{rclarray}
-    \tripleSemL{\lpre}{\trans}{\lpost} & \eqdef &
-    \begin{array}[t]{@{}l@{}}
-        \fora{\lenv, \stk, \stk', \h, \h', \opset, \opset' } 
-        (\h, \opset) \in \evalLS[\lenv, \stk]{\lpre} \\
-        \quad {} \land \vdash (\stk, \h, \opset ), \trans \toL^{*}  (\stk', \h', \opset' ), \pskip 
-        \implies (\h', \opset') \in \evalLS[\lenv, \stk']{\lpost}
-    \end{array}
-    \end{rclarray}
 \]
 \end{theorem}
 \begin{proof}
 Induction on the derivations.
 
-\caseB{\rl{TRSkip}}
+\begin{itemize}
 
+\item \caseB{\rl{TRSkip}}
 We have \(\trans \equiv \pskip\), \( \lpre \equiv \lpost \equiv \assemp \), thus \( \h_{p} = \h_{q} = \unitH \), \( \opset = \opset' \) and \( \stk = \stk' \), and then \( (\unitH,\unitO ) \in \evalLS[\lenv, \stk']{\assemp} \) holds.
 
-\caseB{\rl{TRAss}}
-
+\item \caseB{\rl{TRAss}}
 We have \(\trans \equiv ( \pass{\var}{\expr} ) \), \( \lpre \equiv ( \var \doteq \lexpr ) \) and \( \lpost \equiv ( \var \doteq \expr\sub{\var}{\lexpr} ) \) 
 for some \( \expr, \lexpr \) and \( \var \) such that \( \var \notin \func{fv}{\lexpr}\).
 Given the transaction semantics (\cref{fig:thread_semantics}), it has \( \stk' = \stk\rmto{\var}{\val} \) where \( \val = \evalLE[\lenv, \stk]{\expr\sub{\var}{\lexpr}} \).
@@ -71,41 +35,54 @@ Since \( \var \notin \func{fv}{\lexpr} \), we know \( \evalLE[\lenv, \stk]{\lexp
 This means the assertions related to stack hold even thought the stack changes.
 Also because the snapshot and fingerprint remain unchanged, \ie \( \h = \h' \) and \( \opset = \opset' \), so we prove \( (\h', \opset' ) \in \evalLS[\lenv, \stk']{\lpost} \).
 
-\caseB{\rl{TRLookup}}
-
+\item \caseB{\rl{TRLookup}}
 We have \(\trans \equiv ( \plookup{\var}{\expr} ) \) and four cases for pre- and post-conditions defined by the relation \( \toFP{\otR(\expr, \lexpr)}\).
 In all the four cases, the stack is updated to \( \stk' = \stk\rmto{\var}{\val} \), yet since \( \var \notin \func{fv}{\lexpr}\), the logical value \( \lexpr \) and new logical address \( \expr\sub{\var}{\lexpr}\) are evaluated to the same value \( \val \) and address \( \addr \) as before.
 By \cref{lem:appendix-fingerprint-op}, we know that the final state of snapshot and fingerprint satisfy the postcondition.
 
-\caseB{ \rl{TRMutate} }
-
+\item \caseB{ \rl{TRMutate} }
 We have  \( \trans \equiv (\pmutate{\expr_{1}}{\expr_{2}}) \) and four cases for pre- and post-conditions defined by the relation \( \toFP{\otW(\expr, \lexpr)}\). 
 In all the four cases, the stack remains untouched and  by \cref{lem:appendix-fingerprint-op} the snapshot and fingerprint match the postcondition.
 
-\caseI{\rl{TRChoice}}
-
+\item \caseI{\rl{TRChoice}}
 We have  \(\trans \equiv \trans_{1} + \trans_{2} \), where \( \tripleL{\lpre}{\trans_{1}}{\lpost} \) and \( \tripleL{\lpre}{\trans_{2}}{\lpost} \) hold, for some \( \trans_{1}, \trans_{2}, \lpre, \lpost \).
-Given the transaction semantics (\cref{fig:thread_semantics}), it either has \( ( \stk, \h, \opset ), \trans_{1} \pchoice \trans_{2} \toL ( \stk, \h, \opset ), \trans_{1} \) or  \( ( \stk, \h, \opset ), \trans_{1} \pchoice \trans_{2} \toL ( \stk, \h, \opset ), \trans_{2} \).
-Let us pick \( \trans_{1} \) and  assume it can be reduced to \( \pskip \) from the initial state, \ie \( ( \stk, \h, \opset ), \trans_{1}  \toL^{*} ( \stk', \h', \opset' ), \pskip \).
-By the premiss of the rule \( \tripleL{\lpre}{\trans_{1}}{\lpost} \) and the \ih, it implies \( \tripleSemL{\lpre}{\trans_{1}}{\lpost} \), so we prove \( (\h', \opset') \in \evalLE[\lenv, \stk']{\lpost} \).
+Given the transaction semantics (\cref{fig:thread_semantics}), it either has 
+\[ 
+( \stk, \h_\lpre \composeH \h, \opset ), \trans_{1} \pchoice \trans_{2} \toL ( \stk, \h_\lpre \composeH \h, \opset ), \trans_{1} 
+\]
+or  
+\[ 
+( \stk, \h_\lpre \composeH \h, \opset ), \trans_{1} \pchoice \trans_{2} \toL ( \stk, \h_\lpre \composeH \h, \opset ), \trans_{2} 
+\]
+Let us pick \( \trans_{1} \) and  assume it can be reduced to \( \pskip \) from the initial state, \ie \( ( \stk, \h_\lpre \composeH \h, \opset ), \trans_{1}  \toL^{*} ( \stk', \h', \opset' ), \pskip \).
+By the premiss of the rule \( \tripleL{\lpre}{\trans_{1}}{\lpost} \) and the \ih, 
+there exists a \( \h_\lpost \) such that \( \h' = \h_\lpost \composeH \h \) and  \( (\h_\lpost, \opset') \in \evalLE[\lenv, \stk']{\lpost} \).
 Symmetrically, if we pick \( \trans_{2} \), it gives the same result.
 
-\caseI{\rl{TRSeq}}
-
+\item \caseI{\rl{TRSeq}}
 We have \( \trans \equiv \trans_{1} \pseq \trans_{2} \) where \( \tripleL{\lpre}{\trans_{1}}{\lframe} \) and \( \tripleL{\lframe}{\trans_{2}}{\lpost} \) hold, for some \( \trans_{1}, \trans_{2}, \lpre, \lpost, \lframe \).
 Given the transaction semantics (\cref{fig:thread_semantics}), 
-it has \( \vdash ( \stk, \h, \opset ), \trans_{1} \pseq \trans_{2} \toL^{*} ( \stk'', \h'', \opset'' ), \pskip \pseq \trans_{1} \toL ( \stk'', \h'', \opset'' ), \trans_{1} \toL^{*} ( \stk', \h', \opset' ), \pskip \) for some intermediate states \( (\stk'', \h'', \opset'') \).
-By the premisses of the rule and the \ih, we have \( \tripleSemL{\lpre}{\trans_{1}}{\lframe} \) and so \( (\h'', \opset'') \in \evalLE[\lenv, \stk'']{\lframe} \).
+it has 
+\[
+    \begin{array}{l}
+    \vdash ( \stk, \h_\lpre \compose \h, \opset ), \trans_{1} \pseq \trans_{2} \toL^{*} ( \stk'', \h'', \opset'' ), \pskip \pseq \trans_{1} \\
+    \qqquad \toL ( \stk'', \h'', \opset'' ), \trans_{1} \toL^{*} ( \stk', \h', \opset' ), \pskip 
+\end{array}
+\] 
+for a residue \( \h \) and  some states \( (\stk', \h', \opset'), (\stk'', \h'', \opset'') \).
+By the \ih that \( \tripleL{\lpre}{\trans_{1}}{\lframe} \) is sound,
+there exists a snapshot \( \h_\lframe \) such that \( \h'' = \h_\lframe \composeH \h \) and \( (\h_\lframe, \opset'') \in \evalLE[\lenv, \stk'']{\lframe} \).
 The elimination of prefix \( \pskip \) does not change the state, so \( (\h'', \opset'') \in \evalLE[\lenv, \stk'']{\lframe} \).
-Then, by the premiss and the \ih, we know \( \tripleSemL{\lframe}{\trans_{2}}{\lpost} \) and therefore we prove \( (\h', \opset') \in \evalLE[\lenv, \stk']{\lpost} \).
+Then similarly, 
+By the \ih that \( \tripleL{\lframe}{\trans_{2}}{\lpost} \) is sound,
+there exists a snapshot \( \h_\lpost \) such that \( \h'' = \h_\lpost \composeH \h \) and \( (\h_\lpost, \opset') \in \evalLE[\lenv, \stk']{\lpost} \).
 
-\caseI{\rl{TRLoop}}
-
+\item \caseI{\rl{TRLoop}}
 Since the triple is only partial correct, 
 meaning that only when the transaction \( \trans \) terminates, it will reach a state satisfying the post-condition \( \lpost \).
-It is sufficient to prove the follows:
+It is sufficient to prove the following is sound:
 \[
-    \fora{\lpre, \trans, \nat > 0} \tripleL{\lpre}{\trans^{\nat}}{\lpre} \implies \ \tripleSemL{\lpre}{\trans^{\nat}}{\lpre} 
+    \fora{\lpre, \trans, \nat > 0} \tripleL{\lpre}{\trans^{\nat}}{\lpre}
 \]
 where,
 \[
@@ -114,20 +91,71 @@ where,
 \]
 
 We prove that by induction on the number \( \nat \).
-For \( \nat = 0 \), it is trivial as \( \tripleSemL{\lpre}{\pskip}{\lpre} \).
-For \( \nat > 0 \), we have \( \vdash (\stk, \h, \opset), \trans \pseq \trans^{\nat - 1} \toL^{*} (\stk'', \h'', \opset''), \trans^{\nat - 1} \toL^{*} (\stk', \h', \opset'), \pskip \) for some intermediate state \( ( \stk'', \h'', \opset'' ) \).
-By the premiss and the \ih, we have \(\tripleSemL{\lpre}{\trans}{\lpre} \) and thus \(  (\h'', \opset'') \in \evalLS[\lenv, \stk'']{\lpre} \).
-Then by the \ih that \(\tripleSemL{\lpre}{\trans^{\nat - 1}}{\lpre} \), we prove \(  (\h', \opset') \in \evalLS[\lenv, \stk']{\lpre} \).
+\begin{itemize}
+    \item \caseB{\( \nat = 0 \)} It has been proven before \( \triple{\lpre}{\pskip}{\lpre} \).
+    \item \caseI{\( \nat > 0 \)} We have 
+    \[ 
+        \begin{array}{l}
+        \vdash (\stk, \h_\lpre \composeH \h, \opset), \trans \pseq \trans^{\nat - 1} \toL^{*} \\
+        \qqquad (\stk'', \h'', \opset''), \trans^{\nat - 1} \toL^{*} (\stk', \h', \opset'), \pskip  
+        \end{array}
+    \]
+    for a residue \( \h \) and some states \( ( \stk', \h', \opset' ), ( \stk'', \h'', \opset'' ) \).
+    This is similar to the \rl{PSeq} case.
+\end{itemize}
 
-\caseI{\rl{TRFrame}}
-
-We need to prove \( \tripleSemL{\lpre \sep \lframe }{\trans}{\lpost \sep \lframe} \) given that \( \tripleSemL{\lpre}{\trans}{\lpost} \).
-Assume variables \( \h, \h', \h'', \opset, \opset', \opset'', \stk, \stk' \) such that \( ( \h, \opset ) \in \evalLS[\lenv, \stk]{\lpre} \), \( ( \h', \opset' ) \in \evalLS[\lenv, \stk']{\lpost} \) and \( ( \h'', \opset'' ) \in \evalLS[\lenv, \stk]{\lframe}\).
-Since \( \lpre \sep \lframe \), the component-wise composition is defined, \ie \( (\h \composeH \h'', \opset \composeO \opset'') \in \evalLS[\lenv, \stk]{\lpre \sep \lframe} \).
+\item \caseI{\rl{TRFrame}}
+We need to prove \( \tripleL{\lpre \sep \lframe }{\trans}{\lpost \sep \lframe} \) is sound, 
+given the soundness of  \( \tripleL{\lpre}{\trans}{\lpost} \).
+Assume snapshots \( \h_\lpre, \h_\lpost, \h_\lframe \), fingerprints \( \opset, \opset', \opset'' \) and stacks\( \stk, \stk' \) 
+such that \( ( \h_\lpre, \opset ) \in \evalLS[\lenv, \stk]{\lpre} \), \( ( \h_\lframe, \opset' ) \in \evalLS[\lenv, \stk']{\lpost} \) and \( ( \h_\lpost, \opset'' ) \in \evalLS[\lenv, \stk]{\lframe}\).
+Since \( \lpre \sep \lframe \), the component-wise composition is defined, \ie \( (\h_\lpre \composeH \h_\lframe, \opset \composeO \opset'') \in \evalLS[\lenv, \stk]{\lpre \sep \lframe} \).
 The keys from the snapshots and fingerprints are disjointed.
-By the hypothesis that \( \tripleSemL{\lpre}{\trans}{\lpost} \), we know \( ( \stk, \h, \opset ), \trans \toL^{*} ( \stk', \h', \opset' ), \pskip \).
-The snapshot after the execution contains the same resources as before, that is \( \dom(\h) = \dom(\h') \) and \( \dom(\opset') \subseteq \dom(\h') \).
-We know the compositions \( \h' \composeH \h''\) and \( \opset' \composeO \opset''\) exist, so \( ( \stk, \h \composeH \h'', \opset \composeO \opset''), \trans \toL^{*} ( \stk', \h' \composeH \h'', \opset' \composeO \opset'' ), \pskip \).
-Finally, because the transaction \( \trans \) does not modify any variable from the frame \( \lframe \), the update of stack does not change the evaluation of the frame, \( \evalLS[\lenv, \stk]{\lframe} = \evalLS[\lenv, \stk']{\lframe} \) which then gives us the result \( (\h' \composeH \h'', \opset' \composeO \opset'') \in \evalLS[\lenv, \stk']{\lpost \sep \lframe} \).
+By the hypothesis that \( \tripleL{\lpre}{\trans}{\lpost} \) is sound, 
+we know \( ( \stk, \h_\lpre \composeH \h, \opset ), \trans \toL^{*} ( \stk', \h_\lpost \composeH \h, \opset' ), \pskip \) for some residues \( \h \).
+The snapshot after the execution contains the same resources as before, that is \( \dom(\h_\lpre) = \dom(\h_\lpost) \) and \( \dom(\opset') \subseteq \dom(\h_\lpost) \).
+We know the composition of \( \h_\lpost \composeH \h_\lframe \) and \( \opset' \composeO \opset''\) exists, 
+so 
+\[ 
+    ( \stk, \h_\lpre \composeH \h_\lframe \composeH \h', \opset \composeO \opset''), \trans \toL^{*} ( \stk', \h_\lpost \composeH \h_\lframe \composeH \h', \opset' \composeO \opset'' ), \pskip 
+\]
+for some residues \( \h' \).
+Note that \( \dom(\h_\lframe \composeH \h') = \dom(\h) \).
+Finally, because the transaction \( \trans \) does not modify any variable from the frame \( \lframe \), 
+the update of stack does not change the evaluation of the frame, 
+\( \evalLS[\lenv, \stk]{\lframe} = \evalLS[\lenv, \stk']{\lframe} \) which then gives us the result \( (\h_\lpost \composeH \h_\lframe, \opset' \composeO \opset'') \in \evalLS[\lenv, \stk']{\lpost \sep \lframe} \).
+\end{itemize}
+\end{proof}
 
+\begin{lemma}
+\label{lem:fingerprint-op}
+\label{lem:appendix-fingerprint-op}
+For \( \mathtt{O} \in \Set{\otR, \otW} \), the relation \( \toFP{\mathtt{O}(\ke,\val')}\) is sound with respect to the operator \( \addO \):
+\[
+\begin{array}{@{}l}
+    \fora{\lpre, \lpost, \lenv, \stk, \stk', \opset, \opset', \mathtt{O}, \ke, \val} \\
+    \quad \mathtt{O} \in \Set{\otR, \otW} 
+    \land \lpre \toFP{\mathtt{O}(\ke,\val)} \lpost
+    \land (\stub, \opset) \in \evalLS{\lpre}
+    \land (\stub, \opset') \in \evalLS{\lpost} \\
+    \qqquad \implies \opset' = \opset \addO (\mathtt{O}, \ke, \val)
+\end{array}
+\]
+\end{lemma}
+\begin{proof}
+\begin{itemize}
+    \item In this case, a read operation is added \( \opset' = \Set{(\otR, \addr, \val)} \) and it is included in the interpretation of the post condition \( \lpost \equiv \ke \fpR \val \).
+If \( \lpre \equiv \ke \fpR \val \) and \( \lpost \equiv \ke \fpR \val \), 
+since there is already a read operation in the fingerprint, adding a new read operation does not change the fingerprint, \ie \( \opset' = \Set{(\otR, \addr, \val)} \addO (\otR, \addr, \val ) = \Set{(\otR, \addr, \val)} \).
+This is exactly the post-condition.
+It is sound for the rest two cases that  when \( \lpre \equiv \ke \fpW \val \) and \( \lpost \equiv \ke \fpW \val \), and when \( \lpre \equiv \ke \fpRW (\lexpr,\val) \) and \( \lpost \equiv \ke \fpRW (\lexpr,\val) \), as the fingerprint remains the same in the rest two cases.
+
+\item When \( \mathtt{O} = \otW\), we also have four cases for pre- and post-conditions.
+If \( \lpre \equiv \ke \fpI \val' \) for some value \( \val' \), a new write operation is added to the initially empty fingerprint, that is, \( \opset' = \Set{(\otW, \addr, \val)}\).
+This is exactly the post-condition \( \lpost \equiv \ke \fpW \val \).
+If \( \lpre \equiv \ke \fpW \val' \) for some \( \val' \), the fingerprint before execution is \( \opset = \Set{(\otW, \addr, \val')}\).
+Since the fingerprint only has the last write for the key because of the property of the \( \addO \) operator,
+the fingerprint after is \( \opset' = \opset \addO (\otW, \addr, \val) = \Set{(\otW, \addr, \val)}\) which satisfies the postcondition \( \lpost \equiv \expr_{1} \fpW \expr_{2} \).
+The remaining two cases follow the same argument as the fingerprint only have the last write.
+\end{itemize}
 \end{proof}
