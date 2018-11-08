@@ -88,12 +88,103 @@ replica, as well as understanding the synchronisation protocol among replicas \c
 do not apologise here about why another framework when there are already other three around. This should 
 be done in introduction and conclusions. Just give the details about how we do stuff.} 
 We propose an approach where we study the semantics to programs in a setting where 
-clients interact with a centralised (i.e. non-replicated, non-distributed), multi-versioned key value store, 
+clients interact with a centralised (i.e. non-replicated, non-distributed), multi-version key value store, 
 using a mechanism that we refer to as \emph{views}: in \cref{} we show that this approach 
 is sufficient to capture the behaviour of programs under several consistency models 
 employed by distributed transactional storage systems.
 
+Let us show how, in our model, it is possible to exhibit a computation of 
+the set of transactions $\{\trans_{i}\}_{i=1}^{4}$ that leads to updating 
+both $\ke_3$ and $\ke_4$ to $1$.
+In our model, when a piece of code corresponding to a transaction executes, 
+it gets assigned a \emph{transaction identifier} $\txid, \txid',\cdots$. 
+As we will see, transaction identifiers 
+embed the information about the client that executes them. 
+The state of the system consists of a mapping from keys to non-empty lists of versions, each 
+of which comprises value and the meta-data of the transaction identifiers 
+that read and wrote such a version. Initially, each key is initialised to a singleton carrying 
+value $0$, written by a special initialisation transaction $\txid_0$ that is not associated 
+with any client. This key-value store is depicted graphically in \cref{?}. Versions are represented graphically
+as boxes divided in three containers: the leftmost container contains the value of the version, 
+the right-top container contains the identifier of the transaction that wrote the version, 
+and the right-bottom container contains the set of transaction identifiers that read the version. 
+Initially, one of the four clients from $\{\cl_{i}\}_{i=1}^{4}$, say 
+$\cl_1$, executes the transaction $\trans_1$. To do so, the client 
+must first select the portion of state that it observes from the key-value store: 
+specifically, it must select a non-empty sub-list of versions of each key that it observes from 
+the key-value store. The portion of state selected by the client is referred to as its view, 
+and it determines the local state in which the transactional code $\trans_1$ is executed.
+Because there is only one version for each key, each carrying value $0$, 
+the choice of view for $\cl_1$ is compulsory, 
+and it leads to client $\cl_1$ executing the transaction $\trans_1$ in the local state 
+where $\ke_1 = \ke_2 = \ke_3 = \ke_4 = 0$. This transaction gets assigned an identifier 
+that also carries the information about the client that executes the transaction $\txid_{\cl_{1}}^{1}$ 
+(ignore for the moment the superscript $1$). Upon executing $\trans_1$ 
+atomically, a new version carrying value $1$ and written by $\txid_{\cl_{1}}^{1}$ 
+is created for $\ke_1$. 
 
+Next, client $\cl_4$ is scheduled to execute a transaction. As for $\cl_1$, 
+we must select a view for $\cl_4$, which we use to determine the state in which $\trans_4$ 
+is executed. The choice for which versions to observe for $\ke_2, \ke_3, \ke_4$ is compulsory, 
+and it leads to execute $\trans_4$ in a state where $\ke_2 = \ke_3 = \ke_4 = 0$.
+Because we have two versions for $\ke_1$, carrying values $0$ and $1$ respectively, 
+there are three different choices for selecting the view that $\cl_4$ has on $\ke_1$: 
+only the initial version carrying value $0$ is observed, in which case $\trans_4$ executes in 
+a state where $\ke_1 = 0$; or the final version carrying value $1$ is observed, in which 
+case $\trans_4$ executes in a state where $\ke_1 = 1$; orboth versions for 
+$\ke_1$ are observed: because the version of $\ke_1$, carrying value $1$ is more recent than the one 
+carrying value $0$ (i.e. it appears after in the list of versions for $\ke_1$), then $\trans_4$ 
+executes in a state in which $\ke_1 = 1$. This approach models the \emph{Last Write Wins} 
+policy employed by many transactional key-value stores \cite{}. If we assume that the view 
+of $\trans_4$ comprises both versions for $\ke_1$, then the execution of $\trans_4$ 
+results in reading the only version available for $\ke_2$ (carrying value $0$), the last version available 
+for $\ke_1$, and in the creation of a new version for $\ke_4$ carrying value $1$. If we associate 
+the transaction identifier $\txid_{\cl_{4}}^1$ to the execution of $\trans_4$, the resulting 
+key-value store is the one depicted in Figure \ref{}.
+
+Next, client $\cl_2$ executes transaction $\trans_2$. Independently from the view that 
+$\cl_2$ chooses to execute this transaction, the outcome will be a new version carrying 
+value $1$ to be installed for value $\ke_1$. The identifier of the transaction installing such 
+a version is given by $\txid_{\cl_2}{1}$. The resulting key-value store is given in Figure \ref{}. 
+Finally, client $\cl_3$ executes transaction $\trans_3$. Prior to executing a transaction, client 
+$\cl_3$ selects a view of the key-value store where that comprises only the initial version of $\ke_1$, 
+and both versions for $\ke_2$. In Figure \ref{} we show the same key-value store from Figure \ref{},  
+where we highlight the versions that are included in the view of $\cl_3$. The choice of view for $\cl_3$ 
+mandates that the transaction $\txid_3$ is executed in a state where $\ke_1 = 0, \ke_2 = 1$, which 
+means that a new version carrying value $1$ for $\ke_4$ is installed by the execution of $\trans_3$. 
+If $\txid_{\cl_3}^{1}$ is the transaction identifier associated with the execution of $\trans_3$, then the resulting 
+key value store is given in Figure \ref{fig:}.
+
+The example above implicitly assumes that the key-value store employs a very weak consistency model, 
+where transactions are always allowed to execute. To express stronger consistency models, 
+we introduce a notion of \emph{execution tests}, which restrict the set of possible scenarios in which 
+a transaction is allowed to execute in a given initial state. For example, the execution test for 
+(strict) serialisability mandates that the only view that a client can select, prior to executing a transaction, 
+is the one that comprises all versions of all keys: this amounts to requiring that the client observes the totality 
+of the state of the key-value store. If we were to replay the example from above using the execution test 
+for serialisability, we would notice that the execution of transaction $\trans_3$ starting from a state 
+where $\ke_1 = 0, \ke_2 = 1$, would not be possible anymore: because at the moment $\trans_3$ is 
+executed the key-value store contains a version carrying value $1$ for $\ke_1$, this version must be 
+included in the view used by $\cl_3$ to determine the state in which $\trans_3$ is executed, leading 
+to $\trans_3$ being executed in a state where $\ke_1 = \ke_2 = 1$. A consequence of this fact is 
+that the execution of $\trans_3$ will not install a new version for $\ke_4$ anymore. Furthermore, 
+if the execution test for serialisability is enforced by the key-value store, there exists no scheduling 
+of the transactions $\{\trans_i\}_{i=1}^{4}$ that leads to installing a version carrying value 
+$1$ for both $\ke_3$ and $\ke_4$.
+
+\ac{Pictures will need to be drawn: Shale, do you mind doing this? 
+For each figure I describe the updates that need to be made w.r.t to the previous 
+Figure.\\
+First picture: 4 keys $\ke_1, \ke_2, \ke_3, \ke_4$, 
+all initialised to 0 by $\txid_{0}$ and with no read transactions.\\
+Second picture: a version with value $1$, written by $\txid_{\cl^{1}}^1$ 
+and read by no transaction, is inserted for $\ke_1$. Second picture: $\txid_4$.
+reads value $1$ for $\ke_1$, value $0$ for $\ke_2$, and writes value $1$ for $\ke_4$. 
+Third picture: transaction $\txid_{\cl_2}^{1}$ writes value $1$ for $\ke_2$. 
+Fourth picture: same as the third picture, but the version with value $1$ of $\ke_1$ 
+should be dotted (as to represent the view of $\txid_{\cl_3}^{3}$. \\
+Fifth picture: $\txid_{\cl_3}^{1}$ reads value $1$ for $\ke_2$, value $0$ for $\ke_1$, 
+and updates $\ke_4$ to $1$.}
 %\sx{
 %    \begin{itemize}
 %        \item long-fork example
