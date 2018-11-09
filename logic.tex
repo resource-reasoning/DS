@@ -126,54 +126,101 @@ which yields result that \( \vx \) and \( \vy \) are 1.
 \label{fig:write-skew-si-proof}
 \end{figure}
 
-We will use \( \gpre, \gpost \) to denote states of clients, and \( \lpre, \lpost\) for states of transactions.
-In the sketch proof (\cref{fig:write-skew-si-proof}), the assertion in the form of \( \boxass{\bar{\lpre}}{\lrid}{\intass}\),
+We often use \( \lpre, \lpost \) to denote \emph{transactional assertions} and \( \gpre, \gpost \) for \emph{program assertions}.
+The transactional assertions, such as \( p1 \) in \cref{fig:write-skew-si-proof}, 
+describe the state of local snapshots for transactions and more importantly the fingerprints.
+The fingerprint is the transaction's contribution to the key-value store, that is, \emph{the first read preceding any write} and \emph{last write} of each key.
+The transactional assertions for individual keys have the following forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \),
+where \( \otR \) and \( \otW \) are read and write labels respectively.
+The first three asserts the only key \( \vx \) in the local snapshot has value 0 and it has not been touched (no label), 
+has been read (\(\otR\)) and has been written (\(\otW\)) respectively.
+The last one asserts that the key \( \vx \) currently has value 1, 
+\emph{the first read preceding any write} fetched 0 and the \emph{the last write} updated the key to \( 1 \).
+We extend the standard sequential separation logic rules in a ways that the first read to a key adds a read label to the assertion; 
+and a write to a key adds a write label to assertion and updates the value.
+All the detail is in \cref{sec:reasoning-transaction}.
+
+The program assertions, such as \( P1 \) in \cref{fig:write-skew-si-proof}, 
+describe clients' views on key-value stores, together with some capabilities for the purpose of reasoning.
+The assertion in the form of \( \boxass{\bar{\lpre}}{\lrid}{\intass}\),
 for example \( \boxass{\vx \pt 1 \sep \vy \pt 1}{\lrid}{\intass} \) in \( \gpre_1 \),
 is called the \emph{shared region assertions} also know as \emph{boxed assertions},
 where \( \lrid \) is a unique \emph{region identifier},  \( \intass \) is \emph{interference},
-and \( \lpre \) describes the state of views on key-value stores.
+and \( \lpre \) describes the views on key-value stores.
 Region are shareable and indivisible, \ie 
 \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
 
-Interference is a set of actions, each of which has the form \( \kap : \fp \),
-where \( \kap \) is the \emph{client-specified capability} and \( \fp \) is the \emph{fingerprint}.
-An action \( \kap : \fp \) describes that if a client holds the capability \( \kap \), 
+Interference is a set of actions to specify what transactions are allowed by the region.
+Each action has the form \( \kap : \fp \),
+where \( \kap \) is the \emph{client-specified capability} and \( \fp \) is the \emph{fingerprint},
+describes that if a client holds the capability \( \kap \), 
 it is allowed to execute a transaction with the fingerprint \( \fp \).
 For instance in \cref{fig:write-skew-si-proof}, 
 the \( \CB{L}\) allows a client to read \( \vy \) when it is 0 (\(\vy \fpR 0\)) and write 1 to \( \vx \) (\(\vx \fpW 1\)),
 and similarly \( \CB{R} \) allows a client to read \( \vx \) when it is 0 and write 1 to \( \vy \).
 The fingerprint \( \fp \) in an action also specifies capabilities transformation.
-For example, \( \null \fpA \cass{\CB{L}}{\lrid} \) means that \( \CB{L} \) needs to return to the shared region.
-Last, the \emph{client-specified capability} forms \emph{a partial commutative monoid (PCM)} where \( \composeK \) denotes the composition function.
-In the write skew example, both \( \CB{L} \) and \( \CB{R} \) are unique and \( \CB{U} \) is the unit.
-The unit \( \CB{U} \) allows clients to always read \( \vx \) or \( \vy \) no matter the values.
+For example, \( \null \fpA \cass{\CB{L}}{\lrid} \) means that \( \CB{L} \) needs to return to the shared region after the transaction is committed.
+Last, the capabilities forms \emph{a partial commutative monoid (PCM)} where \( \composeK \) denotes the composition function.
+In the write skew example (\cref{fig:write-skew-si-proof}), 
+both \( \CB{L} \) and \( \CB{R} \) are unique as the compositions are undefined and \( \CB{U} \) is the unit.
 
-The assertions \( \bar{\lpre} \) inside regions describe a client's view on a key-value store.
-It is interpreted as a triple \((\hh, \vi, \ca) \in \evalAUX{\lpre}  \) (details in \cref{def:prog-assertion}), 
-consisting of a key-value store \( \mkvs \), a view \( \vi \) and capabilities \( \ca \),
-where \( \lpre \) satisfies the snapshots induced by the view \( \snapshot(\mkvs, \vi) \).
+Interference induces a label transitions system upon states \( (\mkvs, \vi, \ca) \)
+where the labels are actions from the interference.
+Then the \emph{invariant} of a region \( \func{inv}{\lrid} \) is the set of states reachable from 
+the initial states of the regions provided by the function \( \func{init}{\lrid}\).
 
-Note that unlike serialisability, the view might be out-of-date for SI.
-For instance, the assertion \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vy \) might point to either 0 or 1.
-Since the capability \( \cass{\CB{R}}{\lrid} \) has been returned to the region, the view where \( \vy \) point to 0 is out-of-date.
+Given the invariant, a state \( (\mkvs, \vi, \ca) \) satisfies the assertion \( \boxass{\bar{\lpre}}{\lrid}{\intass} \),
+if it is in the invariant of the region \( (\mkvs, \vi, \ca) \in \func{inv}{\lrid} \) and the snapshot induced by the view \( \snapshot(\mkvs, \vi) \) and 
+the shared capabilities satisfy \( \bar{\lpre} \) (details in \cref{def:prog-assertion}).
 
-An assertion \( \gpre \) is \emph{stable}, iff it holds against the interference.
-Specifically, stabilisation has two meanings: \textbf{(i)} the environment might interfere and change the state of key-value stores but not the views of the current client, since the views are local; 
+Now let discuss the sketch proof in \cref{fig:write-skew-si-proof}, especially the rule for committing a transaction (other rules are standard and can be found in \cref{sec:reasoning-prog})
+\[
+    \inferrule[\rl{PRCommit}]{%
+        \tripleL{\lpre}{\trans}{\lpost} 
+        \\ \repartition{\gpre}{\gpost}{\lpre}{\lpost}
+        \\\\ \stable{\gpre, \como} 
+        \\ \stable{\gpost, \como} 
+    }{%
+        \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
+    }
+\]
+
+An assertion \( \gpre \) is \emph{stable} under execution test \( \ET \), written \( \stable{\gpre, \como} \), if it holds against the interference.
+Specifically, stabilisation has two meanings: \textbf{(i)} the environment might interfere and change the state of key-value stores, note that, but not the views of the current client since the views are local; 
 \textbf{(ii)} consequentially, the client can advance the views.
-For example, \( P1 \) is stable as it describes either the environment does nothing \( \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \),
+For example, \( P1 \) is stable as it describes the states that either the environment does nothing \( \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \),
 or the environment has performed the action associated with \( \cass{\CB{R}}{\lrid}\), 
-after which the environment cannot do any further actions since the capabilities \( \cass{\CB{R}}{\lrid}\) is in the shared region,
+after which the environment cannot do any further action since the capabilities \( \cass{\CB{R}}{\lrid}\) is in the shared region,
 \ie \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \).
+
 Let discuss the assertions \( \vy \pt 0  \lor \vy \pt 1  \sep \cass{\CB{R}}{\lrid} \) from \( P1 \).
 The environment returns the capability \( \cass{\CB{R}}{\lrid} \), it means the environment commits a transaction that writes 1 to \( vy \) and the capability \( \cass{\CB{R}}{\lrid} \), thus the value \( 0 \) is out-of-date.
 Because of stabilisation, the view might be advanced so we get an up-to-date view \( \vy \pt 1 \).
 
-We use \emph{transactional assertions}, such as \( p1 \) in \cref{fig:write-skew-si-proof}, to describe the state of local snapshots for transactions and more importantly the fingerprints.
-The fingerprint is the transaction's contribution to the kv-store, that is, \emph{the first read preceding any write} and \emph{last write} of each key.
-The transactional assertions for individual keys have the following forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \), where \( \otR \) and \( \otW \) are read and write labels respectively.
-The first three asserts the only key \( \vx \) in the local snapshot has value 0 and it has not been touched (no label), has been read (\(\otR\)) and has been written (\(\otW\)) respectively.
-The last one asserts that the key \( \vx \) currently has value 1, \emph{the first read preceding any write} fetched 0 and the \emph{the last write} updated the key to \( 1 \).
-We extend the standard sequential separation logic rules in a ways that the first read to a key adds a read label to the assertion; and a write to a key adds a write label to assertion and updates the value.
+\[
+\begin{rclarray}
+    \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+        \fora{ \w, \mkvs, \vi, \lenv, \stk } 
+        \w \in \evalW{\gpre} 
+        \land (\mkvs, \vi) = \eraseW{\w}
+        \implies  \\
+        \quad \exsts{\h_\lpre, \h}
+        \h_\lpre \composeH \h = \getSN{\mkvs, \vi}
+        \land (\h, \unitO) \in \evalLS{\lpre}  \\
+        \quad {} \land \fora{\w', \mkvs', \vi', \stk', \opset, \cl}  \\
+        \qquad  (\stub, \opset) \in \evalLS[\lenv, \stk']{\lpost} 
+        \land \mkvs' \in \updM{\mkvs, \vi, \cl, \opset} \\
+        \qquad {} \land \et \vdash (\mkvs, \vi) \csat \opset : \vi' 
+        \land (\mkvs', \vi') = \eraseW{\w'} 
+        \land (\w, \w') \in \Guar \\
+        \qqqquad \implies \w' \in \evalW[\lenv, \stk']{\gpost}
+    \end{array} 
+\end{rclarray}                          
+\]
+
+
+
 
 Because of atomicity, a transaction takes a snapshot and afterword executes locally on the snapshot and only commits the fingerprint by the end.
 For example, \( P1 \) asserts views where \( \vx \) has value 0 and \( \vy \) has value either 0 or 1, the precondition \( p1 \) for transaction \( \txid_1 \) describes exactly the same states, and initial all keys have no fingerprint.
@@ -202,6 +249,18 @@ Now we have a stable assertions \( Q1 \) shown in \cref{fig:write-skew-si-proof}
 Following similar reasoning, we get \( Q2 \) for right-hand-side client.
 The final \( Q \) is  \( Q = Q1 \sep Q2 \) provided that \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
 It means the final views and key-value stores are those come from both \( Q1 \) and \( Q2 \).
+
+
+
+
+
+
+Note that unlike serialisability, the view might be out-of-date for SI.
+For instance, the assertion \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vy \) might point to either 0 or 1.
+Since the capability \( \cass{\CB{R}}{\lrid} \) has been returned to the region, the view where \( \vy \) point to 0 is out-of-date.
+
+
+
 
 \begin{figure}[!t]
 \hrule
