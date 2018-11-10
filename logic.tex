@@ -307,165 +307,118 @@ The precondition \( P1 \) asserts following views:
 \end{center}
 Note that the they must satisfy the invariant of the region \( \lrid \).
 The transactional precondition \( p1 \) describes exactly the snapshots given the views above.
-By the end of the transaction, we have the fingerprints of the transaction \( \Set{(\otW, \vx, 1), (\otR, \vy, 0)} \) or  
+The transaction \( \txid_1 \) has the fingerprints \( \Set{(\otW, \vx, 1), (\otR, \vy, 0)} \) or  
 \( \Set{(\otR, \vx, 1)} \) by the transactional postcondition \( \lpost \).
-To commit the fingerprints under SI, let first consider the precondition \( \lpre \).
-There the key-value store \( \mkvs \) and initial view \( \vi \) by 
-SI requires that if a view observe some transactions, it should observe everything before.
-Also if there is a write fingerprint for a key, the view for that key must be up-to-date, so to avoid write-write conflict.
-Now given the view on the key-value store \( \gpre \), and we are about to commit the fingerprint given by the transaction \( \lpost \):
-\textbf{(i)} for any key that has been over-written, we create a new version with the value;
-\textbf{(ii)} for any key that has been read, the view before points to a version containing the same value;
-\textbf{(iii)} the view after moves the up-to-date versions for all keys;
-and last \textbf{(iv)} we need to check the update is allowed by the local capabilities and transfer the capabilities if necessary.
-This will give us the following assertions \emph{before stabilisation}:
+The repartitioning asserts that any new key-value stores \( \mkvs' \) and new views \( \vi' \)
+by committing the fingerprint under snapshot isolation \( \SI \):
+\begin{center}
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\vx \mapsto$};
+
+\matrix(versionx) [version list, column 2/.style={text width=7mm}]
+    at ([xshift=\tikzkvspace]locx.east) {
+        {a} & $\txid_0$ & {a} & $\txid'$ \\
+        {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+\matrix(versiony) [version list, column 2/.style={text width=7mm}]
+   at ([xshift=\tikzkvspace]locy.east) {
+  {a} & $\txid_0$  \\
+  {a} & $\Set{\txid'}$ \\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+%
+\quad
+%
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\vx \mapsto$};
+
+\matrix(versionx) [version list, column 2/.style={text width=7mm}]
+    at ([xshift=\tikzkvspace]locx.east) {
+        {a} & $\txid_0$ & {a} & $\txid'$ \\
+        {a} & $\Set{\txid}$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+\matrix(versiony) [version list, column 2/.style={text width=7mm}, column 3/.style={dotted}, column 4/.style={dotted}]
+   at ([xshift=\tikzkvspace]locy.east) {
+       {a} & $\txid_0$ & {a} & \color{gray}$\txid$ \\
+       {a} & $\Set{\txid'}$ & {a} &  \color{gray} $\emptyset$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+\node[version node,draw=none,fit=(versiony-1-3) (versiony-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+%
+\quad
+%
+\begin{tikzpicture}
+\begin{pgfonlayer}{foreground}
+%\draw[help lines] grid(5,4);
+
+%Location x
+\node(locx) {$\vx \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ \\
+    {a} & $\Set{\txid}$  \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+
+%Location y
+\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+\matrix(versiony) [version list]
+   at ([xshift=\tikzkvspace]locy.east) {
+ {a} & $\txid_0$ & {a} & $\txid$ \\
+  {a} & $\emptyset$ & {a} & $\emptyset$\\
+};
+
+\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
+
+\end{pgfonlayer}
+\end{tikzpicture}
+\end{center}
+they should satisfy the postcondition \( \gpost \).
+It is easy to see that
+the fingerprint \( \Set{(\otW, \vx, 1), (\otR, \vy, 0)} \) is allowed to commit 
+by \( \cass{\CB{R}}{\lrid} \) after which it returns to the region,
+and \( \Set{(\otR, \vy, 1)} \) is allowed by \( \CB{U} \).
+This will give us a postcondition \emph{before stabilisation}:
 \[
 \boxass{ \vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
 \lor \boxass{\vx \pt 1 \sep \vy \pt 1  \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}
 \lor \cass{\CB{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
 \]
-We need to stabilise the assertions.
-The environment can commit a transaction that updates \( \vy \) to 1 under the state that satisfies the first disjunction, 
-which yields \( \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \).
-Now we have a stable assertions \( Q1 \) shown in \cref{fig:write-skew-si-proof}.
-
-Following similar reasoning, we get \( Q2 \) for right-hand-side client.
-The final \( Q \) is  \( Q = Q1 \sep Q2 \) provided that \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
-It means the final views and key-value stores are those come from both \( Q1 \) and \( Q2 \).
-
-
-
-
-
-
-Note that unlike serialisability, the view might be out-of-date for SI.
-For instance, the assertion \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}\) from \( P1 \) asserts views where \( \vy \) might point to either 0 or 1.
-Since the capability \( \cass{\CB{R}}{\lrid} \) has been returned to the region, the view where \( \vy \) point to 0 is out-of-date.
-
-
-
+By stabilisation we will get the final postcondition \( \gpost_1 \) shown in \cref{fig:write-skew-si-proof}.
 
 \begin{figure}[!t]
 \hrule
 \[
 \intass :
-\begin{array}[t]{@{} c @{\quad} c @{\quad} c @{\quad} c @{} }
-\begin{rclarray}[t]
-    \CB{L} & : & \exsts{\V{n}} \vx \fpR \V{n} \sep \vx \fpW \V{n} + 1 \sep \null \fpA \cass{\CB{L}}{\lrid} \\
-\end{rclarray}
-&
-\begin{rclarray}[t]
-    \CB{R} & : & \exsts{\V{n}} \vx \fpR \V{n} \sep \vx \fpW \V{n} + 1 \sep \null \fpA \cass{\CB{R}}{\lrid} \\
-\end{rclarray} \\
-\end{array}
-\]
-\[
-\CB{L} \composeK \CB{L} \ \text{is undefined} \quad  \CB{R} \composeK \CB{R} \ \text{is undefined}
-\]
-\hrule\vspace{5pt}
-\[
-\begin{session}
- \specline{ \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 0}{\lrid}{\intass}  } \\
-\begin{parl}
-\begin{session}
-    \specline{\cass{\CB{L}}{\lrid} \sep 
-            \boxass{\vx \pt 0}{\lrid}{\intass} 
-            \lor \boxass{\vx \pt 0  \lor \vx \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
-    } \\
-    \txid_1 : \begin{transaction}
-        \specline{ \vx \fpI 0 \lor \vx \fpI 1 } \\
-        \pderef{\pvar{a}}{\vy} ; 
-        \pmutate{\vx}{\pv{a} + 1} ; \\
-        \specline{ \vx \fpW 2 \lor \vx \fpW 1 } \\
-    \end{transaction} \\
-    \specline{ 
-            \boxass{ \vx \pt 1 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \lor {} \\
-            \boxass{ \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \\
-    } \\
-\end{session}
-&
-\begin{session}
-    \specline{\cass{\CB{R}}{\lrid} \sep 
-            \boxass{\vx \pt 0}{\lrid}{\intass} 
-            \lor \boxass{\vx \pt 0  \lor \vx \pt 1 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
-    } \\
-    \txid_2 : \begin{transaction}
-        \specline{ \vx \fpI 0 \lor \vx \fpI 1 } \\
-        \pderef{\pvar{b}}{\vy} ; 
-        \pmutate{\vx}{\pv{b} + 1} ; \\
-        \specline{ \vx \fpW 2 \lor \vx \fpW 1 } \\
-    \end{transaction} \\
-    \specline{ 
-            \boxass{ \vx \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \lor {} \\
-            \boxass{ \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
-    } \\
-\end{session}
-\end{parl} \\
-    \specline{ 
-            \boxass{ \vx \pt 1 \lor \vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
-    } \\
-\end{session}
-\]
-\hrule\vspace{5pt}
-\[
-\begin{session}
- \specline{ \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 0}{\lrid}{\intass}  } \\
-\begin{parl}
-\begin{session}
-    \specline{\cass{\CB{L}}{\lrid} \sep 
-            \boxass{\vx \pt 0}{\lrid}{\intass} 
-            \lor \boxass{ \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
-    } \\
-    \txid_1 : \begin{transaction}
-        \specline{ \vx \fpI 0 \lor \vx \fpI 1 } \\
-        \pderef{\pvar{a}}{\vy} ; 
-        \pmutate{\vx}{\pv{a} + 1} ; \\
-        \specline{ \vx \fpW 2 \lor \vx \fpW 1 } \\
-    \end{transaction} \\
-    \specline{ 
-            \boxass{ \vx \pt 1 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}
-            \lor \boxass{ \vx \pt 2 \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \\
-    } \\
-\end{session}
-&
-\begin{session}
-    \specline{\cass{\CB{R}}{\lrid} \sep 
-            \boxass{\vx \pt 0}{\lrid}{\intass} 
-            \lor \boxass{\vy \pt 1 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
-    } \\
-    \txid_2 : \begin{transaction}
-        \specline{ \vx \fpI 0 \lor \vx \fpI 1 } \\
-        \pderef{\pvar{b}}{\vy} ; 
-        \pmutate{\vx}{\pv{b} + 1} ; \\
-        \specline{ \vx \fpW 2 \lor \vx \fpW 1 } \\
-    \end{transaction} \\
-    \specline{ 
-            \boxass{ \vx \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}
-            \lor \boxass{\vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
-    } \\
-\end{session}
-\end{parl} \\
-    \specline{ 
-            \boxass{ \vx \pt 2 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
-    } \\
-\end{session}
-\]
-\hrule
-\caption{Sketch proofs for concurrent increments under serialisability (the bottom) and casual consistency (the middle)}
-\label{fig:increment-proof}
-\end{figure}
-
-The \cref{fig:increment-proof} shows sketch proofs for the same \emph{concurrent increments} under different consistency models, causal consistency (the middle) and serialisability (the bottom).
-For causal consistency, a transaction can update keys even if started with an out-of-date view on those keys.
-That means, the fingerprint \( \vx \fpW 1\) is allowed to commit when the view for \( \vx \) is out-of-date, \ie \( \vx \pt 0 \).
-The same situation is disallowed under serialisability and snapshot isolation.
-
-
-\begin{figure}[!t]
-\hrule
-\[
-\intass :
-\begin{array}[t]{@{} c @{\quad} c @{\quad}  c @{} }
+\begin{array}[t]{@{} c @{\quad} c @{} }
 \begin{rclarray}[t]
     \CB{L1} \composeK \CB{L2} & : & \vx \fpW 1 \sep \null \fpA \cass{\CB{L1}}{\lrid} \\
 \end{rclarray}
@@ -473,22 +426,18 @@ The same situation is disallowed under serialisability and snapshot isolation.
 \begin{rclarray}[t]
     \CB{R1} \composeK \CB{R2} & : & \vy \fpW 1 \sep \null \fpA \cass{\CB{R1}}{\lrid} \\
 \end{rclarray}
-&
-\begin{rclarray}[t]
-    \CB{U} & : & \exsts{\V{n}} \vy \fpR \V{n} \\
-\end{rclarray}
 \\
 \begin{rclarray}[t]
-    \CB{L2} & : & \vy \fpR 0 \sep \null \fpA \cass{\CB{L2}}{\lrid} \\
+    \CB{L2} & : & \vx \fpR 1 \sep \vy \fpR 0 \sep \null \fpA \cass{\CB{L2}}{\lrid} \\
 \end{rclarray}
 &
 \begin{rclarray}[t]
-    \CB{R2} & : & \vx \fpR 0 \sep \null \fpA \cass{\CB{R2}}{\lrid} \\
-\end{rclarray}
-&
+    \CB{R2} & : & \vx \fpR 0 \sep \vy \fpR 1  \null \fpA \cass{\CB{R2}}{\lrid} \\
+\end{rclarray}  
+\\
 \begin{rclarray}[t]
-    \CB{U} & : & \exsts{\V{n}} \vx \fpR \V{n} \\
-\end{rclarray}
+    \CB{U} & : & \vx \fpR 1 \sep \vy \fpR 1\\
+\end{rclarray} \\
 \end{array}
 \]
 
@@ -515,8 +464,9 @@ The same situation is disallowed under serialisability and snapshot isolation.
         \sep \cass{\CB{R2}}{\lrid} \sep \cass{\CB{L1}}{\lrid} }{\lrid}{\intass} 
     } \\
     \begin{transaction}
-        \pderef{\pv{a}}{\vy}; \\
-        \pifs{ \pv{a} = 0 } 
+        \pderef{\pv{a}}{\vx};
+        \quad \pderef{\pv{b}}{\vy};\\
+        \pifs{ \pv{a} = 1 \&\& \pv{b} = 0 } 
         \passign{\pv{f1}}{1} ; 
         \pife
     \end{transaction} \\
@@ -546,8 +496,9 @@ The same situation is disallowed under serialisability and snapshot isolation.
         \sep \cass{\CB{L2}}{\lrid} \sep \cass{\CB{R1}}{\lrid} }{\lrid}{\intass} \\
     } \\
     \begin{transaction}
-        \pderef{\pv{b}}{\vy}; \\
-        \pifs{ \pv{b} = 0 } 
+        \pderef{\pv{c}}{\vx};
+        \quad \pderef{\pv{d}}{\vy};\\
+        \pifs{ \pv{c} = 0 \&\& \pv{d} = 1 } 
         \passign{\pv{f2}}{1} ; 
         \pife
     \end{transaction} \\
