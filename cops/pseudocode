@@ -1,0 +1,57 @@
+COPS-GT SYSTEM PSEUDO_CODE
+
+VersionNo : LocalTime ++ ID
+Replicate : ID -> (KV, VersionNo)
+KV : Key -> List( Val , VersionNo , Dep )
+Dep : List (Key, VersionNo)
+ReplQueue : List( Key, Val, Deps, Deps, VersionNo )
+
+// write to a key local
+
+VersionNo put_after(k, v, deps, nearest, vers){
+    atomic{
+        // increase local time.
+        inc(local_time);
+        // appending local kv with a new version.
+        kv[k] := kv[k] ++ [( v, (local_time + id), (deps ++ vers) )];
+    }
+
+    enqueue(k, v, (current_ver+id), (nearest ++ vers), (deps ++ vers) );
+    return current_ver;
+        
+}
+
+send() {
+    (k, v, ver, nearest, vers) = dequeue();
+    for id in repls {
+        send (k, v, ver, nearest, vers) to id;
+    }
+}
+
+// receive a write message from other replica
+
+on_receive( k, v, ver, nearest, deps ) {
+    // for single matchine the following check immediately holds
+    for (k, ver_d)  in nearest {
+        wait until dep_check(k, ver_d);
+    }
+    atomic{
+        kv[k] := kv[k] ++ [( v, ver, deps )];
+    }
+}
+
+// check dependency
+
+bool dep_check(k, ver) {
+    return  (_,ver,_) in kv(k);
+}
+
+// read by version number
+
+(Val, Version, Dep) get_by_version(k, ver) {
+    wait until dep_check(k, ver);
+    take (val, ver, deps) from kv[k];
+    return (val, ver, deps);
+}
+
+
