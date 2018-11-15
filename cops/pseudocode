@@ -1,40 +1,69 @@
 COPS-GT SYSTEM PSEUDO_CODE
 
-VersionNo : LocalTime ++ ID
-Replicate : ID -> (KV, VersionNo)
+// local time and ID are totally ordered separately
+VersionNo : LocalTime + ID
+
+// replica has a unique identifier, a local store and local time
+Replica : ID -> (KV, VersionNo)
+
+// each key in the local store has a list of tuples consisting of 
+// value, version and the dependency.
+// assume the list is order by version number.
 KV : Key -> List( Val , VersionNo , Dep )
-Dep : List (Key, VersionNo)
-ReplQueue : List( Key, Val, Deps, Deps, VersionNo )
+
+// dependency is a set of versions.
+// note that each individual write operation corresponds to a version.
+Dep : Set(Key, VersionNo)
+
+// a queue for sending put_after message.
+// Each message contains key, value, version number, the dependency.
+ReplQueue : List( Key, Val, VersionNo, Deps )
+Ctx : {
+    readers :: List( Key, VersionNo, Dep)
+    writers :: List( Key, VersionNo, Dep)
+}
+
+
+//  ******* replica API ********** //
 
 // write to a key local
 
+// deps come from read operations and vers come write operations
+// nearest come from deps by computing the nearest dependency
+// for local call, all the versions in nearest should already exist
+// since those has been checked the moment reading them
 VersionNo put_after(k, v, deps, nearest, vers){
+    for (k,ver) in nearest
+        wait until dep_check(k, ver);
+
     atomic{
         // increase local time.
         inc(local_time);
         // appending local kv with a new version.
-        kv[k] := kv[k] ++ [( v, (local_time + id), (deps ++ vers) )];
+        kv[k] := kv[k] ++ [( v, (local_time + id), (deps + vers) )];
     }
 
-    enqueue(k, v, (current_ver+id), (nearest ++ vers), (deps ++ vers) );
+    enqueue(k, v, (current_ver+id), (deps ++ vers) );
     return current_ver;
-        
 }
 
+// syn to other replicas
+
 send() {
-    (k, v, ver, nearest, vers) = dequeue();
+    (k, v, ver, deps) := dequeue();
     for id in repls {
-        send (k, v, ver, nearest, vers) to id;
+        send (k, v, ver, vers) to id;
     }
 }
 
 // receive a write message from other replica
 
-on_receive( k, v, ver, nearest, deps ) {
-    // for single matchine the following check immediately holds
-    for (k, ver_d)  in nearest {
-        wait until dep_check(k, ver_d);
+on_receive( k, v, ver, deps ) {
+    // for single matching the following check immediately holds
+    for (k, ver)  in deps {
+        wait until dep_check(k, ver);
     }
+
     atomic{
         kv[k] := kv[k] ++ [( v, ver, deps )];
     }
@@ -43,15 +72,66 @@ on_receive( k, v, ver, nearest, deps ) {
 // check dependency
 
 bool dep_check(k, ver) {
-    return  (_,ver,_) in kv(k);
+    return  (_,ver,_) ∈ kv(k);
 }
 
 // read by version number
 
 (Val, Version, Dep) get_by_version(k, ver) {
+
+    if (ver  = LATEST)
+        ver := max(kv[k].vers);
+
     wait until dep_check(k, ver);
-    take (val, ver, deps) from kv[k];
+    
+    take (val, ver, deps) in kv[k];
     return (val, ver, deps);
 }
 
+Dep ctx_to_dep(ctx) {
+    return {(k,ver) | (k,ver,_) ∈ ctx.readers ∨  (k,ver,_) ∈ ctx.writers}
+}
 
+Dep dep_to_nearest(deps) {
+    return { (k, ver) | ∀ k',ver',deps'. (k', ver', deps') ∈ deps ⇒  ¬( (k, ver) ∈ deps' ) };
+}
+
+//  ******* client API ********** //
+
+// write a key
+put(k, v, ctx) {
+
+    // add up all the read and write dependency
+    deps = ctx_to_dep(ctx);
+
+    ver = put_after(k, v, deps, dep_to_nearest(deps), ctx.writers);
+
+    ctx.writers += (k, ver, deps);
+}
+
+// read
+List ( Val ) get_trans( ks, ctx ) {
+    for k in ks
+        // only guarantee to read up-to-date value 
+        // the moment reading the individual key
+        rst[k] = get_by_version( k, LATEST );
+
+    ccv[...] = min_version;
+
+    for k in ks  {
+        ccv[k] = max (ccv[k], rst[k].ver);
+        for dep in rst[k].deps
+            if ( dep.key in  ks )
+                ccv[k] = max (ccv[dep.key], dep.vers);
+    }
+
+    for k in ks 
+        if ccv[k] > rst[k].vers
+            rst[k] = get_by_version(k, ccv[k]);
+
+    // update the ctx
+    for (k,ver,deps) in rst
+        ctx.readers += (k,ver,deps);
+
+    return to_vals(ks);
+}                                   
