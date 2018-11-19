@@ -340,8 +340,8 @@ Let
 $\Ops \defeq \{(l, \ke, \val) \mid$ $ l \in \Set{\otW, \otR} \land \ke \in \Keys \wedge \val \in \Val \}$ 
 be a set of operations. 
 A \emph{Read-Write Set} $\opset$ is a subset of operations, $\opset \subseteq \Ops$,
-such that for all $\ke \in \Keys$ and \( l \in \Set{\otW, \otR} \),
-if $(l, \ke, \val_1), (l, \ke, \val_2) \in \opset$, then $\val_1 = \val_2$.
+such that for all $\ke \in \Keys$ and \( L \in \Set{\otW, \otR} \),
+if $(L, \ke, \val_1), (L, \ke, \val_2) \in \opset$, then $\val_1 = \val_2$.
 \end{definition}
 Note that we have placed a constraint that read-write sets contains at most one value read, 
 and at most one value written, per key. This reflects the fact that we only consider transactions 
@@ -350,16 +350,16 @@ that are atomically visible \cite{laws}.
 Finally, we need to address how the effects of a transaction executed by client $\cl$, formalised 
 as a read-write set $\opset$, are pushed into a key-value store $\hh$. To this end, we also 
 need to know the view $\vi$ that the client has on $\hh$.
-First, we must associate the read-write set $\opset$ with a transaction identifier $\txid$. This 
-Because we are assuming that the read-write set is being pushed into the key-value store from client $\cl$, 
+First, we must associate the read-write set $\opset$ with a transaction identifier $\txid$.  
+Because we are assuming that the read-write set is being merged into the key-value store from client $\cl$, 
 it is natural to choose $\txid$ from the set $\{\txid_{\cl}^{n} \mid n \in \mathbb{N}\}$. 
 Furthermore, we must choose a transaction identifier of the form 
 $\txid_{\cl}^{n}$, where $n$ is greater than any index $m$ such that 
 $\txid_{\cl}^{m} \in \hh$: because such transaction identifiers are already present 
 in the key-value store, they correspond to transactions that have been previously executed 
 by $\cl$, and thus they must precede the transaction identifier $\txid_{\cl}^{n}$ in the session 
-order $\cl$. Formally, we define the set $\nextTxId(\cl, \hh) = \{ \txid_{\cl}^{n} \mid \forall m \in \mathbb{N}. \; 
-\txid_{\cl}^{m} \in \hh \implies m < n\}$. 
+order. Formally, we define the set $\nextTxId(\cl, \hh) = \{ \txid_{\cl}^{n} \mid \forall m \in \mathbb{N}. \; 
+\txid_{\cl}^{m} \in \hh \implies m < n\}$, and we require that $\txid_{\cl}^{n} \in \nextTxId(\cl,\hh)$. 
 Having selected a suitable transaction identifier $\txid_{\cl}^{n}$, we push the read-write set $\opset$ 
 into $\hh$ as follows: for each read operation $(\otR, \ke, \_) \in \opset$, we add $\txid_{\cl}^{n}$ 
 to the set of readers to the last version of $\ke$ that is included in the view $\vi$ of the client; 
@@ -372,7 +372,6 @@ $\vilist' = \ver_0, \cdots, \ver_{i-1}, \ver, \ver_{i+1}, \cdots, \ver_{n}$.
 \begin{definition}[Transaction Commit]
 Let $\hh \in \HisHeaps, \vi \in \Views(\hh)$, $\cl \in \ClSet$, and $\opset \subseteq \powerset{\Ops}$. 
 Then the set of possible key-value stores obtained by letting client $\cl$ with view $\vi$ pushing $\opset$ into $\hh$, 
-using the transaction identifier $\txid$, 
 is defined inductively on $\opset$ as follows: let $\txid$ be a transaction identifier;  
 \begin{equation*}
 \begin{rclarray}         
@@ -398,7 +397,27 @@ is defined inductively on $\opset$ as follows: let $\txid$ be a transaction iden
 	Note that all the key-value stores in $\updateKV(\hh, \vi, \cl, \opset)$ are equivalent, up-to the transaction 
 	identifier $\txid_{\cl}^{n} \in \nextTxId(\hh, \cl)$ that is associated with the read-write set $\opset$.
 
-	
+The set $\HisHeaps$ is closed with respect to applications of the operator $\updateKV$. Furthermore, 
+let us say that two read-write sets $\opset_1, \opset_2$ are \emph{conflict-free} if 
+$\forall \ke \in \Keys.\; (\otW,\ke, \_) \in \opset_1 \implies \forall \val \in \Val.\; (\otW, \ke, \val) \notin \opset_2$: 
+then the set of key-value stores obtained by letting two different clients $\cl_1, \cl_2$ committing the read-write sets 
+$\opset_1, \opset_2$ into a key-value store $\hh$, respectively, does not depend on the order in which the commits 
+are performed. 
+
+\begin{proposition}
+\label{prop:updatekv_commutative}
+Let $\hh \in \HisHeaps$, $\vi_1, \vi_2 \in \Views(\hh)$, $\opset_1, \opset_2 \subseteq \Ops$, and $\cl_1, \cl_2 \in \Clients$. 
+Then $\updateKV(\hh, \vi_1, \cl_1, \opset_1) \in \HisHeaps$. Furthermore, if $\cl_1 \neq \cl_2$ and $\opset_1, \opset_2$ 
+are conflict-free, then 
+\begin{multline*}
+\updateKV(\updateKV(\hh, \vi_1, \cl_1, \opset_1), \vi_2, \cl_2, \opset_2)  =\\ 
+\updateKV(\updateKV(\hh, \vi_2, \cl_2, \opset_2), \vi_1, \cl_1, \opset_1).
+\end{multline*}
+\ac{in both the LHS and RHS of the formula above, the outermost application of $\updateKV$ is implicitly lifted from type 
+$\HisHeaps \rightarrow \powerset{\HisHeaps}$ to $\powerset{\HisHeaps} \rightarrow \powerset{\HisHeaps}$. This should 
+be made present to the reader without spending too much time on it. Maybe using the notation $\overline{\updateKV}$ for 
+the lifting of functions, and just say that it is the lifting of functions to power-sets could be enough?}
+\end{proposition}
 %
 %Once the execution of a transaction is completed, its effects are committed to the kv-store. 
 %The effects of transactions are modelled as a \emph{fingerprint} $\opset$. 
