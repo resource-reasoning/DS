@@ -3,8 +3,143 @@ Let \( \repl \in \Repls \) denotes the set of totally ordered replicates.
 Each replicate can have multiple clients, and 
 each clients can commit a sequence of either read-only transitions or single-write transactions.
 To model these, we annotate the transaction identifier with replicate \( \repl \), client \( \cl \), 
-local time of the replicate \( n \) and read-only transactions count\ ( n' \), \ie \( \txidCOPS{\repl}{\cl}{n}{n'} \)
+local time of the replicate \( n \) and read-only transactions count \( n' \), \ie \( \txidCOPS{\repl}{\cl}{n}{n'} \).
+Note that the \( (n, \repl, n') \) can be treated as a single number that \( n \) are the higher bits, 
+\( \repl \) the middle bits and \( n' \) the lower bits.
+There is a total order among transitions from the same replica and from the same client.
 We extend version with the set of all versions it dependencies on, \( \dep \in \pset{\Keys \times \TxID} \).
 The function \( \depOf{\ver} \) denotes the dependencies set of the version.
-
+For readability, we annotate view with either a replica, \( \viREPL \), or a client, \( \viCL \).
+The view environment is extended with replicas and their views, \( \viewFunCOPS : (\Repls \times \ClientID ) \parfinfun \Views \).
 We give the following semantics to capture the behaviours of the code.
+
+\begin{lstlisting}
+// mixing the clent API and lower level
+put(k,v,ctx) {
+
+    // add up all the read and write dependency
+    deps = ctx_to_dep(ctx);
+
+    ver = put_after(k,v,
+            deps,dep_to_nearest(deps),ctx.writers);
+
+    atomic{
+        // increase local time.
+        inc(local_time);
+
+        // appending local kv with a new version.
+        list_isnert(kv[k],(v, (local_time + id), deps));
+    }
+
+    ctx.writers += (k,(local_time + id),deps);
+
+    enqueue(k,v,(current_ver+id),(deps ++ vers));
+}
+\end{lstlisting}
+
+\begin{mathpar}
+    \inferrule[put]{%
+        ( \stk, \getSN{\mkvsCOPS, \viCL}, \emptyset ), \pmutate{\ke}{\vx} \toL
+        ( \stk', \stub, \Set{(\otW, \ke, \val )} ), \pskip
+        \\\\
+        \txid = \min\Setcon{\txidCOPS{\repl}{\cl}{n'}{0}}{\txidCOPS{\repl}{\cl}{n}{\stub} \in \mkvsCOPS \land n' > n }
+        \\\\
+        \dep = \Setcon{(\ke', \txid)}{\exsts{i} i \in \viCL(\ke') \land \txid = \WTx(\mkvsCOPS(\ke', i))}
+        \\\\
+        \mkvsCOPS' = \mkvsCOPS\rmto{\ke}{\mkvsCOPS(\ke) \lcat \List{(\ke, \txid, \emptyset, \dep)}}
+        \\\\
+        \viREPL' = \viREPL\rmto{\ke}{\viREPL(\ke) \uplus \abs{\mkvsCOPS'(\ke)} - 1}
+        \\\\
+        \viCL' = \viCL\rmto{\ke}{\viREPL(\ke) \uplus \abs{\mkvsCOPS'(\ke)} - 1}
+    }{%
+    \repl, \cl \vdash 
+    \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pmutate{\ke}{\vx};} \toT{}
+    \mkvsCOPS', \viREPL', \viCL', \stk', \pskip
+    }
+\end{mathpar}
+\begin{lstlisting}
+// A simplified version by guessing
+// a ccv satisfying dependency constraints
+// and then read versions indicated by ccv.
+// Note that it is a weaker version of the original code,
+// as the original implementation fetches the latest versions
+// for keys by a sequence of atomic get_by_version calls
+List(Val) get_trans(ks,ctx) {
+    take ccv: (*$\forall$*) k (*$\in$*) ks.
+        (_,_,deps) := get_by_version(k,ccv[k]) (*${}\land \forall$*) dep (*$\in$*) deps.
+            dep.key (*$\in$*) ks (*$\implies$*) ccv[dep.key] >= dep.ver
+
+    for k in ks                 
+        rst[k] = get_by_version(k,ccv[k]);
+
+    // update the ctx
+    for (k,ver,deps) in rst
+        ctx.readers += (k,ver,deps);
+
+    return to_vals(ks);
+}                                   
+\end{lstlisting}
+
+\begin{mathpar}
+    \inferrule[getTrans]{%
+        \viCL \viewleq \viCL' \viewleq \viREPL
+        \\\\
+        \fora{i : 1 \leq i \leq j, \ke', m, \ver} 
+        \ver = \mkvsCOPS(\ke_i, \max(\viCL'(\ke_i)) \land  (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \ver\projection{4} \implies m \in \viCL'(\ke')
+        \\\\
+        ( \stk, \getSN{\mkvsCOPS, \viCL'}, \emptyset ),\pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j}; \toL
+        ( \stk', \stub, \f ), \pskip
+        \\\\
+        \txidCOPS{\repl}{\cl}{n'}{n} = \max\Setcon{\txidCOPS{\repl}{\cl}{z'}{z}}{\txidCOPS{\repl}{\cl}{z'}{z} \in \mkvsCOPS }
+        \\\\
+        \mkvsCOPS' = \updKV{\mkvsCOPS, \viCL', \txidCOPS{\repl}{\cl}{n'}{n+1}, \f} 
+    }{%
+    \repl, \cl \vdash 
+    \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j}; } \toT{}
+    \mkvsCOPS', \viREPL', \viCL', \stk', \pskip
+    }
+    \and
+    \inferrule[clientCommit]{%
+    \repl, \cl \vdash 
+    \mkvsCOPS, \viewFunCOPS(\repl), \viewFunCOPS(\cl), \stk, \prog(\cl) \toT{}
+    \mkvsCOPS', \viREPL', \viCL', \stk', \cmd'
+    }{%
+    \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toT{}
+    \mkvsCOPS', \viewFunCOPS\rmto{\repl}{\viREPL'}\rmto{\cl}{\viCL'}, \thdenv\rmto{\cl}{\stk'}, \prog\rmto{\cl}{\cmd'}
+    }
+\end{mathpar}
+\begin{lstlisting}
+// Syn to other replicas
+send() {
+    (k,v,ver,deps) := dequeue();
+    for id in repls {
+        send (k,v,ver,deps) to id;
+    }
+}
+
+// receive a write message from other replica
+on_receive(k,v,ver,deps) {
+    // for a single machine
+    // the following check immediately holds
+    for (k',ver') in deps {
+        wait until dep_check(k',ver');
+    }
+
+    atomic{
+        list_isnert(kv[k],(v,ver,deps));
+    }
+}
+\end{lstlisting}
+\begin{mathpar}
+    \inferrule[sync]{%
+        \viREPL = \viewFunCOPS(\repl)\rmto{\ke}{\viewFunCOPS(\repl)(\ke) \uplus i}
+        \\\\
+        \fora{\ke', m, \ver} 
+        \ver = \mkvsCOPS(\ke, i) \land  (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \ver\projection{4} \implies m \in \viREPL'(\ke')
+    }{%
+    \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toT{}
+    \mkvsCOPS, \viewFunCOPS\rmto{\repl}{\viREPL}, \thdenv, \prog
+    }
+\end{mathpar}
+
+
