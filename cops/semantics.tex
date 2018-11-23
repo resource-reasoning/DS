@@ -13,51 +13,77 @@ For readability, we annotate view with either a replica, \( \viREPL \), or a cli
 The view environment is extended with replicas and their views, \( \viewFunCOPS : (\Repls \times \ClientID ) \parfinfun \Views \).
 We give the following semantics to capture the behaviours of the code.
 
-\begin{lstlisting}
-// mixing the clent API and lower level
-put(k,v,ctx) {
+\begin{lstlisting}[caption={put},label={lst:simplified-put}]
+// mixing the client API and system API
+put(repl,k,v,ctx) {
 
-    // add up all the read and write dependency
-    deps = ctx_to_dep(ctx);
-
-    ver = put_after(k,v,
-            deps,dep_to_nearest(deps),ctx.writers);
+    // Dependency for previous reads and writes
+    deps = ctx_to_dep(ctx);(*\label{line:put-ctx-to-deps}*)
 
     atomic{
         // increase local time.
-        inc(local_time);
+        inc(repl.local_time);(*\label{line:put-inc-local}*) 
 
         // appending local kv with a new version.
-        list_isnert(kv[k],(v, (local_time + id), deps));
+        list_isnert(repl.kv[k],(v, (local_time + id), deps));(*\label{line:put-update-kv}*)
     }
 
-    ctx.writers += (k,(local_time + id),deps);
+    // update dependency for writes
+    ctx.writers += (k,(local_time + id),deps);(*\label{line:put-update-ctx}*)
 
+    // put in the queue to sync with other replicas
     enqueue(k,v,(current_ver+id),(deps ++ vers));
 }
 \end{lstlisting}
 
+The client always fetches the version with the maximum writer it can observed for each key,
+Which is computed by \( \funcn{getMax} \) function. 
+It is different from \( \snapshot \) as \( \snapshot \) fetches the latest version with respect to the position in the list.
+
+\[
+    \begin{rclarray}
+        \func{getMax}{\mkvsCOPS, \viCL} & \defeq &
+        \lambda \ke \ldotp \left( \max_\txid\Setcon{(\val, \txid, \T, \dep)}{\exsts{i} (\val, \txid, \T, \dep) = \mkvsCOPS(\ke, i)} \right)\projection{1}
+    \end{rclarray}
+\]
 \begin{mathpar}
-    \inferrule[put]{%
-        ( \stk, \getSN{\mkvsCOPS, \viCL}, \emptyset ), \pmutate{\ke}{\vx} \toL
+    \inferrule[Put]{%
+        ( \stk, \func{getMax}{\mkvsCOPS, \viCL}, \emptyset ), \pmutate{\ke}{\vx} \toL
         ( \stk', \stub, \Set{(\otW, \ke, \val )} ), \pskip
         \\\\
-        \txid = \min\Setcon{\txidCOPS{\repl}{\cl}{n'}{0}}{\txidCOPS{\repl}{\cl}{n}{\stub} \in \mkvsCOPS \land n' > n }
+        \dep = \Setcon{(\ke', \txid)}{\exsts{i} i \in \viCL(\ke') \land \txid = \WTx(\mkvsCOPS(\ke', i))} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-ctx-to-deps}} 
         \\\\
-        \dep = \Setcon{(\ke', \txid)}{\exsts{i} i \in \viCL(\ke') \land \txid = \WTx(\mkvsCOPS(\ke', i))}
+        \txid = \min\Setcon{%
+        \txidCOPS{\repl}{\cl}{n'}{0}
+        }{%
+            \fora{\ke', i \in \viREPL(\ke'), n} \\
+            \quad \txidCOPS{\stub}{\stub}{n}{\stub} = \WTx(\mkvsCOPS(\ke',i)) \\
+            \qquad {} \implies n' > n 
+        } \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-inc-local}}
         \\\\
-        \mkvsCOPS' = \mkvsCOPS\rmto{\ke}{\mkvsCOPS(\ke) \lcat \List{(\ke, \txid, \emptyset, \dep)}}
+        \mkvsCOPS' = \mkvsCOPS\rmto{\ke}{\mkvsCOPS(\ke) \lcat \List{(\ke, \txid, \emptyset, \dep)}} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-update-kv}}
         \\\\
-        \viREPL' = \viREPL\rmto{\ke}{\viREPL(\ke) \uplus \abs{\mkvsCOPS'(\ke)} - 1}
+        \viREPL' = \viREPL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-update-kv}}
         \\\\
-        \viCL' = \viCL\rmto{\ke}{\viREPL(\ke) \uplus \abs{\mkvsCOPS'(\ke)} - 1}
+        \viCL' = \viCL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-update-ctx}}
     }{%
     \repl, \cl \vdash 
     \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pmutate{\ke}{\vx};} \toT{}
     \mkvsCOPS', \viREPL', \viCL', \stk', \pskip
     }
 \end{mathpar}
-\begin{lstlisting}
+The \verb|get_trans| fetches the latest versions from the replica via multiple atomic reads, one for each key.
+As a result, a client has a list of candidates \verb|rst|.
+Since interleaving might happen, versions might become out-of-date because the replicate receives new versions.
+It is not a problem to read old versions as long as they satisfy causal consistency,
+\ie if a client read a version \( \ver \), it should at least read all the versions that \( \ver \) depends on.
+Thus the algorithm use \verb|ccv| to track the maximum versions the client should fetches,
+and re-fetches the \verb|ccv[k]| version from the replica if it is greater than the candidate.
+
+The following is a simplified algorithm by directly taking a list of versions \verb|ccv| satisfies causal consistency constraint,
+and then read the versions indicated by \verb|ccv|.
+The simplified algorithm is easier to understand.
+\begin{lstlisting}[caption={get\_trans},label={lst:get-trans}]
 // A simplified version by guessing
 // a ccv satisfying dependency constraints
 // and then read versions indicated by ccv.
@@ -65,50 +91,56 @@ put(k,v,ctx) {
 // as the original implementation fetches the latest versions
 // for keys by a sequence of atomic get_by_version calls
 List(Val) get_trans(ks,ctx) {
-    take ccv: (*$\forall$*) k (*$\in$*) ks.
-        (_,_,deps) := get_by_version(k,ccv[k]) (*${}\land \forall$*) dep (*$\in$*) deps.
-            dep.key (*$\in$*) ks (*$\implies$*) ccv[dep.key] >= dep.ver
+    take ccv: (*$\forall$*) k (*$\in$*) ks.(*\label{line:get-trans-ccv-1}*)
+        (_,_,deps) := get_by_version(k,ccv[k]) (*${}\land \forall$*) dep (*$\in$*) deps.(*\label{line:get-trans-ccv-2}*)
+            dep.key (*$\in$*) ks (*$\implies$*) ccv[dep.key] >= dep.ver (*\label{line:get-trans-ccv-3}*)
 
-    for k in ks                 
-        rst[k] = get_by_version(k,ccv[k]);
+    for k in ks(*\label{line:get-trans-read-1}*)
+        rst[k] = get_by_version(k,ccv[k]);(*\label{line:get-trans-read-2}*)
 
     // update the ctx
-    for (k,ver,deps) in rst
-        ctx.readers += (k,ver,deps);
+    for (k,ver,deps) in rst(*\label{line:get-trans-update-ctx-1}*)
+        ctx.readers += (k,ver,deps);(*\label{line:get-trans-update-ctx-2}*)
 
     return to_vals(ks);
 }                                   
 \end{lstlisting}
-
 \begin{mathpar}
-    \inferrule[getTrans]{%
-        \viCL \viewleq \viCL' \viewleq \viREPL
+    \inferrule[GetTrans]{%
+        \viCL \viewleq \viCL' \viewleq \viREPL  \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-update-ctx-1,line:get-trans-update-ctx-2}}
         \\\\
-        \fora{i : 1 \leq i \leq j, \ke', m, \ver} 
-        \ver = \mkvsCOPS(\ke_i, \max(\viCL'(\ke_i)) \land  (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \ver\projection{4} \implies m \in \viCL'(\ke')
+        {\left(\begin{array}{@{}l@{}}
+        \fora{i : 1 \leq i \leq j, \ke', m, \ver}  \\
+        \quad \ver = \mkvsCOPS(\ke_i, \max(\viCL'(\ke_i)) \land {} \\
+        \quad (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \ver\projection{4} \\
+        \qquad {} \implies m \in \viCL'(\ke')
+        \end{array}\right)} \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-ccv-1,line:get-trans-ccv-2,line:get-trans-ccv-3}}
         \\\\
-        ( \stk, \getSN{\mkvsCOPS, \viCL'}, \emptyset ),\pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j}; \toL
-        ( \stk', \stub, \f ), \pskip
+        \trans =  \pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j};
+        \\\\
+        ( \stk, \func{getMax}{\mkvsCOPS, \viCL'}, \emptyset ), \trans \toL
+        ( \stk', \stub, \f ), \pskip \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-read-1,line:get-trans-read-2}}
         \\\\
         \txidCOPS{\repl}{\cl}{n'}{n} = \max\Setcon{\txidCOPS{\repl}{\cl}{z'}{z}}{\txidCOPS{\repl}{\cl}{z'}{z} \in \mkvsCOPS }
-        \\\\
+        \\
         \mkvsCOPS' = \updKV{\mkvsCOPS, \viCL', \txidCOPS{\repl}{\cl}{n'}{n+1}, \f} 
     }{%
-    \repl, \cl \vdash 
-    \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j}; } \toT{}
-    \mkvsCOPS', \viREPL', \viCL', \stk', \pskip
+        \repl, \cl \vdash 
+        \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j}; } \toT{}
+        \mkvsCOPS', \viREPL', \viCL', \stk', \pskip
     }
     \and
-    \inferrule[clientCommit]{%
-    \repl, \cl \vdash 
-    \mkvsCOPS, \viewFunCOPS(\repl), \viewFunCOPS(\cl), \stk, \prog(\cl) \toT{}
-    \mkvsCOPS', \viREPL', \viCL', \stk', \cmd'
+    \inferrule[ClientCommit]{%
+        \repl, \cl \vdash 
+        \mkvsCOPS, \viewFunCOPS(\repl), \viewFunCOPS(\cl), \stk, \prog(\cl) \toT{}
+        \mkvsCOPS', \viREPL', \viCL', \stk', \cmd'
     }{%
-    \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toT{}
-    \mkvsCOPS', \viewFunCOPS\rmto{\repl}{\viREPL'}\rmto{\cl}{\viCL'}, \thdenv\rmto{\cl}{\stk'}, \prog\rmto{\cl}{\cmd'}
+        \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toG{}
+        \mkvsCOPS', \viewFunCOPS\rmto{\repl}{\viREPL'}\rmto{\cl}{\viCL'}, \thdenv\rmto{\cl}{\stk'}, \prog\rmto{\cl}{\cmd'}
     }
 \end{mathpar}
-\begin{lstlisting}
+A replica updates its local state only if all the dependencies has been receive.
+\begin{lstlisting}[caption={Send and receive},label={lst:send-receive}]
 // Syn to other replicas
 send() {
     (k,v,ver,deps) := dequeue();
@@ -122,24 +154,103 @@ on_receive(k,v,ver,deps) {
     // for a single machine
     // the following check immediately holds
     for (k',ver') in deps {
-        wait until dep_check(k',ver');
+        wait until dep_check(k',ver');(*\label{line:receive-wait}*)
     }
 
     atomic{
-        list_isnert(kv[k],(v,ver,deps));
+        list_isnert(kv[k],(v,ver,deps));(*\label{line:receive-update-view-1}*)
+        (remote_local_time + id) = ver;(*\label{line:receive-update-view-2}*)
+        local_time = max(remote_local_time, local_time);(*\label{line:receive-update-view-3}*)
     }
 }
 \end{lstlisting}
 \begin{mathpar}
     \inferrule[sync]{%
-        \viREPL = \viewFunCOPS(\repl)\rmto{\ke}{\viewFunCOPS(\repl)(\ke) \uplus i}
+        \viREPL = \viewFunCOPS(\repl)\rmto{\ke}{\viewFunCOPS(\repl)(\ke) \uplus i} 
+        \texttt{ ---> \cref{lst:send-receive}, \cref{line:receive-update-view-1,line:receive-update-view-2,line:receive-update-view-3}}
         \\\\
+        {\left(\begin{array}{@{}l@{}}
         \fora{\ke', m, \ver} 
-        \ver = \mkvsCOPS(\ke, i) \land  (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \ver\projection{4} \implies m \in \viREPL'(\ke')
+        \ver = \mkvsCOPS(\ke, i) \land {} \\
+        \quad (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \ver\projection{4} \\
+        \qquad {} \implies m \in \viREPL'(\ke') 
+        \end{array}\right)} \texttt{ ---> \cref{lst:send-receive}, \cref{line:receive-wait}} 
     }{%
-    \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toT{}
-    \mkvsCOPS, \viewFunCOPS\rmto{\repl}{\viREPL}, \thdenv, \prog
+        \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toG{}
+        \mkvsCOPS, \viewFunCOPS\rmto{\repl}{\viREPL}, \thdenv, \prog
     }
 \end{mathpar}
 
+A view \( \vi \) on key-value store \( \mkvsCOPS \) \emph{agrees} 
+with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and only
+\[
+ \func{getMax}{\mkvsCOPS, \vi} = \func{getMax}{\mkvsCOPS', \vi'}
+\]
+\begin{theorem}
+    For any trace \( \tr \) of COPS with final configuration \( (\mkvsCOPS, \viewFunCOPS) \), 
+    there exists a trace \( \tr' \) with final configuration \( (\mkvsCOPS', \viewFunCOPS') \) such that 
+    each step of the trace \( \tr' \) commits a transaction with strictly greater transaction identifier than any one appearing in the key-value store:
+    \[
+        \begin{array}{@{}l@{}}
+        (\mkvsCOPS_i, \viewFunCOPS_i) 
+        \toG{} (\mkvsCOPS_{i+1}, \viewFunCOPS_{i+1}) 
+        \land \exsts{\txid} \txid \in \mkvsCOPS_{i+1} 
+        \land \txid \notin \mkvsCOPS_{i+1}
+        \implies \fora{\txid' \in \mkvsCOPS_i} \txid > \txid'
+        \end{array}
+    \]
+    and any replica's view from \( \viewFunCOPS \) agrees with its counterpart from  \( \viewFunCOPS' \):
+    \[
+        \fora{i} 
+        \func{getMax}{\mkvsCOPS, \viewFunCOPS(i)} = \func{getMax}{\mkvsCOPS', \viewFunCOPS'(i)}
+    \]
+\end{theorem}
+\begin{proof}
+\end{proof}
+
+\begin{lemma}
+\[
+    \begin{array}{@{}l@{}}
+    \fora{\repl, \cl, \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'', \viREPL, \viREPL', \viREPL'', \viCL, \viCL', \viCL'', \stk, \stk', \cmd, \cmd'} \\
+    \quad \func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
+    \land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
+    \qquad \repl, \cl \vdash 
+    \mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
+    \mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
+    \qquad \implies 
+    \exsts{\mkvsCOPS''', \viREPL'''}
+    \mkvsCOPS'', \viREPL'', \viCL'', \stk, \cmd \toT{}
+    \mkvsCOPS''', \viREPL''', \viCL', \stk', \cmd' \\
+    \qquad \func{getMax}{\mkvsCOPS', \viREPL'} = \func{getMax}{\mkvsCOPS''', \viREPL'''} 
+    \land \func{getMax}{\mkvsCOPS', \viCL'} = \func{getMax}{\mkvsCOPS''', \viCL'''} \\
+    \end{array}
+\]
+\end{lemma}
+\begin{proof}
+We perform case analysis.
+\begin{itemize}
+    \item \rl{Put}.
+        We have \( \cmd =  \ptrans{\pmutate{\ke}{\vx};} \) for some key \( \ke \) and variable \( \vx \).
+        Suppose key-value stores \(  \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'' \), 
+        replica's views \( \viREPL, \viREPL', \viREPL''\) and client's views \( \viCL, \viCL', \viCL''\) such that
+        \[
+        \begin{array}{@{}l@{}}
+        \func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
+        \land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
+        \qquad \repl, \cl \vdash 
+        \mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
+        \mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
+        \end{array}
+        \]
+        By the premiss of the \rl{Put} rule, the new key-value store
+        \[
+        \]
+    \item \rl{GetTrans}.
+\end{itemize}
+\end{proof}
+
+\begin{lemma}
+    \label{lem:client-subset-repl}
+    The view of a client is subset of the view of the replica that the client interacts with.
+\end{lemma}
 
