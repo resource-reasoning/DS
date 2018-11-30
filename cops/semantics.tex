@@ -51,7 +51,7 @@ It is different from \( \snapshot \) as \( \snapshot \) fetches the latest versi
         ( \stk, \func{getMax}{\mkvsCOPS, \viCL}, \emptyset ), \pmutate{\ke}{\vx} \toL
         ( \stk', \stub, \Set{(\otW, \ke, \val )} ), \pskip
         \\\\
-        \dep = \Setcon{(\ke', \txid)}{\exsts{i} i \in \viCL(\ke') \land \txid = \WTx(\mkvsCOPS(\ke', i))} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-ctx-to-deps}} 
+        \dep = \Setcon{(\ke', \txid)}{\exsts{i} i \in \viCL(\ke') \land \txid = \WTx(\mkvsCOPS(\ke', i)) \lor (\ke', \txid) \in \depOf{\mkvsCOPS(\ke', i)} } \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-ctx-to-deps}} 
         \\\\
         \txid = \min\Setcon{%
         \txidCOPS{\repl}{\cl}{n'}{0}
@@ -68,7 +68,7 @@ It is different from \( \snapshot \) as \( \snapshot \) fetches the latest versi
         \viCL' = \viCL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-update-ctx}}
     }{%
     \repl, \cl \vdash 
-    \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pmutate{\ke}{\vx};} \toT{}
+    \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pmutate{\ke}{\vx};} \toT{\viCL, \Set{(\otW, \ke, \val )} }
     \mkvsCOPS', \viREPL', \viCL', \stk', \pskip
     }
 \end{mathpar}
@@ -110,9 +110,9 @@ List(Val) get_trans(ks,ctx) {
         \viCL \viewleq \viCL' \viewleq \viREPL  \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-update-ctx-1,line:get-trans-update-ctx-2}}
         \\\\
         {\left(\begin{array}{@{}l@{}}
-        \fora{i : 1 \leq i \leq j, \ke', m, \ver}  \\
-        \quad \ver = \mkvsCOPS(\ke_i, \max(\viCL'(\ke_i)) \land {} \\
-        \quad (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \ver\projection{4} \\
+        \fora{\ke, \ke', m, \ver}  \\
+        \quad \ver = \mkvsCOPS(\ke, \max(\viCL'(\ke)) \land {} \\
+        \quad (\ke', \WTx(\mkvsCOPS(\ke', m))) \in \depOf{\ver} \\
         \qquad {} \implies m \in \viCL'(\ke')
         \end{array}\right)} \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-ccv-1,line:get-trans-ccv-2,line:get-trans-ccv-3}}
         \\\\
@@ -126,16 +126,16 @@ List(Val) get_trans(ks,ctx) {
         \mkvsCOPS' = \updKV{\mkvsCOPS, \viCL', \txidCOPS{\repl}{\cl}{n'}{n+1}, \f} 
     }{%
         \repl, \cl \vdash 
-        \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j}; } \toT{}
+        \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pderef{\vx_1}{\ke_1}; \dots; \pderef{\vx_j}{\ke_j}; } \toT{\viCL', \f}
         \mkvsCOPS', \viREPL, \viCL', \stk', \pskip
     }
     \and
     \inferrule[ClientCommit]{%
         \repl, \cl \vdash 
-        \mkvsCOPS, \viewFunCOPS(\repl), \viewFunCOPS(\cl), \stk, \prog(\cl) \toT{}
+        \mkvsCOPS, \viewFunCOPS(\repl), \viewFunCOPS(\cl), \stk, \prog(\cl) \toT{\viCL'', \f}
         \mkvsCOPS', \viREPL', \viCL', \stk', \cmd'
     }{%
-        \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toG{}
+        \mkvsCOPS, \viewFunCOPS, \thdenv, \prog \toG{\viCL'', \f}
         \mkvsCOPS', \viewFunCOPS\rmto{\repl}{\viREPL'}\rmto{\cl}{\viCL'}, \thdenv\rmto{\cl}{\stk'}, \prog\rmto{\cl}{\cmd'}
     }
 \end{mathpar}
@@ -189,112 +189,6 @@ with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and 
 
 
 
-%\begin{theorem}
-    %For any trace \( \tr \) of COPS with final configuration \( (\mkvsCOPS, \viewFunCOPS) \), 
-    %there exists a trace \( \tr' \) with final configuration \( (\mkvsCOPS', \viewFunCOPS') \) such that 
-    %each step of the trace \( \tr' \) commits a transaction with strictly greater transaction identifier than any one appearing in the key-value store:
-    %\[
-        %\begin{array}{@{}l@{}}
-        %(\mkvsCOPS_i, \viewFunCOPS_i) 
-        %\toG{} (\mkvsCOPS_{i+1}, \viewFunCOPS_{i+1}) 
-        %\land \exsts{\txid} \txid \in \mkvsCOPS_{i+1} 
-        %\land \txid \notin \mkvsCOPS_{i+1}
-        %\implies \fora{\txid' \in \mkvsCOPS_i} \txid > \txid'
-        %\end{array}
-    %\]
-    %and any replica's view from \( \viewFunCOPS \) agrees with its counterpart from  \( \viewFunCOPS' \):
-    %\[
-        %\fora{i} 
-        %\func{getMax}{\mkvsCOPS, \viewFunCOPS(i)} = \func{getMax}{\mkvsCOPS', \viewFunCOPS'(i)}
-    %\]
-%\end{theorem}
-%\begin{proof}
-%\end{proof}
-
-%\begin{lemma}
-%\[
-    %\begin{array}{@{}l@{}}
-    %\fora{\repl, \cl, \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'', \viREPL, \viREPL', \viREPL'', \viCL, \viCL', \viCL'', \stk, \stk', \cmd, \cmd'} \\
-    %\quad \func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
-    %\land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
-    %\qquad \repl, \cl \vdash 
-    %\mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
-    %\mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
-    %\qquad \implies 
-    %\exsts{\mkvsCOPS''', \viREPL'''}
-    %\mkvsCOPS'', \viREPL'', \viCL'', \stk, \cmd \toT{}
-    %\mkvsCOPS''', \viREPL''', \viCL', \stk', \cmd' \\
-    %\qquad \func{getMax}{\mkvsCOPS', \viREPL'} = \func{getMax}{\mkvsCOPS''', \viREPL'''} 
-    %\land \func{getMax}{\mkvsCOPS', \viCL'} = \func{getMax}{\mkvsCOPS''', \viCL'''} \\
-    %\end{array}
-%\]
-%\end{lemma}
-%\begin{proof}
-%We perform case analysis.
-%\begin{itemize}
-    %\item \rl{Put}.
-    %We have \( \cmd \equiv \ptrans{\pmutate{\ke}{\vx};} \) for some key \( \ke \) and variable \( \vx \).
-    %Suppose key-value stores \(  \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'' \), 
-    %replica's views \( \viREPL, \viREPL', \viREPL''\) and client's views \( \viCL, \viCL', \viCL''\) such that
-    %\[
-    %\begin{array}{@{}l@{}}
-    %\func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
-    %\land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
-    %\qquad \repl, \cl \vdash 
-    %\mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
-    %\mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
-    %\end{array}
-    %\]
-    %By the premiss of the \rl{Put} rule, the new key-value store
-    %\[
-        %\mkvsCOPS' = \mkvsCOPS\rmto{\ke}{\mkvsCOPS(\ke) \lcat \List{(\ke, \txid, \emptyset, \dep)}}
-    %\]
-    %where
-    %\[
-        %\txid = \min\Setcon{%
-            %\txidCOPS{\repl}{\cl}{n'}{0}
-        %}{%
-            %\fora{\ke', i \in \viREPL(\ke'), n} \\
-            %\quad \txidCOPS{\stub}{\stub}{n}{\stub} = \WTx(\mkvsCOPS(\ke',i)) \\
-            %\qquad {} \implies n' > n 
-        %} 
-    %\]
-    %and the new views of replica and client are
-    %\[   
-        %\begin{array}{@{}l@{}}
-        %\viREPL' = \viREPL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}} \\
-        %{} \land \viCL' = \viCL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}}
-        %\end{array}
-    %\]
-    %Similarly there exists a new \( \mkvsCOPS''' \) by committing a single-write transaction \( \txid' \) and two new views \( \viREPL''' \) and \( \viCL''' \).
-    %This means for those key \( \ke' \) that is different from the key \( \ke \) being overwritten,
-    %\begin{equation}
-        %\label{equ:get-max-match-all-other-key}
-        %\begin{array}{@{}l@{}}
-            %\func{getMax}{\mkvsCOPS', \viREPL'}(\ke') = \func{getMax}{\mkvsCOPS''', \viREPL'''}(\ke') \\
-            %{} \land \func{getMax}{\mkvsCOPS', \viCL'}(\ke') = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke') 
-        %\end{array}
-    %\end{equation}
-    %Note that the \( \txid \) is greater than any writers \( \txidCOPS{\repl}{\cl}{n'}{0} \) that can be observed by the \( \viREPL \), so is \( \txid' \).
-    %That is,
-    %\begin{equation}
-        %\label{equ:get-max-match-overwritten-key}
-        %\begin{array}{@{}l@{}}
-            %\func{getMax}{\mkvsCOPS', \viREPL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viREPL'''}(\ke)  \\
-            %{} \land \func{getMax}{\mkvsCOPS', \viCL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke) 
-        %\end{array}
-    %\end{equation}
-    %Combine \cref{equ:get-max-match-all-other-key} and \cref{equ:get-max-match-overwritten-key},
-    %we have the proof.
-
-    %\item \rl{GetTrans}.
-    %Since the views of replica remain unchanged, so we only need to prove that there exists a new key-value store and a new view \( \viCL''' \) such that
-    %\[
-        %\func{getMax}{\mkvsCOPS', \viCL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke) 
-    %\]
-    
-%\end{itemize}
-%\end{proof}
 
 \begin{lemma}
     \label{lem:client-subset-repl}
@@ -327,7 +221,7 @@ with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and 
                 By the premiss of \rl{Put}, the new transaction identifier \( \txid = \txidCOPS{\repl}{\cl}{n'}{0} \) where for some \( n' \) that is greater than any \( n \) from any writers \( \txidCOPS{\stub}{\stub}{n}{\stub} \) that are observable by the replica \( \repl \).
                 Since the new transaction \( \txid = \txidCOPS{\repl}{\cl}{n'}{0} \) is a single-write transaction which is always installed at the end of the list associated to \( \ke \), it is sufficient to prove the following:
                 \begin{gather}
-                    \fora{j} 0 \leq j < \abs{ \mkvsCOPS_i(\ke) } \implies \WTx(\mkvsCOPS_{i}(\ke, m)) \neq \txid \label{equ:write-trans-unique} \\
+                    \fora{j} 0 \leq j < \abs{ \mkvsCOPS_i(\ke) } \implies \WTx(\mkvsCOPS_{i}(\ke, j)) \neq \txid \label{equ:write-trans-unique} \\
                     \fora{j, n} \txidCOPS{\repl}{\cl}{n}{\stub} \in \Set{\WTx(\mkvsCOPS_{i}(\ke,j))} \cup \RTx(\mkvsCOPS_{i}(\ke, j)) \implies n < n' \label{equ:replica-time-monotonic-inc}
                 \end{gather}
                 By \cref{lem:repl-observe-own}, we know that for any version written \( \ver = \mkvsCOPS_i(\ke, j) \) by the same replica \( \txidCOPS{\repl}{\stub}{\stub}{\stub} = \WTx(\ver) \), such version is included in the replica's view \( j \in \viREPL(\ke) \).
@@ -340,8 +234,20 @@ with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and 
                 Because \( \txid \) is a single-write transaction, so the new view \( \viREPL' \) still satisfies the atomic read.
                 For similar reason, the new view for client \( \viCL' \) till satisfies atomic read.
                 Therefore we have \( \viREPL', \viCL' \in \Views(\mkvsCOPS_{i+1}) \).
-            \item \rl{GetTrans}
 
+            \item \rl{GetTrans}
+                Assume the client \( \cl \) of a replica \( \repl \) commits a read-only transaction \( \txid \).
+                Since it is a read-only transaction, it suffice  to prove the following:
+                \begin{gather}
+                    \fora{\ke,j} 0 \leq j < \abs{ \mkvsCOPS_i(\ke) } \implies \txid \notin \RTx(\mkvsCOPS_{i}(\ke, j)) \label{equ:read-trans-unique} \\
+                \end{gather}
+                By the premiss of \rl{GetTrans}, the new transaction identifier \( \txid \) is unique, which implies \cref{equ:read-trans-unique}.
+                Thus the new key-value store \( \mkvsCOPS_{i+1} \) satisfies the well-formed conditions.
+                Now let consider the views.
+                Since only the client view has changed, it is sufficient to  prove that \( \viCL' \in \Views{\mkvsCOPS_{i+1}} \), 
+                where \( \viCL' \) is the new client.
+                By \cref{lem:write-unique}, the new view \( \viCL' \) satisfies the atomic read constraint.
+                Therefore \( \viCL' \in \Views(\mkvsCOPS_{i+1})  \).
         \end{itemize}
     \end{itemize}
 \end{proof}
@@ -350,3 +256,285 @@ with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and 
     \label{lem:repl-observe-own}
     A replica observes all its own transactions.
 \end{lemma}
+
+\begin{lemma}
+    \label{lem:cl-observe-own}
+    A client observes all its own transactions, that is, for any key-value store \( \mkvsCOPS \) and view \( \viCL \):
+    \[
+        \fora{i,\ke, \val, \dep, \txid, \T, \txidCOPS{\stub}{\cl}{\stub}{\stub}} (\val, \txid, \T, \dep)  = \mkvsCOPS(\ke,i) 
+        \land \txid = \txidCOPS{\stub}{\cl}{\stub}{\stub} 
+        \lor \txidCOPS{\stub}{\cl}{\stub}{\stub} \in \T
+        \implies i \in \viCL(\ke)
+    \]
+\end{lemma}
+
+\begin{lemma}
+    \label{lem:write-unique}
+    Each version has a unique writer.
+\end{lemma}
+\begin{proof}
+    Because a transaction can write to at most one key, then by \cref{lem:repl-observe-own} and the premiss of \rl{Put},
+    we have the proof.
+\end{proof}
+
+\begin{lemma}
+    Given a reduction step such that: 
+    \[
+        \mkvsCOPS, \viREPL, \viCL, \stk, \cmd {\toT{}}^* \mkvsCOPS', \viREPL', \viCL', \stk', \cmd'
+    \]
+    let \( \txidCOPS{\repl}{\cl}{n}{n'} \) be the new transaction, \ie \( \txidCOPS{\repl}{\cl}{n}{n'} \in \mkvsCOPS' \land  \txidCOPS{\repl}{\cl}{n}{n'} \notin \mkvsCOPS \).
+    It implies the new transaction is greater than any transaction committed by the same client view \( \viCL \), \ie
+    \[ 
+        \txidCOPS{\repl}{\cl}{n''}{n'''} \in \mkvsCOPS \implies (n,\repl,n') > (n'', \repl, n''')
+    \]
+\end{lemma}
+\begin{proof}
+    We perform case analysis.
+    \begin{itemize}
+        \item \rl{Put}
+            By the premiss of the rule, 
+            the new transaction is in the form \( \txidCOPS{\repl}{\cl}{n}{0} \).
+            By the \cref{lem:repl-observe-own} we have for any existing transaction \( \txidCOPS{\repl}{\cl}{n'}{\stub} \),
+            \[
+                \txidCOPS{\repl}{\cl}{n'}{\stub} \in \mkvsCOPS \implies n > n'
+            \]
+        \item \rl{GetTrans}
+            Let \( \txidCOPS{\repl}{\cl}{n}{n'} \) be the new transaction.
+            By the premiss we have that for any existing transaction \( \txidCOPS{\repl}{\cl}{n''}{n'''} \), 
+            \[
+                \txidCOPS{\repl}{\cl}{n''}{n'''} \in \mkvsCOPS \implies n = n'' \land n' > n'''
+            \]
+    \end{itemize}
+\end{proof}
+
+\begin{theorem}
+    Given a trace starting from the initial key-value store \( \mkvsCOPS_0 \), initial views \( \viewFunCOPS_0 \) and some programs \( \prog_0 \), for any \( \mkvsCOPS_i \) and \( \viewFunCOPS_i \)  such that: 
+    \[
+        \mkvsCOPS_i, \viewFunCOPS_i, \thdenv_i, \prog_i \toG{\viCL,\f} \mkvsCOPS_{i+1}, \viewFunCOPS_{i+1}, \thdenv_{i+1}, \prog_{i+1} 
+    \]
+    then the i-\emph{th} step satisfies \( \ET_\CC \), \ie
+    \[
+        \ET_\CC \vdash ( \mkvsCOPS_i, \viCL ) \csat \f : \viewFunCOPS_{i+1}(\cl)
+    \]
+\end{theorem}
+\begin{proof}
+    We introduce an invariant \( I \) on the view of client that if the view includes a version, 
+    it also includes all the version it depends on, that is,
+    \[
+        \begin{array}{@{}l@{}}
+        \fora{\cl, \viCL,\ke,\ke',j,m,\dep} \\
+        \quad \viCL = \viewFunCOPS_i(\cl) \land j \in \viCL(\ke') 
+        \land (\stub,\stub,\stub,\dep) = \mkvsCOPS_i(\ke,j)
+        \land (\ke',\WTx(\mkvsCOPS_i(\ke',m))) \in \dep \\
+        \qquad \implies m \in \viCL(\ke')
+        \end{array}
+    \]
+    Since \( \ET_\CC = \ET_\MRd \cap \ET_\MW \cap \ET_\RYW \cap \ET_\WFR \), we prove the four constraints separately.
+    In each case we need to consider \rl{Put} and \rl{GetTrans}.
+    \begin{itemize}
+        \item \( \ET_\MRd \). 
+            It is easy to see \( \viCL \viewleq \viewFunCOPS_{i+1}(\cl) \).
+
+        \item \( \ET_\MW \).
+            By \cref{lem:cops-dep} and the invariant, we have to proof.
+            Now we need to re-establish the invariant \( I_{i+1} \).
+            \begin{itemize}
+                \item 
+                For \rl{GetTrans}, the client \( \cl \) commits a read-only transaction.
+                By the premiss of the rule, the new view \( \viewFunCOPS_{i+1}(\cl) \) satisfies the invariant.
+                \item For \rl{Put}, the new view \( \viewFunCOPS_{i+1}(\cl) = \viCL\rmto{\ke}{j} \),
+                where the new version \( \mkvsCOPS_{i+1}(\ke,j)\) is written by the client \( \cl \).
+                Let \( \dep \) be the dependency for the new view, \ie \( \dep = \depOf(\mkvsCOPS_{i+1}(\ke,j)) \).
+                By the premiss, the \( \dep \) includes all version included in \( \viCL \), 
+                therefore the invariant has been preserved.
+            \end{itemize}
+
+        \item \( \ET_\RYW \). 
+            \begin{itemize}
+                \item 
+                For \rl{GetTrans}, the client \( \cl \) commits a read-only transaction.
+                By \cref{lem:cl-observe-own} and  \( \viCL \viewleq \viewFunCOPS_{i+1}(\cl) \),
+                we have the prove.
+            \item For \rl{Put}, the new view \( \viewFunCOPS_{i+1}(\cl) = \viCL\rmto{\ke}{j} \),
+                where the new version \( \mkvsCOPS_{i+1}(\ke,j)\) is written by the client \( \cl \).
+                Then by \( \viCL \viewleq \viewFunCOPS_{i+1}(\cl) \), we have the proof.
+            \end{itemize}
+
+        \item \( \ET_\WFR \).
+            By \cref{lem:cops-dep} and the invariant, we have to proof.
+            Now we need to re-establish the invariant \( I_{i+1} \).
+            \begin{itemize}
+                \item 
+                For \rl{GetTrans}, the client \( \cl \) commits a read-only transaction.
+                By the premiss of the rule, the new view \( \viewFunCOPS_{i+1}(\cl) \) satisfies the invariant.
+                \item For \rl{Put}, the new view \( \viewFunCOPS_{i+1}(\cl) = \viCL\rmto{\ke}{j} \),
+                where the new version \( \mkvsCOPS_{i+1}(\ke,j)\) is written by the client \( \cl \).
+                Let \( \dep \) be the dependency for the new view, \ie \( \dep = \depOf(\mkvsCOPS_{i+1}(\ke,j)) \).
+                By the premiss, the \( \dep \) includes all version included in \( \viCL \), 
+                therefore the invariant has been preserved.
+            \end{itemize}
+    \end{itemize}
+\end{proof}
+
+\begin{lemma}
+    \label{lem:cops-dep}
+    Given the initial key-value store \( \mkvsCOPS_0 \), initial views \( \viewFunCOPS_0 \) and some programs \( \prog_0 \), for any \( \mkvsCOPS_i \) and \( \viewFunCOPS_i \)  such that: 
+    \[
+        \mkvsCOPS_0, \viewFunCOPS_0, \thdenv_0, \prog_0 {\toG{}}^* \mkvsCOPS_i, \viewFunCOPS_i, \thdenv_i, \prog_i 
+    \]
+    for any versions \( ( \val,\txid,\T,\dep ) = \mkvsCOPS_i(\ke,j) \) and \( ( \val',\txid',\T',\dep' ) = \mkvsCOPS_i(\ke',m) \), if \( \txid \) depends on \( \txid' \), \ie
+    \[
+        \begin{array}{@{}l@{}}
+            \txid' \toEdge{\SO ?} \txid
+            \lor \exsts{\txid''}
+            \txid'' \in \T' \land
+            \txid'' \toEdge{\SO ?} \txid
+        \end{array}
+    \]
+    then \( \txid' \) and \( \dep' \) is in the dependency \( \dep \), \ie
+    \[
+        (\stub, \txid') \in \dep \land \dep' \subseteq \dep
+    \]
+\end{lemma}
+\begin{proof}
+    We prove by induction on the length of trace \( i \).
+    \begin{itemize}
+        \item 
+        \caseB{\(i = 0\)}
+        It trivially holds.
+        \item  
+        \case{\( i > 0 \)}
+        Suppose \( \mkvsCOPS_i \) satisfies the property, let consider the next key-value store \( \mkvsCOPS_{i+1}\).
+        We perform case analysis.
+        \begin{itemize}
+            \item 
+            \rl{Put}.
+            Assume a client \( \cl \) commit a new transaction \( \txid \) that installs a new version to key \( \ke \).
+            Assume the initial view for the client is \( \viCL \).
+            In the new key-value store \( \mkvsCOPS_{i+1} \), for versions other than \( \mkvsCOPS_{i+1}(\ke, \abs{\mkvsCOPS_{i+1}} - 1 ) \), they still satisfy the property by \ih
+            By \cref{lem:cl-observe-own}, it follows that for any preview transaction from the same client \( \txid' \):
+            \[
+                \begin{array}{@{}l@{}}
+                    \txid' \toEdge{\SO ?} \txid
+                    \lor \exsts{\txid''}
+                    \txid'' \in \T' \land
+                    \txid'' \toEdge{\SO ?} \txid
+                \end{array}
+            \]
+            the version written by the transaction \( \txid' \) is included in the view \( \viCL \).
+            By the premiss of \rl{Put} that how the new \( \dep \) is constructed, we have proof.
+
+            \item 
+            \rl{GetTrans}.
+            Since it only commits a read-only transaction, 
+            the \( \mkvsCOPS_{i+1} \)  satisfies the property by \ih
+        \end{itemize}
+    \end{itemize}
+\end{proof}
+
+\begin{theorem}
+    For any trace \( \tr \) of COPS with final configuration \( (\mkvsCOPS, \viewFunCOPS) \), 
+    there exists a trace \( \tr' \) with final configuration \( (\mkvsCOPS', \viewFunCOPS') \) such that 
+    each step of the trace \( \tr' \) commits a transaction with strictly greater transaction identifier than any one appearing in the key-value store:
+    \[
+        \begin{array}{@{}l@{}}
+        (\mkvsCOPS_i, \viewFunCOPS_i) 
+        \toG{} (\mkvsCOPS_{i+1}, \viewFunCOPS_{i+1}) 
+        \land \exsts{\txid} \txid \in \mkvsCOPS_{i+1} 
+        \land \txid \notin \mkvsCOPS_{i+1}
+        \implies \fora{\txid' \in \mkvsCOPS_i} \txid > \txid'
+        \end{array}
+    \]
+    and any replica's view from \( \viewFunCOPS \) agrees with its counterpart from  \( \viewFunCOPS' \):
+    \[
+        \fora{i} 
+        \func{getMax}{\mkvsCOPS, \viewFunCOPS(i)} = \func{getMax}{\mkvsCOPS', \viewFunCOPS'(i)}
+    \]
+\end{theorem}
+\begin{proof}
+\end{proof}
+
+\begin{lemma}
+\[
+    \begin{array}{@{}l@{}}
+    \fora{\repl, \cl, \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'', \viREPL, \viREPL', \viREPL'', \viCL, \viCL', \viCL'', \stk, \stk', \cmd, \cmd'} \\
+    \quad \func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
+    \land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
+    \qquad \repl, \cl \vdash 
+    \mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
+    \mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
+    \qquad \implies 
+    \exsts{\mkvsCOPS''', \viREPL'''}
+    \mkvsCOPS'', \viREPL'', \viCL'', \stk, \cmd \toT{}
+    \mkvsCOPS''', \viREPL''', \viCL', \stk', \cmd' \\
+    \qquad \func{getMax}{\mkvsCOPS', \viREPL'} = \func{getMax}{\mkvsCOPS''', \viREPL'''} 
+    \land \func{getMax}{\mkvsCOPS', \viCL'} = \func{getMax}{\mkvsCOPS''', \viCL'''} \\
+    \end{array}
+\]
+\end{lemma}
+\begin{proof}
+We perform case analysis.
+\begin{itemize}
+    \item \rl{Put}.
+    We have \( \cmd \equiv \ptrans{\pmutate{\ke}{\vx};} \) for some key \( \ke \) and variable \( \vx \).
+    Suppose key-value stores \(  \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'' \), 
+    replica's views \( \viREPL, \viREPL', \viREPL''\) and client's views \( \viCL, \viCL', \viCL''\) such that
+    \[
+    \begin{array}{@{}l@{}}
+    \func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
+    \land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
+    \qquad \repl, \cl \vdash 
+    \mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
+    \mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
+    \end{array}
+    \]
+    By the premiss of the \rl{Put} rule, the new key-value store
+    \[
+        \mkvsCOPS' = \mkvsCOPS\rmto{\ke}{\mkvsCOPS(\ke) \lcat \List{(\ke, \txid, \emptyset, \dep)}}
+    \]
+    where
+    \[
+        \txid = \min\Setcon{%
+            \txidCOPS{\repl}{\cl}{n'}{0}
+        }{%
+            \fora{\ke', i \in \viREPL(\ke'), n} \\
+            \quad \txidCOPS{\stub}{\stub}{n}{\stub} = \WTx(\mkvsCOPS(\ke',i)) \\
+            \qquad {} \implies n' > n 
+        } 
+    \]
+    and the new views of replica and client are
+    \[   
+        \begin{array}{@{}l@{}}
+        \viREPL' = \viREPL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}} \\
+        {} \land \viCL' = \viCL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}}
+        \end{array}
+    \]
+    Similarly there exists a new \( \mkvsCOPS''' \) by committing a single-write transaction \( \txid' \) and two new views \( \viREPL''' \) and \( \viCL''' \).
+    This means for those key \( \ke' \) that is different from the key \( \ke \) being overwritten,
+    \begin{equation}
+        \label{equ:get-max-match-all-other-key}
+        \begin{array}{@{}l@{}}
+            \func{getMax}{\mkvsCOPS', \viREPL'}(\ke') = \func{getMax}{\mkvsCOPS''', \viREPL'''}(\ke') \\
+            {} \land \func{getMax}{\mkvsCOPS', \viCL'}(\ke') = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke') 
+        \end{array}
+    \end{equation}
+    Note that the \( \txid \) is greater than any writers \( \txidCOPS{\repl}{\cl}{n'}{0} \) that can be observed by the \( \viREPL \), so is \( \txid' \).
+    That is,
+    \begin{equation}
+        \label{equ:get-max-match-overwritten-key}
+        \begin{array}{@{}l@{}}
+            \func{getMax}{\mkvsCOPS', \viREPL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viREPL'''}(\ke)  \\
+            {} \land \func{getMax}{\mkvsCOPS', \viCL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke) 
+        \end{array}
+    \end{equation}
+    Combine \cref{equ:get-max-match-all-other-key} and \cref{equ:get-max-match-overwritten-key},
+    we have the proof.
+
+    \item \rl{GetTrans}.
+    Since the views of replica remain unchanged, so we only need to prove that there exists a new key-value store and a new view \( \viCL''' \) such that
+    \[
+        \func{getMax}{\mkvsCOPS', \viCL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke) 
+    \]
+    
+\end{itemize}
+\end{proof}
