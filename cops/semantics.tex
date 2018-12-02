@@ -43,7 +43,7 @@ It is different from \( \snapshot \) as \( \snapshot \) fetches the latest versi
 \[
     \begin{rclarray}
         \func{getMax}{\mkvsCOPS, \viCL} & \defeq &
-        \lambda \ke \ldotp \left( \max_\txid\Setcon{(\val, \txid, \T, \dep)}{\exsts{i} (\val, \txid, \T, \dep) = \mkvsCOPS(\ke, i)} \right)\projection{1}
+        \lambda \ke \ldotp \left( \max_\txid\Setcon{(\val, \txid, \T, \dep)}{\exsts{i} (\val, \txid, \T, \dep) = \mkvsCOPS(\ke, i) \land i \in \viCL(\ke)} \right)\projection{1}
     \end{rclarray}
 \]
 \begin{mathpar}
@@ -181,13 +181,11 @@ on_receive(k,v,ver,deps) {
     }
 \end{mathpar}
 
-A view \( \vi \) on key-value store \( \mkvsCOPS \) \emph{agrees} 
-with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and only
-\[
- \func{getMax}{\mkvsCOPS, \vi} = \func{getMax}{\mkvsCOPS', \vi'}
-\]
-
-
+%A view \( \vi \) on key-value store \( \mkvsCOPS \) \emph{agrees} 
+%with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and only
+%\[
+ %\func{getMax}{\mkvsCOPS, \vi} = \func{getMax}{\mkvsCOPS', \vi'}
+%\]
 
 
 \begin{lemma}
@@ -197,6 +195,7 @@ with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and 
 
 
 \begin{theorem}[Well-formed COPS key-value]
+    \label{thm:cops-key-value-well-form}
     Let ignore the dependencies of versions from \( \mkvsCOPS \).
     Given the initial key-value store \( \mkvsCOPS_0 \), initial views \( \viewFunCOPS_0 \) and some programs \( \prog_0 \), for any \( \mkvsCOPS_i \) and \( \viewFunCOPS_i \)  such that: 
     \[
@@ -304,8 +303,120 @@ with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and 
     \end{itemize}
 \end{proof}
 
-\begin{theorem}
-\label{thm:cops-cc}
+
+The dependency of a transaction \( \depOf{\mkvsCOPS, \txid} \) is defined as:
+\begin{itemize}
+    \item if \( \txid \) is a single-write transaction:
+    \[
+        \begin{rclarray}
+            \depOf{\mkvsCOPS, \txid} & \defeq & 
+            \begin{array}[t]{@{}l@{}}
+                \dep  \ \text{where} 
+                \exsts{\ke,j} \lastConf(\tr)\projection{1}(\ke,j) = (\stub, \txid, \stub, \dep)  \\
+            \end{array}
+        \end{rclarray}
+    \]
+    \item if \( \txid \) is a read-only transaction:
+    \[
+        \begin{rclarray}
+            \depOf{\mkvsCOPS, \txid} & \defeq & 
+            \begin{array}[t]{@{}l@{}}
+                \bigcup_{\Setcon{\ver}{\exsts{\ke,j} \ver = \mkvsCOPS(\ke,j) \land \txid \in \RTx(\ver)}} \depOf{\ver} \\
+            \end{array}
+        \end{rclarray}
+    \]
+\end{itemize}
+
+Given a trace \( \tr \), 
+the function \( \func{maxVersion}{\tr, \txid} \) returns the version that the transaction \( \txid \) depends on
+and is the last one begin reduced:
+        \[
+        \begin{rclarray}
+            \func{maxVersion}{\tr, \txid} & \defeq & 
+            \begin{array}[t]{@{}l@{}}
+                \qquad \text{the \( \txid_i \) is the last one appears in \( \tr \) such that} \\
+                \qquad (\ke',\txid_i) \in \depOf(\lastConf(\tr)\projection{1}, \txid) \land \txid_i \notin \mkvsCOPS_i \land  \txid_i \notin \mkvsCOPS_{i+1}
+            \end{array}
+        \end{rclarray}
+    \]
+
+A COPS's semi-normal trace is a trace \( \tr \) if it is in the form that
+read-only transactions \( \txid_\rd \) directly follows its \( \func{maxVersion}{\tr, \txid_\rd} \) or another read-only transaction \( \txid_{\rd}' \) such that \( \func{maxVersion}{\tr, \txid_\rd}  =  \func{maxVersion}{\tr, \txid_{\rd}'}\).
+
+Give two COPS's traces \( \tr \) and \( \tr' \), \( \mkvsCOPS \) being the final state of \( \tr \) and \( \mkvsCOPS' \) for \(\tr'\),
+if the two traces are equivalent, if and only if,
+\[ 
+    \begin{array}{@{}l@{}}
+    \fora{\txid,\f,\dep} \txid \in \mkvsCOPS
+    \f = \func{RWset}{\txid,\mkvsCOPS} \land \dep =  \func{RWset}{\txid,\mkvsCOPS}
+    \implies
+    \txid \in \mkvsCOPS'
+    \f = \func{RWset}{\txid',\mkvsCOPS} \land \dep =  \func{RWset}{\txid',\mkvsCOPS}
+    \end{array}
+\]
+where \( \func{RWset}{\txid,\mkvsCOPS} \) is the read-write set of \( \txid \).
+Note that \( \func{RWset}{.} \) is well-defined by \cref{thm:cops-key-value-well-form}.
+
+\begin{corollary}
+    \label{lem:cops-semi-normal-trace}
+    \label{cor:cops-semi-normal-trace}
+    For any COPS's trace \( \tr \), there exists a equivalent semi-normal trace \( \tr' \) 
+    such that \( \lastConf(\tr) = \lastConf(\tr') \).
+\end{corollary}
+\begin{proof}
+    It is easy to prove by induction on the numbers of read-only transactions that are not in the wanted position.
+    Let take the first one for those read-only transactions \( \txid_\rd \) who does not follows its \( \func{maxVersion}{\tr, \txid_i} \).
+    It is safe to move the reduction step to the right in the trace,
+    until it directly follows its \( \func{maxVersion}{\tr, \txid_\rd} \) or another read-only transaction \( \txid_{\rd}' \) such that \( \func{maxVersion}{\tr, \txid_\rd}  =  \func{maxVersion}{\tr, \txid_{\rd}'}\). 
+\end{proof}
+
+A COPS's normal trace is a trace \( \tr \) if it is semi-normal trace and the single-write transactions commit in the same order of the transaction identifiers.
+
+\begin{theorem}[normal trace]
+    \label{thm:cops-normal-trace}
+    \label{lem:cops-normal-trace}
+    \label{cor:cops-normal-trace}
+    For any COPS's trace \( \tr \), there exists a equivalent normal trace \( \tr' \) such that
+\end{theorem}
+\begin{proof}
+    By \cref{cor:cops-semi-normal-trace}, let consider a semi-normal trace \( \tr \).
+    It is easy to prove by induction on the single-write transactions that are out of order.
+    Let take the first single-write transaction \( \txid = \txid{\repl}{\cl}{n}{n'} \) that is out of order.
+    Suppose it is the i-\emph{step}.
+    Assume \( \txid \) write to key \( \ke \) with value \( \val \).
+    Assume the preview write-only transaction \( \txid'  = \txid{\repl'}{\cl'}{n''}{n'''} \) and it follows \( (n,\repl,n') < (n'', \repl', n''') \).
+    It means if a view \( \vi \) includes both \( \txid \)  and \( \txid' \), and if \( \txid' \) also write to the same key \( \ke \) with value \( \val' \), the \( \vi \) will fetch the value from \( \txid' \):
+    \begin{equation}
+        \label{equ:out-order-wrte-older-value}
+        \func{getMax}{\mkvsCOPS_i,\vi}(\ke) = \val'
+    \end{equation}
+    The intuition here is to swap the reduction steps of these two transactions and those read-only transactions following them.
+    We assume \( \txid \)  and \( \txid' \) write to the same key, otherwise it is safe to swap.
+    For any read-only transactions \( \txid_{\rd} \in \T_{\rd} \) following \( \txid \), we knows \( \txid' \notin \depOf(\mkvsCOPS_i, \txid_{\rd}) \), otherwise it violate \( \func{maxVersion}{\tr, \txid_\rd} = \txid \).
+    Thus it is safe to swap the reduction steps.
+\end{proof}
+
+
+\begin{corollary}
+    \label{cor:get-max-to-get-snap}
+    For the \rl{Put} and \rl{GetTrans}, it is safe to replace the function \( \func{getMax}{.} \) with the function \( \getSN{.} \).
+\end{corollary}
+\begin{proof}
+    By \cref{thm:cops-normal-trace}, each trace \( \tr \) has an equivalent normal trace \( \tr' \).
+    Assume i-\emph{th} step in the trace \( \tr' \).
+    Assume the key-value store before is \( \mkvsCOPS_i \).
+    For any versions \( m \) and \( j \) from the same key in the \( \tr' \):
+    \[
+        0 < m < j < \abs{\mkvsCOPS_i(\ke)} \implies \WTx(\mkvsCOPS_i(\ke,m)) <  \WTx(\mkvsCOPS_i(\ke,j))
+    \]
+    thus it is safe to use \( \getSN{.} \).
+\end{proof}
+
+Given \cref{thm:cops-key-value-well-form} and \cref{cor:get-max-to-get-snap}, for any COPS's trace \( \tr \), 
+there exists a trace \( \tr' \) that is a normal trace and satisfies \( \ET_\top \).
+
+\begin{theorem}[COPS satisfying causal consistency]
+    \label{thm:cops-cc}
     Given a trace starting from the initial key-value store \( \mkvsCOPS_0 \), initial views \( \viewFunCOPS_0 \) and some programs \( \prog_0 \), for any \( \mkvsCOPS_i \) and \( \viewFunCOPS_i \)  such that: 
     \[
         \mkvsCOPS_i, \viewFunCOPS_i, \thdenv_i, \prog_i \toG{\viCL,\f} \mkvsCOPS_{i+1}, \viewFunCOPS_{i+1}, \thdenv_{i+1}, \prog_{i+1} 
@@ -430,109 +541,60 @@ with another view \( \vi \) on another key-value store \( \mkvsCOPS' \), if and 
     \end{itemize}
 \end{proof}
 
-\begin{theorem}
-    For any trace \( \tr \) of COPS with final configuration \( (\mkvsCOPS, \viewFunCOPS) \), 
-    there exists a trace \( \tr' \) with final configuration \( (\mkvsCOPS', \viewFunCOPS') \) such that 
-    each step of the trace \( \tr' \) commits a transaction with strictly greater transaction identifier than any one appearing in the key-value store:
+\begin{theorem}[COPS satisfy parallel snapshot isolation]
+    For any COPS's trace \( \tr \) starting from the initial key-value store \( \mkvsCOPS_0 \), initial views \( \viewFunCOPS_0 \) and some programs \( \prog_0 \), 
+    there exists an equivalent trace \( \tr' \) where \( \mkvsCOPS'_i \) and \( \viewFunCOPS'_i \)  such that: 
     \[
-        \begin{array}{@{}l@{}}
-        (\mkvsCOPS_i, \viewFunCOPS_i) 
-        \toG{} (\mkvsCOPS_{i+1}, \viewFunCOPS_{i+1}) 
-        \land \exsts{\txid} \txid \in \mkvsCOPS_{i+1} 
-        \land \txid \notin \mkvsCOPS_{i+1}
-        \implies \fora{\txid' \in \mkvsCOPS_i} \txid > \txid'
-        \end{array}
+        \mkvsCOPS'_i, \viewFunCOPS'_i, \thdenv'_i, \prog'_i \toG{\viCL',\f'} \mkvsCOPS'_{i+1}, \viewFunCOPS'_{i+1}, \thdenv'_{i+1}, \prog'_{i+1} 
     \]
-    and any replica's view from \( \viewFunCOPS \) agrees with its counterpart from  \( \viewFunCOPS' \):
+    then the i-\emph{th} step satisfies \( \ET_\PSI \), \ie
     \[
-        \fora{i} 
-        \func{getMax}{\mkvsCOPS, \viewFunCOPS(i)} = \func{getMax}{\mkvsCOPS', \viewFunCOPS'(i)}
+        \ET_\PSI \vdash ( \mkvsCOPS'_i, \viCL' ) \csat \f' : \viewFunCOPS'_{i+1}(\cl)
     \]
 \end{theorem}
 \begin{proof}
+    By \cref{thm:cops-cc}, we already the trace \( \tr \) satisfying \( \ET_\CC \).
+    It is sufficient to construct the trace \( \tr' \) so that 
+    \( \ET_\PSI \vdash ( \mkvsCOPS'_i, \viCL' ) \csat \f' : \viewFunCOPS'_{i+1}(\cl) \) since \( \ET_\PSI = \ET_\CC \cap \ET_\UA\).
+    We inductively alter all single-write transactions \( \txid \) that 
+    does not start with a view containing all the versions for the key the transactions \( \txid \) want to write.
+    Initially let \( \tr' = \tr \).
+    Let pick the first single-write transaction \( \txid \), assuming it is i-\emph{step}, 
+    who installs a version \( \mkvsCOPS_{i+1}(\ke,j) = (\val,\txid,\T,\dep )\) with a initial view \( \viCL \) does not contain all versions \( \mkvsCOPS_i(\ke,m) \)
+    for some key \( \ke \), client \( \cl \) and index \( m \) and \( j \).
+    Since \( \txid \) is the first transaction does not contain all versions \( \mkvsCOPS_i(\ke,m) \),
+    it means the view \( \viCL \) does not include only the last version \( \mkvsCOPS_i(\ke,j-1) \).
+    Suppose the version \( \mkvsCOPS_i(\ke,j-1) = (\val',\txid',\T',\dep' ) \) for some transaction \( \txid' \).
+    Note that \( \txid' \)  and \( \txid \) comes from different client, otherwise it violate \( \ET_\RYW \).
+    Thus let assume the initial view for \( \txid' \) is \( \viCL[\cl'] \) for client \( \cl' \) such that \( \cl' \neq \cl \).
+    We performance case analysis as the following.
+    \begin{itemize}                                                               
+        \item Suppose \( \depOf(\txid') \subseteq \depOf(\txid_\rd) \), for all read-only transactions \( \txid_\rd \in \T \).
+            It means it is safe to include \( j-1 \) version into \( \viCL \),
+            \ie the new initial view for \( \txid \) is \( \viCL' = \viCL\rmto{\ke}{j-1} \).
+            Given that, all the initial views for the read-only transactions \( \txid_\rd \in \T \) also include \( \mkvsCOPS(\ke,j) \).
+            Yet because \( \depOf(\txid') \subseteq \depOf(\txid_\rd) \), the version \(\mkvsCOPS(\ke,j)  \) is already in the initial view of \( \txid_\rd \).
+            By the new initial view \( \viCL' \), it is easy to see 
+            \( \ET_\UA \vdash (\mkvsCOPS_i, \viCL') \csat \Set{(\otW, \ke, \val)}, \viCL'' \).
+        \item there exists a read-only transaction \( \txid_\rd \in \T \) such that 
+              \( \depOf(\txid') \not\subseteq \depOf(\txid_\rd) \).
+              \begin{itemize}
+                  \item If it is safe to include \( \depOf(\txid') \) into \( \depOf(\txid_\rd) \), consequently changing the initial for \( \txid_\rd \), for all read-only transactions \( \txid_\rd \in \T \), then we are back to the first case.
+                  \item If there exists a read-only transaction \( \txid_\rd \) that is not safe to include \( \depOf(\txid') \).
+                      That is, there exists a single-write transaction  \( \txid'' \) who installs a version \( \mkvsCOPS_i(\ke',x)\) for a key \( \ke' \) and a index \( x \) and the \( \txid_\rd \) read this version.
+                      Given that it is not safe for  \( \depOf(\txid_\rd) \) to includes \( \depOf(\txid') \), 
+                      there exists anther version \( \mkvsCOPS_i(\ke',y) \) for the same key \( \ke' \) and a index \( y \) such that \( y > x \).
+                      It follows 
+                      \[ 
+                        \depOf{\mkvsCOPS_i(\ke',x)} \subseteq \depOf{\mkvsCOPS_i(\ke',y) \subseteq \depOf{\txid'} } 
+                      \]
+                      therefore 
+                      \[
+                          \fora{\txid'_\rd \in \T'} \depOf{\mkvsCOPS_i(\ke',x)} \subseteq \depOf{ \txid'_\rd}
+                      \]
+            \end{itemize}
+    \end{itemize}
 \end{proof}
 
-\begin{lemma}
-\[
-    \begin{array}{@{}l@{}}
-    \fora{\repl, \cl, \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'', \viREPL, \viREPL', \viREPL'', \viCL, \viCL', \viCL'', \stk, \stk', \cmd, \cmd'} \\
-    \quad \func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
-    \land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
-    \qquad \repl, \cl \vdash 
-    \mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
-    \mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
-    \qquad \implies 
-    \exsts{\mkvsCOPS''', \viREPL'''}
-    \mkvsCOPS'', \viREPL'', \viCL'', \stk, \cmd \toT{}
-    \mkvsCOPS''', \viREPL''', \viCL', \stk', \cmd' \\
-    \qquad \func{getMax}{\mkvsCOPS', \viREPL'} = \func{getMax}{\mkvsCOPS''', \viREPL'''} 
-    \land \func{getMax}{\mkvsCOPS', \viCL'} = \func{getMax}{\mkvsCOPS''', \viCL'''} \\
-    \end{array}
-\]
-\end{lemma}
-\begin{proof}
-We perform case analysis.
-\begin{itemize}
-    \item \rl{Put}.
-    We have \( \cmd \equiv \ptrans{\pmutate{\ke}{\vx};} \) for some key \( \ke \) and variable \( \vx \).
-    Suppose key-value stores \(  \mkvsCOPS, \mkvsCOPS', \mkvsCOPS'' \), 
-    replica's views \( \viREPL, \viREPL', \viREPL''\) and client's views \( \viCL, \viCL', \viCL''\) such that
-    \[
-    \begin{array}{@{}l@{}}
-    \func{getMax}{\mkvsCOPS, \viREPL} = \func{getMax}{\mkvsCOPS'', \viREPL''} 
-    \land \func{getMax}{\mkvsCOPS, \viCL} = \func{getMax}{\mkvsCOPS'', \viCL''} \\
-    \qquad \repl, \cl \vdash 
-    \mkvsCOPS, \viREPL, \viCL, \stk, \cmd \toT{}
-    \mkvsCOPS', \viREPL', \viCL', \stk', \cmd' \\
-    \end{array}
-    \]
-    By the premiss of the \rl{Put} rule, the new key-value store
-    \[
-        \mkvsCOPS' = \mkvsCOPS\rmto{\ke}{\mkvsCOPS(\ke) \lcat \List{(\ke, \txid, \emptyset, \dep)}}
-    \]
-    where
-    \[
-        \txid = \min\Setcon{%
-            \txidCOPS{\repl}{\cl}{n'}{0}
-        }{%
-            \fora{\ke', i \in \viREPL(\ke'), n} \\
-            \quad \txidCOPS{\stub}{\stub}{n}{\stub} = \WTx(\mkvsCOPS(\ke',i)) \\
-            \qquad {} \implies n' > n 
-        } 
-    \]
-    and the new views of replica and client are
-    \[   
-        \begin{array}{@{}l@{}}
-        \viREPL' = \viREPL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}} \\
-        {} \land \viCL' = \viCL\rmto{\ke}{\viREPL(\ke) \uplus \Set{\abs{\mkvsCOPS'(\ke)} - 1}}
-        \end{array}
-    \]
-    Similarly there exists a new \( \mkvsCOPS''' \) by committing a single-write transaction \( \txid' \) and two new views \( \viREPL''' \) and \( \viCL''' \).
-    This means for those key \( \ke' \) that is different from the key \( \ke \) being overwritten,
-    \begin{equation}
-        \label{equ:get-max-match-all-other-key}
-        \begin{array}{@{}l@{}}
-            \func{getMax}{\mkvsCOPS', \viREPL'}(\ke') = \func{getMax}{\mkvsCOPS''', \viREPL'''}(\ke') \\
-            {} \land \func{getMax}{\mkvsCOPS', \viCL'}(\ke') = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke') 
-        \end{array}
-    \end{equation}
-    Note that the \( \txid \) is greater than any writers \( \txidCOPS{\repl}{\cl}{n'}{0} \) that can be observed by the \( \viREPL \), so is \( \txid' \).
-    That is,
-    \begin{equation}
-        \label{equ:get-max-match-overwritten-key}
-        \begin{array}{@{}l@{}}
-            \func{getMax}{\mkvsCOPS', \viREPL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viREPL'''}(\ke)  \\
-            {} \land \func{getMax}{\mkvsCOPS', \viCL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke) 
-        \end{array}
-    \end{equation}
-    Combine \cref{equ:get-max-match-all-other-key} and \cref{equ:get-max-match-overwritten-key},
-    we have the proof.
 
-    \item \rl{GetTrans}.
-    Since the views of replica remain unchanged, so we only need to prove that there exists a new key-value store and a new view \( \viCL''' \) such that
-    \[
-        \func{getMax}{\mkvsCOPS', \viCL'}(\ke) = \stk(\vx) = \func{getMax}{\mkvsCOPS''', \viCL'''}(\ke) 
-    \]
-    
-\end{itemize}
-\end{proof}
+
