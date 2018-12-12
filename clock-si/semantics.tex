@@ -1,0 +1,151 @@
+\subsection{Clock-SI}
+
+\subsubsection{Code}
+\renewcommand{\thelstlisting}{\arabic{lstlisting}}
+\lstinputlisting{\RootPath/clock-si/pseudocode}
+
+\subsubsection{Semantics the code}
+
+Database is partitioned into several \emph{shards}.
+A shard \(\sd \in \sds \subseteq \Shards \)  contains some keys which are disjointed from keys in other shards.
+The \( \func{shardOf}{\ke} \) denotes the shard where the key \( ke \) locates.
+
+Shards and clients are associated with clock times, \(  \ct \in \ClockTimes \defeq \nat \), which represent the current times of shards and clients.
+We use notation \( \cts \in (\Shards \cup \ClientID ) \parfinfun \ClockTimes\).
+
+
+
+\begin{lstlisting}[caption={read},label={lst:simplified-read}]
+startTransaction( Trans t, Time ts ) {
+    wait until ts < getClockTime();
+    t.snapshotTime = getClockTime();
+    t.state = active;
+}
+\end{lstlisting}
+
+\[
+    \inferrule[timeTick]{ }{%
+        \mkvs, \cts, \thdenv, \prog \toG{}
+        \mkvs, \cts\rmto{\sd}{\cts(\sd) + 1}, \thdenv, \prog
+    }
+\]
+
+\[
+    \inferrule[startTrans]{ 
+            \ct_\cl < \cts(\sd)
+        }{%
+            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \ptrans{\trans} \toT{}
+            \mkvs, \ct_\cl, \cts, \stk, \runtrans{\trans}{\cts(\sd)}{\emptyset}
+        }
+\]
+
+
+The clock-SI protocol includes some codes related to performance which does not affect the correctness.
+Clock-SI distinguishes a local read/commit and a remote read/commit,
+yet it is sufficient to assume all the read and commit are ``remote'',
+while the local read and commit can be treated as self communication.
+Similarly we assume a transaction always commits to several shards.
+\begin{lstlisting}[caption={read},label={lst:simplified-read}]
+On receive ``read(t,k)'' {
+
+    if ( k in t.ws ) return ws(k);
+
+    asssert( t.snapshotTime < getClockTime() )
+    for t' that writes to k:
+        if(t.snapshotTime > t'.preparedTime || t.snapshotTime > t'.committingTime) 
+            asssert( t.state == committed )
+
+    return K(k,i) where i is the latest version before t.snapshotTime
+}
+\end{lstlisting}
+
+\[
+    \inferrule[readTrans]{ 
+            \ke = \evalE{\expr} \\
+            (\otW, \ke, \val ) \in \f \\
+        }{%
+            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{}
+            \mkvs, \ct_\cl, \cts, \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
+        }
+\]
+
+\[
+    \inferrule[readRemote]{ 
+            \ke = \evalE{\expr} \\
+            (\otW, \ke, \stub ) \notin \f \\
+            \ct < \cts(\func{shardOf}{\ke}) \\
+            n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \\
+            \mkvs(\ke, i) = (\val, \txid, \stub)
+        }{%
+            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{}
+            \mkvs, \ct_\cl, \cts, \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
+        }
+\]
+
+
+\[
+    \inferrule[write]{ 
+            \ke = \evalE{\expr_1} \\
+            \val = \evalE{\expr_2} \\
+        }{%
+            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pmutate{\expr_1}{\expr_2}}{\ct}{\f} \toT{}
+            \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pskip}{\ct}{\f \addO (\otW, \ke, \val)}
+        }
+\]
+
+Note that it uses two phase commit that
+the coordinator (the shard that the client directly connects to) distinguishes ``committing'' state  and ``committed'' state, where in between the coordinator pick the committing time and log the write set,
+and the participants distinguishes ``prepared'' state and ``committed'' state.
+Such operations are for possible network partition or single shard errors and allowed a more fine-grain implementations which do not affect the correctness, therefore it suffices to assume they are one atomic step.
+
+\begin{lstlisting}[caption={commit},label={lst:simplified-commit}]
+commit( Trans t )
+    for p in t.updatedPartitions
+        send ``prepare t'' to p;
+    wait receiving ``t prepared'' from all participants, store into prep;
+    t.state = committing;
+    t.commitTime = max(prep);
+    log t.commitTime;
+    t.state = committed;
+    for p in t.updatedPartitions
+        send ``commit t'' to p;
+
+On receiving ``prepare t''
+    if noConcurrentWrite(t)
+        log t.ws to t.coordinator ID
+        t.state = prepared;
+        t.prepareTime = getClockTime();
+        send ``t prepared'' to t.coordinator
+
+On receiving ``commit t''
+    log t.commitTime
+    t.state = committed
+\end{lstlisting}
+
+\[
+\begin{rclarray}
+    \func{commitKV}{\mkvs,\ct,\txid,\f \uplus \Set{(\otR,\ke,\val)}} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+    \texttt{let} \ n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \\
+    \texttt{and} \ \mkvs(\ke,i) = (\val, \txid^n, \T) \\
+    \texttt{in} \ \mkvs\rmto{\ke}{\mkvs(\ke)\rmto{i}{(\val, \txid^n, \T \cup \Set{\txid})}}
+    \end{array} \\
+    \func{commitKV}{\mkvs,\ct,\txid,\f \uplus \Set{(\otW,\ke,\val)}} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+    \mkvs\rmto{\ke}{\mkvs(\ke) \lcat \List{(\val, \txid, \emptyset)}}
+    \end{array} \\
+\end{rclarray}
+\]
+
+\[
+    \inferrule[commit]{ 
+        \fora{\ke} (\otW, \ke, \stub) \in \f \land \WTx(\mkvs(\ke,\abs{\mkvs(\ke)} - 1)) < \ct \\
+        n = \max\left( \Setcon{\ct'}{\exsts{\ke} (\otW, \ke, \stub) \in \f \land \ct' = \cts(\func{shardOf}{\ke})} \cup \Set{\ct} \right) \\
+        \fora{\sd}
+        \left( \sd \in \Setcon{\func{shardOf}{\ke}}{(\otW, \ke, \stub) \in \f} \implies \cts'(\sd) = \cts(\sd) + 1 \right) \lor (\cts'(\sd) = \cts(\sd)) \\
+        \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\f}
+        }{%
+            \sd, \cl \vdash \mkvs, \ct_\cl, \cts', \stk, \runtrans{\pskip}{\ct}{\f} \toT{}
+            \mkvs', n, \cts, \stk, \pskip
+        }
+\]
