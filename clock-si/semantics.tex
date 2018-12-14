@@ -10,32 +10,26 @@ Database is partitioned into several \emph{shards}.
 A shard \(\sd \in \sds \subseteq \Shards \)  contains some keys which are disjointed from keys in other shards.
 The \( \func{shardOf}{\ke} \) denotes the shard where the key \( ke \) locates.
 
-Shards and clients are associated with clock times, \(  \ct \in \ClockTimes \defeq \nat \), which represent the current times of shards and clients.
+Shards and clients are associated with clock times, \(  \ct \in \ClockTimes \defeq \Nat \), which represent the current times of shards and clients.
 We use notation \( \cts \in (\Shards \cup \ClientID ) \parfinfun \ClockTimes\).
 
 
 
-\begin{lstlisting}[caption={read},label={lst:simplified-read}]
+\begin{lstlisting}[caption={start transaction},label={lst:clock-si-start-trans}]
 startTransaction( Trans t, Time ts ) {
-    wait until ts < getClockTime();
+    assert(ts < getClockTime()); (*\label{line:check-local-time}*)
     t.snapshotTime = getClockTime();
     t.state = active;
 }
 \end{lstlisting}
 
 \[
-    \inferrule[timeTick]{ }{%
-        \mkvs, \cts, \thdenv, \prog \toG{}
-        \mkvs, \cts\rmto{\sd}{\cts(\sd) + 1}, \thdenv, \prog
-    }
-\]
-
-\[
     \inferrule[startTrans]{ 
-            \ct_\cl < \cts(\sd)
+        \ct_\cl < \cts(\sd) \quad \texttt{---> \cref{lst:clock-si-start-trans}, \cref{line:check-local-time}}\\\\
+        \cts' = \cts\rmto{\func{shardOf}{\ke}}{\cts(\func{shardOf}{\ke}) + 1} \quad \texttt{--->  simulate time elapses}
         }{%
-            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \ptrans{\trans} \toT{}
-            \mkvs, \ct_\cl, \cts, \stk, \runtrans{\trans}{\cts(\sd)}{\emptyset}
+            \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \ptrans{\trans} \toT{\cl,\ct,\perp}
+            \mkvs, \ct_\cl, \cts', \stk, \runtrans{\trans}{\cts(\sd)}{\emptyset}
         }
 \]
 
@@ -47,24 +41,25 @@ while the local read and commit can be treated as self communication.
 Similarly we assume a transaction always commits to several shards.
 \begin{lstlisting}[caption={read},label={lst:simplified-read}]
 On receive ``read(t,k)'' {
+    if ( k in t.ws ) return ws(k); (*\label{line:read-from-local}*)
 
-    if ( k in t.ws ) return ws(k);
-
-    asssert( t.snapshotTime < getClockTime() )
+    asssert( t.snapshotTime < getClockTime() ) (*\label{line:snapshot-time-grt-than-shard}*)
     for t' that writes to k:
-        if(t.snapshotTime > t'.preparedTime || t.snapshotTime > t'.committingTime) 
+        if(t.snapshotTime > t'.preparedTime 
+                    || t.snapshotTime > t'.committingTime) 
             asssert( t.state == committed )
 
-    return K(k,i) where i is the latest version before t.snapshotTime
+    take the latest version before t.snapshotTime: i (*\label{line:read-i-from-shard}*)
+    return K(k,i) 
 }
 \end{lstlisting}
 
 \[
     \inferrule[readTrans]{ 
             \ke = \evalE{\expr} \\
-            (\otW, \ke, \val ) \in \f \\
+            (\otW, \ke, \val ) \in \f \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-from-local}}\\
         }{%
-            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{}
+        \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{\cl,\ct,\perp}
             \mkvs, \ct_\cl, \cts, \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
         }
 \]
@@ -73,12 +68,13 @@ On receive ``read(t,k)'' {
     \inferrule[readRemote]{ 
             \ke = \evalE{\expr} \\
             (\otW, \ke, \stub ) \notin \f \\
-            \ct < \cts(\func{shardOf}{\ke}) \\
-            n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \\
-            \mkvs(\ke, i) = (\val, \txid, \stub)
+            \ct < \cts(\func{shardOf}{\ke}) \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:snapshot-time-grt-than-shard}} \\\\
+            n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-i-from-shard}} \\\\ 
+            \mkvs(\ke, i) = (\val, \txid, \stub) \\
+            \cts' = \cts\rmto{\func{shardOf}{\ke}}{\cts(\func{shardOf}{\ke}) + 1} \quad \texttt{--->  simulate time elapses} 
         }{%
-            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{}
-            \mkvs, \ct_\cl, \cts, \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
+        \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{\cl,\ct,\perp}
+            \mkvs, \ct_\cl, \cts', \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
         }
 \]
 
@@ -88,7 +84,7 @@ On receive ``read(t,k)'' {
             \ke = \evalE{\expr_1} \\
             \val = \evalE{\expr_2} \\
         }{%
-            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pmutate{\expr_1}{\expr_2}}{\ct}{\f} \toT{}
+            \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pmutate{\expr_1}{\expr_2}}{\ct}{\f} \toT{\cl,\ct,\perp}
             \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pskip}{\ct}{\f \addO (\otW, \ke, \val)}
         }
 \]
@@ -102,24 +98,24 @@ Such operations are for possible network partition or single shard errors and al
 commit( Trans t )
     for p in t.updatedPartitions
         send ``prepare t'' to p;
-    wait receiving ``t prepared'' from all participants, store into prep;
-    t.state = committing;
-    t.commitTime = max(prep);
+    wait receiving ``t prepared'' from all participants, store into prep; (*\label{line:pick-time-1}*)
+    t.state = committing; (*\label{line:pick-time-2}*)
+    t.commitTime = max(prep); (*\label{line:pick-time-3}*)
     log t.commitTime;
     t.state = committed;
     for p in t.updatedPartitions
         send ``commit t'' to p;
 
 On receiving ``prepare t''
-    if noConcurrentWrite(t)
+    if noConcurrentWrite(t) (*\label{line:check-concur-write}*)
         log t.ws to t.coordinator ID
         t.state = prepared;
         t.prepareTime = getClockTime();
         send ``t prepared'' to t.coordinator
 
 On receiving ``commit t''
-    log t.commitTime
-    t.state = committed
+    log t.commitTime (*\label{line:clock-si-commit-1}*)
+    t.state = committed  (*\label{line:clock-si-commit-2}*)
 \end{lstlisting}
 
 \[
@@ -139,13 +135,87 @@ On receiving ``commit t''
 
 \[
     \inferrule[commit]{ 
-        \fora{\ke} (\otW, \ke, \stub) \in \f \land \WTx(\mkvs(\ke,\abs{\mkvs(\ke)} - 1)) < \ct \\
-        n = \max\left( \Setcon{\ct'}{\exsts{\ke} (\otW, \ke, \stub) \in \f \land \ct' = \cts(\func{shardOf}{\ke})} \cup \Set{\ct} \right) \\
+        \fora{\ke,i} (\otW, \ke, \stub) \in \f \land \WTx(\mkvs(\ke,i) < \ct \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:check-concur-write}} \\\\  
+        n = \max\left( \Setcon{\ct'}{\exsts{\ke} (\otW, \ke, \stub) \in \f \land \ct' = \cts(\func{shardOf}{\ke})} \cup \Set{\ct} \right) \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:pick-time-1,line:pick-time-2,line:pick-time-3}} \\\\
+        \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\f} \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:clock-si-commit-1,line:clock-si-commit-2}} \\\\
         \fora{\sd}
-        \left( \sd \in \Setcon{\func{shardOf}{\ke}}{(\otW, \ke, \stub) \in \f} \implies \cts'(\sd) = \cts(\sd) + 1 \right) \lor (\cts'(\sd) = \cts(\sd)) \\
-        \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\f}
+        \left( \sd \in \Setcon{\func{shardOf}{\ke}}{(\otW, \ke, \stub) \in \f} \implies \cts'(\sd) = \cts(\sd) + 1 \right) \lor (\cts'(\sd) = \cts(\sd)) \quad \texttt{--->  simulate time elapses}
         }{%
-            \sd, \cl \vdash \mkvs, \ct_\cl, \cts', \stk, \runtrans{\pskip}{\ct}{\f} \toT{}
+            \sd, \cl \vdash \mkvs, \ct_\cl, \cts', \stk, \runtrans{\pskip}{\ct}{\f} \toT{\cl,\ct,n}
             \mkvs', n, \cts, \stk, \pskip
         }
 \]
+
+\[
+    \inferrule[timeTick]{ }{%
+        \mkvs, \cts, \cts', \thdenv, \prog \toG{\epsilon}
+        \mkvs, \cts, \cts'\rmto{\sd}{\cts(\sd) + 1}, \thdenv, \prog
+    }
+\]
+
+\[
+    \inferrule[ClientCommit]{ 
+            \cl \vdash 
+            \mkvs, \cts(\cl), \cts', \thdenv(\cl), \prog(\cl) \toT{\cl,\ct',\ct''}
+            \mkvs', \ct, \cts'', \stk, \cmd
+        }{%
+            \mkvs, \cts, \cts', \thdenv, \prog \toG{\cl,\ct',\ct''}
+            \mkvs, \cts\rmto{\cl}{\ct}, \cts'', \thdenv\rmto{\cl}{\stk}, \prog\rmto{\cl}{\cmd}
+        }
+\]
+
+\begin{lemma}[Strictly monotonic writers]
+    Each version for a key has a writer with strictly greater clock time than any versions before:
+    \[
+        \begin{array}{@{}l@{}}
+            \fora{\mkvs,\ke,i,j,\txid^n,\txid^m} 
+            \WTx(\mkvs(\ke,i)) = \txid^n 
+            \land \WTx(\mkvs(\ke,j)) = \txid^m 
+            \land i < j
+            \implies 
+            n < m
+        \end{array}
+    \]
+\end{lemma}
+
+\begin{lemma}[Reader greater than writer]
+    All the readers of a version has strictly greater clock time:
+    \[
+        \begin{array}{@{}l@{}}
+            \fora{\mkvs,\ke,i,\txid^n,\txid^m} 
+            \WTx(\mkvs(\ke,i)) = \txid^n 
+            \land \txid^m \in \RTx(\mkvs(\ke,j))
+            \implies 
+            n < m
+        \end{array}
+    \]
+\end{lemma}
+
+\begin{theorem}
+
+A clock-SI trace \( \tr \) is a clock-SI normal trace if it satisfies the following:
+there is no interleaving of a transaction,
+\begin{equation}
+    \label{equ:clock-si-no-interleaving}
+    \begin{array}{@{}l@{}}
+        \fora{\cl,\ct, \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i} \\
+        \quad \tr = \cdots \toG{\cl,\ct,\perp} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub} \cdots \\
+        \qquad \implies \exsts{\ct', \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j} \\
+        \qquad \tr = \cdots \toG{\cl,\ct,\perp} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\cl,\ct,\perp} \stub \toG{\cl,\ct,\perp} \\
+        \qqqquad \cdots \toG{\cl,\ct,\ct'} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j
+    \end{array}
+\end{equation}
+and transactions in the trace appear in the committing order, 
+\begin{equation}
+    \label{equ:clock-si-commit-order}
+    \begin{array}{@{}l@{}}
+        \fora{\cl,\cl',\ct, \ct' \mkvs_i, \mkvs_j, \cts_i, \cts_j, \cts'_i, \cts'_j, \thdenv_i, \thdenv_j,  \prog_i, \prog_j} \\
+        \quad \tr = \cdots \toG{\cl,\stub,\ct} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub}  \cdots \toG{\cl',\stub,\ct'} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j \\
+        \qquad \implies \ct < \ct'
+    \end{array}
+\end{equation}
+For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr' \) which has the same final configuration as \( \tr \).
+\end{theorem}
+\begin{proof}
+    Given a trace \( \tr \), we first construct a trace ( \tr' \)  that satisfies \cref{equ:clock-si-commit-order}.
+\end{proof}
