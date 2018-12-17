@@ -1,0 +1,128 @@
+\section{Program Analysis}
+
+Contents: \\
+transactional implementation of a counter. \\
+Counter is not robust when a 
+weak consistency model (i.e. causal consistency, in practice anything that does not 
+guarantee both write-conflict detection and monotonic reads) is assumed. \\
+A single counter is robust as long as the consistency model used by the database 
+guarantees both write-conflict detection and monotonic reads.\\
+Multiple counters are not robust even when monotonic reads and write-conflict 
+detection are guaranteed by the database. In particular, multiple counters are 
+not robust when PSI is guaranteed by the database.\\
+Multiple counters are robust if a stronger consistency models, such as SI, is employed 
+by the database.
+
+\paragraph{Counter Code}
+\[
+\begin{array}{lrlr}
+\mathsf{inc}(\ke) = &
+\begin{session}
+\begin{transaction}
+\pderef{\pv{a}}{\ke};\\
+\pmutate{\ke}{\pv{a}+1};
+\end{transaction}
+\end{session}
+&
+\hspace{10pt}\mathsf{read}(\ke) = &
+\begin{session}
+\begin{transaction}
+\pderef{\pv{a}}{\ke};\\
+\end{transaction}
+\end{session}
+\end{array}
+\]
+
+For the moment, we assume that the key-value store contains a single object $\ke$. 
+Also, clients can interact with the key-value store only by invoking the $\mathsf{inc}(\ke)$ and 
+$\mathsf{read}(\ke)$ operations.
+Given the transactional code 
+$\ptrans{\trans}$, we define $\opset(\hh, \vi, \ptrans{\trans})$ 
+to be the fingerprint that would be produced by a client that has view $\vi$ 
+over the kv-store $\hh$, upon executing $\ptrans{\trans}$.
+For example, we have that 
+%$\opset(\hh, \vi, \mathsf{inc}(\ke))$ is the fingerprint generated 
+%by a client $\cl$ with view $\vi$ after executing the operation $\mathsf{inc}(\ke)$. 
+%Specifically, 
+$\opset(\hh, \vi, \mathsf{inc}(\ke)) = \{(\otR, \ke, n), (\otW, \ke, n+1) \mid 
+n = \snapshot(\hh, \vi)\}$. Similarly, $\opset(\hh, \vi ,\mathsf{read}(\ke)) = 
+\{(otR, \ke, n) \mid n = \snapshot(\hh, \vi)\}$.
+A transactional module is a set of transaction codes $\{\ptrans{\trans_i}_{i \in I}\}$.
+Given an execution test $\ET$, and a transactional module $\{\ptrans{\trans_i}\}_{i \in I}$, 
+we define the set of valid $\ET$-traces for the transactional module as the set 
+$\mathsf{Traces}(\ET, \{\ptrans{\trans_i}\}_{i \in I})$ 
+of $\ET$-traces in which only $\ET$-reductions of the form 
+\[
+(\hh, \viewFun) \xrightarrowtriangle{\left(\cl, \opset\left(\hh, \viewFun(\cl), \ptrans{\trans_{i}}\right)\right)}_{\ET} (\hh', \viewFun')
+\]
+are allowed. 
+We also let $\mathsf{KVStores}(\ET, \{\ptrans{\trans_i}\}_{i \in I})$ be the set of kv-stores 
+that can be obtained when clients can only perform operations from $\{\ptrans{\trans_i}\}_{i \in I}$ 
+under the execution test $\ET$. Specifically, 
+\[
+\mathsf{KVStores}(\ET, \{\ptrans{\trans_i}\}_{i \in I}) = \{ \hh \mid \left( (\hh_0, \viewFun_{0}) \xrightarrowtriangle{\cdot}_{\ET} \cdots 
+\xrightarrowtriangle{\cdot}_{\ET} (\hh, \_)\right) \in \mathsf{Traces}(\ET, \{\ptrans{\trans_{i}}\}_{i \in I}) \}.
+\]
+
+\paragraph{Anomaly under Causal Consistency.}
+It is well known that even when the key-value store consists of a single object $\ke$, which 
+can be manipulated via the $\mathsf{inc}(\ke)$ and $\mathsf{read}(\ke)$ transactions, 
+then it is possible to obtain non-serialisable executions over the kv-store. Henceforth, 
+we write $(\hh, \viewFun) \xrightarrowtriangle{(\cl, \ptrans{\trans})}_{\ET} (\hh', \viewFun')$ 
+as a shorthand for $(\hh, \viewFun) \xrightarrowtriangle{\left(\cl, \opset\left(\hh, \viewFun(\cl), \ptrans{\trans}\right)\right)}_{\ET} (\hh', \viewFun')$. 
+For simplicity, let us assume that $\Keys = \ke$.
+Let $\hh_{0} = [\ke \mapsto (0, \txid_{0}, \emptyset)]$,  
+$\hh_1 = [\ke \mapsto (0, \txid_{0}, \{\txid_{\cl_1}^{1}\} \lcat (0, \txid_{\cl_1}^{1}, \emptyset)$, 
+$\hh_2 = [\ke \mapsto (0, \txid_{0}, \{\txid_{\cl_1}^{1}, \txid_{\cl_2}^{1}\}) \lcat (0, \txid_{\cl_1}^{1}, \emptyset) 
+\lcat (0, \txid_{\cl_2}^{1}, \emptyset)$. Let also
+$\vi_{0} = [\ke \mapsto {0}]$. Then we have that 
+\[
+(\hh_{0}, [\cl_1 \mapsto \vi_0, \cl_2 \mapsto \vi_0]) \xrightarrowtriangle{(\cl_1, \mathsf{inc(\ke)})}_{\ET_{\CC}} 
+(\hh_1, [\cl_1 \mapsto \_, \cl_2 \mapsto \vi_0]) \xrightarrowtriangle{(\cl_1, \mathsf{inc(\ke)})}_{\ET_{\CC}} 
+(\hh_2, \_).
+\]
+If we now draw the dependency graph $\graphof(\hh_2)$, we immediately find a cycle of the form 
+$\txid_{\cl_1}^{1} \xrightarrow{\AD(\ke)} \txid_{\cl_2}^{1} \xrightarrow{\AD(\ke)} \txid_{\cl_1}^{1}$, 
+which proves that $\hh_2$ cannot be obtained in any serialisable execution.
+
+\paragraph{Robustness of a Single counter under Parallel Snapshot Isolation.}
+In practice we show that a single counter is robust under any consistency model 
+that guarantees both write conflict detection (formalised by the execution test 
+$\ET_{\UA}$) and monotonic reads (formalised by the execution test $\ET_{\MRd}$). 
+\begin{proposition}
+\label{prop:counter_hhshape}
+Let $\mathsf{Counter} = \{\mathsf{inc}(\ke), \mathsf{read}(\ke)\}$.
+Let $\hh$ be in $\mathsf{KVStores}(\ET_{\UA} \cap \ET_{\MRd}, \mathsf{Counter})$. Then we have that 
+there exist $\{\txid_i\}_{i = 1}^{n}$ and $\{\T_{i}\}_{i = 0}^{n}$ such that 
+for any $i = 1,\cdots, n$, $\T_{i} \cap \{\txid_i\}_{i=0}^{n} = \emptyset$, and 
+$\hh(\ke) = \left(\prod_{i=0}^{n-1} (i, \txid_{i}, \T_{i} \uplus \{\txid_{i+1}\}) \right) \lcat 
+(n, \txid_{n}, \T_{n})$. Furthermore, if there exist four indexes $i,j, p, q$ such that 
+$\txid_{\cl}^{p} \in \WTx(\hh(\ke, i) \cup \RTx(\hh(\ke, i))$ and 
+$\txid_{\cl}^{q} \in \WTx(\hh(\ke, j) \cup \RTx(\hh(\ke, j))$, then 
+$i < j \implies p < q$.
+\end{proposition}
+
+\begin{proof}
+It suffices to prove that, given a reduction of the form 
+\[
+(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{inc}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd}} (\hh', \viewFun)
+\]
+then if $\hh$ has the shape described in \cref{prop:counter_hhshape}, then so has $\hh'$, 
+and similarly for $\mathsf{read}(\ke)$ operations. In practice, we can show that the result holds for 
+$\ET$-reductions of the form 
+\[
+(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{inc}(\ke))}_{\ET_{\UA}} (\hh', \viewFun)
+\]
+and $\ET$-reductions of the form 
+\[
+(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{read}(\ke))}_{\ET_{\MRd}} (\hh', \viewFun)
+\]
+Proving this second result also requires to place an invariant on $\viewFun(\cl)$, which states 
+that if $\txid_{\cl}^{n} \in \WTx(\hh) \cup \RTx(\hh)$, then there exists $m \geq n$ such that 
+$\viewFun(\cl) = \{i \mid i \leq m\}$.
+\end{proof}
+
+\begin{corollary}
+Given $\hh \in \mathsf{KVStores}(\ET_{\UA} \cap \ET_{\MRd}, \mathsf{Counter})$, 
+then $\graphof(\hh)$ is acyclic.
+\end{corollary}
