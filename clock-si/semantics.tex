@@ -28,7 +28,7 @@ startTransaction( Trans t, Time ts ) {
         \ct_\cl < \cts(\sd) \quad \texttt{---> \cref{lst:clock-si-start-trans}, \cref{line:check-local-time}}\\\\
         \cts' = \cts\rmto{\func{shardOf}{\ke}}{\cts(\func{shardOf}{\ke}) + 1} \quad \texttt{--->  simulate time elapses}
         }{%
-            \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \ptrans{\trans} \toT{\cl,\ct,\perp}
+            \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \ptrans{\trans} \toT{\cl, \ct, \emptyset, \perp}
             \mkvs, \ct_\cl, \cts', \stk, \runtrans{\trans}{\cts(\sd)}{\emptyset}
         }
 \]
@@ -59,7 +59,7 @@ On receive ``read(t,k)'' {
             \ke = \evalE{\expr} \\
             (\otW, \ke, \val ) \in \f \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-from-local}}\\
         }{%
-        \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{\cl,\ct,\perp}
+        \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{\cl,\ct,\f \addO (\otR, \ke, \val),\perp}
             \mkvs, \ct_\cl, \cts, \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
         }
 \]
@@ -70,10 +70,10 @@ On receive ``read(t,k)'' {
             (\otW, \ke, \stub ) \notin \f \\
             \ct < \cts(\func{shardOf}{\ke}) \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:snapshot-time-grt-than-shard}} \\\\
             n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-i-from-shard}} \\\\ 
-            \mkvs(\ke, i) = (\val, \txid, \stub) \\
-            \cts' = \cts\rmto{\func{shardOf}{\ke}}{\cts(\func{shardOf}{\ke}) + 1} \quad \texttt{--->  simulate time elapses} 
+            \mkvs(\ke, i) = (\val, \txid, \stub) 
+            %\cts' = \cts\rmto{\func{shardOf}{\ke}}{\cts(\func{shardOf}{\ke}) + 1} \quad \texttt{--->  simulate time elapses} 
         }{%
-        \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{\cl,\ct,\perp}
+        \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{\cl,\ct,\f \addO (\otR, \ke, \val), \perp}
             \mkvs, \ct_\cl, \cts', \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
         }
 \]
@@ -84,12 +84,12 @@ On receive ``read(t,k)'' {
             \ke = \evalE{\expr_1} \\
             \val = \evalE{\expr_2} \\
         }{%
-            \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pmutate{\expr_1}{\expr_2}}{\ct}{\f} \toT{\cl,\ct,\perp}
+            \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pmutate{\expr_1}{\expr_2}}{\ct}{\f} \toT{\cl,\ct,\f \addO (\otW, \ke, \val), \perp}
             \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pskip}{\ct}{\f \addO (\otW, \ke, \val)}
         }
 \]
 
-Note that it uses two phase commit that
+Note that Clock-SI uses two phase commit:
 the coordinator (the shard that the client directly connects to) distinguishes ``committing'' state  and ``committed'' state, where in between the coordinator pick the committing time and log the write set,
 and the participants distinguishes ``prepared'' state and ``committed'' state.
 Such operations are for possible network partition or single shard errors and allowed a more fine-grain implementations which do not affect the correctness, therefore it suffices to assume they are one atomic step.
@@ -134,21 +134,21 @@ On receiving ``commit t''
 \]
 
 \[
-    \inferrule[commit]{ 
-        \fora{\ke,i} (\otW, \ke, \stub) \in \f \land \WTx(\mkvs(\ke,i) < \ct \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:check-concur-write}} \\\\  
-        n = \max\left( \Setcon{\ct'}{\exsts{\ke} (\otW, \ke, \stub) \in \f \land \ct' = \cts(\func{shardOf}{\ke})} \cup \Set{\ct} \right) \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:pick-time-1,line:pick-time-2,line:pick-time-3}} \\\\
+    \inferrule[Commit]{ 
+        \fora{\ke,i} (\otW, \ke, \stub) \in \f \land \WTx(\mkvs(\ke,i)) < \ct \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:check-concur-write}} \\\\  
+        n = \max\left( \Setcon{\ct'}{\exsts{\ke} (\stub, \ke, \stub) \in \f \land \ct' = \cts(\func{shardOf}{\ke})} \cup \Set{\ct} \right) \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:pick-time-1,line:pick-time-2,line:pick-time-3}} \\\\
         \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\f} \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:clock-si-commit-1,line:clock-si-commit-2}} \\\\
         \fora{\sd}
         \left( \sd \in \Setcon{\func{shardOf}{\ke}}{(\otW, \ke, \stub) \in \f} \implies \cts'(\sd) = \cts(\sd) + 1 \right) \lor (\cts'(\sd) = \cts(\sd)) \quad \texttt{--->  simulate time elapses}
         }{%
-            \sd, \cl \vdash \mkvs, \ct_\cl, \cts', \stk, \runtrans{\pskip}{\ct}{\f} \toT{\cl,\ct,n}
-            \mkvs', n, \cts, \stk, \pskip
+            \sd, \cl \vdash \mkvs, \ct_\cl, \cts, \stk, \runtrans{\pskip}{\ct}{\f} \toT{\cl,\ct,\f,n}
+            \mkvs', n+1, \cts', \stk, \pskip
         }
 \]
 
 \[
-    \inferrule[timeTick]{ }{%
-        \mkvs, \cts, \cts', \thdenv, \prog \toG{\epsilon}
+    \inferrule[TimeTick]{ }{%
+        \mkvs, \cts, \cts', \thdenv, \prog \toG{\sd,\cts(\sd) + 1}
         \mkvs, \cts, \cts'\rmto{\sd}{\cts(\sd) + 1}, \thdenv, \prog
     }
 \]
@@ -156,15 +156,16 @@ On receiving ``commit t''
 \[
     \inferrule[ClientCommit]{ 
             \cl \vdash 
-            \mkvs, \cts(\cl), \cts', \thdenv(\cl), \prog(\cl) \toT{\cl,\ct',\ct''}
+            \mkvs, \cts(\cl), \cts', \thdenv(\cl), \prog(\cl) \toT{\cl,\ct',\f,\ct''}
             \mkvs', \ct, \cts'', \stk, \cmd
         }{%
-            \mkvs, \cts, \cts', \thdenv, \prog \toG{\cl,\ct',\ct''}
+            \mkvs, \cts, \cts', \thdenv, \prog \toG{\cl,\ct',\f,\ct''}
             \mkvs, \cts\rmto{\cl}{\ct}, \cts'', \thdenv\rmto{\cl}{\stk}, \prog\rmto{\cl}{\cmd}
         }
 \]
 
 \begin{lemma}[Strictly monotonic writers]
+    \label{lem:clock-si-mono-writer}
     Each version for a key has a writer with strictly greater clock time than any versions before:
     \[
         \begin{array}{@{}l@{}}
@@ -191,31 +192,307 @@ On receiving ``commit t''
     \]
 \end{lemma}
 
-\begin{theorem}
+\begin{lemma}[Monotonic client clock time]
+    \label{lem:mono-client-clock-time}
+    The clock time associated with a client monotonically increases.
+\end{lemma}
 
+\begin{lemma}[Commit time after snapshot time]
+    \label{lem:commit-after-snapshot-time}
+    The commit time of a transaction is after the snapshot time.
+\end{lemma}
+
+\begin{lemma}[No side effect read]
+    \label{lem:commit-after-snapshot-time}
+    Any read operation has no side effect to the shard and key-value store.
+\end{lemma}
+
+\begin{theorem}
+\label{thm:clock-si-normal-trace}
 A clock-SI trace \( \tr \) is a clock-SI normal trace if it satisfies the following:
 there is no interleaving of a transaction,
 \begin{equation}
     \label{equ:clock-si-no-interleaving}
     \begin{array}{@{}l@{}}
         \fora{\cl,\ct, \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i} \\
-        \quad \tr = \cdots \toG{\cl,\ct,\perp} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub} \cdots \\
+        \quad \tr = \cdots \toG{\cl,\ct,\stub, \perp} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub} \cdots \\
         \qquad \implies \exsts{\ct', \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j} \\
-        \qquad \tr = \cdots \toG{\cl,\ct,\perp} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\cl,\ct,\perp} \stub \toG{\cl,\ct,\perp} \\
-        \qqqquad \cdots \toG{\cl,\ct,\ct'} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j
+        \qquad \tr = \cdots \toG{\cl,\ct,\stub, \perp} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\cl,\ct,\stub, \perp} \stub \toG{\cl,\ct,\stub, \perp} \\
+        \qqqquad \cdots \toG{\cl,\ct,\stub,\ct'} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j
     \end{array}
 \end{equation}
 and transactions in the trace appear in the committing order, 
 \begin{equation}
     \label{equ:clock-si-commit-order}
     \begin{array}{@{}l@{}}
-        \fora{\cl,\cl',\ct, \ct' \mkvs_i, \mkvs_j, \cts_i, \cts_j, \cts'_i, \cts'_j, \thdenv_i, \thdenv_j,  \prog_i, \prog_j} \\
-        \quad \tr = \cdots \toG{\cl,\stub,\ct} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub}  \cdots \toG{\cl',\stub,\ct'} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j \\
-        \qquad \implies \ct < \ct'
+        \fora{\cl_i,\cl_j,\ct_i, \ct_j, \ct'_i, \cl'_j, \f_i, \f_j \mkvs_i, \mkvs_j, \cts_i, \cts_j, \cts'_i, \cts'_j, \thdenv_i, \thdenv_j,  \prog_i, \prog_j} \\
+        \quad \tr = \cdots \toG{\cl_i,\ct_i,\f_i,\ct'_i} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub} \\
+        \qqquad \cdots \toG{\cl_j,\ct_j,\f_j,\ct'_j} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j \\
+        \qqqquad \implies \ct'_i < \ct'_j
     \end{array}
 \end{equation}
 For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr' \) which has the same final configuration as \( \tr \).
 \end{theorem}
 \begin{proof}
-    Given a trace \( \tr \), we first construct a trace \( \tr' \)  that satisfies \cref{equ:clock-si-commit-order}.
+    Given a trace \( \tr \), we first construct a trace \( \tr' \)  that satisfies \cref{equ:clock-si-commit-order}, 
+    by swapping the reduction order.
+    Let take the first two transactions \( \txid_{\cl_i}^n \) and \( \txid_{\cl_j}^m \) that are out of order, \ie \( n > m \) and 
+    \[
+    \begin{array}{@{}l@{}}
+        \tr = \cdots \toG{\cl_i,\ct_i,\f_i,n} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub}  \cdots \toG{\cl_j,\ct_j,\f_j,m} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j \\
+    \end{array}
+    \]
+    By \cref{lem:mono-client-clock-time}, the two clients are different \( \cl_i \neq \cl_j\) and the two steps are unique in the trace.
+    We will construct a trace that \( \txid_{\cl_i}^n \) commits after \( \txid_{\cl_j}^m  \).
+    First it is important to prove that \( \txid_{\cl_j}^m \) does not read any version written by \( \txid_{\cl_i}^n\).
+    By \cref{lem:commit-after-snapshot-time}, the snapshot time \( \ct_j \) of \( \txid_{\cl_j}^m \) is less than the commit time, 
+    \ie \( \ct_j < m \), therefore \( \ct_j < n \).                                                                                  
+    By the \rl{read} rule, \( \ct_j < n \) implies the transaction \( \txid_{\cl_j}^m \) never read any version written by \( \txid_{\cl_i}^n \).
+    Let consider any possible time tick for those shard \( \sd \) that has been updated by \( \txid_{\cl_j}^m \),
+    that is, \( \sd = \func{shardOf}{\ke}\) for some key \( \ke \)  that \( (\otW, \ke, \stub) \in \f_i \) and
+    \begin{equation}
+    \label{equ:time-tick-move-afterwards}
+    \begin{array}{@{}l@{}}
+        \tr = \cdots \toG{\cl_i,\ct_i,\f_i,n} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\stub}  \cdots \toG{\sd,\ct} \stub \toG{\stub} \cdots \toG{\cl_j,\ct_j,\f_j,m} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j \\
+    \end{array}
+    \end{equation}
+    It follows \( \ct_j < n < \ct \), and therefore such time tick will not affect the transaction \( \txid_{\cl_j}^m \),
+    which means it is safe to move the time tick step after the \( \txid_{\cl_j}^m \).
+    Now we can move the commit of \( \txid_{\cl_i}^n \) and any step similar to \cref{equ:time-tick-move-afterwards} after the commit of \( \txid_{\cl_j}^m \),
+    \[
+    \begin{array}{@{}l@{}}
+        \tr' = \cdots \toG{\cl_j,\ct_j,\f_j,m} \mkvs_j, \cts_j, \cts'_j, \thdenv_j, \prog_j \toG{\cl_i,\ct_i,\f_i,n} \mkvs_i, \cts_i, \cts'_i, \thdenv_i, \prog_i \toG{\sd,\ct} \cdots \\
+    \end{array}
+    \]
+    We continually swap the out of order transaction until the newly constructed trace \( \tr' \)  satisfying \cref{equ:clock-si-commit-order}.
+
+    Now let consider \cref{equ:clock-si-no-interleaving}.
+    Let take the first transaction \( \txid \) whose read has been interleaved by other transaction or a time tick.
+    \begin{itemize}
+        \item If it is a step that the transaction \( \txid \) read from local state,
+        \[
+        \begin{array}{@{}l@{}}
+            \tr = \cdots \toG{\cl,\ct,\f \addO (\otR, \ke, \val ),\perp} \stub  \toG{\alpha} \cdots  \toG{\cl,\ct,\f'',n} \cdots \\
+        \end{array}
+        \]
+        where \( \f \addO (\otR, \ke, \val ) = \f\), then it is safe to swap the two steps as the following
+        \[
+        \begin{array}{@{}l@{}}
+            \tr' = \cdots \toG{\alpha} \stub \toG{\cl,\ct,\f \addO (\otR, \ke, \val ),\perp} \cdots \toG{\cl,\ct,\f'',n} \cdots \\
+        \end{array}
+        \]
+        \item If it is a step that the transaction \( \txid \) read from remote,
+    \begin{itemize}
+        \item if it is interleaved by the commit of other transaction \( \txid' \), that is
+        \[
+        \begin{array}{@{}l@{}}
+            \tr = \cdots \toG{\cl,\ct,\f,\perp} \mkvs, \cts, \cts', \thdenv, \prog  \toG{\cl',\ct',\f',m} \cdots \toG{\cl,\ct,\f'',n} \cdots \\
+        \end{array}
+        \]
+        \begin{itemize}
+            \item if the transaction \( \txid' \) does not write to any key \( \ke \) that is read by \( \txid \),
+                \[
+                    \fora{\ke} (\otR, \ke, \stub) \in \f \implies (\otW, \ke, \stub) \notin \f'
+                \]
+            In this case, it is safe to swap the two steps
+            \[
+            \begin{array}{@{}l@{}}
+                \tr' = \cdots \toG{\cl',\ct',\f',m} \stub \toG{\cl,\ct,\f,\perp} \cdots \toG{\cl,\ct,\f'',n} \cdots \\
+            \end{array}
+            \]
+            \item if the transaction \( \txid' \) write to a key \( \ke \) that is read by \( \txid \),
+                \[
+                    (\otR, \ke, \stub) \in \f \land (\otW, \ke, \stub) \in \f'
+                \]
+                Let \( \sd = \func{shardOf}{\ke} \).
+                By the \rl{ReadRemote}, we know the current clock time for the shard \( \sd \) is greater than the snapshot time of \( \txid \), 
+                that is, \( \cts'(\sd) > \ct \).
+                Then by \rl{commit}, the commit time of \( \txid' \) is picked as the maximum of the shards it touched, 
+                \ie \( m \geq \cts'(\sd) \).
+                Now by the \rl{ReadRemote} and \( m \geq \ct \), it is safe to swap the two steps since the new version of \( \ke \) does not affect the \( \txid \).
+        \end{itemize}
+        \item if it is interleaved by the read of other transaction \( \txid' \), that is
+        \[
+        \begin{array}{@{}l@{}}
+            \tr = \cdots \toG{\cl,\ct,\f,\perp} \mkvs, \cts, \cts', \thdenv, \prog  \toG{\cl',\ct',\f',\perp} \cdots \toG{\cl,\ct,\f'',n} \cdots \\
+        \end{array}
+        \]
+        Because reads have no side effect to any shard by \rl{readRemote},
+        it is safe to swap the two steps
+        \[
+        \begin{array}{@{}l@{}}
+            \tr' = \cdots \toG{\cl',\ct',\f', \perp} \stub \toG{\cl,\ct,\f,\perp} \cdots \toG{\cl,\ct,\f'',n} \cdots \\
+        \end{array}
+        \]
+        \item if it is interleaved by a time tick step,
+        \[
+        \begin{array}{@{}l@{}}
+            \tr = \cdots \toG{\cl,\ct,\f \addO (\otR, \ke, \val),\perp} \mkvs, \cts, \cts', \thdenv, \prog  \toG{\sd, \ct'} \cdots \toG{\cl,\ct,\f'',n} \cdots \\
+        \end{array}
+        \]
+        \begin{itemize}
+            \item if the transaction \( \txid \) does not read from the shard \( \sd \),
+                \[
+                    \func{shardOf}{\ke} \neq \sd
+                \]
+            In this case, it is safe to swap the two steps
+            \[
+            \begin{array}{@{}l@{}}
+            \tr' = \cdots \toG{\sd, \ct'} \stub \toG{\cl,\ct,\f \addO (\otR, \ke, \val),\perp} \cdots \toG{\cl,\ct,\f'',n} \cdots \\
+            \end{array}
+            \]
+            \item if the transaction \( \txid \) read from the shard \( \sd \),
+                \[
+                    \func{shardOf}{\ke} = \sd
+                \]
+                By the \rl{ReadRemote}, we know the current clock time for the shard \( \sd \) is greater than the snapshot time of \( \txid \), 
+                that is, \( \cts'(\sd) > \ct \).
+                Then by \rl{TimeTick},  we have \( \ct' > \cts'(\sd) \).
+                Now by the \rl{ReadRemote} and \( \ct' > \ct \), it is safe to swap the two steps.
+        \end{itemize}
+    \end{itemize}
+    \end{itemize}
+\end{proof}
+
+\begin{definition}
+    \label{clock-si-view}
+    Given a normal clock-SI trace \( \tr \) and a transaction \( \txid_\cl \), such that
+    \[
+        \tr = \cdots \toG{\cl, \ct, \emptyset, \perp} \cdots \toG{\cl, \ct, \f, \perp} \mkvs, \cts, \cts', \thdenv, \prog  \toG{\cl, \ct, \f, \ct'} \cdots
+    \] 
+    the initial view of the transaction is defined as the following:
+    \[
+        \begin{rclarray}
+            \func{viewOf}{\mkvs,\ct} & \defeq & \lambda \key \ldotp \Setcon{i}{\exsts{\txid^{n} } \WTx(\mkvs(\ke,i)) = \txid^{n} \land n < \ct}
+        \end{rclarray}
+    \]
+\end{definition}
+
+\begin{theorem}
+    \cref{clock-si-view} produces well-formed view.
+\end{theorem}
+
+
+\begin{theorem}[Clock-SI satisfying SI]
+    For any normal trace clock-SI trace \( \tr \), and any transaction \( \txid_\cl^{n} \),
+    \[
+        \tr = \cdots \toG{\cl, \ct, \f, \perp} \mkvs, \cts, \cts', \thdenv, \prog  \toG{\cl, \ct, \f, n} \mkvs', \cts'', \cts''', \thdenv', \prog'
+    \]
+    the transaction satisfies \( \ET_\SI \), \ie \( \ET_\SI \vdash \mkvs \func{viewOf}{\mkvs,\ct} \csat \f \func{viewOf}{\mkvs,\cts''(\cl)} \)
+\end{theorem}
+\begin{proof}
+    Recall \( \ET_\SI  = \Setcon{(\mkvs, \vi, \f, \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW  \cap \ET_\UA \)
+    where
+    \[
+    \begin{rclarray}
+        \func{RW^{-1}}{\mkvs, \ke, i} & \defeq & \Setcon{\txid}{\exsts{ j < i } \txid \in \RTx(\mkvs(\ke,j))} \\
+        \func{SO^{-1}}{\txid} & \defeq & \Setcon{\txid'}{ \exsts{ \cl, m, n } \txid = \txid_{\cl}^{n} \land \txid' = \txid_{\cl}^{m} \land m < n } \\
+        \dagger & \equiv &
+        \begin{array}[t]{@{}l@{}}
+            \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
+            \begin{array}{@{}l@{}}
+            i \in \vi(\ke) 
+            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
+            \quad \left(
+                \begin{array}{@{}l @{}}
+                    \left( \begin{array}{@{}l@{}}
+                        \txid' \in \func{SO^{-1}}{\txid}
+                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \end{array} \right)  \lor {} \\
+                    \left( \begin{array}{@{}l@{}}
+                        \txid \in \RTx(\mkvs(\ke',j)) 
+                        \land \txid' = \WTx(\mkvs(\ke',j))
+                    \end{array} \right) \lor {} \\ 
+                    \left( \begin{array}{@{}l@{}}
+                        \txid = \WTx(\mkvs(\ke',m)) 
+                        \land \txid' = \WTx(\mkvs(\ke',j)) \land m > j
+                    \end{array} \right) 
+                \end{array}
+                \right)  \\
+            \qquad \implies j \in \vi(\ke') 
+            \end{array}
+        \end{array} \\
+    \end{rclarray}
+    \]
+    Note that final view of the client, \( \cts''(\cl) = n + 1 \).
+    We prove the four parts separately.
+    \begin{itemize}
+        \item \( \Setcon{(\mkvs, \func{viewOf}{\mkvs,\ct}, \f, \func{viewOf}{\mkvs,\cts''(\cl)})}{\dagger} \).
+            Assume a version \( i \in \func{viewOf}{\mkvs,\ct}(\ke) \) for some key \( \ke \).
+            Let \(\txid_{\cl'}^{m} = \WTx(\mkvs(\ke, i))  \).
+            Assume a transaction \( \txid_{\cl''}^{x} \in \Set{\WTx(\mkvs(\ke, i))} \cup \RW^{-1}(\mkvs, \ke, i)\).
+            By \cref{lem:.....}, \( \txid_{\cl''}^{x} \) took snapshot before time \( m \).
+            Assume the snapshot time for \( \txid_{\cl''}^{x} \) is \( y \), \ie
+            \[
+                \tr = \cdots \toG{\cl'', y, \stub, x} \cdots
+            \]
+            Now suppose a transaction \( \txid' \) such that 
+            \[
+            \begin{array}{@{}l @{}}
+                \left( \begin{array}{@{}l@{}}
+                    \txid' \in \func{SO^{-1}}{\txid_{\cl''}^{x}}
+                    \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                \end{array} \right)  \lor {} \\
+                \left( \begin{array}{@{}l@{}}
+                    \txid_{\cl''}^{x} \in \RTx(\mkvs(\ke',j)) 
+                    \land \txid' = \WTx(\mkvs(\ke',j))
+                \end{array} \right) \lor {} \\ 
+                \left( \begin{array}{@{}l@{}}
+                    \txid_{\cl''}^{x} = \WTx(\mkvs(\ke',o)) 
+                    \land \txid' = \WTx(\mkvs(\ke',j)) \land o > j
+                \end{array} \right) 
+            \end{array}
+            \]
+            There are three cases.
+            \begin{itemize}
+                \item The session order:
+                    \[
+                    \txid' \in \func{SO^{-1}}{\txid_{\cl''}^x}
+                    \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \]
+                    In this case, the transaction \( \txid' = \txid_{\cl''}^k \) where \( k \leq x \).
+                    It is easy to see that for any version written or read (\cref{lem:...}) by \( \txid_{\cl''}^k \), \ie
+                    \[     
+                        \txid_{\cl''}^k \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
+                    \]
+                    such version  \( \mkvs(\ke',j) \) is commit before \( y \) that is the snapshot time  of \(  \txid_{\cl''}^x \),
+                    \[     
+                        \exsts{\txid^z} \WTx(\mkvs(\ke',j)) = \txid^z \land z \leq k < x
+                    \]
+                    By \cref{clock-si-view}, \( j \in \func{viewOf}{\mkvs,\ct}(\ke') \).
+                    \sx{a lemma here}
+                \item The write-read relation,
+                    \[
+                        \txid_{\cl''}^m \in \RTx(\mkvs(\ke',j)) 
+                        \land \txid' = \WTx(\mkvs(\ke',j))
+                    \]
+                    Trivially \( \txid' = \txid^k = \WTx(\mkvs(\ke',j)) \) for some \( k < y \).
+                    By \cref{clock-si-view}, \( j \in \func{viewOf}{\mkvs,\ct}(\ke') \).
+                \item The write-write relation,
+                    \[
+                        \txid_{\cl''}^{x} = \WTx(\mkvs(\ke',o)) 
+                        \land \txid' = \WTx(\mkvs(\ke',j)) \land o > j
+                    \]
+                    Supposing \( \txid' = \txid^z \), by \cref{lem:clock-si-mono-writer}, we know \( z < x \).
+                    By \cref{clock-si-view}, \( j \in \func{viewOf}{\mkvs,\ct}(\ke') \).
+            \end{itemize}
+        \item \( \ET_\MRd \).
+            By \rl{Commit}, we know \( \ct \leq n < \cts''(\cl) \) then \( \func{viewOf}{\mkvs,\ct} \viewleq \func{viewOf}{\mkvs,\cts''(\cl)} \).
+        \item \( \ET_\MW \).
+            By \rl{Commit}, for any write \( (\otW, \ke, \val) \in \f \), there is a new version written by the client \( \cl \) in the \( \mkvs'  \),
+            \[
+                \WTx(\mkvs'(\ke,\abs{\mkvs'(\ke)} - 1)) = \txid_\cl^{n}
+            \]
+            Since \( n < \cts''(\cl)\), it follows \( \abs{\mkvs'(\ke)} - 1 \in \func{viewOf}{\mkvs,\cts''(\cl)}(\ke) \).
+        \item \( \ET_\UA \).
+            By the premiss of \rl{Commit}, for any write \( (\otW, \ke, \val) \in \f \), any existed versions of the key \( \ke \)
+            must be installed by some transactions before the snapshot time of \( \ct \),
+            \[
+                \fora{\ke,i} (\otW, \ke, \stub) \in \f \land \WTx(\mkvs(\ke,i)) < \ct 
+            \]
+            It implies that 
+            \[ 
+                \fora{i} i \in \dom(\mkvs(\ke)) \implies i \in \func{viewOf}{\mkvs,\ct}(\ke) 
+            \]
+    \end{itemize}
 \end{proof}
