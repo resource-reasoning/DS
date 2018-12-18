@@ -19,7 +19,7 @@ transactions:
 $\PO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid = \txid_{\cl}^{n} \wedge \txid' = \txid_{\cl}^{m} \wedge n < m}$.
 For readability, we often write  $\txid \xrightarrow{\PO} \txid'$ for $(\txid, \txid') \in \PO$.
 
-\begin{definition}[Multi-version Key-value Stores]
+\begin{definition}[Key-value Stores]
 \label{def:his_heap}
 \label{def:mkvs}
 Assume a countably infinite set of \emph{keys} $\Keys = \Set{\ke, \ke', \cdots}$, 
@@ -190,7 +190,7 @@ and executes a sequential \emph{command} $\cmd$, given by the following grammar:
 \]
 %
 Sequential commands include the standard constructs of $\pskip$, sequential composition ($\cmd \pseq \cmd$), non-deterministic choice ($\cmd \pchoice \cmd$), loops $\cmd\prepeat$, 
-as well as \emph{transactions} ($\ptrans{\trans}$) and primitive commands. 
+as well as \emph{transactions} $\ptrans{\trans}$ and primitive commands. 
 Primitive commands include variable assignments ($\pass{\txvar}{\expr}$) and assume statements ($\passume{\expr}$) used to encode conditionals,
 and are split into transactional ones (the $\transpri$ clause) 
 and non-transactional ones (the $\cmdpri$ clause).
@@ -383,22 +383,22 @@ when executing from some initial client-local state, formalised as a mapping fro
         \\\\ (\stk, \h, \emptyset), \trans \ \toL^{*} \  (\stk', \stub,  \opset) , \pskip
         \\ \ET \vdash (\hh, \vi'') \triangleright \opset : \vi'
     }{%
-        \cl \vdash ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{(\cl, \vi'', \opset)}_{\ET} \ ( \updateKV(\hh, \vi, \txid, \opset),\vi', \stk' ) , \pskip
+        ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{(\cl, \vi'', \opset)}_{\ET} \ ( \updateKV(\hh, \vi, \txid, \opset),\vi', \stk' ) , \pskip
     }
 \]
 \[
     \inferrule[\rl{PPrimitive}]{
         \stk \toLTS{\cmdpri} \stk'
     }{%
-    \cl \vdash ( \hh, \vi, \stk ) , \cmdpri \ \toT{(\cl,\iota)}_{\como} \  ( \hh, \vi, \stk' ) , \pskip
+        ( \hh, \vi, \stk ) , \cmdpri \ \toT{(\cl,\iota)}_{\como} \  ( \hh, \vi, \stk' ) , \pskip
     }
 \]
 \hrulefill
 \[
     \inferrule[\rl{PProg}]{%
-         \cl \vdash ( \mkvs, \vi, \thdenv(\thid) ) , \prog(\thid), \ \toT{\lambda}_{\ET} \  ( \mkvs', \vi', \stk' ) , \cmd'  
+        ( \mkvs, \vi, \thdenv(\thid) ) , \prog(\thid), \ \toT{\lambda}_{\ET} \  ( \mkvs', \vi', \stk' ) , \cmd'  
     }{%
-         (\mkvs, \viewFun\rmto{\thid}{\vi}, \thdenv ), \prog  \ \toT{\lambda}_{\ET} \  ( \mkvs', \viewFun\rmto{\thid}{\vi'}, \thdenv\rmto{\thid}{\stk'} ) , \prog\rmto{\thid}{\cmd'} ) 
+        (\mkvs, \viewFun\rmto{\thid}{\vi}, \thdenv ), \prog  \ \toT{\lambda}_{\ET} \  ( \mkvs', \viewFun\rmto{\thid}{\vi'}, \thdenv\rmto{\thid}{\stk'} ) , \prog\rmto{\thid}{\cmd'} ) 
     }
 \]
 \hrulefill
@@ -424,8 +424,7 @@ and thus the choice of the underlying consistency model.
 
 
 With the exception of the \rl{PCommit} rule, the remaining command transitions are standard and behave as expected. 
-For instance, the \rl{PPrimitive} rule models the execution of a non-transactional primitive command $\cmdpri$, where the $\stk \toLTS{\cmdpri} \stk'$ transition describes how the stack of a client 
-evolve upon executing $\cmdpri$:
+For instance, the \rl{PPrimitive} rule models the execution of a non-transactional primitive command $\cmdpri$, where the $\stk \toLTS{\cmdpri} \stk'$ transition describes how the stack of a client evolves upon executing $\cmdpri$:
 \[
 \begin{array}{rcl @{\qquad} rcl}
 \stk  & \toLTS{\passign{\var}{\expr}} & \stk\rmto{\var}{\evalE{\expr}} &
@@ -435,14 +434,14 @@ evolve upon executing $\cmdpri$:
 
 The \rl{PCommit} rule models the execution of a transaction $\ptrans{\trans}$, under the execution test $\ET$. 
 The first premise of \rl{PCommit} states that the current view $\vi$ of the executing command maybe advanced to a newer atomic view $\vi''$ (see \cref{def:views}). 
-The semantics only allows to advance the view to latest versions, which corresponds to \emph{monotonic read} \cite{.......}.
+The semantics only allows to advance the view to later versions, which corresponds to \emph{monotonic read} \cite{.......}.
 Given the new view $\vi''$, the transaction proceeds by obtaining a snapshot $\sn$ of the kv-store $\hh$, and executing $\trans$ locally to completion ($\pskip$), updating the stack to $\stack'$, while accumulating the fingerprint $\opset$. Note that the resulting snapshot is ignored (denoted by $\stub$) as the effect of the transaction is recorded in the fingerprint $\opset$. 
 %
 
 The transaction is now ready to commit and may propagate its changes to $\hh$.
 To this end, a \emph{fresh} transaction identifier $\txid \in \nextTxId(\cl, \hh)$ (defined shortly) is picked
 to identify the completed transaction, and the changes performed by $\txid$ are propagated to $\hh$. 
-This is done via the $\func{updateMKVS}{\hh, \vi, \txid, \opset}$ function (defined shortly) to update $\hh$. 
+This is done via the $\updKV{\hh, \vi, \txid, \opset}$ function (defined shortly) to update $\hh$. 
 Once the kv-store is updated, the client subsequently updates its view to $\vi'$ with respect to its fingerprint. 
 Lastly, to ensure that the effect of the transaction (its fingerprint  $\opset$) is permitted by the underlying consistency model, 
 the last premise requires that the updates be permitted by the execution test $\ET$, \ie \( (\hh, \vi'') \etto \opset : \vi'\).
@@ -486,11 +485,11 @@ is defined inductively on $\opset$ as follows: let $\txid$ be a transaction iden
 \begin{equation*}
 \begin{rclarray}         
     \updateKV(\hh, \vi, \txid, \emptyset) &\defeq & \hh \\
-    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \stub)}) & \defeq &  
+    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \val)}) & \defeq &  
     \begin{array}[t]{@{}l}
-        \texttt{let } (\val, \txid', \txidset) = \hh(\ke, \vi), \\
+        \texttt{let} \ (\val, \txid', \txidset) = \hh(\ke, \max_{<}(\vi(\ke))), \\
         \vilist = \hh(\ke)\rmto{\max_{<}(\vi(\ke))}{(\val, \txid', \txidset \uplus \{ t \})}\\
-        \quad \texttt{in } \updateKV(\hh\rmto{\ke}{\vilist}, \vi, \txid, \opset)
+        \quad \texttt{in} \ \updateKV(\hh\rmto{\ke}{\vilist}, \vi, \txid, \opset)
     \end{array} \\
     \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otW, \ke, \val)} )& \defeq &  
     \begin{array}[t]{@{}l}
