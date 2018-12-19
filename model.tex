@@ -19,7 +19,7 @@ transactions:
 $\PO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid = \txid_{\cl}^{n} \wedge \txid' = \txid_{\cl}^{m} \wedge n < m}$.
 For readability, we often write  $\txid \xrightarrow{\PO} \txid'$ for $(\txid, \txid') \in \PO$.
 
-\begin{definition}[Multi-version Key-value Stores]
+\begin{definition}[Key-value Stores]
 \label{def:his_heap}
 \label{def:mkvs}
 Assume a countably infinite set of \emph{keys} $\Keys = \Set{\ke, \ke', \cdots}$, 
@@ -190,7 +190,7 @@ and executes a sequential \emph{command} $\cmd$, given by the following grammar:
 \]
 %
 Sequential commands include the standard constructs of $\pskip$, sequential composition ($\cmd \pseq \cmd$), non-deterministic choice ($\cmd \pchoice \cmd$), loops $\cmd\prepeat$, 
-as well as \emph{transactions} ($\ptrans{\trans}$) and primitive commands. 
+as well as \emph{transactions} $\ptrans{\trans}$ and primitive commands. 
 Primitive commands include variable assignments ($\pass{\txvar}{\expr}$) and assume statements ($\passume{\expr}$) used to encode conditionals,
 and are split into transactional ones (the $\transpri$ clause) 
 and non-transactional ones (the $\cmdpri$ clause).
@@ -374,6 +374,7 @@ when executing from some initial client-local state, formalised as a mapping fro
 
 
 \begin{figure}[t]
+\hrulefill
 \[
     \inferrule[\rl{PCommit}]{%
         \vi \orderVI  \vi''
@@ -382,22 +383,22 @@ when executing from some initial client-local state, formalised as a mapping fro
         \\\\ (\stk, \h, \emptyset), \trans \ \toL^{*} \  (\stk', \stub,  \opset) , \pskip
         \\ \ET \vdash (\hh, \vi'') \triangleright \opset : \vi'
     }{%
-        \cl \vdash ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{(\cl, \vi'', \opset)}_{\ET} \ ( \updateKV(\hh, \vi, \txid, \opset),\vi', \stk' ) , \pskip
+        ( \hh, \vi, \stk ), \ptrans{\trans} \ \toT{(\cl, \vi'', \opset)}_{\ET} \ ( \updateKV(\hh, \vi, \txid, \opset),\vi', \stk' ) , \pskip
     }
 \]
 \[
     \inferrule[\rl{PPrimitive}]{
         \stk \toLTS{\cmdpri} \stk'
     }{%
-    \cl \vdash ( \hh, \vi, \stk ) , \cmdpri \ \toT{(\cl,\iota)}_{\como} \  ( \hh, \vi, \stk' ) , \pskip
+        ( \hh, \vi, \stk ) , \cmdpri \ \toT{(\cl,\iota)}_{\como} \  ( \hh, \vi, \stk' ) , \pskip
     }
 \]
 \hrulefill
 \[
     \inferrule[\rl{PProg}]{%
-         \cl \vdash ( \mkvs, \vi, \thdenv(\thid) ) , \prog(\thid), \ \toT{\lambda}_{\ET} \  ( \mkvs', \vi', \stk' ) , \cmd'  
+        ( \mkvs, \vi, \thdenv(\thid) ) , \prog(\thid), \ \toT{\lambda}_{\ET} \  ( \mkvs', \vi', \stk' ) , \cmd'  
     }{%
-         (\mkvs, \viewFun\rmto{\thid}{\vi}, \thdenv ), \prog  \ \toT{\lambda}_{\ET} \  ( \mkvs', \viewFun\rmto{\thid}{\vi'}, \thdenv\rmto{\thid}{\stk'} ) , \prog\rmto{\thid}{\cmd'} ) 
+        (\mkvs, \viewFun\rmto{\thid}{\vi}, \thdenv ), \prog  \ \toT{\lambda}_{\ET} \  ( \mkvs', \viewFun\rmto{\thid}{\vi'}, \thdenv\rmto{\thid}{\stk'} ) , \prog\rmto{\thid}{\cmd'} ) 
     }
 \]
 \hrulefill
@@ -423,8 +424,7 @@ and thus the choice of the underlying consistency model.
 
 
 With the exception of the \rl{PCommit} rule, the remaining command transitions are standard and behave as expected. 
-For instance, the \rl{PPrimitive} rule models the execution of a non-transactional primitive command $\cmdpri$, where the $\stk \toLTS{\cmdpri} \stk'$ transition describes how the stack of a client 
-evolve upon executing $\cmdpri$:
+For instance, the \rl{PPrimitive} rule models the execution of a non-transactional primitive command $\cmdpri$, where the $\stk \toLTS{\cmdpri} \stk'$ transition describes how the stack of a client evolves upon executing $\cmdpri$:
 \[
 \begin{array}{rcl @{\qquad} rcl}
 \stk  & \toLTS{\passign{\var}{\expr}} & \stk\rmto{\var}{\evalE{\expr}} &
@@ -434,14 +434,14 @@ evolve upon executing $\cmdpri$:
 
 The \rl{PCommit} rule models the execution of a transaction $\ptrans{\trans}$, under the execution test $\ET$. 
 The first premise of \rl{PCommit} states that the current view $\vi$ of the executing command maybe advanced to a newer atomic view $\vi''$ (see \cref{def:views}). 
-The semantics only allows to advance the view to latest versions, which corresponds to \emph{monotonic read} \cite{.......}.
+The semantics only allows to advance the view to later versions, which corresponds to \emph{monotonic read} \cite{.......}.
 Given the new view $\vi''$, the transaction proceeds by obtaining a snapshot $\sn$ of the kv-store $\hh$, and executing $\trans$ locally to completion ($\pskip$), updating the stack to $\stack'$, while accumulating the fingerprint $\opset$. Note that the resulting snapshot is ignored (denoted by $\stub$) as the effect of the transaction is recorded in the fingerprint $\opset$. 
 %
 
 The transaction is now ready to commit and may propagate its changes to $\hh$.
 To this end, a \emph{fresh} transaction identifier $\txid \in \nextTxId(\cl, \hh)$ (defined shortly) is picked
 to identify the completed transaction, and the changes performed by $\txid$ are propagated to $\hh$. 
-This is done via the $\func{updateMKVS}{\hh, \vi, \txid, \opset}$ function (defined shortly) to update $\hh$. 
+This is done via the $\updKV{\hh, \vi, \txid, \opset}$ function (defined shortly) to update $\hh$. 
 Once the kv-store is updated, the client subsequently updates its view to $\vi'$ with respect to its fingerprint. 
 Lastly, to ensure that the effect of the transaction (its fingerprint  $\opset$) is permitted by the underlying consistency model, 
 the last premise requires that the updates be permitted by the execution test $\ET$, \ie \( (\hh, \vi'') \etto \opset : \vi'\).
@@ -485,11 +485,11 @@ is defined inductively on $\opset$ as follows: let $\txid$ be a transaction iden
 \begin{equation*}
 \begin{rclarray}         
     \updateKV(\hh, \vi, \txid, \emptyset) &\defeq & \hh \\
-    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \stub)}) & \defeq &  
+    \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otR, \ke, \val)}) & \defeq &  
     \begin{array}[t]{@{}l}
-        \texttt{let } (\val, \txid', \txidset) = \hh(\ke, \vi), \\
+        \texttt{let} \ (\val, \txid', \txidset) = \hh(\ke, \max_{<}(\vi(\ke))), \\
         \vilist = \hh(\ke)\rmto{\max_{<}(\vi(\ke))}{(\val, \txid', \txidset \uplus \{ t \})}\\
-        \quad \texttt{in } \updateKV(\hh\rmto{\ke}{\vilist}, \vi, \txid, \opset)
+        \quad \texttt{in} \ \updateKV(\hh\rmto{\ke}{\vilist}, \vi, \txid, \opset)
     \end{array} \\
     \updateKV(\hh, \vi, \txid, \opset \uplus \Set{(\otW, \ke, \val)} )& \defeq &  
     \begin{array}[t]{@{}l}
@@ -541,23 +541,17 @@ We write $\txid \in \hh$ when there exists a key
 $\ke$ and an index $i=0,\cdots, \lvert \hh(\ke) \rvert -1$ such that $\txid \in \{\WTx(\hh(\ke, i)\} \cup \RTx(\hh(\ke, i))$.}, 
 the $\updateKV$ is well-defined.
 
-\sx{List notation? simply put all the elements one after another or we use \List{} to wrap them?}
 
-
-\sx{well defined mean? Confluence?}
-
-
-\ac{The paragraph below should probably go when discussing the rules of the semantics:
-
-Note that the way in which MKVSs and views are updated ensure the following: 
-$\bullet$ a client always reads its own preceding writes; 
-$\bullet$ clients always read from an increasingly up-to-date state of the database; 
-$\bullet$ the order in which clients update a key $\key{k}$ is consistent with the 
-order of the versions for such keys in the MKVS; 
-$\bullet$ writes take place after reads on which they depend. 
-}
-
-
+\subsubsection{Programs}
+The \emph{operational semantics of programs} are given at the bottom of \cref{fig:semantics}. 
+Programs transitions are of the form $(\conf,  \thdenv, \prog) \ \toG{\lambda}_{\ET} (\conf',  \thdenv', \prog')$,
+stating that given the configuration $\conf$ and the \emph{client environment} $\thdenv$, executing program $\prog$ for one step under $\ET$, updates the configuration to $\conf'$, the client environment to $\thdenv'$, and the program to its continuation $\prog'$. 
+A \emph{client environment}, $\thdenv \in \ThdEnv$, is a mapping from client identifiers to pairs of stacks and views. 
+We assume that the clients in the domain of client environments are are those in the domain of the program throughout the execution: 
+$\dom(\thdenv) = \dom(\prog)$.
+Program transitions are simply defined in terms of the transitions of their constituent client commands.
+This in turn yields the standard interleaving semantics for concurrent programs. 
+That is, a client performs a reduction in an atomic step, without affecting other clients.
 
 
 \subsection{Consistency Guarantees}
@@ -582,18 +576,6 @@ the $\opset$ denotes the fingerprint of the transaction; and
 $\vi'$ demotes the \emph{final} view of the transaction, obtained after committing the transaction. 
 An execution test $(\mkvs, \vi, \opset, \vi')$ states that when the kv-store is described by $\hh$, a client with view $\vi$ is allowed to execute a single transaction with fingerprint $\opset$, commit the transaction and obtain an updated view $\vi'$. 
 
-\ac{
-For example, \emph{serialisability} can be described as the set 
-of key-value stores for which it is possible to recover a total schedule of transactions, 
-such that each read operation on key $\ke$ fetches its value from the 
-most recent write on the same key \cite{??????}.
-In this sense, the kv-store $\hh$ from \cref{fig:hheap-a} is not serialisable: 
-transaction $\txid_1$ reads the initial version carrying value $\val'_0$ for key $\ke_{2}$, 
-and installs a new version of $\ke_{2}$ carrying value $\val_1$. The transaction $\txid_2$ 
-reads the initial version carrying value $\val'_0$, and therefore, 
-cannot be scheduled after $\txid_1$. Similarly, $\txid_2$ cannot be scheduled after $\txid_1$.
-}
-
 \begin{definition}
 \label{def:execution.test}
 An \emph{execution test} is a set of tuples $\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
@@ -609,25 +591,21 @@ Execution tests enforce last write win,
 \ie a transaction always reads the most recent writes from the initial view (\cref{eq:read-external}).
 For minimum footprint on the views, a transaction is only allowed to update the view for those keys that have been read or overwritten (\cref{eq:valid-view-update}).
 
-\azalea{Explain the two conditions in 1 and 2.}
 
 Hereafter, we adopt a more suggestive notation and write $\ET \vdash (\hh, \vi) \triangleright \opset: \vi'$ 
 for $(\hh, \vi, \opset, \vi') \in \ET$.
 Execution tests induce \emph{consistency models} \( \CMs(\ET) \) as defined in \cref{def:reduction,def:cm}.
 
-\azalea{Add an example of execution test, \eg for serialisability.}
 An example of execution test is serialisability (\SER).
 The execution test for \( \SER \) requires the initial view  \( \vi \) contains all the versions in the key-value store \( \mkvs \), that is, \( \fora{\ke, i < \abs{\mkvs(\ke)} } i \in \vi(\ke)\).
 It matches the intuition that a transaction should observe the up-to-date state of the database.
 Later in \cref{sec:spec} we present more examples of execution tests of well-known consistency models in the literature. 
 
-\sx{ The following might go to appendix as it seems not very useful in the main body and cut the flow a bit}
-
 
 ------------------
 
 
-\subsection{Specifications of Consistency Models}
+\subsection{Consistency Guarantees}
 \begin{figure}
 \begin{tabular}{ l @{} r }
 \hline
@@ -657,57 +635,22 @@ $\SI$ & $\Setcon{(\mkvs, \vi, \f, \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW  \
         \RF_{\hh} &\defeq& \{ (\txid, \txid') \mid \exists \ke, i.\; \txid = \WTx(\hh(\ke, i)) \wedge \txid' \in \RTx(\hh(\ke, i))\}\\
         \VO_{\hh} &\defeq& \{ (\txid, \txid') \mid \exists \ke, i, j.\; \txid = \WTx(\hh(\ke, i)) \wedge \txid' = \WTx(\hh(\ke, j)) \wedge i < j\}\\
         \AD_{\hh} &\defeq& \{ (\txid, \txid') \mid \exists \ke, i, j.\; \txid \in \RTx(\hh(\ke, i)) \wedge \txid' = \WTx(\hh(\ke, j)) \wedge i < j\}\\
-%        \func{RW^{-1}}{\mkvs, \ke, i} & \defeq & \Setcon{\txid}{\exsts{ j < i } \txid \in \RTx(\mkvs(\ke,j))} \\
- %       \func{SO^{-1}}{\txid} & \defeq & \Setcon{\txid'}{ \exsts{ \cl, m, n } \txid = \txid_{\cl}^{n} \land \txid' = \txid_{\cl}^{m} \land m < n } \\
         \PO &\defeq& \{ (\txid, \txid') \mid \exists \cl, m, n.\; \txid = \txid_{\cl}^{m} \wedge \txid' = \txid_{\cl}^{n} \wedge m < n \}\\
         \dagger & \equiv &
         \begin{array}[t]{@{}l@{}}
-%            \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
                \fora{\ke, \ke', i, j} \\
             \begin{array}{@{}l@{}}
-            i \in \vi(\ke)  \wedge \WTx(\hh(\ke', j)) \mathrel{((\PO \cup \RF_{\hh} \cup \VO_{\hh}) ; \AD_{\hh}?)} \WTx(\hh(\ke, i))\\
-%            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
-%            \quad \left(
-%                \begin{array}{@{}l @{}}
-%                    \left( \begin{array}{@{}l@{}}
-%                        \txid' \in \func{SO^{-1}}{\txid}
-%                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
-%                    \end{array} \right)  \lor {} \\
-%                    \left( \begin{array}{@{}l@{}}
-%                        \txid \in \RTx(\mkvs(\ke',j)) 
-%                        \land \txid' = \WTx(\mkvs(\ke',j))
-%                    \end{array} \right) \lor {} \\ 
-%                    \left( \begin{array}{@{}l@{}}
-%                        \txid = \WTx(\mkvs(\ke',m)) 
-%                        \land \txid' = \WTx(\mkvs(\ke',j)) \land m > j
-%                    \end{array} \right) 
-%                \end{array}
-%                \right)  \\
+            i \in \vi(\ke)  \wedge \WTx(\hh(\ke', j)) \toEdge{((\PO \cup \RF_{\hh} \cup \VO_{\hh}) ; \AD_{\hh}?)} \WTx(\hh(\ke, i))\\
             \qquad \implies j \in \vi(\ke') 
             \end{array}
         \end{array} \\
 
-        \ddagger & \equiv &
+      \ddagger & \equiv &
         \begin{array}[t]{@{}l@{}}
-            \fora{\ke, \ke', i, j, m, \txid, \txid', \txid''} \\
-            \left( \begin{array}{@{}l@{}}
-            i \in \vi(\ke) 
-            \land \txid \in \Set{\WTx(\mkvs(\ke,i))} \cup \func{RW^{-1}}{\mkvs, \ke, i} \land {} \\
-            \quad \left(
-                \begin{array}{@{}l @{}}
-                    \left( \begin{array}{@{}l@{}}
-                        \txid' \in \func{SO^{-1}}{\txid}
-                        \land \txid' \in \Set{\WTx(\mkvs(\ke',j))} \cup  \RTx(\mkvs(\ke',j))
-                    \end{array} \right)  \lor {} \\
-                    \left( \begin{array}{@{}l@{}}
-                            \txid \in \RTx(\mkvs(\ke',j)) \land \txid' = \WTx(\mkvs(\ke',j))
-                    \end{array} \right)
-                    \end{array} \right) 
-                \end{array}
-                \right)  \\
-                {} \lor \left( \begin{array}{@{}l@{}}
-                        i \in \vi(\ke) \land \ke = \ke' \land j < i
-                \end{array} \right) \\
+               \fora{\ke, \ke', i, j} \\
+            \begin{array}{@{}l@{}}
+            i \in \vi(\ke)  \wedge \WTx(\hh(\ke', j)) \toEdge{(((\PO \cup \RF_{\hh}) ; \AD_{\hh}?) \cup \VO_{\hh})} \WTx(\hh(\ke, i))\\
+              \end{array}\\
                 \qquad \implies j \in \vi(\ke') 
         \end{array} \\
     \end{rclarray}
@@ -830,22 +773,6 @@ Intuitively, the \( \CP \) disallows that a transaction observes updates in diff
 In \cref{fig:cp-disallowed-1}, transactions $\txid_{3}$ and \( \txid_4 \) observes updates in different order.
 That is, \( \txid_3 \) observes that the update of $\ke_2$ carrying value $\val_2$ happens before the update of $\ke_1$ carrying value $\val_2$,
 yet $\txid_{4}$ observes that the update of $\ke_1$ carrying value $\val_1$ happens before the update of $\ke_2$ carrying value $\val_2$. 
-\ac{
-    \sx{ Not sure I understand the words but the counterexample has  been ruled out by \( \ddagger \). 
-         It looks like the same as observe update in different order without having a transaction actually reading. }
-The second property required by $\CP$ is that at any given time, 
-a client observes the effects of all the transactions that  
-executed before the last transaction that such a client executed. 
-This property prevents a scenario like the one depicted to the 
-right: client $\cl$ does not observe the update to $\ke_2$ performed 
-by $\cl'$, and $\cl'$ does not observe the update to $\ke_1$ performed 
-by $\cl$. This property can be formalised by requiring that, after 
-a client executes a transaction, its view is shifted to the most recent 
-view of the data. The execution test $\ET_{\CP}$ is defined formally 
-in \cref{fig:execution.tests}; in \cref{sec:?} we prove that our specification  
-of $\CP$ using execution tests is precise. 
-}
-
 \paragraph{Parallel Snapshot Isolation (\PSI)} 
 Parallel Snapshot Isolation (\PSI) can be obtained by combining causal consistency with update atomic, 
 $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$, and $\ET_{\SI} = \ET_{\CC} \cap \ET_{\UA}$.
@@ -883,34 +810,6 @@ By \( \ET_\MRd\), it is the case \( \txid \) is in the view \( \vi \).
 If \( \txid' \) is a new transaction observed by the client \( \cl \),
 the \( \dagger \) enforces that \( \txid \) should be included \( \vi \).
 
-\ac{\color{red} This is going to be difficult to be put in words: 
-both SI and CP require that the snapshot taken by clients are monotonically 
-increasing (at least for transactions that write to at least one key). 
-In both SI and CP, we enforce this property by computing, at the moment 
-of trying to commit a transaction, a view of all the transactions that executed before 
-(and hence appear in the kv-store); then we require that such views do not cross 
-with the one that is being used to commit the current transaction. Here is where 
-the twist happens: the way in which the relevant fragment of a view of 
-a transaction is obtained is different for $\CP$ and $\SI$. 
-For $\CP$, this relevant fragment is obtained 
-by looking at the version reads for a transaction. If transaction $\txid$ read the 
-$i$-th version of $\ke$, then we can be sure that the view $\vi_{\txid}$ 
-that was used to execute $\txid$ was such that $\vi_{\txid}(\ke) = i$. 
-For $\SI$ we also know that if transaction $\txid$ wrote the $i$-th version 
-of key $\ke$, then because of write conflict detection, $\vi_{\txid}$ pointed 
-to the previous version of $\ke$ i.e. $\vi_{\txid}(\ke) = i - 1$. 
-In \cref{fig:execution.tests}, the execution test $\ET_{\SI}$ enforces three properties: 
-the check on the first line mandates that  if a transaction wants to write key $\ke$, then the view of the client wishing 
-to execute such a transaction must be up-to-date for that client; the check 
-on the second line mandates that upon committing 
-a transaction, a client shifts its view to the most up-to-date version of each 
-key (this is done to ensure both $\RYW$ and $\MRd$); 
-the check on the last two lines ensures that, in order to commit a transaction, the 
-view of a client must not be crossing the view that was used to commit a previous 
-transactions $\txid'$, at least for the objects that were accessed by $\txid'$.\\
-Following a chat with Shale: it looks that there is a check on the program order missing 
-here. I need to correct this.}
-
 \paragraph{(Strict) serialisability (\SER)}
 Serialisability is the strongest consistency model, 
 which requires that there exists a serial or sequential schedule of transaction. 
@@ -945,15 +844,10 @@ is the smallest relation such that for all $\vi, \vi', \cl, \hh, \hh', \viewFun,
 	\phantom{a} \hfill 
 	$(\hh, \viewFun) \xrightarrowtriangle{(\cl, \opset)}_{\ET} (\hh', \viewFun\rmto{\cl}{\vi'})$
 \end{enumerate}
-%Such relations take the name of $\ET$-reductions, or simply reductions.
-%
 Given an execution test $\ET$, an \emph{$\ET$-trace} is a sequence of $\ET$-reductions of the form $\conf_{0} \xrightarrowtriangle{\alpha_{0}}_{\ET} \cdots 
 \xrightarrow{\alpha_{n-1}} \conf_{n}$.
 \end{definition}
-%
-%
-%
-%
+
 \subsubsection{Consistency Models}
 Consistency models are computed from execution tests by closing the set of initial key-value stores with respect to two operations: 
 \begin{enumerate*}[label=(\arabic*)]
@@ -961,8 +855,7 @@ Consistency models are computed from execution tests by closing the set of initi
 	\item committing a fingerprint of a transaction. 
 \end{enumerate*}
 Lastly, consistency models induced by execution tests are \emph{monotonic} (\cref{prop:mono-et}).
-%
-%
+
 \begin{definition}[Consistency Models]
 \label{def:cm}
 Given an execution test $\ET$, the set of configurations induced by $\ET$ is given by:
@@ -974,7 +867,6 @@ The \emph{consistency model} induced by $\ET$ is:
 \CMs(\ET) \defeq \Setcon{ \hh }{ (\hh, \stub) \in \Confs(\ET) }
 \)
 \end{definition}
-
 
 
 
