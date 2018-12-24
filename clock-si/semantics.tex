@@ -483,8 +483,8 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
     \]
     for some \( i \), there exists a trace
     \[
-        (\thdenv(\cl), \snapshot(\mkvs,\func{viewOf}{\mkvs,\ct}), \emptyset), \trans \toL^*
-        (\stk, \h, \f), \pskip
+        (\stk_0, \snapshot(\mkvs_0,\func{viewOf}{\mkvs_0,\ct}), \emptyset), \trans \toL^*
+        (\stk_i, \h_i, \f_i), \pskip
     \]
     that produces the same final fingerprint in the end.
 \end{theorem}
@@ -496,7 +496,7 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
     \]
     We construct the following trace,
     \[
-        (\stk_0, \snapshot(\mkvs,\func{viewOf}{\mkvs,\ct}), \f_0), \trans_0 \toL^*
+        (\stk_0, \snapshot(\mkvs_0,\func{viewOf}{\mkvs_0,\ct}), \f_0), \trans_0 \toL^*
         (\stk_i, \h_i, \f_i), \trans_i
     \]
     Let consider how many transactional internal steps.
@@ -518,25 +518,96 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
         \]
         and a trace
         \[
-            (\stk_0, \snapshot(\mkvs,\func{viewOf}{\mkvs,\ct}), \f_0), \trans_0 \toL^*
+            (\stk_0, \snapshot(\mkvs_0,\func{viewOf}{\mkvs_0,\ct}), \f_0), \trans_0 \toL^*
             (\stk_i, \h_i, \f_i), \trans_i
         \]
         Now let consider the next step.
-        %\begin{itemize}
-            %\item Read from transaction: \rl{ReadTrans}.
-                %In this case
-                %\[
-                    %\mkvs_i, \ct_i, \cts_i, \stk_i, \ptrans{\trans_i}_\ct^{\f_i}
-                    %\toG{\stub}
-                    %\mkvs_{i+1}, \ct_{i+1}, \cts_{i+1}, \stk_{i+1}, \ptrans{\trans_{i+1}}_\ct^{\f_{i+1}}
-                %\]
-                %such that
-                %\[
-                    %\f_{i+1} = \f_i \addO (\otR, \ke, \val) 
-                    %\land (\otW,\ke, \val') \in \f_i
-                %\]
-                %for some key \( \key \) and values \( \val \) and \( \val' \).
-        %\end{itemize}
+        \begin{itemize}
+            \item \rl{ReadTrans}.
+                In this case
+                \[
+                    \mkvs_i, \ct_i, \cts_i, \stk_i, \ptrans{\trans_i}_\ct^{\f_i}
+                    \toG{\stub}
+                    \mkvs_{i+1}, \ct_{i+1}, \cts_{i+1}, \stk_{i+1}, \ptrans{\trans_{i+1}}_\ct^{\f_{i+1}}
+                \]
+                such that
+                \[
+                    \f_{i+1} = \f_i \addO (\otR, \ke, \val)  = \f_i
+                    \land (\otW,\ke, \val) \in \f_i
+                \]
+                for some key \( \ke \) and value \( \val \), and
+                \[
+                    \trans_{i} \equiv \plookup{\vx}{\expr} ; \trans 
+                    \land \evalE[\stk_i]{\expr} = \ke 
+                    \land \stk_{i+1} = \stk_i\rmto{\pv}{\val}
+                    \land  \trans_{i+1} \equiv \pskip ; \trans
+                \]
+                for some variable \( \vx \), expression \( \expr \) and continuation \( \trans \).
+                Since \( ( \otW, \ke ,\val ) \in \f_i  \), it means \( \ss_i(\ke) = \val \) for the local snapshot.
+                By the \rl{TPrimitive}, we have 
+                \[
+                    (\stk_i, \h_i, \f_i), \trans_i \toL \plookup{\vx}{\expr} ; \trans 
+                    \toL (\stk_{i+1}, \h_i, \f_{i+1} ), \trans_{i+1}
+                \]
+            \item \rl{ReadRemote}.
+                In this case
+                \[
+                    \mkvs_i, \ct_i, \cts_i, \stk_i, \ptrans{\trans_i}_\ct^{\f_i}
+                    \toG{\stub}
+                    \mkvs_{i+1}, \ct_{i+1}, \cts_{i+1}, \stk_{i+1}, \ptrans{\trans_{i+1}}_\ct^{\f_{i+1}}
+                \]
+                such that
+                \[
+                    \f_{i+1} = \f_i \addO (\otR, \ke, \val) = \f_i \uplus \Set{(\otR, \ke, \val)}
+                    \land \fora{\val} (\otW,\ke, \val') \notin \f_i
+                \]
+                for some key \( \ke \) and value \( \val \), and
+                \[
+                    \trans_{i} \equiv \plookup{\vx}{\expr} ; \trans 
+                    \land \evalE[\stk_i]{\expr} = \ke 
+                    \land \stk_{i+1} = \stk_i\rmto{\pv}{\val}
+                    \land  \trans_{i+1} \equiv \pskip ; \trans
+                \]
+                for some variable \( \vx \), expression \( \expr \) and continuation \( \trans \).
+                By the premiss of the \rl{ReadRemote}, the value read is from the last version before the snapshot time:
+                \[
+                    n = \max\Setcon{n'}{%
+                        \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct%
+                    } 
+                    \land \valueOf(\mkvs_i(\ke,n) ) = \val
+                \]                 
+                By the definition of \( \vi_0 = \func{viewOf}{\mkvs_0,\ct} \) and \( \getSN{\mkvs_0,\vi_0} \) and the fact that there is no write to the key \( \ke \),
+                it follows \( \h_i(\ke) = \val \).
+                Thus, by the \rl{TPrimitive}, we have 
+                \[
+                    (\stk_i, \h_i, \f_i), \trans_i \toL \plookup{\vx}{\expr} ; \trans 
+                    \toL (\stk_{i+1}, \h_i, \f_{i+1} ), \trans_{i+1}
+                \]
+            \item \rl{Write}.
+                In this case
+                \[
+                    \mkvs_i, \ct_i, \cts_i, \stk_i, \ptrans{\trans_i}_\ct^{\f_i}
+                    \toG{\stub}
+                    \mkvs_{i+1}, \ct_{i+1}, \cts_{i+1}, \stk_{i+1}, \ptrans{\trans_{i+1}}_\ct^{\f_{i+1}}
+                \]
+                such that
+                \[
+                    \f_{i+1} = \f_i \addO (\otW, \ke, \val) = \f_i \setminus \Setcon{(\otW, \ke, \val')}{\val' \in \Val} \uplus \Set{(\otR, \ke, \val)}
+                \]
+                for some key \( \ke \) and value \( \val \), and
+                \[
+                    \trans_{i} \equiv \pmutate{\expr_1}{\expr_2} ; \trans 
+                    \land \evalE[\stk_i]{\expr_1} = \ke 
+                    \land \evalE[\stk_i]{\expr_2} = \val 
+                    \land  \trans_{i+1} \equiv \pskip ; \trans
+                \]
+                for some expressions \( \expr_1 \) and \( \expr_2 \), and continuation \( \trans \).
+                By the \rl{TPrimitive}, it is easy to see: 
+                \[
+                    (\stk_i, \h_i, \f_i), \trans_i \toL \pmutate{\expr_1}{\expr_2} ; \trans 
+                    \toL (\stk_{i+1}, \h_i, \f_{i+1} ), \trans_{i+1}
+                \]
+        \end{itemize}
     \end{itemize}
 \end{proof}
 
