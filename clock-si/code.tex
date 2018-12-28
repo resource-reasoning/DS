@@ -1,0 +1,161 @@
+\subsubsection{Code}
+
+\paragraph{\bf Structure}
+Clock-SI is a sharding distributed NoSQL database, which means 
+each server, also called shard, contains part of keys and does not overlap with any other servers.
+Clock-SI implements snapshot isolation.
+To achieve that, each shard tracks the physical time.
+Note that times between shards do not match,
+but there is a upper bound of the difference.
+\begin{lstlisting}[caption={Shard},label={lst:clock-si-shard}]
+Shard :: ID -> ( clockTime )
+\end{lstlisting}
+A key maintains a list of values and their versions.
+A version is the time when such value is committed.
+\begin{lstlisting}[caption={Key-value store},label={lst:clock-si-key-value-store}]
+VersionNo :: Time
+KV :: Keys -> List( Val, VersionNo )
+(each key is asscoaited with a shard)
+\end{lstlisting}
+The idea behind Clock-SI is that
+a client starts a transaction in a shard, 
+and the shard is responsible for fetching value from other shards
+if keys are not stored in the local shard.
+During execution, a transaction tracks the write set.
+\begin{lstlisting}[caption={Write set},label={lst:clock-si-write-set}]
+WS :: Key -> Val
+\end{lstlisting}
+At the end, the transaction commits all the update in the write set,
+and the local shard acts as coordinator to update keys either locally or remotely.
+To commit a transaction, Clock-SI use two-phase commits protocol.
+A transaction has four states:
+\begin{itemize}
+    \item \verb|active|, the transaction is still running;
+    \item \verb|prepared|, shards receive the update requests from the coordinator;
+    \item \verb|committing|, shards receive the update confirmations from the coordinator;
+    \item \verb|committed|, the transaction commits successfully.
+\end{itemize}
+To implement SI, a transaction also tracks its snapshot time 
+so it knows which version should be fetched.
+Also a transaction tracks the prepared and committing times,
+which are used to postpone other transactions' reads 
+if those transactions' snapshots time are greater.
+\begin{lstlisting}[caption={Transaction runtime},label={lst:clock-si-trans-runtime}]
+State :: { active, prepared, committing, committed }
+Trans :: ( state, snapTime, prepareTime, commitTime, ws )
+\end{lstlisting}
+
+\paragraph{\bf Start Transaction}
+Clock-SI proposes two versions, with or without session order.
+Here we verify the one with session order.
+To start a transaction, the client contacts a shard 
+and provides the previous committing time.
+The shard will return a snapshot time, 
+which is greater than the committing time provided, for the new transaction.
+Note that client might connects to a different shard from last time,
+which means that 
+the shard might have to wait until the shard local time is greater than the committing time.
+\begin{lstlisting}[caption={Transaction runtime},label={lst:clock-si-trans-runtime}]
+startTransaction( Trans t, Time ts )
+    wait until ts < getClockTime();
+    t.snapshotTime = getClockTime();
+    t.state = active;
+\end{lstlisting}
+From this point, such transaction will always interact with the shard and
+the shard will act as coordinator if necessary.
+
+\paragraph{\bf Read}
+A transaction \verb|t| might read within the transaction if the key has been updated by the same transaction before,
+that is, read from the write set \verb|ws|.
+A transaction \verb|t| might read from the original shard if the key store in the shard,
+but it has to wait until any other transactions \verb|t'| commit successfully
+who are supposed to commit before the current transaction's snapshot time,
+\ie \verb|t'| are in \verb|prepared| or \verb|committing| stage 
+and the corresponding time is less the \verb|t| snapshot time.
+\begin{lstlisting}[caption={Read from original shard},label={lst:clock-si-read-original}]
+Read( Trans t, key k )
+    if ( k in t.ws ) return ws(k);
+    if ( k is updated by t' and t'.state = committing and t.snapshotTime > t'.committingTime)
+        wait until t'.state == committed;
+    if ( k is updated by t' and t'.state = prepared and t.snapshotTime > t'.preparedTime 
+                and t.snapshotTime > t'.committingTime )
+        wait until t'.state == committed;
+    return K(k,i), where i is the latest version before t.snapshotTime;
+\end{lstlisting}
+If the key is not stored in the original shard, 
+the original shard sends a read request to the shard containing the key.
+Because of time difference, the remote shard's time might before the snapshot time of the transaction.
+In this case, the shard wait until the time catches up.
+\begin{lstlisting}[caption={Read from original shard},label={lst:clock-si-read-original}]
+On read k request from a remote transaction t
+    wait until t.snapshotTime < getClockTime() 
+    return read(t,k);
+\end{lstlisting}
+
+\paragraph{\bf Commit Write Set}
+If all the keys in the write set are hosted in the original shard that the transaction first connected,
+the write set only needs to commit local.
+\begin{lstlisting}[caption={Local Commit},label={lst:clock-si-local-commit}]
+localCommit( Trans t )
+    if noConcurrentWrite(t)
+        t.state = committing;
+        t.commitTime = getClockTime();
+        log t.commitTime;
+        log t.ws;
+        t.state = committed;
+\end{lstlisting}
+To commit local, it first checks, by \verb|noConcurrentWrite(t)|,
+if there is any transaction \verb|t'| 
+that writes to the same key as the transaction new transaction \verb|t|,
+and the transaction \verb|t'| commit after the snapshot of \verb|t|.
+Since writing database needs time,
+it sets the transaction state to \verb|committing| and
+log the \verb|commitTime|, before the updating really happens.
+During \verb|committing| state, other transactions will be pending, 
+if they want to read the keys being updated.
+Last, the state of transaction is set to \verb|committed|.
+
+To commit to several shards,
+Clock-SI uses two-phase protocol.
+\begin{lstlisting}[caption={Distributed Commit},label={lst:clock-si-distributed-commit}]
+distributedCommit( Trans t )
+    for p in t.updatedPartitions
+        send ``prepare t'' to p;
+    wait receiving ``t prepared'' from all participants, store into prep;
+    t.state = committing;
+    t.commitTime = max(prep);
+    log t.commitTime;
+    t.state = committed;
+    for p in t.updatedPartitions
+        send ``commit t'' to p;
+
+On receiving ``prepare t''
+    if noConcurrentWrite(t)
+        log t.ws and t.coordinator ID
+        t.state = prepared;
+        t.prepareTime = getClockTime();
+        send ``t prepared'' to t.coordinator
+
+On receiving ``commit t''
+    log t.commitTime
+    t.state = committed
+\end{lstlisting}
+The original shard, who acts as the coordinator,
+sends \verb|''prepare t''| to shards that will be updated.
+Any shard receiving \verb|''prepare t''| checks, similarly, 
+if there is any transaction write to the same key committing after the snapshot time.
+If the check passes, 
+the shard logs the write set and the coordinator shard ID,
+set the state to \verb|prepared|,
+and sends the local time to the coordinator.
+Once the coordinator receives all the \verb|prepared| messages,
+it starts the second phase by setting the state to \verb|committing|.
+Then the coordinator picks the largest time from 
+all the \verb|prepared| messages as the commit time for the new transaction.
+Since the write set has been logged in the first phase, 
+so here it can immediately set the state to be \verb|committed|.
+Last, the coordinator needs to send \verb|commit t| to other shards 
+so they will log the commit time and set the state to \verb|committed|.
+Note that participants have different view for the new transaction from the coordinator,
+but it guarantees eventually they all updated to \verb|committed| with the same commit time.
+
