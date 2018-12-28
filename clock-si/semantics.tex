@@ -1,25 +1,36 @@
 \subsubsection{Verification}
 
+\paragraph{\bf Structure}
+We model the database use key-value store from \cref{def:mkvs},
+yet here it is necessary to satisfy the well-formed conditions.
+Transaction identifier \( \txid_\cl^n \) are labelled with the committing time \( n \).
+Sometime we also write \( \txid_\cl^\ct \) or omit the client label, \ie \( \txid^n\) and \( \txid^\ct \).
+
 Database is partitioned into several \emph{shards}.
 A shard \(\sd \in \sds \subseteq \Shards \)  contains some keys which are disjointed from keys in other shards.
-The \( \func{shardOf}{\ke} \) denotes the shard where the key \( ke \) locates.
+The \( \func{shardOf}{\ke} \) denotes the shard where the key \( \ke \) locates.
 
 Shards and clients are associated with clock times, \(  \ct \in \ClockTimes \defeq \Nat \), which represent the current times of shards and clients.
 We use notation \( \cts \in (\Shards \cup \ClientID ) \parfinfun \ClockTimes\).
 
+We will use notation \( \ptrans{\trans} \) to denote the static code of a transaction,
+and \( \runtrans{\trans}{\ct}{\f} \) for the runtime of a transaction,
+where \( \ct \)  is the snapshot time and \( \f \) is the read-write set.
+Note that in the model, we only distinguishes \verb|active| and \verb|committed| state,
+since the \verb|prepared| and \verb|committing| are only for better performance.
 
-
-\begin{lstlisting}[caption={start transaction},label={lst:clock-si-start-trans}]
-startTransaction( Trans t, Time ts ) {
-    assert(ts < getClockTime()); (*\label{line:check-local-time}*)
-    t.snapshotTime = getClockTime();
-    t.state = active;
-}
-\end{lstlisting}
-
+\paragraph{\bf Start Transaction}
+To start a transaction, it picks a random shard \( \sd \) as the coordinator,
+reads the local time \( \cts(\sd) \) as the snapshot,
+and sets the initial read-write set to be an empty set.
+Also the client time is updated to the snapshot time.
+For technical reason,
+we also update the shard time to avoid time collision to other transaction about to commit.
+Note that in real life, all the operations running in a shard take many time cycles,
+so it is impossible to have time collision.
 \[
     \inferrule[StartTrans]{ 
-        \ct < \cts(\sd) \quad \texttt{---> \cref{lst:clock-si-start-trans}, \cref{line:check-local-time}}\\\\
+        \ct < \cts(\sd) \and 
         \cts' = \cts\rmto{\sd}{\cts(\sd) + 1} \quad \texttt{--->  simulate time elapses}
         }{%
             \cl \vdash \mkvs, \ct, \cts, \stk, \ptrans{\trans} \toT{\cts(\sd), \ct, \emptyset, \perp}
@@ -27,13 +38,13 @@ startTransaction( Trans t, Time ts ) {
         }
 \]
 
-
+\paragraph{\bf Read}
 The clock-SI protocol includes some codes related to performance which does not affect the correctness.
 Clock-SI distinguishes a local read/commit and a remote read/commit,
 yet it is sufficient to assume all the read and commit are ``remote'',
 while the local read and commit can be treated as self communication.
 Similarly we assume a transaction always commits to several shards.
-\begin{lstlisting}[caption={read},label={lst:simplified-read}]
+\begin{lstlisting}[caption={simplified read},label={lst:simplified-read}]
 On receive ``read(t,k)'' {
     if ( k in t.ws ) return ws(k); (*\label{line:read-from-local}*)
 
@@ -43,11 +54,12 @@ On receive ``read(t,k)'' {
                     || t.snapshotTime > t'.committingTime) 
             asssert( t.state == committed )
 
-    take the latest version before t.snapshotTime: i (*\label{line:read-i-from-shard}*)
-    return K(k,i) 
+    return K(k,i), where i is the latest version before t.snapshotTime; (*\label{line:read-i-from-shard}*)
 }
 \end{lstlisting}
 
+If the key exists in the write set \( \f \),
+the transaction read from the write set immediately.
 \[
     \inferrule[ReadTrans]{ 
             \ke = \evalE{\expr} \\
@@ -58,20 +70,25 @@ On receive ``read(t,k)'' {
         }
 \]
 
+Otherwise, the transaction needs to fetch the value from the shard.
+The first premiss says the transaction must wait until the shard local time \( \cts(\func{shardOf}{\ke}) \) is greater than the snapshot time \( \ct \).
+If so, by the second line, the transaction fetches the latest version for key \( \ke \) before the snapshot time \( \ct \).
 \[
     \inferrule[ReadRemote]{ 
             \ke = \evalE{\expr} \\
             (\otW, \ke, \stub ) \notin \f \\
             \ct < \cts(\func{shardOf}{\ke}) \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:snapshot-time-grt-than-shard}} \\\\
             n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-i-from-shard}} \\\\ 
-            \mkvs(\ke, i) = (\val, \txid, \stub) 
+            \mkvs(\ke, i) = (\val, \txid^n, \stub) 
         }{%
         \cl \vdash \mkvs, \ct, \cts, \stk, \runtrans{\pderef{\vx}{\expr}}{\ct}{\f} \toT{\cl,\ct,\f \addO (\otR, \ke, \val), \perp}
             \mkvs, \ct, \cts', \stk\rmto{\vx}{\val}, \runtrans{\pskip}{\ct}{\f \addO (\otR, \ke, \val)}
         }
 \]
 
-
+\paragraph{\bf Write}
+Write will not go to the shard until committing time.
+Before it only log it in the write set.
 \[
     \inferrule[Write]{ 
             \ke = \evalE{\expr_1} \\
@@ -82,12 +99,10 @@ On receive ``read(t,k)'' {
         }
 \]
 
-Note that Clock-SI uses two phase commit:
-the coordinator (the shard that the client directly connects to) distinguishes ``committing'' state  and ``committed'' state, where in between the coordinator pick the committing time and log the write set,
-and the participants distinguishes ``prepared'' state and ``committed'' state.
-Such operations are for possible network partition or single shard errors and allowed a more fine-grain implementations which do not affect the correctness, therefore it suffices to assume they are one atomic step.
+\paragraph{\bf Commit}
+We also assume transaction always commit to several shards and the local commit is treated as self-communication.
 
-\begin{lstlisting}[caption={commit},label={lst:simplified-commit}]
+\begin{lstlisting}[caption={simplified commit},label={lst:simplified-commit}]
 commit( Trans t )
     for p in t.updatedPartitions
         send ``prepare t'' to p;
@@ -111,22 +126,11 @@ On receiving ``commit t''
     t.state = committed  (*\label{line:clock-si-commit-2}*)
 \end{lstlisting}
 
-\[
-\begin{rclarray}
-    \func{commitKV}{\mkvs,\ct,\txid,\f \uplus \Set{(\otR,\ke,\val)}} & \defeq & 
-    \begin{array}[t]{@{}l@{}}
-    \texttt{let} \ n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \\
-    \texttt{and} \ \mkvs(\ke,i) = (\val, \txid^n, \T) \\
-    \texttt{and} \ \mkvs' = \func{commitKV}{\mkvs,\ct,\txid,\f} \\
-    \texttt{in} \ \mkvs'\rmto{\ke}{\mkvs'(\ke)\rmto{i}{(\val, \txid^n, \T \cup \Set{\txid})}}
-    \end{array} \\
-    \func{commitKV}{\mkvs,\ct,\txid,\f \uplus \Set{(\otW,\ke,\val)}} & \defeq & 
-    \begin{array}[t]{@{}l@{}}
-    \texttt{let} \ \mkvs' = \func{commitKV}{\mkvs,\ct,\txid,\f} \\
-    \texttt{in} \ \mkvs'\rmto{\ke}{\mkvs'(\ke) \lcat \List{(\val, \txid, \emptyset)}}
-    \end{array} \\
-\end{rclarray}
-\]
+Note that Clock-SI uses two phase commit:
+the coordinator (the shard that the client directly connects to) distinguishes ``committing'' state  and ``committed'' state, where in between the coordinator pick the committing time and log the write set,
+and the participants distinguishes ``prepared'' state and ``committed'' state.
+Such operations are for possible network partition or single shard errors, and allowed a more fine-grain implementations which do not affect the correctness,
+therefore it suffices to assume they are one atomic step.
 
 \[
     \inferrule[Commit]{ 
@@ -144,6 +148,37 @@ On receiving ``commit t''
         }
 \]
 
+To commit the new transaction, it needs to check, by the first premiss,
+there is no other transactions writing to the same keys after the snapshot time.
+If it passes, by the second line it picks the maximum time \( n \) among all participants
+as the commit time.
+The new key-value store \( \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\f} \),
+where 
+\[
+\begin{rclarray}
+    \func{commitKV}{\mkvs,\ct,\txid,\f \uplus \Set{(\otR,\ke,\val)}} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+    \texttt{let} \ n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\ke, j)) \land n' < \ct } \\
+    \texttt{and} \ \mkvs(\ke,i) = (\val, \txid^n, \T) \\
+    \texttt{and} \ \mkvs' = \func{commitKV}{\mkvs,\ct,\txid,\f} \\
+    \texttt{in} \ \mkvs'\rmto{\ke}{\mkvs'(\ke)\rmto{i}{(\val, \txid^n, \T \cup \Set{\txid})}}
+    \end{array} \\
+    \func{commitKV}{\mkvs,\ct,\txid,\f \uplus \Set{(\otW,\ke,\val)}} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+    \texttt{let} \ \mkvs' = \func{commitKV}{\mkvs,\ct,\txid,\f} \\
+    \texttt{in} \ \mkvs'\rmto{\ke}{\mkvs'(\ke) \lcat \List{(\val, \txid, \emptyset)}}
+    \end{array} \\
+\end{rclarray}
+\]
+Note that \( \funcn{commitKV} \) is similar to \( \updateKV \) by appending the new version to the end of a list.
+The \( \funcn{commitKV} \) also updates versions read by the new transaction 
+using the snapshot time of the transaction.
+Last, like \rl{StartTrans} 
+we update the client time after the commit time, \ie \( n + 1 \) 
+and simulate time elapses for all shards updated.
+
+\paragraph{\bf Time Tick}
+For technical reasoning, we have non-deterministic time elapses.
 \[
     \inferrule[TimeTick]{ }{%
         \mkvs, \cts, \cts', \thdenv, \prog \toG{\sd,\cts(\sd) + 1}
