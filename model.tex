@@ -123,73 +123,77 @@ Give a formal definition of well-formedness in the appendix and move the below c
 %\textbf{(i)}-\textbf{(iv)} above are \emph{well-formed}.  Henceforth,
 %we always assume kv-stores are  well-formed, and  write 
 %$\HisHeaps$ to denote the set of well-formed kv-stores.
+}
+
+%\pg{Above, I've got rid of the technical details to make it more
+%  readable. I've also done a technical version, commented out, which
+%  should probably go in the appendix.}
+
+
 
 
 \subsection{Client Views}
 
-Clients often have a partial view of the key-value store, 
+Clients often have partial views of kv-stores, 
 with different clients observing 
-different version subsets  of the same key.
+different versions of the same key.
 %To keep track of the versions observed by clients,
 %we introduce the notion of \emph{client views} (\cref{def:view}). 
 
-\begin{definition}[View]
+\begin{definition}[Views]
 \label{def:view}
 \label{def:cuts}
 \label{def:views}
 \label{def:configuration}
 A \emph{view} of a kv-store $\hh$ is a function
-$\vi \in \Views(\hh) \defeq \Keys \to\powerset{\Nat}$ such that:
+$\vi \in \Views(\hh) \defeq \Keys \to\powerset{\Nat}$ such that for all $i, i', \ke, \ke'$:
 \begin{align}
-    & \fora{ \ke } 
+    & \hspace*{-8pt}
+%    \fora{ \ke } 
     0 \in \vi(\ke) 
-    \wedge \fora{ i \in \vi(\ke) } 
-    i < \abs{ \hh(\ke) } 
-    \tag{well-formed}
+    \wedge (i \in \vi(\ke) \Rightarrow i < \abs{ \hh(\ke) }) 
+    \tag{wf}
     \label{eq:view.wf}\\
-    & 
+    & \hspace*{-8pt}
     \begin{array}{@{}l@{}}
-    \fora{ \ke_1,\ke_2, i_1, i_2} 
-	i_1 \in \vi(\ke_1)  \\
-    \quad {} \land \WTx(\hh(\ke_1, i_1)) = \WTx(\hh(\ke_2, i_2))  \\
-    \qquad {} \implies i_2 \in \vi(\ke_2)
+%    \fora{ \ke_1,\ke_2, i_1, i_2} 
+	i \in \vi(\ke)  
+  	\land \WTx(\hh(\ke, i)) {=} \WTx(\hh(\ke', i'))  
+  	\Rightarrow i' \in \vi(\ke')
     \end{array}
 	\tag{atomic}
 	\label{eq:view.atomic}
 \end{align}
-The initial view $\vi_{0}$ is defined as $\vi_{0}(\ke) = \{0\}$ for
-each $\ke \in \Keys$. A \emph{configuration}, $\conf \in \Confs$  is a pair $ (\hh, \viewFun)$
+The \emph{initial view} is denoted by $\vi_{0}$, where $\vi_{0}(\ke) = \{0\}$ for all $\ke \in \Keys$. 
+A \emph{configuration}, $\conf \in \Confs$,  is a pair $ (\hh, \viewFun)$
 with $\hh \in \HisHeaps$ and
 $\viewFun : \Clients \parfinfun \Views(\hh)$. A configuration is an 
-\emph{initial} configuration when $\hh$ is the initial key-value store
+\emph{initial} configuration when $\hh$ is the initial kv-store
 $\hh_{0}$. 
 \end{definition}
 %
 
 
-In configuration $(\hh, \viewFun)$, the view of client 
-$\cl$, given by $\vi = \viewFun(\cl)$ if defined,  determines, for each key $\ke
-\in \Keys$, the sublist of versions in $\hh$
-that the client can observe. If $i,j \in \vi(\ke)$ and $i < j$, then
-the client knows about 
- the values and transaction meta-data associated with  versions
-$\hh(\ke, i)$ and 
-$\hh(\ke, j)$, and  knows that these versions are contained in 
- $\hh$ with  $\hh(\ke, j)$ more 
+Given a configuration $(\hh, \viewFun)$, when the view of client 
+$\cl$ is defined, \ie there exists $\vi = \viewFun(\cl)$, then for each key $\ke \in \Keys$, 
+$\vi$ determines the sublist of versions in $\hh$ that client $\cl$ can observe. 
+If $i,j \in \vi(\ke)$ and $i < j$, then $\cl$ knows about the values and 
+transaction meta-data associated with versions $\hh(\ke, i)$ and  $\hh(\ke, j)$, 
+and  knows that these versions are contained in $\hh$ with  $\hh(\ke, j)$ more 
 up-to-date than $\hh(\ke, i)$. 
-Let $\Views = \bigcup_{\hh \in \HisHeaps} \Views(\hh)$ be the set of all views. 
+Let $\Views \eqdef \bigcup_{\hh \in \HisHeaps} \Views(\hh)$ be the set of all views. 
 Given a kv-store $\hh$ and two views $\vi, \vi' \in \Views(\hh)$, 
-we write $\vi \viewleq \vi'$ when $\vi(k) \subseteq \vi'(\ke)$ for all $\ke \in \dom(\hh)$. 
+we define: $\vi \viewleq \vi' \iffdef \for{\ke \in \dom(\hh)} \vi(k) \subseteq \vi'(\ke)$.
 
-Given configuration
-$(\hh, \viewFun)$ and client $\cl$ such that $\viewFun(\cl)$ is
+Given a configuration $(\hh, \viewFun)$ and a client $\cl$ such that $\viewFun(\cl)$ is
 defined, it is possible to define a \emph{snapshot} of the
 view $\viewFun  (\cl)$, which identifies the last write of a client
 view. This definition assumes that the database satisfies the \emph{last write wins}
 resolution policy~\cite{}. It  is straightforward to generalise our work
 to other resolution policies~\cite{.}.
 
-\begin{definition}[Snapshot]
+%\azalea{$\ss$ has negative (Nazi) connotations. I would rename it if possible.}
+\begin{definition}[Snapshots]
 \label{def:heaps}
 \label{def:snapshot}
 A \emph{snapshot}, \( \ss \in \Snapshots  \defeq \Keys \to
@@ -199,20 +203,18 @@ $\hh$ is defined by  $\snapshot(\hh, \vi) \defeq \lambda \ke \ldotp \valueOf(\hh
 where $\max_{<}(\vi(\ke))$ is the maximum element in $\vi(\ke)$ with respect to the natural 
 order $<$ over $\mathbb{N}$.
 \end{definition}
-Given a kv-store $\hh$, key $\ke$ and view $\vi$, we abuse
-notation, writing 
+Given a kv-store $\hh$, a key $\ke$ and a view $\vi$, 
+%we abuse
+%notation, writing 
+we write 
 $\hh(\ke, \vi)$ as a shorthand for 
 $\hh(\ke, \max_{<}(\vi(\ke))$. Thus, $\snapshot(\hh, \vi) = \lambda \ke \ldotp \valueOf(\hh(\ke, \vi))$. 
 
 \begin{remark}
-The client view describes the partial history of  the database that is
-observed  by
-the client. The client snapshot describes the most up-to-date
-information about the state of the database known to the client. 
-It is not possible to work with just the 
-snapshot. The client view is essential to 
-to express some of the standard consistency models (see
-Section~\cref{........}). 
+The client view describes the partial history of the database observed by the client. 
+The client snapshot describes the most up-to-date state of the database known to the client (based on its view). 
+It is not possible to work with the snapshot alone. 
+The client view is essential to express several standard consistency models (see~\cref{subsec:cm_examples}). 
 \end{remark}
 
 
