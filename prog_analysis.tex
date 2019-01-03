@@ -88,7 +88,8 @@ which proves that $\hh_2$ cannot be obtained in any serialisable execution.
 \paragraph{Robustness of a Single counter under Parallel Snapshot Isolation.}
 In practice we show that a single counter is robust under any consistency model 
 that guarantees both write conflict detection (formalised by the execution test 
-$\ET_{\UA}$) and monotonic reads (formalised by the execution test $\ET_{\MRd}$). 
+$\ET_{\UA}$), monotonic reads (formalised by the execution test $\ET_{\MRd}$) 
+and read your writes (formalised by the execution test $\ET_{\RYW}$).
 \begin{proposition}
 \label{prop:counter_hhshape}
 Let $\mathsf{Counter}(\ke) = \{\mathsf{inc}(\ke), \mathsf{read}(\ke)\}$.
@@ -438,7 +439,190 @@ On the other hand, for $\graphof(\hh_4)$ we have the following cycle, which prov
 $\hh_4 \notin \mathsf{KVStrores}(\ET_{\SER}, \mathsf{Counter})$: 
 \[
 \txid_{\cl_1}^{1} \xrightarrow{\PO_{\hh_4}} \txid_{\cl_1}^{2} \xrightarrow{\AD_{\hh_4}} \txid_{\cl_2}^{1} \xrightarrow{\PO_{\hh_4}} 
-\txid_{\cl_2}^{2} \xrightarrow{\PO_{\hh_4}} \txid_{\cl_2}^{1} \xrightarrow{\AD_{\hh_4}} \txid_{\cl_1}^{1}.
+\txid_{\cl_2}^{2} \xrightarrow{\AD_{\hh_4}} \txid_{\cl_1}^{1}.
 \]
 
-\paragraph{Robustness of multiple counters under Snapshot Isolation}
+\paragraph{Robustness of multiple counters under Snapshot Isolation.}
+The reason why multiple counters fail to be robust under Parallel Snapshot Isolation is 
+that two different clients can observe increments over different counters to have been 
+executed in different order. For example, in the example above we had that client $\cl_1$ 
+observed the initial value of $\ke_2$ after it incremented $\ke_1$, and vice-versa $\cl_2$ 
+observed the initial value of $\ke_1$ after it incremented $\ke_2$. This situation does not 
+arise when the execution test employed by clients guarantees Snapshot Isolation: 
+by definition, this consistency model ensures that there is a total order among all the the updates 
+performed over $\ke_1$ and $\ke_2$, and that is consistent with the order in which such updates 
+are observed by clients. 
+
+We show that multiple counters are robust against Snapshot Isolation. 
+The proof strategy we employ is the same as for the proof of robustness of a single 
+counter against PSI: we characterise the shape of kv-stores that can be obtained 
+as a result of multiple clients invoking arbitrary operations on counters, and we show 
+that the corresponding dependency graph has no cycle. 
+To this end, we will need the following, auxiliary result that characterises cycles in 
+Snapshot Isolation: 
+\begin{proposition}
+\label{prop:si_cycles}
+Let $\hh \in \CM(\ET_{\SI})$. Then the relation $((\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh}) ; \AD_{\hh}?)^{+}$ is 
+irreflexive. 
+\end{proposition}
+
+\begin{proof}
+This is a straightforward consequence of the correspondence between $\ET_{\SI}$-traces and 
+abstract executions that satisfy the axiomatic specification of $\SI$ (\cref{?}), and the fact that for any 
+such abstract execution $\aexec$, the relation $((\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh}); \AD_{\hh}?)^{+}$ 
+is irreflexive (\cite{feketeSI,SIanalysis,laws}).
+\end{proof}
+
+We only consider 
+the case where the key-value store consists of two counters $\mathsf{Counter}(\ke_1)$ and $\mathsf{Counter}(\ke_2)$, 
+although our line of reasoning can be generalised to an arbitrary number of counters. 
+Therefore, let $\mathsf{Counter} = \mathsf{Counter}(\ke_1) \cup \mathsf{Counter}(\ke_2)$. 
+
+Let also $\hh$ be in $\mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$. Because 
+$\ET_{\SI} \subseteq \ET_{\PSI}$, $\hh(\ke_1)$ and $\hh(\ke_2)$ satisfy the 
+properties from Proposition \ref{prop:counter_hhshape}. 
+Furthermore, none of the transaction identifiers appearing in $\hh$ appears 
+both in $\hh_{\ke_1}$ and $\hh_{\ke_2}$.
+\begin{proposition}
+\label{prop:si_counter_hhshape1}
+Let $\hh$ be in $\mathsf{KVStores}(\ET_{\PSI}, \mathsf{Counter})$. 
+Let $n_1 = \lvert \hh(\ke_1) \rvert$, $n_2 = \lvert \hh(\ke_2) \rvert$. 
+Then there exist $\{\txid_{i}^{\ke_1}\}_{i=1}^{n_1 - 1}$, $\{\txid_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$, 
+$\{\T_{i}^{\ke_1}\}_{i=0}^{n_1-1}$, $\{\T_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$ such that, 
+for $h = 1,2$: 
+\begin{align}
+\hh(\ke_{h}) = \left( (0, \txid_{0}, \T^{\ke_{h}}_{0} \uplus \{\txid^{\ke_{h}}_1\}) \lcat \cdots \lcat (n-1, \txid^{\ke_{h}}_{n-1}, \T_{n_{h}-2} \uplus \{\txid^{\ke_{h}}_{n}\}) \right) 
+\lcat (n-1, \txid_{n_{h} - 1}, \T^{\ke_{h}}_{n_{h} - 1}) \label{eq:si_counter_shape}\\
+\forall i=0,\cdots,n.\T^{\ke_{h}}_{i} \cap \{\txid^{\ke_{h}}_{i}\}_{i=0}^{n_{h}-1} = \emptyset \label{eq:si_counter_rwtxs}\\
+\forall \txid, \txid'.\;\forall i,j=0,\cdots, n_{h} - 1.\; \txid \xrightarrow{\PO} \txid' 
+\wedge \txid \in \{\txid^{\ke_{h}}_{i}\} \cup \T^{\ke_{h}}_{i} \implies 
+\left(\begin{array}{l}
+(\txid' = \txid^{\ke_{h}}_{j} \implies i < j) \wedge {} \\
+(\txid' \in \T^{\ke_{h}}_{j} \implies i \leq j) \\
+%(\txid \in \T_{i} \wedge \txid' = \txid_{j} \implies i < j) \wedge {} \\
+%(\txid \in \T_{i} \wedge \txid' \in \T_{j} \implies i \leq j)
+\end{array}\right) \label{eq:si_counter_so}\\
+\left( \{\txid^{\ke_{1}}_{i}\}_{i=1}^{n_1 -1} \cup \bigcup_{i=0}^{n_1 - 1} \T_{i}^{\ke_1} \right) \cap 
+\left( \{\txid^{\ke_{2}}_{i}\}_{i=1}^{n_2 -1} \cup \bigcup_{i=0}^{n_2 - 1} \T_{i}^{\ke_1} \right) = \emptyset \label{eq:si_counter_disjoint}
+\end{align}
+
+\end{proposition}
+
+\begin{proof}
+Each of the properties \eqref{eq:psi_counter_shape}, \eqref{eq:si_counter_rwtxs}, \eqref{eq:si_counter_so} 
+can be proved as in \cref{prop:counter_hhshape}. The fact that $(\hh, \{\txid_{i}^{\ke_{1}}\}_{i=1}^{n_1 - 1}, \{\txid^{\ke_2}_{i}\}_{i=1}^{n_2 - 1}, 
+\{\T_{i}^{\ke_1}\}_{i=0}^{n_1 - 1}, \{\T_{i}^{\ke_2}\}_{i=0}^{n_2-1})$ also satisfies Property \eqref{eq:si_counter_disjoint} 
+follows from the fact that each of the operations in $\mathsf{Counter}$ only access a single key. 
+\end{proof}
+
+Following the proof pattern we employed for a single counter under $\ET_{\PSI}$, we now 
+define a strict partial order $\rightarrow$ among transaction identifiers appearing in a store 
+$\hh \in \mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$, and show that such a 
+total order covers the relation $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}$. 
+Because clients may invoke counter operations on different keys, and because the 
+order in which a clients observes versions of different keys is regulated by $\ET_{\SI}$, 
+the definition of the total order is considerably more complicated than the one 
+obtained for a single-key counter under $\ET_\PSI$.
+
+\begin{definition}
+\label{def:si_counter_order}
+Let $\hh \in \mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$, and let 
+$n_1 = \lvert \hh(\ke_1) \rvert$, $n_2 = \lvert \hh(\ke_2) \rvert$. 
+and $\{\txid_{i}^{\ke_1}\}_{i=1}^{n_1 - 1}$, $\{\txid_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$, 
+$\{\T_{i}^{\ke_1}\}_{i=0}^{n_1-1}$, $\{\T_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$ the indexes 
+and sets such that $(\hh, \{\txid_{i}^{\ke_{1}}\}_{i=1}^{n_1 - 1}, \{\txid^{\ke_2}_{i}\}_{i=1}^{n_2 - 1}, 
+\{\T_{i}^{\ke_1}\}_{i=0}^{n_1 - 1}, \{\T_{i}^{\ke_2}\}_{i=0}^{n_2-1})$ satisfies the property from 
+Proposition \ref{prop:si_counter_hhshape1}. Let $h, l \in \{1,2\}$ with $h \neq l$; we 
+let $\rightarrow$ be the smallest relation such that 
+\[
+\begin{array}{ll}
+\txid \in \T^{\ke_{h}}_{i} &\implies \txid^{\ke_{h}}_{i} \rightarrow \txid,\\
+i < j &\implies \txid_{i} \rightarrow \txid_{j},\\
+\txid \in \T^{\ke_{h}}_{i} \wedge i < j & \implies \txid \rightarrow \txid^{\ke_{h}}_{j}\\
+\txid, \txid' \in \T^{\ke_{h}}_{i} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \rightarrow \txid'\\
+\txid \in (\T^{\ke_{h}}_{I} \cup \{\txid^{\ke_{h}}_{l}\}) \wedge \txid' \in (\T^{\ke_{l}}{j} \cup \{\txid^{\ke_l}_{j}\} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \rightarrow \txid'\\
+\txid \rightarrow \txid' \rightarrow \txid'' &\implies \txid \rightarrow \txid''
+\end{array}
+\]
+
+For the sake of clarity, we write $\txid \twoheadrightarrow \txid'$ in the case that $\txid \rightarrow \txid'$ 
+and either $\txid \in \hh(\ke_1), \txid' \in \hh(\ke_2)$, or $\txid \in \hh(\ke_2), \txid' \in \hh(\ke_1)$. 
+We also let $\txid \dashrightarrow \txid'$ if $\txid \rightarrow \txid'$, and $\txid, \txid' \in \hh(\ke_h)$ 
+for $h = 1,2$.
+\end{definition}
+Note that the definition of $\dashrightarrow$ coincides with partial order over transaction 
+identifiers from the proof of \cref{cor:psi_counter_acyclic}, and therefore it is irreflexive.
+
+\begin{proposition}
+Let $\hh \in \mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$: the relation $\rightarrow$ 
+defined by \cref{def:si_counter_order} is irreflexive.
+\end{proposition}
+
+\begin{proof}[Sketch]
+By contradiction. Suppose that there exists a transaction identifier $\txid \in \hh$ such that 
+$\txid \rightarrow \txid$. Then there exists a cyclic sequence of transaction identifiers 
+$\txid^{0}, \cdots, \txid^{n}$ such that $\txid^{n} =  \txid^{0} = \txid$, and
+\[ 
+\txid^{0} \rightarrow \txid^{1} \rightarrow \cdots \rightarrow \txid^{n}.
+\]
+Without loss of generality, we may assume that such a cycle is minimal: i.e., 
+there exists no shorter cycle induced by the relation $\rightarrow$.
+Because $\txid^{0}$ appears only in $\hh(\ke_1)$ or $\hh(\ke_2)$ 
+(Property \ref{eq:si_counter_disjoint}), and because transitions of the form 
+$\txid \twoheadrightarrow \txid'$ are defined between transaction identifiers 
+appearing in the list of versions of different keys in $\hh$, then it 
+must be the case that the sequence above contains an even number of 
+$\twoheadrightarrow$ transitions. If such a number is zero, then it is immediate to observe that 
+$\txid^{0} \neq \txid^{n}$, leading to a contradiction. 
+Suppose then that that there exist two different indexes $i, j$ such that 
+$\txid^{i} \twoheadrightarrow \txid^{i+1}$ and $\txid^{j} \twoheadrightarrow \txid^{j+1}$. Without loss of 
+generality, suppose that $i < j$, and for no index $h: h < i \vee h > j$ we have $\txid^{h} \twoheadrightarrow \txid^{h+1}$. 
+%Let $\dashrightarrow$ be the reflexive, transitive closure of $\rightarrow$, and 
+Observe that in this case we have $\txid^{i} \twoheadrightarrow \txid^{i+1} \dashrightarrow^{?} \txid{j} \twoheadrightarrow \txid^{j+1} 
+(\dashrightarrow)^{?} \txid^{i}$, where $\dashrightarrow^{?}$ is the reflexive closure of $\dashrightarrow$.
+In fact, by definition, $\txid^{i+1} \in \{\WTx(\hh(\ke_{h}, p)\} \cup \RTx(\hh(\ke_{h}, p))$ 
+for $h=1,2$ and $p = 0,\cdots, \lvert \hh(\ke_{h}) \rvert - 1$, 
+$\txid_{j} \in \{ \WTx(\hh(\ke_{h}, q)\} \cup \RTx(\hh(\ke_{h}, q))$ for some $q = 0,\cdots, \lvert \hh(\ke_{h}) \rvert - 1$. 
+Observe that for any two transaction identifier $\txid, \txid' \in \hh(\ke_h)$ we have that either 
+$\txid \dashrightarrow \txid'$, $\txid = \txid'$ or $\txid' \dashrightarrow \txid$. In particular, 
+either $\txid^{i+1} \dashrightarrow \txid^{j}, \txid^{i+1} = \txid^{j}$ or $\txid^{j} \dashrightarrow \txid^{i+1}$. 
+If we have that $\txid^{j+1} \dashrightarrow \txid^{j}$, then we can easily find a cycle of the form
+$\txid^{j} \rightarrow \txid^{i+1} \rightarrow{\txid^{j}}$, contradicting the minimality of the cycle that we have considered. 
+Therefore, it must be $\txid^{i+1} \dashrightarrow^{?} \txid^{j}$. The fact that $\txid^{j+1} \dashrightarrow^{?} \txid^{i}$ 
+follows from the fact that we chose the indexes $i, j$ so that for no index $h: h < i \vee h > j$ we have $\txid^{h} \twoheadrightarrow \txid^{h+1}$. 
+
+Finally, note that the cyclic path $\txid^{i} \twoheadrightarrow \txid^{i+1} \dashrightarrow^{?} \txid{j} \twoheadrightarrow \txid^{j+1} 
+(\dashrightarrow)^{?} \txid^{i}$ correspond to a cycle in $\graphof(\hh)$ of the form: 
+\[
+\txid^{i} \xrightarrow{\PO_{\hh}} \txid^{i+1} \xrightarrow{(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}} 
+\txid^{j} \xrightarrow{\PO_{\hh}} \txid^{j+1} \xrightarrow{(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}} 
+\txid^{i}
+\]
+which contradicts Proposition \ref{prop:si_cycles}.
+%Finally, let us consider the order in which transactions $\txid^{i}, \txid^{i+1}, \txid^{j}, \txid^{j+1}$ must have been 
+%executed to give rise to the kv-store $\hh$. Because $\txid^{i} \twoheadrightarrow \txid^{i+1}$, it must 
+%be the case that $\txid^{i}$ has been executed before $\txid^{i+1}$; similarly we can prove that $\txid^{i}$ 
+%has been executed before $\txid^{j+1}$. WIthout loss of generality, assume that $\txid^{i}$ has also 
+%been executed before $\txid^{j}$. For simplicity, we only consider the case where we assume that $\txid^{i+1} \neq \txid^{j}$ 
+%and $\txid^{j+1} \neq \txid^{i}$, although the proof in the remaning cases is similar.
+%We have that $\txid^{j} \in \{\WTx(\hh(\ke_{h}), p_{h})\} \cup \RTx(\hh(\ke_{h}, \p_{h})$ for some $h=1,2$ and $p_{h} = 0,\cdots, 
+%\lvert \hh(\ke_{h}) \rvert$. 
+
+\end{proof}
+
+%Furthermore, when clients employ the execution test $\ET_{\SI}$ to commit transactions, 
+%then we have the following: 
+%\begin{proposition}
+%Let $\hh \in \mathsf{KVStores}(\ET_{\PSI}, \mathsf{Counter})$, and let 
+%$n_1 = \lvert \hh(\ke_1) \rvert$, $n_2 = \lvert \hh(\ke_2) \rvert$. 
+%and $\{\txid_{i}^{\ke_1}\}_{i=1}^{n_1 - 1}$, $\{\txid_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$, 
+%$\{\T_{i}^{\ke_1}\}_{i=0}^{n_1-1}$, $\{\T_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$ the indexes 
+%and sets such that $(\hh, \{\txid_{i}^{\ke_{1}}\}_{i=1}^{n_1 - 1}, \{\txid^{\ke_2}_{i}\}_{i=1}^{n_2 - 1}, 
+%\{\T_{i}^{\ke_1}\}_{i=0}^{n_1 - 1}, \{\T_{i}^{\ke_2}\}_{i=0}^{n_2-1})$ satisfies the property from 
+%Proposition \ref{prop:si_counter_hhshape1}. Let $h, l \in \{1,2\}$ with $h \neq l$; then 
+%\begin{align} 
+%\forall i, j = 0,\cdots, \ke_{h} - 1, p, q = 0,\cdots, \ke_{l} - 1, \txid, \txid', \txid'', \txid'''. \txid \in \T_{i}^{\ke_h} \wedge 
+%\txid' \in \T_{j}^{\ke_{h}} \wedge \txid'' \in \T_{p}^{\ke_{l}} \wedge \txid''' \in \T_{q}^{\ke_{k}} \wedge 
+%\txid'' \xrightarrow{PO} \txid' \wedge i < j \implies p \leq q \label{eq:si_counter_crossRD}
+%\end{align}
+%\end{proposition}
