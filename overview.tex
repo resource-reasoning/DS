@@ -1,1016 +1,1161 @@
+\newcommand{\Counter}{\ensuremath{\mathsf{Counter}}}
+\newcommand{\ctrinc}{\ensuremath{\mathsf{inc}}}
+\newcommand{\ctrread}{\ensuremath{\mathsf{read}}}
+
 \section{Overview}
 \label{sec:overview}
 
-Suppose that we have an integer valued key-value store. Four different 
-clients from the set $\{\cl_i\}_{i=1}^{4}$ interact with the key-value store by requesting 
-to execute transactions from the set $\{\trans_{i}\}_{i=1}^{4}$, 
-whose code is defined below, respectively:
-
-\sx{
-    Maybe present in the following way, and we can say that
-    we assume the allocated transaction identifiers \( \txid \) are the ones shown in the code.
-    Also clients are like threads etc.
-\[
-\begin{array}{@{} l @{} }
-\begin{array}{@{} c ||  c @{} }
-\begin{session}
-\txid_1 :
-\begin{transaction}
-\pmutate{\ke_{1}}{1}
-\end{transaction} 
-\end{session}
-&
-\begin{session}
-\txid_2 :
-\begin{transaction}
-\pmutate{\ke_2}{1}
-\end{transaction}
-\end{session}
-\end{array} \\[1em]
-\qqqquad \begin{array}{@{} || c || c @{} }
-\txid_3 :
-\begin{session}
-\begin{transaction}
-\pderef{\pv{a}}{\ke_1};
-\quad \pderef{\pv{b}}{\ke_2};\\
-\pifs{\pv{a} = 0 \wedge \pv{b} = 1} \\
-\quad \pmutate{\ke_{3}}{1}
-\pife
-\end{transaction}
-\end{session}
-&
-\txid_4 :
-\begin{session}
-\begin{transaction}
-\pderef{\pv{a}}{\ke_1};
-\quad \pderef{\pv{b}}{\ke_2};\\
-\pifs{\pv{a} = 1 \wedge \pv{b} = 0}  \\
-\quad \pmutate{\ke_{4}}{1}
-\pife
-\end{transaction}
-\end{session}
-\end{array}
-\end{array}
-\]
-}
+Consider a simple counter object $\mathsf{Counter}(\ke)$ 
+defined over a key-value store: 
+clients can manipulate the value of key $\ke$ via two operations, 
+$\ctrinc(\ke)$ and $\ctrread(\ke)$, defined as follows: 
 \[
 \begin{array}{lrlr}
-\trans_{1} = &
+\ctrinc(\ke) = &
 \begin{session}
 \begin{transaction}
-\pmutate{\ke_{1}}{1}
+\pderef{\pv{a}}{\ke};\\
+\pmutate{\ke}{\pv{a}+1};
 \end{transaction}
 \end{session}
 &
-\trans_{2} = &
+\hspace{10pt}\ctrread(\ke) = &
 \begin{session}
 \begin{transaction}
-\pmutate{\ke_2}{1}
-\end{transaction}
-\end{session}
-\\[5pt]
-\trans_{3} = &
-\begin{session}
-\begin{transaction}
-\pderef{\pv{a}}{\ke_1};\\
-\pderef{\pv{b}}{\ke_2};\\
-\pifs{\pv{a} = 0 \wedge \pv{b} = 1} 
- \pmutate{\ke_{3}}{1}
-\pife
-\end{transaction}
-\end{session}
-&
-\trans_{4} = &
-\begin{session}
-\begin{transaction}
-\pderef{\pv{a}}{\ke_1};\\
-\pderef{\pv{b}}{\ke_2};\\
-\pifs{\pv{a} = 1 \wedge \pv{b} = 0} 
- \pmutate{\ke_{4}}{1}
-\pife
+\pderef{\pv{a}}{\ke};\\
 \end{transaction}
 \end{session}
 \end{array}
 \]
-Here and in the rest of the paper, we use 
-brackets to wrap fragments of code into transactions, 
-which should appear as being executed atomically by the clients of the key-value store. 
-Assume that initially $\ke_{i} = 0$ for $i=1,\cdots,4$.
-The semantics of the set of transactions above 
-depends from the data consistency model guaranteed by the key-value store. 
-For example, if the key-value store is serialisable \cite{papadimitriou}, i.e. 
-transactions are executed according to some serial order $\rightarrow$, 
-then it is impossible to schedule the execution of the transactions $\{\trans_{i}\}_{i=1}^{4}$ 
-as to obtain $\ke_3 = \ke_4 = 1$. 
-If $\ke_3$ is updated to value $1$, then it must be the case that 
-$\trans_3$ has been executed after  $\trans_2$, but before $\trans_1$: 
-$\trans_2 \rightarrow \trans_{3} \rightarrow \trans_1$.
-Similarly, the value of $\ke_4$ is updated 
-to $1$ only if $\trans_4$ 
-is executed after $\trans_1$, 
-but before $\trans_2$: $\trans_{1} \rightarrow \trans{4} \rightarrow \trans_{2}$. 
-Then, when both $\ke_3, \ke_4$ are updated to value $1$, we must have that 
-$\trans_1 \rightarrow \trans_4 \rightarrow \trans_2 \rightarrow \trans_3 
-\rightarrow \trans_1$, thus violating the serialisability requirement imposed by 
-the key-value store. 
-%A similar argument applies even it the key-value stores 
-%is assumed to guarantee \emph{Snapshot Isolation} \cite{ansisql}, a weaker consistency model 
-%provided by several centralised, geo-replicated and distributed databases \cite{ansisql,dias-tm,gsi,clocksi,distrsi}.
+The code of each operation is wrapped around brackets, meaning that such 
+operation should be executed as an atomic block, or transaction. At first glance, one may think 
+that the implementation of counter above is correct; in reality, whether this statement is 
+correct heavily depends on implementation details of the key-value store, and in particular 
+on the consistency model it provides. 
 
-However, executing the set of transactions $\{\trans_{i}\}_{i=1}^{4}$ depicted above 
-may lead to both $\ke_3 = 1$ and $\ke_4 = 1$ if a weaker consistency model than 
-serialisability is employed by the key-value store. This is true especially in the case 
-that the key-value store is replicated at several sites, and little to no coordination 
-between replicas is present when clients commit transactions: examples of such geo-replicated 
-datastores are those that provide the \emph{Causal Consistency} model \cite{cops}. 
-For example, transactions $\trans_1$ and $\trans_4$ may be executed sequentially 
-on a replica of the key value store, leading to $\ke_4 = 1$, while transactions 
-$\trans_2$ and $\trans_3$ may be executed sequentially on a different replica, leading to $\ke_3 = 1$. 
-When each replica communicates the state updates to the other, both of them will 
-end up in a state where $\ke_3 = \ke_4 = 1$. 
+For example, the key-value store may be replicated at two different sites: clients 
+perform the $\ctrinc(\ke)$ and $\ctrread(\ke)$ operation on an arbitrary replica, 
+which then propagates the state changes caused by an operation (if any) at the other one. Two clients 
+may concurrently perform an increment operation at different replicas; if no synchronisation 
+mechanism is provided by the underlying key-value store, the result of this operation 
+may result in both clients reading the same initial value for $\ke$ (say $0$), and updating 
+it to $1$. The subsequent exchange of the information that $\ke$ has been 
+updated to $1$ does not affect the state of each replica. Clients performing a 
+$\ctrread(\ke)$ operation will read a final value of $1$ for the counter, despite 
+two increments have been performed. This behaviour is known as a \emph{lost update} anomaly
 
+The number of replicas in geo-replicated key-value stores may be very high; as a 
+consequence, reasoning about client programs interacting with such key-value 
+stores may be cumbersome and error-prone. To overcome this problem, we adopt 
+an approach where we model the key-value store as a global, centralised entity, and 
+we abstract from replication through two mechanisms: multi-versioning 
+and client views. Multi-versioning mandates that we record all the versions of each key 
+written by clients, together with the meta-data of the transactions that access it: this 
+may be thought as projecting the local state of each replica into a global, centralised state. 
+Client views allow for different clients to observe only a fraction of the versions available in 
+the key-value store: this makes it possible for different clients to observe different states 
+of the key-value store\footnote{In a geo-replicated setting, this can happen if two clients access 
+two different replicas that are not yet synchronised.}
 
-\begin{figure*}[t]
-\begin{center}
+Let us illustrate how it is possible to replicate the lost update anomaly via our notion of 
+key-value stores. Initially, the key value store consist of a single key $\ke$, with only one 
+version available: this version, denoted as a triple $(0, \txid_{0}, \emptyset)$, establishes 
+that $\ke$ may take value $0$, that such a value has been written by an initialising transaction 
+$\txid_0$, and that the set of transactions that read such a version is empty. We represent the 
+key-value store graphically in \cref{fig:counter_kv1}. A version is represented as a box sub-divided 
+in three sections: starting from the left and proceeding clockwise, these sections represent the 
+value carried by the version, the identifier of the transaction that has written such a version, and 
+the set of transaction identifiers that read such a version.
+
+Suppose that one client, denoted 
+as $\cl_1$, invokes the  operation $\ctrinc$ on the key-value store. In this case the client first  
+obtains a unique transaction identifier $\txid$, which it will use to mark the versions 
+it reads and writes while executing $\ctrinc$. Then it executes such an operation. 
+This causesclient $\cl_1$ to read the only version available for $\ke$, carrying value $0$, 
+and install a newer value $1$ for the same key. The result of this operation is depicted in \cref{fig:counter_kv1}.
+note that we have updated the initial version of $\ke$ with the knowledge that it was read by $\txid$; 
+note also that versions are ordered, left to right, from the oldest to the newest one.
+
+Next, a second client, dented as $\cl_2$, also attempts to perform the operation $\ctrinc$. Because 
+at this point there are two versions available in the key-value store, we need a mechanism to determine 
+the actual version from which $\cl_2$ fetches its value, before performing the operations in $\ctrinc(\ke)$; 
+this is where \emph{client views}, or simply views, come into play. Roughly speaking, a view consists of 
+a marking of the versions recorded into the key-value store as \emph{visible}. If a version is marked as 
+visible for $\cl_2$, then its value can be potentially fetched when performing the $\ctrinc(\ke)$ update. 
+If more than one version is marked as visible, then the value from the newest such version will be selected, 
+modelling the \emph{last writer wins} resolution policy employed by many key-value stores. 
+For example, there are two possible scenarios for the view that $\cl_2$ can have prior to executing $\ctrinc(\ke)$
+\footnote{In fact, if no restrictions on the view are given, there 
+are four possible views for $\cl_2$: however, as we explain in \cref{}, we always require the view of a client 
+to have the initial version of each key marked as visible.}: 
+only the initial version for $\ke$ is marked as visible, in which case the execution of $\ctrinc(\ke)$ will result 
+in reading value $0$ and writing a new version carrying value $1$ for $\ke$; or both versions for $\ke$ 
+are marked as visible, in which case the execution of $\ctrinc(\ke)$ will fetch the value from  
+the newest visible version of $\ke$ (carrying value $1$), and it will increment it by $1$ (resulting in 
+a new version carrying value $2$ to be installed). In particular, if the former view is adopted by $\cl_2$, 
+the final result will be the key-value store depicted in Figure \ref{fig:counter_kv1}. In this case, the 
+key-value store does not contain a version for $\ke$ carrying value $2$, despite two $\ctrinc(\ke)$ 
+operations have been performed on it. That is, we also have a lost update anomaly.
+
+To avoid the lost update anomaly, geo-replicated and distributed key-value stores 
+introduce a check at commit time to ensure that only one among 
+concurrent transactions writing to one same key can actually commit: this property is 
+known as \emph{write conflict detection}. In our framework, we can simulate this behaviour 
+by introducing the notion of \emph{execution test}: roughly speaking an execution test determines whether 
+a client with a given view can execute a transaction. For example, write-conflict detection  
+can be enforced by requiring that a client can commit a transaction writing to key $\ke$ only if 
+its view contains all the versions available in the global state for such a view. Coming back to 
+the example of two clients incrementing a counter above, this restriction prevents $\cl_2$ 
+to execute the increment if its view only contains the initial version of $\ke$ marked as visible. 
+Instead, in order for $\cl_2$ to be able to execute $\ctrinc(\ke)$, its view must contain 
+both the versions available for $\ke$, thus enforcing the value of the version installed by 
+the increment performed by $\cl_2$ to be $2$. In \cref{}, we prove that if the key-value store 
+ensures write-conflict detection as well as some other properties, then clients can increment 
+and read from a single counter as though as the key-value store were (strictly) serialisable.
+
+However, the situation becomes more complicated if the key-value store contains multiple counters. 
+In this case, because each client has its own view on the key-value store, and because the views 
+of clients are independent each from the other, it is possible for two 
+clients to observe the increments to two counters $\Counter(\ke_1)$ and $\Counter(\ke_2)$ happening 
+in different order. This scenario cannot be replicated in a strictly serialisable key-value store. 
+For example, suppose that initially some client $\cl_0$ increments both $\ke_1$ and $\ke_2$, 
+after which both keys have two versions carrying values $0$ and $1$ respectively. 
+Next, client $\cl_1$ executes $\ctrread(\ke_1)$ operation, followed by a $\ctrread(\ke_2)$ one. 
+Assuming that in the view of $\cl_1$ both versions for $\ke_1$ are marked as visible, but only 
+the initial version of $\ke_2$ is marked as visible, the results of this operation will be reading value $1$ 
+for $\ke_1$ and value $0$ for $\ke_2$, respectively: from the point of view of $\cl_1$, the update of $\ke_1$ 
+happens before the update of $\ke_2$. Similarly, client $\cl_2$ can execute a $\ctrread(\ke_1)$ operation, 
+followed by a $\ctrread(\ke_2)$ operation, although in this case, in the view of $\cl_2$, both versions of $\ke_2$ 
+are marked as visible, while only the initial version of $\ke_1$ is marked as visible. As a result, 
+value $0$ to be fetched for $\ke_1$ by the operation $\ctrread(\ke_1)$, while value $1$ is fetched for $\ke_2$ by 
+the operation $\ctrread(\ke_2)$: from the point of view of $\cl_2$, the update of $\ke_2$ happens before the update 
+of $\ke_1$. This behaviour is known as a \emph{long fork} anomaly.
+
+To prevent the long-fork anomaly from happening, we can further strengthen the 
+execution test employed by the key-value store to commit transactions. Without delving 
+too much in formal details, the candidate execution test recovers the order in which 
+updates of versions have been observed by clients, and allow a transaction to commit 
+only if the observations made  by the current client are consistent with $\cl_1$. In \cref{} 
+we give an example of such an execution test, that ensures that the underlying key-value 
+store guarantees the (strong session) snapshot isolation consistency model. For example, 
+under this revised execution test, in the example above client $\cl_2$ would not be able 
+to observe the updated version of $\ke_2$ after observing the initial version of $\ke_1$, 
+because client $\cl_1$ has already established that the update of $\ke_2$ happens after 
+the update of $\ke_1$. In \cref{}, we prove that  if the key-value store 
+consists of multiple counter objects, and the execution test employed by transactions 
+guarantees snapshot isolation, then the key-value store behaves as though as it is 
+a strictly serialisable one.
+%
+%Suppose that we have an integer valued key-value store. Four different 
+%clients from the set $\{\cl_i\}_{i=1}^{4}$ interact with the key-value store by requesting 
+%to execute transactions from the set $\{\trans_{i}\}_{i=1}^{4}$, 
+%whose code is defined below, respectively:
+%
+%\sx{
+%    Maybe present in the following way, and we can say that
+%    we assume the allocated transaction identifiers \( \txid \) are the ones shown in the code.
+%    Also clients are like threads etc.
+%\[
+%\begin{array}{@{} l @{} }
+%\begin{array}{@{} c ||  c @{} }
+%\begin{session}
+%\txid_1 :
+%\begin{transaction}
+%\pmutate{\ke_{1}}{1}
+%\end{transaction} 
+%\end{session}
+%&
+%\begin{session}
+%\txid_2 :
+%\begin{transaction}
+%\pmutate{\ke_2}{1}
+%\end{transaction}
+%\end{session}
+%\end{array} \\[1em]
+%\qqqquad \begin{array}{@{} || c || c @{} }
+%\txid_3 :
+%\begin{session}
+%\begin{transaction}
+%\pderef{\pv{a}}{\ke_1};
+%\quad \pderef{\pv{b}}{\ke_2};\\
+%\pifs{\pv{a} = 0 \wedge \pv{b} = 1} \\
+%\quad \pmutate{\ke_{3}}{1}
+%\pife
+%\end{transaction}
+%\end{session}
+%&
+%\txid_4 :
+%\begin{session}
+%\begin{transaction}
+%\pderef{\pv{a}}{\ke_1};
+%\quad \pderef{\pv{b}}{\ke_2};\\
+%\pifs{\pv{a} = 1 \wedge \pv{b} = 0}  \\
+%\quad \pmutate{\ke_{4}}{1}
+%\pife
+%\end{transaction}
+%\end{session}
+%\end{array}
+%\end{array}
+%\]
+%}
+%\[
+%\begin{array}{lrlr}
+%\trans_{1} = &
+%\begin{session}
+%\begin{transaction}
+%\pmutate{\ke_{1}}{1}
+%\end{transaction}
+%\end{session}
+%&
+%\trans_{2} = &
+%\begin{session}
+%\begin{transaction}
+%\pmutate{\ke_2}{1}
+%\end{transaction}
+%\end{session}
+%\\[5pt]
+%\trans_{3} = &
+%\begin{session}
+%\begin{transaction}
+%\pderef{\pv{a}}{\ke_1};\\
+%\pderef{\pv{b}}{\ke_2};\\
+%\pifs{\pv{a} = 0 \wedge \pv{b} = 1} 
+% \pmutate{\ke_{3}}{1}
+%\pife
+%\end{transaction}
+%\end{session}
+%&
+%\trans_{4} = &
+%\begin{session}
+%\begin{transaction}
+%\pderef{\pv{a}}{\ke_1};\\
+%\pderef{\pv{b}}{\ke_2};\\
+%\pifs{\pv{a} = 1 \wedge \pv{b} = 0} 
+% \pmutate{\ke_{4}}{1}
+%\pife
+%\end{transaction}
+%\end{session}
+%\end{array}
+%\]
+%Here and in the rest of the paper, we use 
+%brackets to wrap fragments of code into transactions, 
+%which should appear as being executed atomically by the clients of the key-value store. 
+%Assume that initially $\ke_{i} = 0$ for $i=1,\cdots,4$.
+%The semantics of the set of transactions above 
+%depends from the data consistency model guaranteed by the key-value store. 
+%For example, if the key-value store is serialisable \cite{papadimitriou}, i.e. 
+%transactions are executed according to some serial order $\rightarrow$, 
+%then it is impossible to schedule the execution of the transactions $\{\trans_{i}\}_{i=1}^{4}$ 
+%as to obtain $\ke_3 = \ke_4 = 1$. 
+%If $\ke_3$ is updated to value $1$, then it must be the case that 
+%$\trans_3$ has been executed after  $\trans_2$, but before $\trans_1$: 
+%$\trans_2 \rightarrow \trans_{3} \rightarrow \trans_1$.
+%Similarly, the value of $\ke_4$ is updated 
+%to $1$ only if $\trans_4$ 
+%is executed after $\trans_1$, 
+%but before $\trans_2$: $\trans_{1} \rightarrow \trans{4} \rightarrow \trans_{2}$. 
+%Then, when both $\ke_3, \ke_4$ are updated to value $1$, we must have that 
+%$\trans_1 \rightarrow \trans_4 \rightarrow \trans_2 \rightarrow \trans_3 
+%\rightarrow \trans_1$, thus violating the serialisability requirement imposed by 
+%the key-value store. 
+%%A similar argument applies even it the key-value stores 
+%%is assumed to guarantee \emph{Snapshot Isolation} \cite{ansisql}, a weaker consistency model 
+%%provided by several centralised, geo-replicated and distributed databases \cite{ansisql,dias-tm,gsi,clocksi,distrsi}.
+%
+%However, executing the set of transactions $\{\trans_{i}\}_{i=1}^{4}$ depicted above 
+%may lead to both $\ke_3 = 1$ and $\ke_4 = 1$ if a weaker consistency model than 
+%serialisability is employed by the key-value store. This is true especially in the case 
+%that the key-value store is replicated at several sites, and little to no coordination 
+%between replicas is present when clients commit transactions: examples of such geo-replicated 
+%datastores are those that provide the \emph{Causal Consistency} model \cite{cops}. 
+%For example, transactions $\trans_1$ and $\trans_4$ may be executed sequentially 
+%on a replica of the key value store, leading to $\ke_4 = 1$, while transactions 
+%$\trans_2$ and $\trans_3$ may be executed sequentially on a different replica, leading to $\ke_3 = 1$. 
+%When each replica communicates the state updates to the other, both of them will 
+%end up in a state where $\ke_3 = \ke_4 = 1$. 
+%
+%
+%\begin{figure*}[t]
+%\begin{center}
+%%
+%%\hrulefill
+%\begin{subfigure}{0.32\textwidth}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%\matrix(versionx) [version list]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%    {a} & $\txid_0$ \\
+%    {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%\matrix(versiony) [version list]
+%   at ([xshift=\tikzkvspace]locy.east) {
+% {a} & $\txid_0$\\
+%  {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%
+%\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
+%\matrix(versionz) [version list]
+%   at ([xshift=\tikzkvspace]locz.east) {
+% {a} & $\txid_0$\\
+%  {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
+%
+%\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
+%\matrix(versionm) [version list]
+%   at ([xshift=\tikzkvspace]locm.east) {
+% {a} & $\txid_0$\\
+%  {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
+%
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\caption{Key-value store}
+%\label{fig:hheap-a}
+%\label{fig:key-value-store}
+%\label{fig:initial-kv}
+%\end{subfigure}
+%%
+%%
+%\begin{subfigure}{0.32\textwidth}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%        {a} & $\txid_0$   & {a} & $\txid_1$ \\
+%        {a} & $\emptyset$ & {a} & $\Set{\txid_{\cl_4}}$\\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+%
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locy.east) {
+% {a} & $\txid_0$\\
+%  {a} & $\Set{\txid_{\cl_4}}$ \\
+%};
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%
+%\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
+%\matrix(versionz) [version list, column 2/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locz.east) {
+% {a} & $\txid_0$\\
+%  {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
+%
+%\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
+%\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locm.east) {
+%  {a} & $\txid_0$ & {a} & $\txid_{\cl_4}$ \\              
+%  {a} & $\emptyset$  & {a} & $\emptyset$\\  
+%};
+%\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
+%\tikzvalue{versionm-1-3}{versionm-2-3}{locm-v0}{$1$};
+%
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\caption{\( \txid_4 \)}
+%\label{fig:long-fork-t4}
+%\end{subfigure}
+%%
+%%
+%%
+%\begin{subfigure}{0.32\textwidth}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%        {a} & $\txid_0$   & {a} & $\txid_1$ \\
+%        {a} & $\emptyset$ & {a} & $\Set{\txid_{\cl_4}}$\\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+%
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locy.east) {
+%       {a} & $\txid_0$ & {a} & $\txid_{\cl_2}$ \\
+%       {a} & $\Set{\txid_{\cl_4}}$ & {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
+%
+%\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
+%\matrix(versionz) [version list, column 2/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locz.east) {
+% {a} & $\txid_0$\\
+%  {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
+%
+%\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
+%\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locm.east) {
+%  {a} & $\txid_0$ & {a} & $\txid_{\cl_4}$ \\              
+%  {a} & $\emptyset$  & {a} & $\emptyset$\\  
+%};
+%\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
+%\tikzvalue{versionm-1-3}{versionm-2-3}{locm-v0}{$1$};
+%
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\caption{\( \txid_2 \)}
+%\label{fig:long-fork-t2}
+%\end{subfigure}
+%%
+%%
+%%
+%\begin{subfigure}{0.32\textwidth}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted,text width=8mm}]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%        {a} & $\txid_0$   & {a} & \color{gray}$\txid_1$ \\
+%        {a} & $\emptyset$ & {a} & \color{gray}$\Set{\txid_{\cl_4}}$\\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\node[version node,draw=none,fit=(versionx-1-3) (versionx-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$1$};
+%
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locy.east) {
+%       {a} & $\txid_0$ & {a} & $\txid_{\cl_2}$ \\
+%       {a} & $\Set{\txid_{\cl_4}}$ & {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
+%
+%\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
+%\matrix(versionz) [version list, column 2/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locz.east) {
+% {a} & $\txid_0$\\
+%  {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
+%
+%\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
+%\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={text width=8mm,dotted}]
+%   at ([xshift=\tikzkvspace]locm.east) {
+%  {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl_4}$ \\              
+%  {a} & $\emptyset$  & {a} &  \color{gray}$\emptyset$\\  
+%};
+%\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
+%\node[version node,draw=none,fit=(versionm-1-3) (versionm-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$1$};
+%
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\caption{view of \( \txid_3 \)}
+%\label{fig:view-of-cl-prime}
+%\label{fig:long-fork-t3-view}
+%\end{subfigure}
+%%
+%%
+%%
+%%
+%\begin{subfigure}{0.32\textwidth}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%        {a} & $\txid_0$   & {a} & $\txid_1$ \\
+%        {a} & $\Set{\txid_{\cl_3}}$ & {a} & $\Set{\txid_{\cl_4}}$\\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+%
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locy.east) {
+%       {a} & $\txid_0$ & {a} & $\txid_{\cl_2}$ \\
+%       {a} & $\Set{\txid_{\cl_4}}$ & {a} & $\Set{\txid_{\cl_3}}$ \\
+%};
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
+%
+%\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
+%\matrix(versionz) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locz.east) {
+%       {a} & $\txid_0$ & {a} & $\txid_{\cl_3}$ \\
+%       {a} & $\emptyset$ & {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
+%\tikzvalue{versionz-1-3}{versionz-2-3}{locz-v1}{$1$};
+%
+%\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
+%\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
+%   at ([xshift=\tikzkvspace]locm.east) {
+%  {a} & $\txid_0$ & {a} & $\txid_{\cl_4}$ \\              
+%  {a} & $\emptyset$  & {a} & $\emptyset$\\  
+%};
+%\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
+%\tikzvalue{versionm-1-3}{versionm-2-3}{locm-v0}{$1$};
+%
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\caption{\( \txid_3 \)}
+%\label{fig:long-fork-t3}
+%\label{fig:cp-disallowed-1}
+%\end{subfigure}
+%
+%\end{center}
 %
 %\hrulefill
-\begin{subfigure}{0.32\textwidth}
-\begin{tikzpicture}
-\begin{pgfonlayer}{foreground}
-%\draw[help lines] grid(5,4);
-
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
-\matrix(versionx) [version list]
-    at ([xshift=\tikzkvspace]locx.east) {
-    {a} & $\txid_0$ \\
-    {a} & $\emptyset$ \\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-
-%Location y
-\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-\matrix(versiony) [version list]
-   at ([xshift=\tikzkvspace]locy.east) {
- {a} & $\txid_0$\\
-  {a} & $\emptyset$ \\
-};
-\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
-
-\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
-\matrix(versionz) [version list]
-   at ([xshift=\tikzkvspace]locz.east) {
- {a} & $\txid_0$\\
-  {a} & $\emptyset$ \\
-};
-\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
-
-\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
-\matrix(versionm) [version list]
-   at ([xshift=\tikzkvspace]locm.east) {
- {a} & $\txid_0$\\
-  {a} & $\emptyset$ \\
-};
-\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
-
-\end{pgfonlayer}
-\end{tikzpicture}
-\caption{Key-value store}
-\label{fig:hheap-a}
-\label{fig:key-value-store}
-\label{fig:initial-kv}
-\end{subfigure}
+%
+%\caption{Multi-version key-value stores and views}
+%\label{fig:hheap}
+%\label{fig:key-value-and-view}
+%\end{figure*}
+%
+%It has been observed before that reasoning about the behaviour of a replicated data-store at a low level 
+%may be excessively complicated, as it requires the knowledge of the state of each 
+%replica, as well as understanding the synchronisation protocol among replicas \cite{framework-concur,adya,seebelieve}. 
+%\ac{After trying to write this paragraph several time, comparing with the three proposals in the references: 
+%do not apologise here about why another framework when there are already other three around. This should 
+%be done in introduction and conclusions. Just give the details about how we do stuff.} 
+%We propose an approach where we study the semantics to programs in a setting where 
+%clients interact with a centralised (i.e. non-replicated, non-distributed), multi-version key value store, 
+%using a mechanism that we refer to as \emph{views}: in \cref{fig:view-of-cl} we show that this approach 
+%is sufficient to capture the behaviour of programs under several consistency models 
+%employed by distributed transactional storage systems.
+%
+%Let us show how, in our model, it is possible to exhibit a computation of 
+%the set of transactions $\{\trans_{i}\}_{i=1}^{4}$ that leads to updating 
+%both $\ke_3$ and $\ke_4$ to $1$.
+%In our model, when a piece of code corresponding to a transaction executes, 
+%it gets assigned a \emph{transaction identifier} $\txid, \txid',\cdots$. 
+%As we will see, transaction identifiers 
+%embed the information about the client that executes them. 
+%The state of the system consists of a mapping from keys to non-empty lists of versions, each 
+%of which comprises value and the meta-data of the transaction identifiers 
+%that read and wrote such a version. Initially, each key is initialised to a singleton carrying 
+%value $0$, written by a special initialisation transaction $\txid_0$ that is not associated 
+%with any client. This key-value store is depicted graphically in \cref{fig:key-value-store}. Versions are represented graphically
+%as boxes divided in three containers: the leftmost container contains the value of the version, 
+%the right-top container contains the identifier of the transaction that wrote the version, 
+%and the right-bottom container contains the set of transaction identifiers that read the version. 
+%Initially, one of the four clients from $\{\cl_{i}\}_{i=1}^{4}$, say 
+%$\cl_1$, executes the transaction $\trans_1$. To do so, the client 
+%must first select the portion of state that it observes from the key-value store: 
+%specifically, it must select a non-empty sub-list of versions of each key that it observes from 
+%the key-value store. The portion of state selected by the client is referred to as its view, 
+%and it determines the local state in which the transactional code $\trans_1$ is executed.
+%Because there is only one version for each key, each carrying value $0$, 
+%the choice of view for $\cl_1$ is compulsory, 
+%and it leads to client $\cl_1$ executing the transaction $\trans_1$ in the local state 
+%where $\ke_1 = \ke_2 = \ke_3 = \ke_4 = 0$. This transaction gets assigned an identifier 
+%that also carries the information about the client that executes the transaction $\txid_{\cl_{1}}^{1}$ 
+%(ignore for the moment the superscript $1$). Upon executing $\trans_1$ 
+%atomically, a new version carrying value $1$ and written by $\txid_{\cl_{1}}^{1}$ 
+%is created for $\ke_1$. 
+%
+%Next, client $\cl_4$ is scheduled to execute a transaction. As for $\cl_1$, 
+%we must select a view for $\cl_4$, which we use to determine the state in which $\trans_4$ 
+%is executed. The choice for which versions to observe for $\ke_2, \ke_3, \ke_4$ is compulsory, 
+%and it leads to execute $\trans_4$ in a state where $\ke_2 = \ke_3 = \ke_4 = 0$.
+%Because we have two versions for $\ke_1$, carrying values $0$ and $1$ respectively, 
+%there are three different choices for selecting the view that $\cl_4$ has on $\ke_1$: 
+%only the initial version carrying value $0$ is observed, in which case $\trans_4$ executes in 
+%a state where $\ke_1 = 0$; or the final version carrying value $1$ is observed, in which 
+%case $\trans_4$ executes in a state where $\ke_1 = 1$; orboth versions for 
+%$\ke_1$ are observed: because the version of $\ke_1$, carrying value $1$ is more recent than the one 
+%carrying value $0$ (i.e. it appears after in the list of versions for $\ke_1$), then $\trans_4$ 
+%executes in a state in which $\ke_1 = 1$. This approach models the \emph{Last Write Wins} 
+%policy employed by many transactional key-value stores \cite{cassandra,...........}. If we assume that the view 
+%of $\trans_4$ comprises both versions for $\ke_1$, then the execution of $\trans_4$ 
+%results in reading the only version available for $\ke_2$ (carrying value $0$), the last version available 
+%for $\ke_1$, and in the creation of a new version for $\ke_4$ carrying value $1$. If we associate 
+%the transaction identifier $\txid_{\cl_{4}}^1$ to the execution of $\trans_4$, the resulting 
+%key-value store is the one depicted in \cref{fig:long-fork-t4}.
+%
+%Next, client $\cl_2$ executes transaction $\trans_2$. Independently from the view that 
+%$\cl_2$ chooses to execute this transaction, the outcome will be a new version carrying 
+%value $1$ to be installed for value $\ke_1$. The identifier of the transaction installing such 
+%a version is given by $\txid_{\cl_2}{1}$. The resulting key-value store is given in \cref{fig:long-fork-t2}. 
+%Finally, client $\cl_3$ executes transaction $\trans_3$. Prior to executing a transaction, client 
+%$\cl_3$ selects a view of the key-value store where that comprises only the initial version of $\ke_1$, 
+%and both versions for $\ke_2$. In \cref{fig:long-fork-t3-view} we show the same key-value store from \cref{fig:long-fork-t2},  
+%where we highlight the versions that are included in the view of $\cl_3$. The choice of view for $\cl_3$ 
+%mandates that the transaction $\txid_3$ is executed in a state where $\ke_1 = 0, \ke_2 = 1$, which 
+%means that a new version carrying value $1$ for $\ke_4$ is installed by the execution of $\trans_3$. 
+%If $\txid_{\cl_3}^{1}$ is the transaction identifier associated with the execution of $\trans_3$, then the resulting 
+%key value store is given in \cref{fig:long-fork-t3}.
+%
+%The example above implicitly assumes that the key-value store employs a very weak consistency model, 
+%where transactions are always allowed to execute. To express stronger consistency models, 
+%we introduce a notion of \emph{execution tests}, which restrict the set of possible scenarios in which 
+%a transaction is allowed to execute in a given initial state. For example, the execution test for 
+%(strict) serialisability mandates that the only view that a client can select, prior to executing a transaction, 
+%is the one that comprises all versions of all keys: this amounts to requiring that the client observes the totality 
+%of the state of the key-value store. If we were to replay the example from above using the execution test 
+%for serialisability, we would notice that the execution of transaction $\trans_3$ starting from a state 
+%where $\ke_1 = 0, \ke_2 = 1$, would not be possible anymore: because at the moment $\trans_3$ is 
+%executed the key-value store contains a version carrying value $1$ for $\ke_1$, this version must be 
+%included in the view used by $\cl_3$ to determine the state in which $\trans_3$ is executed, leading 
+%to $\trans_3$ being executed in a state where $\ke_1 = \ke_2 = 1$. A consequence of this fact is 
+%that the execution of $\trans_3$ will not install a new version for $\ke_4$ anymore. Furthermore, 
+%if the execution test for serialisability is enforced by the key-value store, there exists no scheduling 
+%of the transactions $\{\trans_i\}_{i=1}^{4}$ that leads to installing a version carrying value 
+%$1$ for both $\ke_3$ and $\ke_4$.
+%
+%%\ac{
+%%
+%%    \sx{Done}
+%%    Pictures will need to be drawn: Shale, do you mind doing this? 
+%%For each figure I describe the updates that need to be made w.r.t to the previous 
+%%Figure.\\
+%%First picture: 4 keys $\ke_1, \ke_2, \ke_3, \ke_4$, 
+%%all initialised to 0 by $\txid_{0}$ and with no read transactions.\\
+%%Second picture: a version with value $1$, written by $\txid_{\cl^{1}}^1$ 
+%%and read by no transaction, is inserted for $\ke_1$. Second picture: $\txid_4$.
+%%reads value $1$ for $\ke_1$, value $0$ for $\ke_2$, and writes value $1$ for $\ke_4$. 
+%%Third picture: transaction $\txid_{\cl_2}^{1}$ writes value $1$ for $\ke_2$. 
+%%Fourth picture: same as the third picture, but the version with value $1$ of $\ke_1$ 
+%%should be dotted (as to represent the view of $\txid_{\cl_3}^{3}$. \\
+%%Fifth picture: $\txid_{\cl_3}^{1}$ reads value $1$ for $\ke_2$, value $0$ for $\ke_1$, 
+%%and updates $\ke_4$ to $1$.}
 %
 %
-\begin{subfigure}{0.32\textwidth}
-\begin{tikzpicture}
-\begin{pgfonlayer}{foreground}
-%\draw[help lines] grid(5,4);
-
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
-\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-    at ([xshift=\tikzkvspace]locx.east) {
-        {a} & $\txid_0$   & {a} & $\txid_1$ \\
-        {a} & $\emptyset$ & {a} & $\Set{\txid_{\cl_4}}$\\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
-
-%Location y
-\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-\matrix(versiony) [version list, column 2/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locy.east) {
- {a} & $\txid_0$\\
-  {a} & $\Set{\txid_{\cl_4}}$ \\
-};
-\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
-
-\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
-\matrix(versionz) [version list, column 2/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locz.east) {
- {a} & $\txid_0$\\
-  {a} & $\emptyset$ \\
-};
-\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
-
-\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
-\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locm.east) {
-  {a} & $\txid_0$ & {a} & $\txid_{\cl_4}$ \\              
-  {a} & $\emptyset$  & {a} & $\emptyset$\\  
-};
-\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
-\tikzvalue{versionm-1-3}{versionm-2-3}{locm-v0}{$1$};
-
-\end{pgfonlayer}
-\end{tikzpicture}
-\caption{\( \txid_4 \)}
-\label{fig:long-fork-t4}
-\end{subfigure}
+%%\input{\RootPath/logic/long-fork-proof.tex}
+%
+%%We build a programming logic based on the multi-version key-value stores and views.
+%%The syntax is close to concurrent-abstract-predicate (CAP) \cite{cap}, 
+%%we generalise the meaning of the assertions and the \emph{atomic update rule}.
+%%\cref{fig:long-fork-proof} is the sketch proof for the long fork.
+%
+%%The transactional assertions are normal separation assertions with read (\(\otR\)) and write (\(\otW\)) labels.
+%%There are four forms of transactional assertions for a key:
+%%\( \ke \fpI 1 \), \( \ke \fpR 1\), \( \ke \fpW 1 \) means that the current state of the key \( \ke \) 
+%%in the local snapshot is 1 and it has no operation, has been read with value 1 or has been overwritten to value 1;
+%%\( \ke \fpRW (1,2) \) means the state of the key is 2 and 
+%%the first read before write fetched 1 and then has been overwritten to 2.
+%%The rules for reasoning the transaction are extension of standard sequential separation logic rules by 
+%%adding read label to the assertion when reading from keys and write label when writing to keys.
+%
+%%The assertions in the form \( \boxass{\bar{\lpre}}{\lrid}{\intass}\) 
+%%are \emph{shared region assertions}, which describe the local views on the shared key-value stores.
+%%Each share region has a unique region identifier \( \lrid \) and a interference \( \intass \)
+%%that specifies what operations are allowed to commit, 
+%%together with some transformation of \emph{capabilities}, ghost resources for reasoning purpose.
+%%For example, \( \CB{L1}  :  \ke_1 \fpW 1 \sep \null \fpA \cass{\CB{L1}}{\lrid} \) in \cref{fig:long-fork-proof} 
+%%means if a client holds \( \CB{L1} \), it is allowed to commit a transaction with fingerprint \(  \ke_1 \fpW 1 \),
+%%and afterwards by \( \null \fpA \cass{\CB{L1}}{\lrid}\) the capability \( \CB{L1} \) should return to the shared region.
+%%The interference \( \intass \)  induces a invariant of the region that 
+%%includes all states reachable from the initial states shown in \cref{fig:initial-kv}.
+%%This means, even though the assertions describe the local views, but they also provide information about possible key-value store
+%%if taking the invariant into account.
+%
+%%The notation of stable assertions is generalised: if assertions are stable under a consistency model,  
+%%then the assertions are close under the portion of invariant where each step satisfies the consistency model.
+%%The \emph{update atomic rule} is similar to the one from CAP.
+%%We generalise the repartitioning \( \repartition[]{\gpre}{\gpost}{\lpre}{\lpost}\):
+%%for any initial view and key-value stores satisfying the precondition \( \gpre \),
+%%any final view and key-value stores that are yielded by committing the fingerprints satisfying \( \gpost \) under the consistency model, should satisfy the postcondition \( \lpost \).
 %
 %
+%%\sx{
+%%    \begin{itemize}
+%%        \item long-fork example
+%%        \item Multi-version Key-value, View.
+%%        \item how does the semantics work on long fork example
+%%        \item a sketch proof for long fork 
+%%    \end{itemize}
+%%}
+%%
+%%
+%%\begin{wrapfigure}[7]{r}{0.33\textwidth}
+%%\vspace{-10pt}
+%%\begin{verbatim}
+%%interface Transaction {
+%%    Start(); 
+%%    Read(Key k);
+%%    Write(Key k, Value v); 
+%%    Commit();    }
+%%\end{verbatim}
+%%\vspace{-10pt}
+%%\caption{Example of Transaction API.}
+%%\label{fig:api}
+%%\end{wrapfigure}
+%%We focus on an abstract computational model where multiple client programs can access and update keys in a key-value store using atomic transactions. 
+%%In general, clients are provided with a simple \textit{API} such as the one depicted in \cref{fig:api} \cite{gdur,physicsnmsi,clockSI}\footnote{It is 
+%%often the case that key-value stores provide a mechanism to wrap more transactions inside a session, and give 
+%%provide appropriate APIs to handle sessions. For the sake of simplicity, in this paper we assume that each client executes transactions 
+%%within a single session.}, while both the implementation details and the system architecture are hidden from clients. 
+%%Because (distributed) key-value stores only give weak consistency guarantees of the data to their clients, the latter are 
+%%not ensured to read the most up-to-date version of a key.
+%%%In an ideal world, when executing a transaction clients would read the most up-to-date version of a key. In a distributed setting 
+%%%this approach, known as (strict) serialisability, would require a continuous synchronisation between the different components of 
+%%%the system, which impacts performance and limits scalability. To this end, the database only provides weak consistency model
+%%%\ac{This sentence should probably be in the introduction.}
+%%
+%%Following these intuitions, we model a key-value stores, or \emph{kv-store}, as a centralised unit where multiple versions 
+%%are stored for each key (\cref{sec:mkvs-view}). Versions consist of a value and the meta-data of the transactions that wrote and 
+%%read such a version. In practical, distributed systems, the meta-data is usually encoded using either timestamps 
+%%\cite{physicsnmsi,clockSI} or vector clocks \cite{gdur}. We focus on key-value stores whose transactions 
+%%enjoy \emph{atomic visibility}, meaning that \textbf{(i)} transactions read their data from an atomic 
+%%snapshot of the key-value store, and \textbf{(ii)} a transaction can observe either none or all 
+%%of the updates performed by another transaction. In other words, a transaction only reads (writes) at most 
+%%one version for each key.
+%%Because clients may observe potentially out-of-date versions of the system, we introduce the notion of \emph{views}. 
+%%Intuitively, a view records the version of each key that a client observes at a given time. We use views 
+%%to determine the snapshot taken by transactions executed by clients.
+%%
+%%A consistency model is a contract between the key-value store and its clients. We distinguish 
+%%between \emph{client-centric} consistency models \cite{terry1994session}, 
+%%which impose constraints on the observations and updates made by a single client, 
+%%and \emph{data-centric} consistency models \cite{framework-concur}, which impose constraints 
+%%on the structure of the key value store.
+%%To specify weak consistency models, 
+%%we introduce the notion of \emph{execution tests} (\cref{sec:execution.tests}). An execution test
+%% specifies when a client is allowed to execute a transaction carrying a given 
+%%set of read and write operations, or \emph{fingerprint}. Therefore, an execution 
+%%test constrains how the state of the key-value store may evolve;
+%%by considering all the possible evolutions of the key-value store under said execution test, 
+%%we determine a consistency model. For example, an execution test for (strict) serialisability 
+%%requires that a transaction can be executed by a client only if it observes the most up-to-date 
+%%version for each key. 
+%%We give several examples of execution tests that capture both client-centric and 
+%%data-centric consistency models. 
+%%
+%%The idea of specifying consistency models using execution tests has been 
+%%already proposed in \cite{seebelieve}; however, their notion of execution 
+%%test is intrinsically more complex than ours: to determine 
+%%whether a transaction can commit, the total order in which all past transactions 
+%%have committed must be known. This knowledge is not needed in our setting.
+%%
+%%
+%%\begin{figure}[t]
+%%\begin{center}
+%%
+%%\hrulefill
+%%
+%%\begin{onethirdsubfig}
+%%\begin{tikzpicture}
+%%\begin{pgfonlayer}{foreground}
+%%%\draw[help lines] grid(5,4);
+%%
+%%%Location x
+%%\node(locx) {$\ke_1 \mapsto$};
+%%
+%%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
+%%    at ([xshift=\tikzkvspace]locx.east) {
+%%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
+%%    {a} & $\left\{\txid_{\cl'}^{1}\right\}$ & {a} & $\emptyset$ \\
+%%};
+%%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+%%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+%%
+%%%Location y
+%%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
+%%   at ([xshift=\tikzkvspace]locy.east) {
+%% {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
+%%  {a} & $\left\{\txid_{\cl}^1\right\}$ & {a} & $\emptyset$\\
+%%};
+%%
+%%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
+%%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
+%%
+%%% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%%%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+%%
+%%%%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+%%%\draw[-, blue, very thick, rounded corners=10pt]
+%% %([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+%% %([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
+%% %([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
+%% %([xshift=-3pt, yshift=-5pt]locy-v0.south east);
+%% 
+%% %\path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client$};
+%%
+%%%%red view
+%%%\draw[-, red, very thick, rounded corners = 10pt]
+%% %([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+%% %([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
+%% 
+%%%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client'$};
+%%
+%%\end{pgfonlayer}
+%%\end{tikzpicture}
+%%\caption{A key-value store $\hh$}
+%%\label{fig:hheap-a}
+%%\label{fig:key-value-store}
+%%\label{fig:ser-disallowed}
+%%\end{onethirdsubfig}
+%%%
+%%\begin{onethirdsubfig}
+%%\begin{tikzpicture}
+%%\begin{pgfonlayer}{foreground}
+%%%\draw[help lines] grid(5,4);
+%%
+%%%Location x
+%%\node(locx) {$\ke_1 \mapsto$};
+%%
+%%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
+%%    at ([xshift=\tikzkvspace]locx.east) {
+%%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
+%%    {a} & $\left\{\txid_{\cl'}^{1}\right\}$ & {a} & $\emptyset$ \\
+%%};
+%%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+%%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+%%
+%%%Location y
+%%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%%\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
+%%   at ([xshift=\tikzkvspace]locy.east) {
+%%       {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl'}^{1}$ \\
+%%  {a} & $\left\{\txid_{\cl}^1\right\}$ & {a} & \color{gray}$\emptyset$\\
+%%};
+%%
+%%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
+%%\node[version node,draw=none,fit=(versiony-1-3) (versiony-2-3),fill=white, inner sep=0pt] (locy-v1) {\color{gray}$v'_1$};
+%%
+%%\end{pgfonlayer}
+%%\end{tikzpicture}
+%%\caption{A view for client \( \cl \)}
+%%\label{fig:view-of-cl}
+%%\end{onethirdsubfig}
+%%%
+%%\begin{onethirdsubfig}
+%%\begin{tikzpicture}
+%%\begin{pgfonlayer}{foreground}
+%%%\draw[help lines] grid(5,4);
+%%
+%%%Location x
+%%\node(locx) {$\ke_1 \mapsto$};
+%%
+%%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
+%%    at ([xshift=\tikzkvspace]locx.east) {
+%%    {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl}^{1}$\\
+%%    {a} & $\left\{\txid_{\cl'}^{1}\right\}$ & {a} & \color{gray}$\emptyset$ \\
+%%};
+%%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+%%\node[version node,draw=none,fit=(versionx-1-3) (versionx-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$v_1$};
+%%
+%%%Location y
+%%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
+%%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
+%%   at ([xshift=\tikzkvspace]locy.east) {
+%% {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
+%%  {a} & $\left\{\txid_{\cl}^1\right\}$ & {a} & $\emptyset$\\
+%%};
+%%
+%%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
+%%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
+%%
+%%\end{pgfonlayer}
+%%\end{tikzpicture}
+%%\caption{A view for client \( \cl' \)}
+%%\label{fig:view-of-cl-prime}
+%%\end{onethirdsubfig}
+%%
+%%\end{center}
+%%
+%%\hrulefill
+%%
+%%\caption{Multi-version key-value stores and views}
+%%\label{fig:hheap}
+%%\label{fig:key-value-and-view}
+%%\end{figure}
+%%\ac{
+%%It will be often convenient to depict key-value stores graphically: an 
+%%example is given by the kv-store $\hh$ depicted in \cref{fig:hheap-a}
+%%(ignore for the moment the vertical lines labelled $\client$ and $\client'$).
+%%It comprises two keys \( \ke_1\) and \( \ke_2 \), 
+%%each of which is associated with two versions carrying values $\val_0$ and $\val_1$, and $\val'_0$ and $\val'_1$, respectively.
+%%The versions of a key are listed in order from left to right. 
+%%We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
+%%For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_{\cl'}^1$.
+%%}
+%%
+%%%the author require 
+%%%the knowledge of the total order in which all past transactions have been 
+%%%executed, to determine whether a new transaction can commit.
+%%
+%%%%\ac{Can't cite documentations of real databases, as they usually have a much more complicated API.}
+%%%
+%%%%Transactions in our model execute atomically, though they have different effects on the key-value stores depending on their associated \emph{consistency model}.
+%%%%A consistency model controls how the key-value store evolves.
+%%%%A common model is \emph{serialisability}, where transactions appear to execute one after another in a sequential order.
+%%%%This notion of sequential execution is however not necessary for many weaker models. As such, upon commencing execution, a transaction may not observe the most up-to-date values for keys. 
+%%%
+%%%To address this, we 
+%%%first model 
+%%%the state of the system using \emph{multi-version key-value stores (MKVSs)} (\cref{sec:mkvs-view}). 
+%%%An MKVS keeps track of all versions (values) written for keys, as well as the information about the transactions that read and wrote such versions. 
+%%%To model the potential out-of-date observation, we introduce \emph{views}.
+%%%A view decides the observable versions of keys for a client.
+%%%Therefore, in order to execute a transaction, the client first takes \emph{a snapshot} of the system with the view, executes the transaction locally with respect to its snapshot (\cref{sec:trans-semantics}), and afterwards commits the effect of the transaction if the change is allowed by the underlying consistency model (\cref{sec:prog-semantics}).
+%%
+%%
+%%%We first introduce MKVSs and views (\secref{sec:mkvs-view}) and.
+%%%We starts with the syntax of programs followed by the semantics of transaction.
+%%%Finally, we will give the semantics for the entire programs.
+%\begin{figure}[t]
 %
-\begin{subfigure}{0.32\textwidth}
-\begin{tikzpicture}
-\begin{pgfonlayer}{foreground}
-%\draw[help lines] grid(5,4);
-
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
-\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-    at ([xshift=\tikzkvspace]locx.east) {
-        {a} & $\txid_0$   & {a} & $\txid_1$ \\
-        {a} & $\emptyset$ & {a} & $\Set{\txid_{\cl_4}}$\\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
-
-%Location y
-\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locy.east) {
-       {a} & $\txid_0$ & {a} & $\txid_{\cl_2}$ \\
-       {a} & $\Set{\txid_{\cl_4}}$ & {a} & $\emptyset$ \\
-};
-\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
-\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
-
-\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
-\matrix(versionz) [version list, column 2/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locz.east) {
- {a} & $\txid_0$\\
-  {a} & $\emptyset$ \\
-};
-\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
-
-\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
-\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locm.east) {
-  {a} & $\txid_0$ & {a} & $\txid_{\cl_4}$ \\              
-  {a} & $\emptyset$  & {a} & $\emptyset$\\  
-};
-\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
-\tikzvalue{versionm-1-3}{versionm-2-3}{locm-v0}{$1$};
-
-\end{pgfonlayer}
-\end{tikzpicture}
-\caption{\( \txid_2 \)}
-\label{fig:long-fork-t2}
-\end{subfigure}
+%\hrulefill
 %
-%
-%
-\begin{subfigure}{0.32\textwidth}
-\begin{tikzpicture}
-\begin{pgfonlayer}{foreground}
-%\draw[help lines] grid(5,4);
-
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
-\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted,text width=8mm}]
-    at ([xshift=\tikzkvspace]locx.east) {
-        {a} & $\txid_0$   & {a} & \color{gray}$\txid_1$ \\
-        {a} & $\emptyset$ & {a} & \color{gray}$\Set{\txid_{\cl_4}}$\\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\node[version node,draw=none,fit=(versionx-1-3) (versionx-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$1$};
-
-%Location y
-\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locy.east) {
-       {a} & $\txid_0$ & {a} & $\txid_{\cl_2}$ \\
-       {a} & $\Set{\txid_{\cl_4}}$ & {a} & $\emptyset$ \\
-};
-\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
-\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
-
-\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
-\matrix(versionz) [version list, column 2/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locz.east) {
- {a} & $\txid_0$\\
-  {a} & $\emptyset$ \\
-};
-\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
-
-\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
-\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={text width=8mm,dotted}]
-   at ([xshift=\tikzkvspace]locm.east) {
-  {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl_4}$ \\              
-  {a} & $\emptyset$  & {a} &  \color{gray}$\emptyset$\\  
-};
-\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
-\node[version node,draw=none,fit=(versionm-1-3) (versionm-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$1$};
-
-\end{pgfonlayer}
-\end{tikzpicture}
-\caption{view of \( \txid_3 \)}
-\label{fig:view-of-cl-prime}
-\label{fig:long-fork-t3-view}
-\end{subfigure}
-%
-%
-%
-%
-\begin{subfigure}{0.32\textwidth}
-\begin{tikzpicture}
-\begin{pgfonlayer}{foreground}
-%\draw[help lines] grid(5,4);
-
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
-\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-    at ([xshift=\tikzkvspace]locx.east) {
-        {a} & $\txid_0$   & {a} & $\txid_1$ \\
-        {a} & $\Set{\txid_{\cl_3}}$ & {a} & $\Set{\txid_{\cl_4}}$\\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
-
-%Location y
-\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locy.east) {
-       {a} & $\txid_0$ & {a} & $\txid_{\cl_2}$ \\
-       {a} & $\Set{\txid_{\cl_4}}$ & {a} & $\Set{\txid_{\cl_3}}$ \\
-};
-\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
-\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
-
-\path (locy.south) + (0,\tikzkeyspace) node (locz) {$\ke_3 \mapsto$};
-\matrix(versionz) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locz.east) {
-       {a} & $\txid_0$ & {a} & $\txid_{\cl_3}$ \\
-       {a} & $\emptyset$ & {a} & $\emptyset$ \\
-};
-\tikzvalue{versionz-1-1}{versionz-2-1}{locz-v0}{$0$};
-\tikzvalue{versionz-1-3}{versionz-2-3}{locz-v1}{$1$};
-
-\path (locz.south) + (0,\tikzkeyspace) node (locm) {$\ke_4 \mapsto$};
-\matrix(versionm) [version list, column 2/.style={text width=8mm}, column 4/.style={text width=8mm}]
-   at ([xshift=\tikzkvspace]locm.east) {
-  {a} & $\txid_0$ & {a} & $\txid_{\cl_4}$ \\              
-  {a} & $\emptyset$  & {a} & $\emptyset$\\  
-};
-\tikzvalue{versionm-1-1}{versionm-2-1}{locm-v0}{$0$};
-\tikzvalue{versionm-1-3}{versionm-2-3}{locm-v0}{$1$};
-
-\end{pgfonlayer}
-\end{tikzpicture}
-\caption{\( \txid_3 \)}
-\label{fig:long-fork-t3}
-\label{fig:cp-disallowed-1}
-\end{subfigure}
-
-\end{center}
-
-\hrulefill
-
-\caption{Multi-version key-value stores and views}
-\label{fig:hheap}
-\label{fig:key-value-and-view}
-\end{figure*}
-
-It has been observed before that reasoning about the behaviour of a replicated data-store at a low level 
-may be excessively complicated, as it requires the knowledge of the state of each 
-replica, as well as understanding the synchronisation protocol among replicas \cite{framework-concur,adya,seebelieve}. 
-\ac{After trying to write this paragraph several time, comparing with the three proposals in the references: 
-do not apologise here about why another framework when there are already other three around. This should 
-be done in introduction and conclusions. Just give the details about how we do stuff.} 
-We propose an approach where we study the semantics to programs in a setting where 
-clients interact with a centralised (i.e. non-replicated, non-distributed), multi-version key value store, 
-using a mechanism that we refer to as \emph{views}: in \cref{fig:view-of-cl} we show that this approach 
-is sufficient to capture the behaviour of programs under several consistency models 
-employed by distributed transactional storage systems.
-
-Let us show how, in our model, it is possible to exhibit a computation of 
-the set of transactions $\{\trans_{i}\}_{i=1}^{4}$ that leads to updating 
-both $\ke_3$ and $\ke_4$ to $1$.
-In our model, when a piece of code corresponding to a transaction executes, 
-it gets assigned a \emph{transaction identifier} $\txid, \txid',\cdots$. 
-As we will see, transaction identifiers 
-embed the information about the client that executes them. 
-The state of the system consists of a mapping from keys to non-empty lists of versions, each 
-of which comprises value and the meta-data of the transaction identifiers 
-that read and wrote such a version. Initially, each key is initialised to a singleton carrying 
-value $0$, written by a special initialisation transaction $\txid_0$ that is not associated 
-with any client. This key-value store is depicted graphically in \cref{fig:key-value-store}. Versions are represented graphically
-as boxes divided in three containers: the leftmost container contains the value of the version, 
-the right-top container contains the identifier of the transaction that wrote the version, 
-and the right-bottom container contains the set of transaction identifiers that read the version. 
-Initially, one of the four clients from $\{\cl_{i}\}_{i=1}^{4}$, say 
-$\cl_1$, executes the transaction $\trans_1$. To do so, the client 
-must first select the portion of state that it observes from the key-value store: 
-specifically, it must select a non-empty sub-list of versions of each key that it observes from 
-the key-value store. The portion of state selected by the client is referred to as its view, 
-and it determines the local state in which the transactional code $\trans_1$ is executed.
-Because there is only one version for each key, each carrying value $0$, 
-the choice of view for $\cl_1$ is compulsory, 
-and it leads to client $\cl_1$ executing the transaction $\trans_1$ in the local state 
-where $\ke_1 = \ke_2 = \ke_3 = \ke_4 = 0$. This transaction gets assigned an identifier 
-that also carries the information about the client that executes the transaction $\txid_{\cl_{1}}^{1}$ 
-(ignore for the moment the superscript $1$). Upon executing $\trans_1$ 
-atomically, a new version carrying value $1$ and written by $\txid_{\cl_{1}}^{1}$ 
-is created for $\ke_1$. 
-
-Next, client $\cl_4$ is scheduled to execute a transaction. As for $\cl_1$, 
-we must select a view for $\cl_4$, which we use to determine the state in which $\trans_4$ 
-is executed. The choice for which versions to observe for $\ke_2, \ke_3, \ke_4$ is compulsory, 
-and it leads to execute $\trans_4$ in a state where $\ke_2 = \ke_3 = \ke_4 = 0$.
-Because we have two versions for $\ke_1$, carrying values $0$ and $1$ respectively, 
-there are three different choices for selecting the view that $\cl_4$ has on $\ke_1$: 
-only the initial version carrying value $0$ is observed, in which case $\trans_4$ executes in 
-a state where $\ke_1 = 0$; or the final version carrying value $1$ is observed, in which 
-case $\trans_4$ executes in a state where $\ke_1 = 1$; orboth versions for 
-$\ke_1$ are observed: because the version of $\ke_1$, carrying value $1$ is more recent than the one 
-carrying value $0$ (i.e. it appears after in the list of versions for $\ke_1$), then $\trans_4$ 
-executes in a state in which $\ke_1 = 1$. This approach models the \emph{Last Write Wins} 
-policy employed by many transactional key-value stores \cite{cassandra,...........}. If we assume that the view 
-of $\trans_4$ comprises both versions for $\ke_1$, then the execution of $\trans_4$ 
-results in reading the only version available for $\ke_2$ (carrying value $0$), the last version available 
-for $\ke_1$, and in the creation of a new version for $\ke_4$ carrying value $1$. If we associate 
-the transaction identifier $\txid_{\cl_{4}}^1$ to the execution of $\trans_4$, the resulting 
-key-value store is the one depicted in \cref{fig:long-fork-t4}.
-
-Next, client $\cl_2$ executes transaction $\trans_2$. Independently from the view that 
-$\cl_2$ chooses to execute this transaction, the outcome will be a new version carrying 
-value $1$ to be installed for value $\ke_1$. The identifier of the transaction installing such 
-a version is given by $\txid_{\cl_2}{1}$. The resulting key-value store is given in \cref{fig:long-fork-t2}. 
-Finally, client $\cl_3$ executes transaction $\trans_3$. Prior to executing a transaction, client 
-$\cl_3$ selects a view of the key-value store where that comprises only the initial version of $\ke_1$, 
-and both versions for $\ke_2$. In \cref{fig:long-fork-t3-view} we show the same key-value store from \cref{fig:long-fork-t2},  
-where we highlight the versions that are included in the view of $\cl_3$. The choice of view for $\cl_3$ 
-mandates that the transaction $\txid_3$ is executed in a state where $\ke_1 = 0, \ke_2 = 1$, which 
-means that a new version carrying value $1$ for $\ke_4$ is installed by the execution of $\trans_3$. 
-If $\txid_{\cl_3}^{1}$ is the transaction identifier associated with the execution of $\trans_3$, then the resulting 
-key value store is given in \cref{fig:long-fork-t3}.
-
-The example above implicitly assumes that the key-value store employs a very weak consistency model, 
-where transactions are always allowed to execute. To express stronger consistency models, 
-we introduce a notion of \emph{execution tests}, which restrict the set of possible scenarios in which 
-a transaction is allowed to execute in a given initial state. For example, the execution test for 
-(strict) serialisability mandates that the only view that a client can select, prior to executing a transaction, 
-is the one that comprises all versions of all keys: this amounts to requiring that the client observes the totality 
-of the state of the key-value store. If we were to replay the example from above using the execution test 
-for serialisability, we would notice that the execution of transaction $\trans_3$ starting from a state 
-where $\ke_1 = 0, \ke_2 = 1$, would not be possible anymore: because at the moment $\trans_3$ is 
-executed the key-value store contains a version carrying value $1$ for $\ke_1$, this version must be 
-included in the view used by $\cl_3$ to determine the state in which $\trans_3$ is executed, leading 
-to $\trans_3$ being executed in a state where $\ke_1 = \ke_2 = 1$. A consequence of this fact is 
-that the execution of $\trans_3$ will not install a new version for $\ke_4$ anymore. Furthermore, 
-if the execution test for serialisability is enforced by the key-value store, there exists no scheduling 
-of the transactions $\{\trans_i\}_{i=1}^{4}$ that leads to installing a version carrying value 
-$1$ for both $\ke_3$ and $\ke_4$.
-
-%\ac{
-%
-%    \sx{Done}
-%    Pictures will need to be drawn: Shale, do you mind doing this? 
-%For each figure I describe the updates that need to be made w.r.t to the previous 
-%Figure.\\
-%First picture: 4 keys $\ke_1, \ke_2, \ke_3, \ke_4$, 
-%all initialised to 0 by $\txid_{0}$ and with no read transactions.\\
-%Second picture: a version with value $1$, written by $\txid_{\cl^{1}}^1$ 
-%and read by no transaction, is inserted for $\ke_1$. Second picture: $\txid_4$.
-%reads value $1$ for $\ke_1$, value $0$ for $\ke_2$, and writes value $1$ for $\ke_4$. 
-%Third picture: transaction $\txid_{\cl_2}^{1}$ writes value $1$ for $\ke_2$. 
-%Fourth picture: same as the third picture, but the version with value $1$ of $\ke_1$ 
-%should be dotted (as to represent the view of $\txid_{\cl_3}^{3}$. \\
-%Fifth picture: $\txid_{\cl_3}^{1}$ reads value $1$ for $\ke_2$, value $0$ for $\ke_1$, 
-%and updates $\ke_4$ to $1$.}
-
-
-%\input{\RootPath/logic/long-fork-proof.tex}
-
-%We build a programming logic based on the multi-version key-value stores and views.
-%The syntax is close to concurrent-abstract-predicate (CAP) \cite{cap}, 
-%we generalise the meaning of the assertions and the \emph{atomic update rule}.
-%\cref{fig:long-fork-proof} is the sketch proof for the long fork.
-
-%The transactional assertions are normal separation assertions with read (\(\otR\)) and write (\(\otW\)) labels.
-%There are four forms of transactional assertions for a key:
-%\( \ke \fpI 1 \), \( \ke \fpR 1\), \( \ke \fpW 1 \) means that the current state of the key \( \ke \) 
-%in the local snapshot is 1 and it has no operation, has been read with value 1 or has been overwritten to value 1;
-%\( \ke \fpRW (1,2) \) means the state of the key is 2 and 
-%the first read before write fetched 1 and then has been overwritten to 2.
-%The rules for reasoning the transaction are extension of standard sequential separation logic rules by 
-%adding read label to the assertion when reading from keys and write label when writing to keys.
-
-%The assertions in the form \( \boxass{\bar{\lpre}}{\lrid}{\intass}\) 
-%are \emph{shared region assertions}, which describe the local views on the shared key-value stores.
-%Each share region has a unique region identifier \( \lrid \) and a interference \( \intass \)
-%that specifies what operations are allowed to commit, 
-%together with some transformation of \emph{capabilities}, ghost resources for reasoning purpose.
-%For example, \( \CB{L1}  :  \ke_1 \fpW 1 \sep \null \fpA \cass{\CB{L1}}{\lrid} \) in \cref{fig:long-fork-proof} 
-%means if a client holds \( \CB{L1} \), it is allowed to commit a transaction with fingerprint \(  \ke_1 \fpW 1 \),
-%and afterwards by \( \null \fpA \cass{\CB{L1}}{\lrid}\) the capability \( \CB{L1} \) should return to the shared region.
-%The interference \( \intass \)  induces a invariant of the region that 
-%includes all states reachable from the initial states shown in \cref{fig:initial-kv}.
-%This means, even though the assertions describe the local views, but they also provide information about possible key-value store
-%if taking the invariant into account.
-
-%The notation of stable assertions is generalised: if assertions are stable under a consistency model,  
-%then the assertions are close under the portion of invariant where each step satisfies the consistency model.
-%The \emph{update atomic rule} is similar to the one from CAP.
-%We generalise the repartitioning \( \repartition[]{\gpre}{\gpost}{\lpre}{\lpost}\):
-%for any initial view and key-value stores satisfying the precondition \( \gpre \),
-%any final view and key-value stores that are yielded by committing the fingerprints satisfying \( \gpost \) under the consistency model, should satisfy the postcondition \( \lpost \).
-
-
-%\sx{
-%    \begin{itemize}
-%        \item long-fork example
-%        \item Multi-version Key-value, View.
-%        \item how does the semantics work on long fork example
-%        \item a sketch proof for long fork 
-%    \end{itemize}
-%}
-%
-%
-%\begin{wrapfigure}[7]{r}{0.33\textwidth}
-%\vspace{-10pt}
+%\begin{subfigure}{0.38\textwidth}
 %\begin{verbatim}
 %interface Transaction {
 %    Start(); 
 %    Read(Key k);
 %    Write(Key k, Value v); 
-%    Commit();    }
+%    Commit();    
+%}
 %\end{verbatim}
-%\vspace{-10pt}
 %\caption{Example of Transaction API.}
 %\label{fig:api}
-%\end{wrapfigure}
-%We focus on an abstract computational model where multiple client programs can access and update keys in a key-value store using atomic transactions. 
-%In general, clients are provided with a simple \textit{API} such as the one depicted in \cref{fig:api} \cite{gdur,physicsnmsi,clockSI}\footnote{It is 
-%often the case that key-value stores provide a mechanism to wrap more transactions inside a session, and give 
-%provide appropriate APIs to handle sessions. For the sake of simplicity, in this paper we assume that each client executes transactions 
-%within a single session.}, while both the implementation details and the system architecture are hidden from clients. 
-%Because (distributed) key-value stores only give weak consistency guarantees of the data to their clients, the latter are 
-%not ensured to read the most up-to-date version of a key.
-%%In an ideal world, when executing a transaction clients would read the most up-to-date version of a key. In a distributed setting 
-%%this approach, known as (strict) serialisability, would require a continuous synchronisation between the different components of 
-%%the system, which impacts performance and limits scalability. To this end, the database only provides weak consistency model
-%%\ac{This sentence should probably be in the introduction.}
-%
-%Following these intuitions, we model a key-value stores, or \emph{kv-store}, as a centralised unit where multiple versions 
-%are stored for each key (\cref{sec:mkvs-view}). Versions consist of a value and the meta-data of the transactions that wrote and 
-%read such a version. In practical, distributed systems, the meta-data is usually encoded using either timestamps 
-%\cite{physicsnmsi,clockSI} or vector clocks \cite{gdur}. We focus on key-value stores whose transactions 
-%enjoy \emph{atomic visibility}, meaning that \textbf{(i)} transactions read their data from an atomic 
-%snapshot of the key-value store, and \textbf{(ii)} a transaction can observe either none or all 
-%of the updates performed by another transaction. In other words, a transaction only reads (writes) at most 
-%one version for each key.
-%Because clients may observe potentially out-of-date versions of the system, we introduce the notion of \emph{views}. 
-%Intuitively, a view records the version of each key that a client observes at a given time. We use views 
-%to determine the snapshot taken by transactions executed by clients.
-%
-%A consistency model is a contract between the key-value store and its clients. We distinguish 
-%between \emph{client-centric} consistency models \cite{terry1994session}, 
-%which impose constraints on the observations and updates made by a single client, 
-%and \emph{data-centric} consistency models \cite{framework-concur}, which impose constraints 
-%on the structure of the key value store.
-%To specify weak consistency models, 
-%we introduce the notion of \emph{execution tests} (\cref{sec:execution.tests}). An execution test
-% specifies when a client is allowed to execute a transaction carrying a given 
-%set of read and write operations, or \emph{fingerprint}. Therefore, an execution 
-%test constrains how the state of the key-value store may evolve;
-%by considering all the possible evolutions of the key-value store under said execution test, 
-%we determine a consistency model. For example, an execution test for (strict) serialisability 
-%requires that a transaction can be executed by a client only if it observes the most up-to-date 
-%version for each key. 
-%We give several examples of execution tests that capture both client-centric and 
-%data-centric consistency models. 
-%
-%The idea of specifying consistency models using execution tests has been 
-%already proposed in \cite{seebelieve}; however, their notion of execution 
-%test is intrinsically more complex than ours: to determine 
-%whether a transaction can commit, the total order in which all past transactions 
-%have committed must be known. This knowledge is not needed in our setting.
-%
-%
-%\begin{figure}[t]
-%\begin{center}
+%\end{subfigure}
 %
 %\hrulefill
 %
-%\begin{onethirdsubfig}
-%\begin{tikzpicture}
-%\begin{pgfonlayer}{foreground}
-%%\draw[help lines] grid(5,4);
-%
-%%Location x
-%\node(locx) {$\ke_1 \mapsto$};
-%
-%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
-%    at ([xshift=\tikzkvspace]locx.east) {
-%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
-%    {a} & $\left\{\txid_{\cl'}^{1}\right\}$ & {a} & $\emptyset$ \\
-%};
-%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
-%
-%%Location y
-%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
-%   at ([xshift=\tikzkvspace]locy.east) {
-% {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
-%  {a} & $\left\{\txid_{\cl}^1\right\}$ & {a} & $\emptyset$\\
-%};
-%
-%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
-%
-%% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
-%%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
-%
-%%%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
-%%\draw[-, blue, very thick, rounded corners=10pt]
-% %([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
-% %([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
-% %([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
-% %([xshift=-3pt, yshift=-5pt]locy-v0.south east);
-% 
-% %\path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client$};
-%
-%%%red view
-%%\draw[-, red, very thick, rounded corners = 10pt]
-% %([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
-% %([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
-% 
-%%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client'$};
-%
-%\end{pgfonlayer}
-%\end{tikzpicture}
-%\caption{A key-value store $\hh$}
-%\label{fig:hheap-a}
-%\label{fig:key-value-store}
-%\label{fig:ser-disallowed}
-%\end{onethirdsubfig}
-%%
-%\begin{onethirdsubfig}
-%\begin{tikzpicture}
-%\begin{pgfonlayer}{foreground}
-%%\draw[help lines] grid(5,4);
-%
-%%Location x
-%\node(locx) {$\ke_1 \mapsto$};
-%
-%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
-%    at ([xshift=\tikzkvspace]locx.east) {
-%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
-%    {a} & $\left\{\txid_{\cl'}^{1}\right\}$ & {a} & $\emptyset$ \\
-%};
-%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
-%
-%%Location y
-%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-%\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
-%   at ([xshift=\tikzkvspace]locy.east) {
-%       {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl'}^{1}$ \\
-%  {a} & $\left\{\txid_{\cl}^1\right\}$ & {a} & \color{gray}$\emptyset$\\
-%};
-%
-%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-%\node[version node,draw=none,fit=(versiony-1-3) (versiony-2-3),fill=white, inner sep=0pt] (locy-v1) {\color{gray}$v'_1$};
-%
-%\end{pgfonlayer}
-%\end{tikzpicture}
-%\caption{A view for client \( \cl \)}
-%\label{fig:view-of-cl}
-%\end{onethirdsubfig}
-%%
-%\begin{onethirdsubfig}
-%\begin{tikzpicture}
-%\begin{pgfonlayer}{foreground}
-%%\draw[help lines] grid(5,4);
-%
-%%Location x
-%\node(locx) {$\ke_1 \mapsto$};
-%
-%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
-%    at ([xshift=\tikzkvspace]locx.east) {
-%    {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl}^{1}$\\
-%    {a} & $\left\{\txid_{\cl'}^{1}\right\}$ & {a} & \color{gray}$\emptyset$ \\
-%};
-%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-%\node[version node,draw=none,fit=(versionx-1-3) (versionx-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$v_1$};
-%
-%%Location y
-%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\ke_2 \mapsto$};
-%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
-%   at ([xshift=\tikzkvspace]locy.east) {
-% {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
-%  {a} & $\left\{\txid_{\cl}^1\right\}$ & {a} & $\emptyset$\\
-%};
-%
-%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
-%
-%\end{pgfonlayer}
-%\end{tikzpicture}
-%\caption{A view for client \( \cl' \)}
-%\label{fig:view-of-cl-prime}
-%\end{onethirdsubfig}
-%
-%\end{center}
-%
-%\hrulefill
-%
-%\caption{Multi-version key-value stores and views}
-%\label{fig:hheap}
-%\label{fig:key-value-and-view}
 %\end{figure}
-%\ac{
-%It will be often convenient to depict key-value stores graphically: an 
-%example is given by the kv-store $\hh$ depicted in \cref{fig:hheap-a}
-%(ignore for the moment the vertical lines labelled $\client$ and $\client'$).
-%It comprises two keys \( \ke_1\) and \( \ke_2 \), 
-%each of which is associated with two versions carrying values $\val_0$ and $\val_1$, and $\val'_0$ and $\val'_1$, respectively.
-%The versions of a key are listed in order from left to right. 
-%We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
-%For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_{\cl'}^1$.
-%}
-%
-%%the author require 
-%%the knowledge of the total order in which all past transactions have been 
-%%executed, to determine whether a new transaction can commit.
-%
-%%%\ac{Can't cite documentations of real databases, as they usually have a much more complicated API.}
 %%
-%%%Transactions in our model execute atomically, though they have different effects on the key-value stores depending on their associated \emph{consistency model}.
-%%%A consistency model controls how the key-value store evolves.
-%%%A common model is \emph{serialisability}, where transactions appear to execute one after another in a sequential order.
-%%%This notion of sequential execution is however not necessary for many weaker models. As such, upon commencing execution, a transaction may not observe the most up-to-date values for keys. 
+%%We focus on an abstract computational model where multiple client programs can access and update keys in a key-value store using atomic transactions. 
+%%In general, clients are provided with a simple \textit{API} such as the one depicted in \cref{fig:api} \cite{gdur,physicsnmsi,clockSI}\footnote{It is 
+%%often the case that key-value stores provide a mechanism to wrap more transactions inside a session, and give 
+%%provide appropriate APIs to handle sessions. For the sake of simplicity, in this paper we assume that each client executes transactions 
+%%within a single session.}, while both the implementation details and the system architecture are hidden from clients. 
+%%Because (distributed) key-value stores only give weak consistency guarantees of the data to their clients, the latter are 
+%%not ensured to read the most up-to-date version of a key.
+%%%In an ideal world, when executing a transaction clients would read the most up-to-date version of a key. In a distributed setting 
+%%%this approach, known as (strict) serialisability, would require a continuous synchronisation between the different components of 
+%%%the system, which impacts performance and limits scalability. To this end, the database only provides weak consistency model
+%%%\ac{This sentence should probably be in the introduction.}
 %%
-%%To address this, we 
-%%first model 
-%%the state of the system using \emph{multi-version key-value stores (MKVSs)} (\cref{sec:mkvs-view}). 
-%%An MKVS keeps track of all versions (values) written for keys, as well as the information about the transactions that read and wrote such versions. 
-%%To model the potential out-of-date observation, we introduce \emph{views}.
-%%A view decides the observable versions of keys for a client.
-%%Therefore, in order to execute a transaction, the client first takes \emph{a snapshot} of the system with the view, executes the transaction locally with respect to its snapshot (\cref{sec:trans-semantics}), and afterwards commits the effect of the transaction if the change is allowed by the underlying consistency model (\cref{sec:prog-semantics}).
-%
-%
-%%We first introduce MKVSs and views (\secref{sec:mkvs-view}) and.
-%%We starts with the syntax of programs followed by the semantics of transaction.
-%%Finally, we will give the semantics for the entire programs.
-\begin{figure}[t]
-
-\hrulefill
-
-\begin{subfigure}{0.38\textwidth}
-\begin{verbatim}
-interface Transaction {
-    Start(); 
-    Read(Key k);
-    Write(Key k, Value v); 
-    Commit();    
-}
-\end{verbatim}
-\caption{Example of Transaction API.}
-\label{fig:api}
-\end{subfigure}
-
-\hrulefill
-
-\end{figure}
-%
-%We focus on an abstract computational model where multiple client programs can access and update keys in a key-value store using atomic transactions. 
-%In general, clients are provided with a simple \textit{API} such as the one depicted in \cref{fig:api} \cite{gdur,physicsnmsi,clockSI}\footnote{It is 
-%often the case that key-value stores provide a mechanism to wrap more transactions inside a session, and give 
-%provide appropriate APIs to handle sessions. For the sake of simplicity, in this paper we assume that each client executes transactions 
-%within a single session.}, while both the implementation details and the system architecture are hidden from clients. 
-%Because (distributed) key-value stores only give weak consistency guarantees of the data to their clients, the latter are 
-%not ensured to read the most up-to-date version of a key.
-%%In an ideal world, when executing a transaction clients would read the most up-to-date version of a key. In a distributed setting 
-%%this approach, known as (strict) serialisability, would require a continuous synchronisation between the different components of 
-%%the system, which impacts performance and limits scalability. To this end, the database only provides weak consistency model
-%%\ac{This sentence should probably be in the introduction.}
-%
-%Following these intuitions, we model a key-value stores, or \emph{kv-store}, as a centralised unit where multiple versions 
-%are stored for each key (\cref{sec:mkvs-view}). Versions consist of a value and the meta-data of the transactions that wrote and 
-%read such a version. In practical, distributed systems, the meta-data is usually encoded using either timestamps 
-%\cite{physicsnmsi,clockSI} or vector clocks \cite{gdur}. We focus on key-value stores whose transactions 
-%enjoy \emph{atomic visibility}, meaning that \textbf{(i)} transactions read their data from an atomic 
-%snapshot of the key-value store, and \textbf{(ii)} a transaction can observe either none or all 
-%of the updates performed by another transaction. In other words, a transaction only reads (writes) at most 
-%one version for each key.
-%Because clients may observe potentially out-of-date versions of the system, we introduce the notion of \emph{views}. 
-%Intuitively, a view records the version of each key that a client observes at a given time. We use views 
-%to determine the snapshot taken by transactions executed by clients.
-%
-%A consistency model is a contract between the key-value store and its clients. We distinguish 
-%between \emph{client-centric} consistency models \cite{terry1994session}, 
-%which impose constraints on the observations and updates made by a single client, 
-%and \emph{data-centric} consistency models \cite{framework-concur}, which impose constraints 
-%on the structure of the key value store.
-%To specify weak consistency models, 
-%we introduce the notion of \emph{execution tests} (\cref{sec:execution.tests}). An execution test
-% specifies when a client is allowed to execute a transaction carrying a given 
-%set of read and write operations, or \emph{fingerprint}. Therefore, an execution 
-%test constrains how the state of the key-value store may evolve;
-%by considering all the possible evolutions of the key-value store under said execution test, 
-%we determine a consistency model. For example, an execution test for (strict) serialisability 
-%requires that a transaction can be executed by a client only if it observes the most up-to-date 
-%version for each key. 
-%We give several examples of execution tests that capture both client-centric and 
-%data-centric consistency models. 
-%
-%The idea of specifying consistency models using execution tests has been 
-%already proposed in \cite{seebelieve}; however, their notion of execution 
-%test is intrinsically more complex than ours: to determine 
-%whether a transaction can commit, the total order in which all past transactions 
-%have committed must be known. This knowledge is not needed in our setting.
-%
-%
-%\begin{figure}[t]
-%\begin{center}
-%
-%\hrulefill
-%
-%\begin{onethirdsubfig}
-%\begin{tikzpicture}
-%\begin{pgfonlayer}{foreground}
-%%\draw[help lines] grid(5,4);
-%
-%%Location x
-%\node(locx) {$\vx \mapsto$};
-%
-%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
-%    at ([xshift=\tikzkvspace]locx.east) {
-%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
-%    {a} & $\emptyset$ & {a} & $\emptyset$ \\
-%};
-%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
-%
-%%Location y
-%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
-%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
-%   at ([xshift=\tikzkvspace]locy.east) {
-% {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
-% {a} & $\Set{\txid_{\cl}^{2}}$ & {a} & $\emptyset$\\
-%};
-%
-%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
-%
-%% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
-%%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
-%
-%%%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
-%%\draw[-, blue, very thick, rounded corners=10pt]
-% %([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
-% %([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
-% %([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
-% %([xshift=-3pt, yshift=-5pt]locy-v0.south east);
-% 
-% %\path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client$};
-%
-%%%red view
-%%\draw[-, red, very thick, rounded corners = 10pt]
-% %([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
-% %([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
-% 
-%%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client'$};
-%
-%\end{pgfonlayer}
-%\end{tikzpicture}
-%\caption{A key-value store $\hh$}
-%\label{fig:hheap-a}
-%\label{fig:key-value-store}
-%\label{fig:ser-disallowed}
-%\end{onethirdsubfig}
+%%Following these intuitions, we model a key-value stores, or \emph{kv-store}, as a centralised unit where multiple versions 
+%%are stored for each key (\cref{sec:mkvs-view}). Versions consist of a value and the meta-data of the transactions that wrote and 
+%%read such a version. In practical, distributed systems, the meta-data is usually encoded using either timestamps 
+%%\cite{physicsnmsi,clockSI} or vector clocks \cite{gdur}. We focus on key-value stores whose transactions 
+%%enjoy \emph{atomic visibility}, meaning that \textbf{(i)} transactions read their data from an atomic 
+%%snapshot of the key-value store, and \textbf{(ii)} a transaction can observe either none or all 
+%%of the updates performed by another transaction. In other words, a transaction only reads (writes) at most 
+%%one version for each key.
+%%Because clients may observe potentially out-of-date versions of the system, we introduce the notion of \emph{views}. 
+%%Intuitively, a view records the version of each key that a client observes at a given time. We use views 
+%%to determine the snapshot taken by transactions executed by clients.
 %%
-%\begin{onethirdsubfig}
-%\begin{tikzpicture}
-%\begin{pgfonlayer}{foreground}
-%%\draw[help lines] grid(5,4);
-%
-%%Location x
-%\node(locx) {$\vx \mapsto$};
-%
-%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
-%    at ([xshift=\tikzkvspace]locx.east) {
-%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
-%    {a} & $\emptyset$ & {a} & $\emptyset$ \\
-%};
-%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
-%
-%%Location y
-%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
-%\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
-%   at ([xshift=\tikzkvspace]locy.east) {
-%       {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl'}^{1}$ \\
-%   {a} & $\Set{\txid_{\cl}^{2}}$ & {a} & \color{gray}$\emptyset$\\
-%};
-%
-%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-%\node[version node,draw=none,fit=(versiony-1-3) (versiony-2-3),fill=white, inner sep=0pt] (locy-v1) {\color{gray}$v'_1$};
-%
-%\end{pgfonlayer}
-%\end{tikzpicture}
-%\caption{A view for client \( \cl \)}
-%\label{fig:view-of-cl}
-%\end{onethirdsubfig}
+%%A consistency model is a contract between the key-value store and its clients. We distinguish 
+%%between \emph{client-centric} consistency models \cite{terry1994session}, 
+%%which impose constraints on the observations and updates made by a single client, 
+%%and \emph{data-centric} consistency models \cite{framework-concur}, which impose constraints 
+%%on the structure of the key value store.
+%%To specify weak consistency models, 
+%%we introduce the notion of \emph{execution tests} (\cref{sec:execution.tests}). An execution test
+%% specifies when a client is allowed to execute a transaction carrying a given 
+%%set of read and write operations, or \emph{fingerprint}. Therefore, an execution 
+%%test constrains how the state of the key-value store may evolve;
+%%by considering all the possible evolutions of the key-value store under said execution test, 
+%%we determine a consistency model. For example, an execution test for (strict) serialisability 
+%%requires that a transaction can be executed by a client only if it observes the most up-to-date 
+%%version for each key. 
+%%We give several examples of execution tests that capture both client-centric and 
+%%data-centric consistency models. 
 %%
-%\begin{onethirdsubfig}
-%\begin{tikzpicture}
-%\begin{pgfonlayer}{foreground}
-%%\draw[help lines] grid(5,4);
-%
-%%Location x
-%\node(locx) {$\vx \mapsto$};
-%
-%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
-%    at ([xshift=\tikzkvspace]locx.east) {
-%    {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl}^{1}$\\
-%    {a} & $\emptyset$ & {a} & \color{gray}$\emptyset$ \\
-%};
-%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
-%\node[version node,draw=none,fit=(versionx-1-3) (versionx-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$v_1$};
-%
-%%Location y
-%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
-%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
-%   at ([xshift=\tikzkvspace]locy.east) {
-%  {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
-%  {a} & $\left\{\txid_{\cl}^2\right\}$ & {a} & $\emptyset$\\
-%};
-%
-%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
-%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
-%
-%\end{pgfonlayer}
-%\end{tikzpicture}
-%\caption{A view for client \( \cl' \)}
-%\label{fig:view-of-cl-prime}
-%\end{onethirdsubfig}
-%
-%\sx{The key-value store corresponds to the last step of long fork.}
-%\end{center}
-%
-%\hrulefill
-%
-%\caption{Multi-version key-value stores and views}
-%\label{fig:hheap}
-%\label{fig:key-value-store-and-view}
-%\label{fig:key-value-and-view}
-%\end{figure}
-%\ac{
-%It will be often convenient to depict key-value stores graphically: an 
-%example is given by the kv-store $\hh$ depicted in \cref{fig:hheap-a}
-%(ignore for the moment the vertical lines labelled $\client$ and $\client'$).
-%It comprises two keys \( \ke_1\) and \( \ke_2 \), 
-%each of which is associated with two versions carrying values $\val_0$ and $\val_1$, and $\val'_0$ and $\val'_1$, respectively.
-%The versions of a key are listed in order from left to right. 
-%We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
-%For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_{\cl'}^1$.
-%}
-%
-%%the author require 
-%%the knowledge of the total order in which all past transactions have been 
-%%executed, to determine whether a new transaction can commit.
-%
-%%%\ac{Can't cite documentations of real databases, as they usually have a much more complicated API.}
+%%The idea of specifying consistency models using execution tests has been 
+%%already proposed in \cite{seebelieve}; however, their notion of execution 
+%%test is intrinsically more complex than ours: to determine 
+%%whether a transaction can commit, the total order in which all past transactions 
+%%have committed must be known. This knowledge is not needed in our setting.
 %%
-%%%Transactions in our model execute atomically, though they have different effects on the key-value stores depending on their associated \emph{consistency model}.
-%%%A consistency model controls how the key-value store evolves.
-%%%A common model is \emph{serialisability}, where transactions appear to execute one after another in a sequential order.
-%%%This notion of sequential execution is however not necessary for many weaker models. As such, upon commencing execution, a transaction may not observe the most up-to-date values for keys. 
 %%
-%%To address this, we 
-%%first model 
-%%the state of the system using \emph{multi-version key-value stores (MKVSs)} (\cref{sec:mkvs-view}). 
-%%An MKVS keeps track of all versions (values) written for keys, as well as the information about the transactions that read and wrote such versions. 
-%%To model the potential out-of-date observation, we introduce \emph{views}.
-%%A view decides the observable versions of keys for a client.
-%%Therefore, in order to execute a transaction, the client first takes \emph{a snapshot} of the system with the view, executes the transaction locally with respect to its snapshot (\cref{sec:trans-semantics}), and afterwards commits the effect of the transaction if the change is allowed by the underlying consistency model (\cref{sec:prog-semantics}).
-%
-%
-%%We first introduce MKVSs and views (\secref{sec:mkvs-view}) and.
-%%We starts with the syntax of programs followed by the semantics of transaction.
-%%Finally, we will give the semantics for the entire programs.f
+%%\begin{figure}[t]
+%%\begin{center}
+%%
+%%\hrulefill
+%%
+%%\begin{onethirdsubfig}
+%%\begin{tikzpicture}
+%%\begin{pgfonlayer}{foreground}
+%%%\draw[help lines] grid(5,4);
+%%
+%%%Location x
+%%\node(locx) {$\vx \mapsto$};
+%%
+%%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
+%%    at ([xshift=\tikzkvspace]locx.east) {
+%%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
+%%    {a} & $\emptyset$ & {a} & $\emptyset$ \\
+%%};
+%%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+%%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+%%
+%%%Location y
+%%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
+%%   at ([xshift=\tikzkvspace]locy.east) {
+%% {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
+%% {a} & $\Set{\txid_{\cl}^{2}}$ & {a} & $\emptyset$\\
+%%};
+%%
+%%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
+%%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
+%%
+%%% \draw[-, red, very thick, rounded corners] ([xshift=-5pt, yshift=5pt]locx-v1.north east) |- 
+%%%  ($([xshift=-5pt,yshift=-5pt]locx-v1.south east)!.5!([xshift=-5pt, yshift=5pt]locy-v0.north east)$) -| ([xshift=-5pt, yshift=5pt]locy-v0.south east);
+%%
+%%%%blue view - I should  check whether I can use pgfkeys to just declare the list of locations, and then add the view automatically.
+%%%\draw[-, blue, very thick, rounded corners=10pt]
+%% %([xshift=-3pt, yshift=20pt]locx-v1.north east) node (tid1start) {} -- 
+%% %([xshift=-3pt, yshift=-5pt]locx-v1.south east) --
+%% %([xshift=-3pt, yshift=5pt]locy-v0.north east) -- 
+%% %([xshift=-3pt, yshift=-5pt]locy-v0.south east);
+%% 
+%% %\path (tid1start) node[anchor=south, rectangle, fill=blue!20, draw=blue, font=\small, inner sep=1pt] {$\client$};
+%%
+%%%%red view
+%%%\draw[-, red, very thick, rounded corners = 10pt]
+%% %([xshift=-16pt, yshift=5pt]locx-v1.north east) node (tid2start) {}-- 
+%% %([xshift=-16pt, yshift=-5pt]locy-v1.south east) node {};
+%% 
+%%%\path (tid2start) node[anchor=south, rectangle, fill=red!20, draw=red, font=\small, inner sep=1pt] {$\client'$};
+%%
+%%\end{pgfonlayer}
+%%\end{tikzpicture}
+%%\caption{A key-value store $\hh$}
+%%\label{fig:hheap-a}
+%%\label{fig:key-value-store}
+%%\label{fig:ser-disallowed}
+%%\end{onethirdsubfig}
+%%%
+%%\begin{onethirdsubfig}
+%%\begin{tikzpicture}
+%%\begin{pgfonlayer}{foreground}
+%%%\draw[help lines] grid(5,4);
+%%
+%%%Location x
+%%\node(locx) {$\vx \mapsto$};
+%%
+%%\matrix(versionx) [version list, column 2/.style={text width=8mm}]
+%%    at ([xshift=\tikzkvspace]locx.east) {
+%%    {a} & $\txid_0$ & {a} & $\txid_{\cl}^{1}$\\
+%%    {a} & $\emptyset$ & {a} & $\emptyset$ \\
+%%};
+%%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+%%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$v_1$};
+%%
+%%%Location y
+%%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%%\matrix(versiony) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
+%%   at ([xshift=\tikzkvspace]locy.east) {
+%%       {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl'}^{1}$ \\
+%%   {a} & $\Set{\txid_{\cl}^{2}}$ & {a} & \color{gray}$\emptyset$\\
+%%};
+%%
+%%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
+%%\node[version node,draw=none,fit=(versiony-1-3) (versiony-2-3),fill=white, inner sep=0pt] (locy-v1) {\color{gray}$v'_1$};
+%%
+%%\end{pgfonlayer}
+%%\end{tikzpicture}
+%%\caption{A view for client \( \cl \)}
+%%\label{fig:view-of-cl}
+%%\end{onethirdsubfig}
+%%%
+%%\begin{onethirdsubfig}
+%%\begin{tikzpicture}
+%%\begin{pgfonlayer}{foreground}
+%%%\draw[help lines] grid(5,4);
+%%
+%%%Location x
+%%\node(locx) {$\vx \mapsto$};
+%%
+%%\matrix(versionx) [version list, column 2/.style={text width=8mm}, column 3/.style={dotted}, column 4/.style={dotted}]
+%%    at ([xshift=\tikzkvspace]locx.east) {
+%%    {a} & $\txid_0$ & {a} & \color{gray}$\txid_{\cl}^{1}$\\
+%%    {a} & $\emptyset$ & {a} & \color{gray}$\emptyset$ \\
+%%};
+%%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$v_0$};
+%%\node[version node,draw=none,fit=(versionx-1-3) (versionx-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$v_1$};
+%%
+%%%Location y
+%%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%%\matrix(versiony) [version list, column 2/.style={text width=8mm}]
+%%   at ([xshift=\tikzkvspace]locy.east) {
+%%  {a} & $\txid_0$ & {a} & $\txid_{\cl'}^{1}$ \\
+%%  {a} & $\left\{\txid_{\cl}^2\right\}$ & {a} & $\emptyset$\\
+%%};
+%%
+%%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$v'_0$};
+%%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$v'_1$};
+%%
+%%\end{pgfonlayer}
+%%\end{tikzpicture}
+%%\caption{A view for client \( \cl' \)}
+%%\label{fig:view-of-cl-prime}
+%%\end{onethirdsubfig}
+%%
+%%\sx{The key-value store corresponds to the last step of long fork.}
+%%\end{center}
+%%
+%%\hrulefill
+%%
+%%\caption{Multi-version key-value stores and views}
+%%\label{fig:hheap}
+%%\label{fig:key-value-store-and-view}
+%%\label{fig:key-value-and-view}
+%%\end{figure}
+%%\ac{
+%%It will be often convenient to depict key-value stores graphically: an 
+%%example is given by the kv-store $\hh$ depicted in \cref{fig:hheap-a}
+%%(ignore for the moment the vertical lines labelled $\client$ and $\client'$).
+%%It comprises two keys \( \ke_1\) and \( \ke_2 \), 
+%%each of which is associated with two versions carrying values $\val_0$ and $\val_1$, and $\val'_0$ and $\val'_1$, respectively.
+%%The versions of a key are listed in order from left to right. 
+%%We represent each version as a three-cell box, with the left cell storing the value, the top right cell recording the writer, and the bottom right cell recording the readers. 
+%%For example, the version carrying value $\val_0$ in $\ke_1$ has been written by $\txid_0$, and has been read by $\txid_{\cl'}^1$.
+%%}
+%%
+%%%the author require 
+%%%the knowledge of the total order in which all past transactions have been 
+%%%executed, to determine whether a new transaction can commit.
+%%
+%%%%\ac{Can't cite documentations of real databases, as they usually have a much more complicated API.}
+%%%
+%%%%Transactions in our model execute atomically, though they have different effects on the key-value stores depending on their associated \emph{consistency model}.
+%%%%A consistency model controls how the key-value store evolves.
+%%%%A common model is \emph{serialisability}, where transactions appear to execute one after another in a sequential order.
+%%%%This notion of sequential execution is however not necessary for many weaker models. As such, upon commencing execution, a transaction may not observe the most up-to-date values for keys. 
+%%%
+%%%To address this, we 
+%%%first model 
+%%%the state of the system using \emph{multi-version key-value stores (MKVSs)} (\cref{sec:mkvs-view}). 
+%%%An MKVS keeps track of all versions (values) written for keys, as well as the information about the transactions that read and wrote such versions. 
+%%%To model the potential out-of-date observation, we introduce \emph{views}.
+%%%A view decides the observable versions of keys for a client.
+%%%Therefore, in order to execute a transaction, the client first takes \emph{a snapshot} of the system with the view, executes the transaction locally with respect to its snapshot (\cref{sec:trans-semantics}), and afterwards commits the effect of the transaction if the change is allowed by the underlying consistency model (\cref{sec:prog-semantics}).
+%%
+%%
+%%%We first introduce MKVSs and views (\secref{sec:mkvs-view}) and.
+%%%We starts with the syntax of programs followed by the semantics of transaction.
+%%%Finally, we will give the semantics for the entire programs.f
