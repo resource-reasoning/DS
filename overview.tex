@@ -14,15 +14,15 @@ $\ctrinc(\ke)$ and $\ctrread(\ke)$, defined as follows:
 \ctrinc(\ke) = &
 \begin{session}
 \begin{transaction}
-\pderef{\pv{a}}{\ke};\\
-\pmutate{\ke}{\pv{a}+1};
+\pderef{\pv{x}}{\ke};\\
+\pmutate{\ke}{\pv{x}+1};
 \end{transaction}
 \end{session}
 &
 \hspace{10pt}\ctrread(\ke) = &
 \begin{session}
 \begin{transaction}
-\pderef{\pv{a}}{\ke};\\
+\pderef{\pv{x}}{\ke};\\
 \end{transaction}
 \end{session}
 \end{array}
@@ -35,7 +35,9 @@ on the consistency model it provides.
 
 For example, the key-value store may be replicated at two different sites: clients 
 perform the $\ctrinc(\ke)$ and $\ctrread(\ke)$ operation on an arbitrary replica, 
-which then propagates the state changes caused by an operation (if any) at the other one. Two clients 
+which then propagates the state changes caused by an operation (if any) at the other one. 
+\sx{replica is not introduced before.}
+Two clients 
 may concurrently perform an increment operation at different replicas; if no synchronisation 
 mechanism is provided by the underlying key-value store, the result of this operation 
 may result in both clients reading the same initial value for $\ke$ (say $0$), and updating 
@@ -57,12 +59,92 @@ the key-value store: this makes it possible for different clients to observe dif
 of the key-value store\footnote{In a geo-replicated setting, this can happen if two clients access 
 two different replicas that are not yet synchronised.}
 
+\begin{figure*}[t]
+\captionsetup[subfigure]{aboveskip=-5pt, belowskip=5pt}
+\begin{tabular}{@{} c | c | c | c@{}}
+\hline
+\phantom{-}& \phantom{-}& \phantom{-}& \phantom{-}\\
+\begin{subfigure}{0.15\textwidth}
+\begin{centertikz}
+%Location x
+\node(locx) {$\ke \mapsto$};
+
+\matrix(versionx) [version list]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ \\
+    {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\end{centertikz}\vspace{5pt}%
+\caption{Initial state}
+\label{fig:counter_kv_initial}
+\end{subfigure}
+&
+\begin{subfigure}{0.22\textwidth}
+\begin{centertikz}
+
+%Location x
+\node(locx) {$\ke_1 \mapsto$};
+
+\matrix(versionx) [version list, column 2/.style={text width=6mm}, column 4/.style={text width=6mm}]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid$\\
+    {a} & $\left\{\txid \right\}$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+
+\end{centertikz}\vspace{5pt}
+\caption{After \(\txid \)}
+\label{fig:counter_kv_first_inc}
+\end{subfigure}
+&
+\begin{subfigure}{0.22\textwidth}
+\begin{centertikz}
+
+%Location x
+\node(locx) {$\ke \mapsto$};
+
+\matrix(versionx) [version list, column 2/.style={text width=6mm}, column 3/.style={dotted}, column 4/.style={text width=6mm,dotted}]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\color{gray}\txid$\\
+    {a} & $\left\{\txid \right\}$ & {a} & $\color{gray}\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\node[version node,fit=(versionx-1-3) (versionx-2-3),fill=white,inner sep=0pt,draw=none] (locx-v1) {\color{gray}$1$};
+
+\end{centertikz}\vspace{5pt}
+\caption{View of \( \txid' \)}
+\label{fig:counter_kv_view}
+\end{subfigure} 
+&
+\begin{subfigure}{0.30\textwidth}
+\begin{centertikz}
+\node(locx) {$\ke \mapsto$};
+\matrix(versionx) [version list, column 2/.style={text width=10mm}]
+    at ([xshift=\tikzkvspace]locx.east) {
+    {a} & $\txid_0$ & {a} & $\txid$ & {a} & $\txid'$\\
+    {a} & $\{\txid, \txid'\}$ & {a} & $\emptyset$ & {a} & $\emptyset$ \\
+};
+\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+\tikzvalue{versionx-1-5}{versionx-2-5}{locx-v2}{$1$};
+\end{centertikz}
+\vspace{5pt}
+\caption{Final state}
+\label{fig:counter_kv_final}
+\end{subfigure}\\
+\hline
+\end{tabular}
+\caption{Counter}
+\end{figure*}
+
 Let us illustrate how it is possible to replicate the lost update anomaly via our notion of 
 key-value stores. Initially, the key value store consist of a single key $\ke$, with only one 
 version available: this version, denoted as a triple $(0, \txid_{0}, \emptyset)$, establishes 
 that $\ke$ may take value $0$, that such a value has been written by an initialising transaction 
 $\txid_0$, and that the set of transactions that read such a version is empty. We represent the 
-key-value store graphically in \cref{fig:counter_kv1}. A version is represented as a box sub-divided 
+key-value store graphically in \cref{fig:counter_kv_initial}. A version is represented as a box sub-divided 
 in three sections: starting from the left and proceeding clockwise, these sections represent the 
 value carried by the version, the identifier of the transaction that has written such a version, and 
 the set of transaction identifiers that read such a version.
@@ -72,8 +154,8 @@ as $\cl_1$, invokes the  operation $\ctrinc$ on the key-value store. In this cas
 obtains a unique transaction identifier $\txid$, which it will use to mark the versions 
 it reads and writes while executing $\ctrinc$. Then it executes such an operation. 
 This causesclient $\cl_1$ to read the only version available for $\ke$, carrying value $0$, 
-and install a newer value $1$ for the same key. The result of this operation is depicted in \cref{fig:counter_kv1}.
-note that we have updated the initial version of $\ke$ with the knowledge that it was read by $\txid$; 
+and install a newer value $1$ for the same key. The result of this operation is depicted in \cref{fig:counter_kv_first_inc}.
+Note that we have updated the initial version of $\ke$ with the knowledge that it was read by $\txid$; 
 note also that versions are ordered, left to right, from the oldest to the newest one.
 
 Next, a second client, dented as $\cl_2$, also attempts to perform the operation $\ctrinc$. Because 
@@ -86,14 +168,14 @@ If more than one version is marked as visible, then the value from the newest su
 modelling the \emph{last writer wins} resolution policy employed by many key-value stores. 
 For example, there are two possible scenarios for the view that $\cl_2$ can have prior to executing $\ctrinc(\ke)$
 \footnote{In fact, if no restrictions on the view are given, there 
-are four possible views for $\cl_2$: however, as we explain in \cref{}, we always require the view of a client 
+are four possible views for $\cl_2$: however, as we explain in \cref{...}, we always require the view of a client 
 to have the initial version of each key marked as visible.}: 
 only the initial version for $\ke$ is marked as visible, in which case the execution of $\ctrinc(\ke)$ will result 
 in reading value $0$ and writing a new version carrying value $1$ for $\ke$; or both versions for $\ke$ 
 are marked as visible, in which case the execution of $\ctrinc(\ke)$ will fetch the value from  
 the newest visible version of $\ke$ (carrying value $1$), and it will increment it by $1$ (resulting in 
-a new version carrying value $2$ to be installed). In particular, if the former view is adopted by $\cl_2$, 
-the final result will be the key-value store depicted in Figure \ref{fig:counter_kv1}. In this case, the 
+a new version carrying value $2$ to be installed). In particular, if the former view is adopted by $\cl_2$ (\cref{fig:counter_kv_view}), 
+the final result will be the key-value store depicted in \cref{fig:counter_kv_final}. In this case, the 
 key-value store does not contain a version for $\ke$ carrying value $2$, despite two $\ctrinc(\ke)$ 
 operations have been performed on it. That is, we also have a lost update anomaly.
 
@@ -109,7 +191,7 @@ the example of two clients incrementing a counter above, this restriction preven
 to execute the increment if its view only contains the initial version of $\ke$ marked as visible. 
 Instead, in order for $\cl_2$ to be able to execute $\ctrinc(\ke)$, its view must contain 
 both the versions available for $\ke$, thus enforcing the value of the version installed by 
-the increment performed by $\cl_2$ to be $2$. In \cref{}, we prove that if the key-value store 
+the increment performed by $\cl_2$ to be $2$. In \cref{...}, we prove that if the key-value store 
 ensures write-conflict detection as well as some other properties, then clients can increment 
 and read from a single counter as though as the key-value store were (strictly) serialisable.
 
@@ -135,13 +217,13 @@ To prevent the long-fork anomaly from happening, we can further strengthen the
 execution test employed by the key-value store to commit transactions. Without delving 
 too much in formal details, the candidate execution test recovers the order in which 
 updates of versions have been observed by clients, and allow a transaction to commit 
-only if the observations made  by the current client are consistent with $\cl_1$. In \cref{} 
+only if the observations made  by the current client are consistent with $\cl_1$. In \cref{...} 
 we give an example of such an execution test, that ensures that the underlying key-value 
 store guarantees the (strong session) snapshot isolation consistency model. For example, 
 under this revised execution test, in the example above client $\cl_2$ would not be able 
 to observe the updated version of $\ke_2$ after observing the initial version of $\ke_1$, 
 because client $\cl_1$ has already established that the update of $\ke_2$ happens after 
-the update of $\ke_1$. In \cref{}, we prove that  if the key-value store 
+the update of $\ke_1$. In \cref{...}, we prove that  if the key-value store 
 consists of multiple counter objects, and the execution test employed by transactions 
 guarantees snapshot isolation, then the key-value store behaves as though as it is 
 a strictly serialisable one.
