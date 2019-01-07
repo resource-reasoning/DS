@@ -352,6 +352,88 @@ In my opinion, what matters here is that we have established a link between kv-s
 
 I have not touched the remainder of this section.  
 }
+\sx{
+    START
+}
+
+To specify consistency models, abstract executions constraint resolution policy \( \RP \) and the sharp of abstract execution \( \Ax \) (I believe we could even say more precise --- the minimum visibility relation, and cite andrea's concur paper).
+Resolution policy determines a set of snapshot given a set of observable transactions.
+Most time it is last-write-win which gives a unique single snapshot.
+This corresponds to the \( \snapshot{} \) function in the semantics kv-store.
+The resolution policy part we could (question?) choose to not mentioned, since it is minor and many people always assume last-write-win.
+
+The \( \Ax = \Set{ A : \aeset \to \powerset{\TxID} \times \powerset{\TxID}} \) is a set of constraints on visibility relations, \eg \( \Ax = \Set{\lambda \aexec \ldotp \SO_\aexec,  \lambda \aexec \ldotp \VIS_\aexec;\VIS_\aexec} \) means all the abstract executions must satisfy \( \SO \subseteq \VIS , \VIS ; \VIS \subseteq \VIS \).
+
+\begin{definition}
+\label{def:aexec2graph}
+Given an abstract execution $\aexec$ that satisfies the last write wins policy,
+the dependency graph $\graphof(\aexec) \defeq (\TtoOp{T}_{\aexec}, \RF_{\aexec}, 
+\VO_{\aexec}, \AD_{\aexec})$ is defined by letting
+\begin{itemize}
+\item $\txid \xrightarrow{\RF_{\aexec}(\ke)} \txid'$ if and only if 
+$\txid = \max_{\AR_{\aexec}}(\visibleWrites_{\aexec}(\ke, \txid'))$, 
+\item $\txid \xrightarrow{\VO_{\aexec}(\ke)} \txid'$ if and only 
+$\txid, \txid' \in_{\aexec} (\otW, \;\ke: \_)$ 
+and $\txid \xrightarrow{\AR_{\aexec}} \txid'$,
+\item $\txid \xrightarrow{\AD_{\aexec}(\ke)} \txid'$ if and only if either 
+$(\otR, \ke, \_) \in_{\aexec} \txid, (\otW, \ke, \_) \in_{\aexec} \txid'$ and 
+whenever $\txid'' \xrightarrow{\RF_{\aexec}(\ke)} \txid$, 
+then $\txid'' \xrightarrow{\VO_{\aexec}(\ke)} \txid'$.
+\end{itemize}
+\end{definition}
+Note that each abstract execution $\aexec$ determines a key-value store $\hh_{\aexec}$,
+as a result of \cref{def:aexec2graph} and \cref{thm:kv2graph}. 
+Let $\hh$ be the unique kv-store such that $\Gr_{\hh} = \graphof(\aexec)$, then $\hh_{\aexec} = \hh$. 
+
+A kv-store \( \mkvs \) is compatible with an abstract execution \( \aexec \)
+There is a mapping from 
+\begin{definition}
+\label{def:compatible-main-body}
+Given a key-value store $\hh$,
+an abstract execution $\aexec$ is compatible with $\hh$, written 
+$\aexec \compatible \hh$, if and only if there exists a  mapping 
+$f: \powerset{\T_{\aexec}} \rightarrow \Views(\hh)$
+such that  
+\begin{itemize}
+\item for any subset $\T \subseteq \T_{\aexec}$, then $\RP_{\LWW}(\aexec, \T) = \{\snapshot(\hh, f(\T))\}$; 
+\item for any view $\vi \in \Views(\hh)$, there exists a subset $\T \subseteq \T_{\aexec}$ 
+such that $f(\T) = \vi$, and $\RP_{\LWW}(\aexec, \T) = \{\snapshot(\hh_{\aexec}, \vi)\}$.
+\end{itemize}
+\end{definition}
+The function $\getView(\aexec, \T)$ defines the view on \( \mkvs_\aexec \) that corresponds to \( \T \) as the following:
+\[
+\getView(\aexec, \T) \defeq \lambda \ke. \{0\} \cup \Setcon{ i }{\WTx(\hh_{\aexec}(\ke, i)) \in \T}
+\]
+Inversely, the function \( \Tx(\hh, \vi) \) converts a view to a set of observable transactions:
+\[
+\Tx(\hh, \vi) \defeq \Setcon{ \WTx(\hh(\ke, i)) }{ \ke \in \Keys \wedge i \in \vi(\ke) }
+\]
+Given \( \getView \), \( \Tx \), \cref{def:compatible}, 
+it follows \( \aexec \compatible \hh_{\aexec} \) shown in \cref{thm:aexec2kv.compatible}.
+
+Given a trace with the final kv-store \( \mkvs \), there an abstract execution \( \aexec \) that is compatible with \( \mkvs \).
+First, all transactions in an abstract execution are totally ordered by \( \AR \),
+therefore an abstract execution by itself is a trace.
+The reduction order of a trace of kv-store maps to the \( \AR \) in the abstract execution and vice versa.
+The challenge is to show that
+for each transaction \( \txid \) in the trace and the initial view \( \vi \) of the transaction, the visible transitions \( \Tx(\hh, \vi) \) contains at least those transactions by the constraints \( \Ax \), \ie
+Note that \( \Tx(\hh, \vi) \) do not contain any read-only transactions, 
+thus to be more precise, we mean \( \Tx(\hh, \vi) \) plus some potentially read-only transactions contains those by the constraints \( \Ax \), \ie
+\( \fora{\A\in \Ax, \txid'} (\txid', \txid) \in \A(\aexec) \implies \txid' \in \Tx(\hh, \vi) \lor \txid' \text{is read only} \).
+
+Given an abstract execution \( \aexec \) there is a trace of kv-store with the final kv-store \( \mkvs \) that is compatible.
+Similarly, the \( \AR \) decides the reduction order in the trace.
+The challenge here is that
+for each transaction \( \txid \) with fingerprint \( \f \) in the abstract execution,
+(We should mentioned a node in the graph is the fingerprint)
+We find two views, the initial \( \vi \) and the final \( \vi' \), so \( \ET \vdash (\mkvs, \vi) \csat \f : \vi' \) where the \( \mkvs \) is the kv-store when \( \txid \) commits.
+The initial view \( \vi \) includes all versions written by visible transactions of \( \txid \) from the abstract execution, \ie \( \vi = \getView(\aexec, \VIS_\aexec^{-1}(\txid)) \).
+Since \( \vi' \) gives the minimum views for the next transactions from the same clients,
+it can be computed by including all versions, if exists in \( \mkvs \), written by visible transactions of \( \txid' \) where \( \txid' \toEdge{\SO} \txid \).
+
+\sx{
+    END
+}
 
 A semantics under \( \aexec \), where transaction satisfies the specification in the form of \( (\RP,\Ax) \).
 \( \RP \) is a function takes a set of transactions \( \T \) from abstract execution \( \aexec \), 
