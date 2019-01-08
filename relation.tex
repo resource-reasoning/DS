@@ -1,15 +1,24 @@
 \section{KV-Stores and Other Formalisms}
 \label{sec:other_formalisms}
-We demonstrate that our definition of consistency models via execution tests have several desirable properties. 
-First, we demonstrate that our consistency models are \emph{compositional} in that they can be composed to build stronger models.
-%Next, we demonstrate that the commutativity of our execution tests are preserved under 
-Next, we demonstrate that our representation of consistency models \emph{generalises} the existing formalisms in the literature, namely \emph{dependency graphs}~\cite{adya-icde} and abstract executions~\cite{??}. 
-That is, \emph{any} consistency model specified using these formalisms can be encoded as is a consistency model in our framework. 
-For abstract executions, we further demonstrate that the other direction holds too. 
-That is, \emph{any} consistency model formulated in our framework can be specified using abstract executions. 
-\azalea{Can someone double check to make sure these claims are accurate? }
 
-
+%We demonstrate that our definition of consistency models via execution tests have several desirable properties. 
+%First, we demonstrate that our consistency models are \emph{compositional} in that they can be composed to build stronger models.
+%%Next, we demonstrate that the commutativity of our execution tests are preserved under 
+%Next, we demonstrate that our representation of consistency models \emph{generalises} the existing formalisms in the literature, namely \emph{dependency graphs}~\cite{adya-icde} and abstract executions~\cite{??}. 
+%That is, \emph{any} consistency model specified using these formalisms can be encoded as is a consistency model in our framework. 
+%For abstract executions, we further demonstrate that the other direction holds too. 
+%That is, \emph{any} consistency model formulated in our framework can be specified using abstract executions. 
+%\ac{
+%\azalea{Can someone double check to make sure these claims are accurate? }
+%I don't think so. These claims are too strong that the actual results we have.}
+In this Section we give a formal account of the properties enjoyed by our operational 
+semantics. We first investigate the compositionality of consistency models 
+induced by execution tests. Then we discuss how kv-stores and execution 
+tests relate to previously known declarative formalisms for specifying weak 
+consistency models, based on dependency graphs \cite{adya} 
+and abstract executions \cite{framework-concur}. Due to space 
+constraints, we give a main overview of the results and refer to the 
+appendix for technical details.
 
 %\sx{
 %    Most execution tests we proposed can be adapted to 
@@ -19,38 +28,75 @@ That is, \emph{any} consistency model formulated in our framework can be specifi
 %}
 
 \mypar{Compositionality}
-We demonstrate that our consistency models are \emph{compositional}.
-That is, given two execution tests $\ET_1$ and $\ET_2$, the consistency model induced by their composition 
-(\ie $\CMs(\ET_1 \cap \ET_2)$) is equivalent to the composition of their two consistency models (\ie $\CMs(\ET_1) \cap \CMs(\ET_2)$), 
-provided that $\ET_1, \ET_2$ meet \emph{certain conditions}.
-These conditions are formalised in \cref{def:et_properties} below. 
-Given an execution test $\ET$, 
-the \emph{no blind writes} property ensures that $\ET$ allows a transaction to write to a key $\ke$ only if the transaction also reads from $\ke$. 
-The \emph{minimum footprint} property ensures that $\ET$ is only concerned with those keys accessed (read or written) by a transaction (\ie those keys in its fingerprint) and is thus agnostic to the keys not accessed by the transaction. 
-The \emph{monotonic post-views} ensures that $\ET$ allows client views to grow after committing a transaction. 
-The \emph{commutativity} ensures that $\ET$ allows the execution of two \emph{non-conflicting} transactions of distinct clients to be reordered. 
-Two transactions are non-conflicting if they write to disjoint set of keys; \ie their fingerprints do not contain a write operation to the same key. 
+We address the issue of whether specifications of consistency models 
+induced by execution tests are compositional:  i.e. given 
+two execution tests $\ET_1, \ET_2$, does it hold that 
+$\CMs(\ET_1 \cap \ET_2) = \CMs(\ET_1) \cap \CMs(\ET_2)$? 
+It is not difficult to show that, for any arbitrary $\ET_1$ and $\ET_2$, 
+then the consistency model induced by the composite execution test 
+$\ET_1 \cap \ET_2$ is at least as strong as the intersection of the 
+consistency models defined by each individual execution test. 
+\begin{proposition}
+\label{prop:composite_stronger}
+$\forall \ET_1, \ET_2.\CMs(\ET_1 \cap \ET_2) \subseteq \CMs(\ET_1) \cap \CMs(\ET_2)$.
+\end{proposition}
 
-Note that these properties are not too restrictive in that the execution tests of most common consistency model satisfy them. 
-In particular, with the exception of $\CP$ and $\SI$, all execution tests defined in \cref{fig:execution_tests} satisfy the four conditions in \cref{def:et_properties}. 
-Moreover, $\UA$, $\CP$ and $\SI$ execution tests satisfy all conditions but that of commutativity.
-This is because \todo.
-\sx{All execution tests in \cref{fig:execution_tests} satisfy monotonic post-view and {\color{red}can be adapted} without losing any behaviours so to satisfy no blind writes and minimum footprint.
-Yet the important property for compositionality is if it is commutative.}
-\azalea{Shale, Andrea, can you give an intuitive explanation why $\UA$, $\CP, \SI$ don't satisfy commutativity?
-    \sx{
-        Sorry, \( \UA \) is fine, but \( \CP \) and \( \SI \) are not, 
-        because \( \dagger \) and \( \ddagger \) use \( \RW_\mkvs \) in the specifications,
-        which means a read from a transaction might also affect future transactions from different clients.
+Unfortunately, the other inclusion of \cref{prop:composite_stronger} is not satisfied 
+by arbitrary consistency models.
+To see why this is true, consider two simple execution tests: 
+$\ET_1 \vdash (\hh_{0}, \vi_{0}) \triangleright \{(\otW, \ke, 1)\}, \vi_{0}$, 
+$\ET_1 \vdash (\hh_{\ke}, \vi_{0}) \triangleright \{(\otW, \ke', 1)\}, \vi_{0}$, 
+and $\ET_2 \vdash (\hh_{0}, \vi_{0}) \triangleright \{(\otW, \ke', 1)\}, \vi_{0}$, 
+$\ET_2 \vdash (\hh_{\ke'}, \vi_{0}) \triangleright \{(\otW, \ke, 1)\} \vi_{1}$, 
+where $\hh_{\ke} = \hh_{0}[\ke \mapsto (0, \txid_{0}, \emptyset) \lcat (1, \_, \emptyset)]$
+and $\hh_{\ke'} = \hh_{0}[\ke' \mapsto (0, \txid_{0}, \emptyset) \lcat (1, \_, \emptyset)]$. 
+Both $\ET_1$ and $\ET_2$ allow a version with value $1$ to be written for the two keys 
+$\ke, \ke'$, which means that for $\hh' = \hh[\ke \mapsto (0, \txid_{0}, \emptyset) \lcat (1, \_, \emptyset), 
+\ke' = \ke \mapsto (0, \txid_{0}, \emptyset) \lcat (1, \_, \emptyset)]$ we have that $\hh' \in \CMs(\ET_1) \cap \CMs(\ET_2)$. 
+However, $\ET_1$ and $\ET_2$ enforce a different order in which the updates to the keys $\ke, \ke'$ must happen, 
+and therefore we have that $\hh' \in \CMs(\ET_1 \cap \ET_2)$. 
 
-        Assume that two fingerprints \( \f_1 \) and \( \f_2 \) are non-conflict and views \( \vi_1 \) and \( \vi_2 \) respectively.
-        Assume that they both want to read a key \( \ke \) and the views \( i \in \vi_2(\ke) \) and \( j \in \vi_1(\ke) \) where \( i < j \).
-        If \( \f_1\) commits first, it will not affect \( \f_2 \) but if \( \f_2 \) commits first, it will introduce a new \( \RW \) for \( \vi_1 \).
-    }
+In the example above, the main problem that led to the failure of compositionality is that the execution tests 
+enforced a particular order on the updates that can be committed into the kv-store, even though such updates 
+are non-conflicting: i.e. the kv-store obtained after applying such updates is independent of the order in which the 
+updates are actually performed. This observation justifies the following definition: 
+\begin{definition}
+Two fingerprints $\opset_1$ and $\opset_2$ are \emph{conflicting} 
+iff there exists $\ke$ such that 
+$(\otW, \ke, -) \in \opset_1 \land (\otW, \ke, -) \in \opset_2$. 
 
-}
+An execution test $\ET$ is \emph{commutative}, written $\com \ET$, if 
+for all views $\vi_1, \vi_2 \in \Views(\hh_0)$, 
+clients $\cl_1, \cl_2$,
+fingerprints $\opset_1, \opset_2$, 
+kv-stores $\hh'$,
+and view functions $\viewFun, \viewFun'$:
+\[
+\begin{array}{@{}r @{\hspace{10pt}} l @{}}
+	\text{if} &  
+	(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
+	\_ \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh', \viewFun') \\
+	& \land\ \cl_1 \ne \cl_2 \land \opset_1, \opset_2  \text{ are non-conflicting}\\
+%
+%	
+	\text{then} & (\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
+\_ \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh', \viewFun')
+\end{array}
+\]
+\end{definition}
 
-
+Requiring execution tests to be commutative is a necessary condition to recover 
+the compositionality result that we desire. However, it is not sufficient. 
+In \cref{app:compositionality} we prove that commutativity ensures that, 
+if $\hh \in \CMs(\ET_1) \cap \CMs(\ET_2)$, then for each 
+$\ET_1$-trace of the form $(\hh_{0}, \viewFun_{0}) \xrightarrow{(\alpha_{1})}_{\ET_1} \cdots 
+\xrightarrow{(\alpha_{n})}_{\ET_1} (\hh_{n}, \viewFun_{n})$ it is possible to reorder the actions of 
+an $\ET_2$-trace terminating in a configuration $(\hh_{n}, \_)$, so that the resulting trace matches 
+closely the $\ET_1$-trace that we are considering, exception made for the views of the clients: 
+$\ET-2$-trace of the form$(\hh_{0}, \viewFun'_{0}) \xrightarrow{(\alpha_{1})}_{\ET_1} \cdots 
+\xrightarrow{(\alpha_{n})}_{\ET_2} (\hh_{n}, \viewFun'_{n})$. To ensure that we can further modify 
+such an $\ET_2$-trace so that its structure matches exactly the considered $\ET_1$-trace, we 
+impose further constraints on pre and post views  in execution tests.
 \begin{definition}[$\ET$ properties]
 %\label{def:noblidwrites}
 %\label{def:et-minimum-footprint}
@@ -102,30 +148,6 @@ views $\vi, \vi',\vi''$ and fingerprints $\f$:
     \implies 
     \ET \vdash (\hh, \vi) \triangleright \opset : \vi''
 \]
-
-Two fingerprints $\opset_1$ and $\opset_2$ are \emph{conflicting} 
-iff there exists $\ke$ such that 
-$(\otW, \ke, -) \in \opset_1 \land (\otW, \ke, -) \in \opset_2$. 
-
-An execution test $\ET$ is \emph{commutative}, written $\com \ET$, if 
-for all views $\vi_1, \vi_2 \in \Views(\hh_0)$, 
-clients $\cl_1, \cl_2$,
-fingerprints $\opset_1, \opset_2$, 
-kv-stores $\hh'$,
-and view functions $\viewFun, \viewFun'$:
-\[
-\begin{array}{@{}r @{\hspace{10pt}} l @{}}
-	\text{if} &  
-	(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
-	\_ \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh', \viewFun') \\
-	& \land\ \cl_1 \ne \cl_2 \land \opset_1, \opset_2  \text{ are non-conflicting}\\
-%
-%	
-	\text{then} & (\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
-\_ \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh', \viewFun')
-\end{array}
-\]
-
 %if $\cl_1 \ne \cl_2$, and $\opset_1, \opset_2$ are non-conflicting,
 %then for all $\hh', \viewFun, \viewFun'$:
 %\[
@@ -137,15 +159,131 @@ and view functions $\viewFun, \viewFun'$:
 %\end{array}
 %\]
 \end{definition}
+The no-blind writes and minimum-footprint requirements ensure that, in any $\ET$-trace 
+terminating in a configuration $(\hh, \stub)$, 
+the set of views used by a client to commit a transaction is uniquely determined by $\hh$. 
+If $\ET_1$ and $\ET_2$ satisfy the monotonic post-view requirement, then there exists at least one  same post-view 
+that can be obtained after a client commits a fingerprint from a configuration $\Gamma$, 
+using two different execution tests $\ET_1$ and $\ET_2$, respectively. 
 
+\begin{theorem}[Compositionality]     
+For all $\ET_1, \ET_2$ with no blind writes, minimum footprints and monotonic post-views: 
+\begin{align*}
+	\com {\ET_1}
+	& \implies \CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)\\
+	\bigwedge_{i \in \{1, 2\}} \!\!\!\!\com{\ET_i}
+	& \implies  \com{\ET_1 \cap \ET_2}
+\end{align*}
+%If $\com{\ET_1}$, 
+%then $\CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)$. 
+%If $\com{\ET_1} \land \com{\ET_2}$, then $\com{\ET_1 \cap \ET_2}$.
+\end{theorem}
+Most of the execution tests from \cref{fig:execution_tests} can be tweaked to satisfy these 
+properties, without preventing any anomalous behaviour. However, the definitions 
+of $\ET_{\SI}$ and $\ET_{\CP}$ are inherently non-commutative, which also motivates 
+why $\ET_{\UA} \cap \ET_{\CP}$ is not an appropriate execution test for Snapshot Isolation.
+\ac{This is going to fire back. The reviewer may want to 
+see an example of kv-store that is included in $\ET_{\UA} \cap \ET_{\CP}$, but not in 
+$\ET_{\SI}$: I can write this at the blackboard, but somebody will need to put it in the Appendix.}
 
+%By defintion, given a kv-store $\hh$ and an execution test $\ET$, 
+%$\hh \in \CMs(\ET)$ implies that there 
+%exists an $\ET-trace$ $(\hh_0, \viewFun_{0}) \xrightarrow{(\cl_1, \opset_1)}_{\ET} \cdots \xrightarrow{(\cl_n, \opset_n)}_{\ET} (\hh_n, \viewFun_{n})$ 
+%with $\hh_n = \hh$. In \cref{app:compositionality} we prove that the (not ordered) multiset of actions $\{(\cl_{i}, \opset_i)\}_{i=1}^{n}$ 
+%is uniquely determined by $\hh_{n}$. As a consequence, if $\hh \in \CMs(\ET_1) \cap \CMs(\ET_2)$, 
+%then there exist an $\ET_1$-trace and $\ET_2$-trace whose last configuration is $\hh_{n}$, and the multi-set of 
+%actions performed in the former is a permutation of the multiset of actions performed by the latter. However, 
+%to ensure that $\hh_{n} \in \CMs(\ET_1) \cap \CMs(\ET_2)$ we need to ensure that each of the $\ET$-reductions
 
-%\begin{definition}
+%We demonstrate that our consistency models are \emph{compositional}.
+%That is, given two execution tests $\ET_1$ and $\ET_2$, the consistency model induced by their composition 
+%(\ie $\CMs(\ET_1 \cap \ET_2)$) is equivalent to the composition of their two consistency models (\ie $\CMs(\ET_1) \cap \CMs(\ET_2)$), 
+%provided that $\ET_1, \ET_2$ meet \emph{certain conditions}.
+%These conditions are formalised in \cref{def:et_properties} below. 
+%Given an execution test $\ET$, 
+%the \emph{no blind writes} property ensures that $\ET$ allows a transaction to write to a key $\ke$ only if the transaction also reads from $\ke$. 
+%The \emph{minimum footprint} property ensures that $\ET$ is only concerned with those keys accessed (read or written) by a transaction (\ie those keys in its fingerprint) and is thus agnostic to the keys not accessed by the transaction. 
+%The \emph{monotonic post-views} ensures that $\ET$ allows client views to grow after committing a transaction. 
+%The \emph{commutativity} ensures that $\ET$ allows the execution of two \emph{non-conflicting} transactions of distinct clients to be reordered. 
+%Two transactions are non-conflicting if they write to disjoint set of keys; \ie their fingerprints do not contain a write operation to the same key. 
+%
+%Note that these properties are not too restrictive in that the execution tests of most common consistency model satisfy them. 
+%In particular, with the exception of $\CP$ and $\SI$, all execution tests defined in \cref{fig:execution_tests} satisfy the four conditions in \cref{def:et_properties}. 
+%Moreover, $\UA$, $\CP$ and $\SI$ execution tests satisfy all conditions but that of commutativity.
+%This is because \todo.
+%\sx{All execution tests in \cref{fig:execution_tests} satisfy monotonic post-view and {\color{red}can be adapted} without losing any behaviours so to satisfy no blind writes and minimum footprint.
+%Yet the important property for compositionality is if it is commutative.}
+%\azalea{Shale, Andrea, can you give an intuitive explanation why $\UA$, $\CP, \SI$ don't satisfy commutativity?
+%    \sx{
+%        Sorry, \( \UA \) is fine, but \( \CP \) and \( \SI \) are not, 
+%        because \( \dagger \) and \( \ddagger \) use \( \RW_\mkvs \) in the specifications,
+%        which means a read from a transaction might also affect future transactions from different clients.
+%
+%        Assume that two fingerprints \( \f_1 \) and \( \f_2 \) are non-conflict and views \( \vi_1 \) and \( \vi_2 \) respectively.
+%        Assume that they both want to read a key \( \ke \) and the views \( i \in \vi_2(\ke) \) and \( j \in \vi_1(\ke) \) where \( i < j \).
+%        If \( \f_1\) commits first, it will not affect \( \f_2 \) but if \( \f_2 \) commits first, it will introduce a new \( \RW \) for \( \vi_1 \).
+%    }
+%
+%}
+%
+%
+%\begin{definition}[$\ET$ properties]
+%%\label{def:noblidwrites}
+%%\label{def:et-minimum-footprint}
+%%\label{def:et-continuous-postview}
+%\label{def:et_properties}
+%An execution test $\ET$ has \emph{no blind writes} if
+%%it allows a key to be written only when it is also read;
+%%that is, 
+%for all $\hh, \vi, \vi', \opset, \ke$:\\
+%\indent
+%$
+%\ET \vdash (\hh, \vi) \triangleright \opset: \vi' 
+%\land (\otW, \ke, \_) \in \opset
+%\implies (\otR, \ke, \_) \in \opset
+%$
+%%\azalea{This definition of minimum footprint below doesn't make sense; it is too strong! 
+%%Since $\vi, \vi'$ is universally quantified, we are essentially saying for any key in the footprint, two arbitrary views must have the same versions!
+%%I think you mean for all $\hh$, $\vi, \vi', \vi'', \opset$:
+%%\[
+%%\begin{array}{@{} r l @{}}
+%%\text{if} & \ET \vdash (\hh, \vi) \triangleright \opset : \vi'' \\
+%%\text{and} & \fora{ \ke} (\stub, \ke, \stub) \in \f \implies \vi(\ke) = \vi'(\ke) \\
+%%\text{then} & \ET \vdash (\hh, \vi') \triangleright \opset : \vi''
+%%\end{array} 
+%%\]
+%%\sx{Yes you are right. I already change}
+%%}
+%An execution test $\ET$ has a \emph{minimum footprint} if for all kv-stores $\hh$,
+%views $\vi, \vi',\vi''$, and fingerprints $\f$: 
+%%
+%\[
+%\begin{array}{@{} r @{\hspace{3pt}} l @{}}
+%\text{if} & \ET \vdash (\hh, \vi) \triangleright \opset : \vi'' 
+%\text{ and } \fora{(\stub, \ke, \stub) \in \f}\!\! \vi(\ke) {=} \vi'(\ke) \\
+%%\text{and} & \fora{ \ke} (\stub, \ke, \stub) \in \f \implies \vi(\ke) = \vi'(\ke) \\
+%\text{then} & \ET \vdash (\hh, \vi') \triangleright \opset : \vi''
+%\end{array} 
+%\]
+%%
+%
+%An execution test $\ET$ has \emph{monotonic post-views} if 
+%%it allows views to grow after committing; 
+%%that is, 
+%for all kv-stores $\hh$, 
+%views $\vi, \vi',\vi''$ and fingerprints $\f$:
+%\[
+%    \ET \vdash (\hh, \vi) \triangleright \opset : \vi' 
+%    \land \vi' \sqsubseteq \vi'' 
+%    \implies 
+%    \ET \vdash (\hh, \vi) \triangleright \opset : \vi''
+%\]
+%
 %Two fingerprints $\opset_1$ and $\opset_2$ are \emph{conflicting} 
 %iff there exists $\ke$ such that 
 %$(\otW, \ke, -) \in \opset_1 \land (\otW, \ke, -) \in \opset_2$. 
 %
-%Execution test is $\ET$ is \emph{commutative}, written $\com \ET$, if 
+%An execution test $\ET$ is \emph{commutative}, written $\com \ET$, if 
 %for all views $\vi_1, \vi_2 \in \Views(\hh_0)$, 
 %clients $\cl_1, \cl_2$,
 %fingerprints $\opset_1, \opset_2$, 
@@ -175,25 +313,63 @@ and view functions $\viewFun, \viewFun'$:
 %%\end{array}
 %%\]
 %\end{definition}
-
-We can now formalise our compositionality theorem below. 
-The first part states that the consistency model induced by the composition of two execution tests, is equivalent to the composition of their two consistency models.
-The second part states that composition preserves commutativity:
-if two execution tests are commutative, then their composition is also commutative. 
-The full proof of this theorem is given in the appendix (see \cref{thm:et-comm}). 
 %
-\begin{theorem}[Compositionality]     
-For all $\ET_1, \ET_2$ with no blind writes, minimum footprints and monotonic post-views: 
-\begin{align*}
-	\com {\ET_1}
-	& \implies \CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)\\
-	\bigwedge_{i \in \{1, 2\}} \!\!\!\!\com{\ET_i}
-	& \implies  \com{\ET_1 \cap \ET_2}
-\end{align*}
-%If $\com{\ET_1}$, 
-%then $\CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)$. 
-%If $\com{\ET_1} \land \com{\ET_2}$, then $\com{\ET_1 \cap \ET_2}$.
-\end{theorem}
+%
+%
+%%\begin{definition}
+%%Two fingerprints $\opset_1$ and $\opset_2$ are \emph{conflicting} 
+%%iff there exists $\ke$ such that 
+%%$(\otW, \ke, -) \in \opset_1 \land (\otW, \ke, -) \in \opset_2$. 
+%%
+%%Execution test is $\ET$ is \emph{commutative}, written $\com \ET$, if 
+%%for all views $\vi_1, \vi_2 \in \Views(\hh_0)$, 
+%%clients $\cl_1, \cl_2$,
+%%fingerprints $\opset_1, \opset_2$, 
+%%kv-stores $\hh'$,
+%%and view functions $\viewFun, \viewFun'$:
+%%\[
+%%\begin{array}{@{}r @{\hspace{10pt}} l @{}}
+%%	\text{if} &  
+%%	(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
+%%	\_ \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh', \viewFun') \\
+%%	& \land\ \cl_1 \ne \cl_2 \land \opset_1, \opset_2  \text{ are non-conflicting}\\
+%%%
+%%%	
+%%	\text{then} & (\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
+%%\_ \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh', \viewFun')
+%%\end{array}
+%%\]
+%%
+%%%if $\cl_1 \ne \cl_2$, and $\opset_1, \opset_2$ are non-conflicting,
+%%%then for all $\hh', \viewFun, \viewFun'$:
+%%%\[
+%%%\begin{array}{lr}
+%%%(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
+%%%\_ \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh', \viewFun') &\implies \\
+%%%(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
+%%%\_ \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh', \viewFun')
+%%%\end{array}
+%%%\]
+%%\end{definition}
+%
+%We can now formalise our compositionality theorem below. 
+%The first part states that the consistency model induced by the composition of two execution tests, is equivalent to the composition of their two consistency models.
+%The second part states that composition preserves commutativity:
+%if two execution tests are commutative, then their composition is also commutative. 
+%The full proof of this theorem is given in the appendix (see \cref{thm:et-comm}). 
+%%
+%\begin{theorem}[Compositionality]     
+%For all $\ET_1, \ET_2$ with no blind writes, minimum footprints and monotonic post-views: 
+%\begin{align*}
+%	\com {\ET_1}
+%	& \implies \CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)\\
+%	\bigwedge_{i \in \{1, 2\}} \!\!\!\!\com{\ET_i}
+%	& \implies  \com{\ET_1 \cap \ET_2}
+%\end{align*}
+%%If $\com{\ET_1}$, 
+%%then $\CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)$. 
+%%If $\com{\ET_1} \land \com{\ET_2}$, then $\com{\ET_1 \cap \ET_2}$.
+%\end{theorem}
 
 \mypar{Relating KV-Stores and Dependency Graphs}
 Adya \etal proposed \emph{dependency graphs} for specification of transactional consistency models~\cite{adya-icde,adya}. 
