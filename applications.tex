@@ -13,52 +13,60 @@
 Compared with graph-based models including dependency graphs and abstract executions,
 our state-based model is useful for verifying implementations,
 because many implementations embed notions of global kv-stores and local views.
-For centralise databases, the state of the centralised server corresponds the kv-stores,
-and the views reflects the initial local states that transactions work on.
+For centralise databases, the state of the centralised server corresponds the kv-store,
+and the views reflect the initial local states that transactions work on.
 For distributed databases, since most distributed databases satisfy eventual consistency, 
-\ie servers among the system eventually agree on their states,
-the final states of all servers collectively correspond to the kv-stores,
-while views reflect the local states of servers.
+\ie servers among the system eventually agree on states,
+these states collectively can be encoded to a kv-store.
+Views reflect the local states of servers.
 We verify two implementations in the literature, 
 COPS~\cite{Lloyd:2011:DSE:2043556.2043593} and Clock-SI~\cite{Du:2013:CSI:2553409.2553434}.
 
 \paragraph{\bf COPS}
 COPS is a fully replicated database, that is, 
 each server also known as replica contains all keys yet the associated values may be out of date.
-It stores all versions and their dependencies and uses these information to implement causal consistency.
+Synchronisation between replicas guarantees that each replica is in a valid yet maybe out-of-date state.
+Therefore, clients only read or write to a replica.
+A replica stores all versions that are aware of,
 Versions among all keys are totally ordered given that
 COPS restraints the API that only allows single-write or multiple reads transactions.
-Each version has \emph{dependency}, that are other versions it depends on.
-A client maintains a context which are versions that have been accessed before.
+Each version has a \emph{dependency} that are other versions it depends on.
+COPS uses the dependencies to ensure any reads satisfy causal consistency.
+A client maintains a context which are versions 
+that have been fetched from some replicas or committed to ones.
+
 To read a version, the replica returns a list of versions \( \vilist = \ver^{i_1}_{\ke_1}, \dots \ver^{i_n}_{\ke_n} \) 
 that are either equal or greater than any versions in the dependencies,
-\ie \( \fora{\ke, \ver, \ver^{i}_{\ke}, \ver^{j}_{\ke}} \ver \in \vilist \land \ver^{i}_{\ke} \in \vilist \land \ver^{j}_{\ke} \func{dep}{\ver} \implies j \geq i \).
+\ie \( \fora{\ke, \ver, \ver^{i}_{\ke}, \ver^{j}_{\ke}} \ver \in \vilist \land \ver^{i}_{\ke} \in \vilist \land \ver^{j}_{\ke} \in \func{dep}{\ver} \implies i \geq j \).
 To commit a new version, the client also provides the context as the dependency.
-The version is accepted by a replica
+A version is accepted by a replica
 only until all versions from the dependency have been aware to the same replica,
 otherwise it is put in the pending list.
 
 We encode kv-store that includes all versions from all replicas, at any given time.
-A client context then converts to a view, \ie if a version in the context then it is in the view.
+A client context then converts to a view on the kv-store, 
+\ie if a version in the context then it is in the view.
 We show that the views before and after any COPS transaction,
 satisfy the execution tests for causal consistency in \cref{fig:execution.tests}.
-The full detail is in \cref{.....}.
+The full detail is in \cref{sec:cops}.
 
 \paragraph{\bf Clock-SI}
 Clock-SI is a sharded database implementation for snapshot isolation.
 A server also called a shard hosts a disjointed fragment of keys.
-To implements snapshot isolation, Clock-SI uses physical times of shards.
-Each key keeps all the versions consisting of the values and the physical times when they committed.
-Obviously, times on shards will not always match, but the difference is bounded.
-When a transaction starts, it gets a snapshot time by a shard and from now on the shard is the coordinator for the transaction.
-Such transaction can read other shard, delegated by the coordinator, only if the shard's time is greater than the snapshot time.
+To implements snapshot isolation, Clock-SI uses physical times.
+Obviously, times on shards will not always match, but it is assumed that the difference is bounded.
+Each key keeps the history of versions consisting of the values and the commit times.
+When a transaction starts, it gets a snapshot time by a shard 
+and from now on this shard is the coordinator for the transaction.
+Such transaction can read other shard, delegated by the coordinator, only if the local time is greater than the snapshot time.
 At the end, a transaction can commit if there is no transaction with conflict writes since the snapshot time.
 
 We encode kv-store as the union of all shard.
-The time mechanism gives us a unique view, which contains all versions committed before,
-since the time is a barrier to determine if a transaction is allowed to progress.
+Over the kv-store, 
+A time corresponds to a unique view,
+which contains all versions committed before.
 To verify the Clock-SI, 
 we show the views constructed from the snapshot time and commit time,
-if the transaction successfully commits later on, 
-satisfies the execution tests for snapshot isolation in \cref{fig:execution.tests}.
-The full detail is in \cref{.....}.
+if a transaction successfully commits, 
+satisfy the execution tests for snapshot isolation in \cref{fig:execution.tests}.
+The full detail is in \cref{sec:clock-si}.
