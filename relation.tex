@@ -167,12 +167,16 @@ that can be obtained after a client commits a fingerprint from a configuration $
 using two different execution tests $\ET_1$ and $\ET_2$, respectively. 
 
 \begin{theorem}[Compositionality]     
-For all $\ET_1, \ET_2$ with no blind writes, minimum footprints and monotonic post-views: 
+For all $\ET_1, \ET_2$ with no blind writes, minimum footprints and monotonic post-views, 
+if $\ET_1$ is commutative then
+%\begin{align*}
+%	\com {\ET_1}
+%	& \implies \CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)\\
+%	\bigwedge_{i \in \{1, 2\}} \!\!\!\!\com{\ET_i}
+%	& \implies  \com{\ET_1 \cap \ET_2}
+%\end{align*}
 \begin{align*}
-	\com {\ET_1}
-	& \implies \CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)\\
-	\bigwedge_{i \in \{1, 2\}} \!\!\!\!\com{\ET_i}
-	& \implies  \com{\ET_1 \cap \ET_2}
+ \CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)
 \end{align*}
 %If $\com{\ET_1}$, 
 %then $\CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)$. 
@@ -372,20 +376,48 @@ $\ET_{\SI}$: I can write this at the blackboard, but somebody will need to put i
 %\end{theorem}
 
 \mypar{Relating KV-Stores and Dependency Graphs}
-Adya \etal proposed \emph{dependency graphs} for specification of transactional consistency models~\cite{adya-icde,adya}. 
-A dependency graph $\Gr$ is a directed graph with its 
-nodes representing transactions, 
-and its edges representing certain \emph{dependencies} (relations) between transactions. 
-An example dependency graph is depicted in \cref{fig:dependency-graph}. 
-Each node is labelled with a transaction identifier and a set of (read/write) operations. 
-Each edge is labelled with one of three possible dependencies, denoting how information flows between transactions. 
-In particular,
+Dependency graphs \cite{adya-icde,adya} are perhaps the most popular 
+mathematical structure serving as a basis for specifying transactional consistency models. 
+%Adya \etal proposed \emph{dependency graphs} for specification of transactional consistency models~\cite{adya-icde,adya}. 
+A dependency graph $\Gr$ is a directed, labelled graph where
+nodes are
+%with its 
+%nodes representing transactions, 
+%and its edges representing certain \emph{dependencies} (relations) between transactions. 
+%An example dependency graph is depicted in \cref{fig:dependency-graph}. 
+%each node is 
+labelled with a transaction identifier and a fingerprint, and edges are labelled with a 
+key-indexed label that describes the information flow of versions in a run of the database\footnote{Dependency graphs 
+come equipped with a session order between transactions. In our case, the session order is embedded into the structure 
+of the set of transaction identifiers.}. 
 \begin{enumerate*}
 	\item a \emph{read dependency} edge, $\txid_1 \xrightarrow{\WR} \txid_2$, denotes
 that transaction $\txid_2$ reads a version written by $\txid_1$;
 	\item a \emph{write dependency} edge, $\txid_1 \xrightarrow{\WW} \txid_2$, denotes that $\txid_2$ overwrites a version written by $\txid_1$; and 
 	\item an \emph{anti-dependency} edge, $\txid_1 \xrightarrow{\RW} \txid_2$, denotes that $\txid_2$ overwrites a version read by $\txid_2$. 
 \end{enumerate*}
+We give the formal definition of dependency graphs in \cref{app:depgraphs}.
+An example dependency graph is given in \cref{fig:dependency-graph}. 
+\ac{There was a reason why I removed the initial transaction identifier $\txid_{0}$ 
+from dependency graphs (and from abstract executions, for what it matters). It was 
+a technical glitch. But I can't remember exactly what was it.}
+Observe that we can always extract a dependency graph  $\Gr$ from a kv-store $\hh$, by choosing 
+the set of transaction identifiers appearing in $\hh$ as the set of nodes of $\Gr$, and by letting the relation $\RF, \VO, \AD$ to be defined by $\RF_{\hh}, \VO_{\hh}, \AD_{\hh}$ from \cref{fig:execution_tests}, 
+respectively. For example, if we apply the construction outlined above to the kv-store 
+from \cref{fig:counter_kv_final}, we obtain the dependency graph from \cref{fig:dependency-graph}. 
+\ac{Some glitch with values, transaction identifiers. To be corrected} 
+In \cref{app:depgraphs} we show that this construction can be reversed, thus giving 
+rise to the following result: 
+\begin{theorem}
+Dependency graphs are isomorphic to kv-stores.
+\end{theorem}
+
+Consistency models can be specified by placing some constraints on the structure of a dependency 
+graphs; typically, such constraints involve checking the absence of cycles of a particular form 
+in a dependency graph. We can always convert a dependency-graph based specification of 
+a consistency model into an execution-test based one by simply checking that, when committing  
+a transaction into a kv-store $\hh'$, no cycle disallowed by the (dependency-graph based) consistency model specification 
+is introduced in the resulting kv-store\footnote{More precisely, in the dependency graph isomorphic to the resulting kv-store.}.
 
 %\emph{Dependency graphs} are introduced by Adya to specify consistency models of transactional databases \cite{adya}. 
 %They are directed graphs consisting of transactions as nodes, 
@@ -398,21 +430,21 @@ that transaction $\txid_2$ reads a version written by $\txid_1$;
 %since there is one-to-one map between key-value stores and dependency graphs.
 
 
-Note that in \cref{sec:cm} we intentionally used relations with the same names ($\WR, \WW, \RW$) on kv-stores in \cref{fig:execution_tests} as there is a one-to-one correspondence between these relations and their corresponding dependency edges of dependency graphs. 
-In particular, there is a one-to-one correspondence between kv-stores and dependency graphs. 
-For instance, the dependency graph in \cref{fig:dependency-graph} corresponds to the kv-store in \cref{fig:execution_tests} and vice versa. 
-This is captured in \cref{thm:dependency-graph-kv-store} below, with its full proof given in the  appendix (see \cref{thm:kv2graph}). 
-%In the proof of \cref{thm:dependency-graph-kv-store}, we provide two \emph{construction functions}; one constructs a dependency graph given a kv-store; the other constructs a kv-store given a dependency graph. 
-
-Consistency models specified using dependency graphs are typically expressed by imposing constraints on the graph shape, \eg stipulating the absence of dependency cycles of certain shapes. 
-As such, given our correspondence theorem below, \emph{any} consistency model specified using dependency graphs can be lifted to an execution test on kv-stores, by lifting the constraints on dependency edges, to constraints on the corresponding relations on kv-stores. 
-In particular, the $\CP$ and $\SI$ consistency models in the literature have been specified using dependency graphs~\cite{??}. 
-In the appendix (\cref{???}) we demonstrate that the consistency models induced by the $\CP$ and $\SI$ execution tests in \cref{fig:execution_tests} are \emph{equivalent} to their dependency graph counterparts. 
-\azalea{Shale please add the appendix references and make sure I haven't left out anything.
-    \sx{will add ref.
-        To be more precise if necessary: The lift of \( \SI \) is andrea's paper, and the lift of \( \CP \) is in the appendix with the same method.
-    }
-}
+%Note that in \cref{sec:cm} we intentionally used relations with the same names ($\WR, \WW, \RW$) on kv-stores in \cref{fig:execution_tests} as there is a one-to-one correspondence between these relations and their corresponding dependency edges of dependency graphs. 
+%In particular, there is a one-to-one correspondence between kv-stores and dependency graphs. 
+%For instance, the dependency graph in \cref{fig:dependency-graph} corresponds to the kv-store in \cref{fig:execution_tests} and vice versa. 
+%This is captured in \cref{thm:dependency-graph-kv-store} below, with its full proof given in the  appendix (see \cref{thm:kv2graph}). 
+%%In the proof of \cref{thm:dependency-graph-kv-store}, we provide two \emph{construction functions}; one constructs a dependency graph given a kv-store; the other constructs a kv-store given a dependency graph. 
+%
+%Consistency models specified using dependency graphs are typically expressed by imposing constraints on the graph shape, \eg stipulating the absence of dependency cycles of certain shapes. 
+%As such, given our correspondence theorem below, \emph{any} consistency model specified using dependency graphs can be lifted to an execution test on kv-stores, by lifting the constraints on dependency edges, to constraints on the corresponding relations on kv-stores. 
+%In particular, the $\CP$ and $\SI$ consistency models in the literature have been specified using dependency graphs~\cite{??}. 
+%In the appendix (\cref{???}) we demonstrate that the consistency models induced by the $\CP$ and $\SI$ execution tests in \cref{fig:execution_tests} are \emph{equivalent} to their dependency graph counterparts. 
+%\azalea{Shale please add the appendix references and make sure I haven't left out anything.
+%    \sx{will add ref.
+%        To be more precise if necessary: The lift of \( \SI \) is andrea's paper, and the lift of \( \CP \) is in the appendix with the same method.
+%    }
+%}
 
 %\sx{I try to remember the discussion among me, Andrea and P:
 %the relation to dependency can simplify to one paragraph since it is easy to see.}
@@ -485,14 +517,14 @@ In the appendix (\cref{???}) we demonstrate that the consistency models induced 
 %\end{itemize}
 %\end{definition}
 
-\begin{theorem}
-\label{thm:main-body-kv2graph}
-\label{thm:dependency-graph-kv-store}
-There is a one-to-one correspondence between key-value stores and dependency graphs.
-\end{theorem}
-%\begin{proof}
-%    See \cref{thm:kv2graph} in \cref{sec:dependent-graph}.
-%\end{proof}
+%\begin{theorem}
+%\label{thm:main-body-kv2graph}
+%\label{thm:dependency-graph-kv-store}
+%There is a one-to-one correspondence between key-value stores and dependency graphs.
+%\end{theorem}
+%%\begin{proof}
+%%    See \cref{thm:kv2graph} in \cref{sec:dependent-graph}.
+%%\end{proof}
 
 
 
