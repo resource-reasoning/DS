@@ -30,6 +30,8 @@ $\ctrinc(\ke)$ and $\ctrread(\ke)$, defined below:
 \]
 The code of each operation is wrapped in square brackets, denoting that the enclosed code 
 must be executed \emph{atomically} as a \emph{transaction}. 
+Command \( \pderef{\pv{x}}{\ke} \) reads the value of key \( \ke \) to local variable \( \vx \),
+and \( \pmutate{\ke}{\pv{x}+1} \) writes \( \pv{x}+1 \) to key \( \ke \) when the transaction commits.
 At first glance, one may think that this implementation is correct; 
 in reality, however, correctness depends heavily on implementation details of the key-value store, 
 and in particular on the \emph{consistency model} it provides. 
@@ -37,7 +39,8 @@ and in particular on the \emph{consistency model} it provides.
 \mypar{Consistency Models}
 A well-known consistency model is that of \emph{serialisability}, where transactions appear to execute in a sequential (serial) order, one after another. 
 However, implementing serialisability comes at a significant performance cost, 
-especially when the key-value store may be distributed across several \emph{replicas} (copies). 
+especially when the key-value store may be distributed across several \emph{replicas} (copies)%
+\footnote{Another technique is sharding that a key is hosted in a specific shard.}. 
 In such replicated key-value stores, clients run each operation on an arbitrary replica, 
 and then propagate the operation effects (if any) to other replicas.
 %To overcome the performance cost of serialisability, the database community has turned to \emph{weaker} consistency models. 
@@ -62,7 +65,7 @@ both replicas hold $1$ for $\ke$,
 %If at Clients performing a 
 %$\ctrread(\ke)$ operation will read a final value of $1$ for the counter, 
 despite two separate increments on $\ke$. 
-This weak behaviour is known as the \emph{lost update} anomaly, disallowed under serialisability. 
+This weak behaviour is known as the \emph{lost update} anomaly, allowed under causal consistency but serialisability. 
 
 \mypar{KV-Stores and Views}
 The number of replicas in distributed key-value stores may be very high; 
@@ -76,8 +79,6 @@ This then yields a history of each key, and may be thought as projecting the loc
 Client views (or simply views) allow different clients to observe only a subset of the versions available in 
 the key-value store: this makes it possible for different clients to observe different states 
 of the key-value store, thus allowing for weak behaviours such as the lost update anomaly. 
-%\footnote{In a distributed setting, this can happen if two clients access 
-%two different replicas that are not yet synchronised.}.
 
 \begin{figure*}[t]
 \captionsetup[subfigure]{aboveskip=-5pt, belowskip=5pt}
@@ -212,7 +213,7 @@ In our \eqref{prog:inc2} example, this prevents $\cl_2$ from running $\ctrinc(\k
 if its view only contains the initial version of $\ke$. 
 Instead, the $\cl_2$ view must contain both versions of $\ke$, 
 thus enforcing $\cl_2$ to install a version with value $2$ after running $\ctrinc(\ke)$
-In \cref{...}, we prove that if the key-value store 
+In \cref{sec:program-analysis}, we prove that if the key-value store 
 ensures write-conflict freedom as well as a few other properties, then clients can increment 
 and read from a single counter as if the key-value store were (strictly) serialisable.
 
@@ -268,9 +269,11 @@ Under this strengthened execution test, in the \eqref{prog:LF} example $\cl_2$ c
 observe $1$ for $\ke_2$ after observing $0$ for $\ke_1$; 
 this is because $\cl_1$ has already established that the increment on $\ke_2$ happens after 
 the one of $\ke_1$. 
-In \cref{...}, we prove that if the key-value store consists of multiple counter objects, and the execution test employed by transactions guarantees SI, then the key-value store behaves as is it were strictly serialisable.
+In \cref{sec:program-analysis}, we prove that if the key-value store consists of multiple counter objects, and the execution test employed by transactions guarantees SI, then the key-value store behaves as is it were strictly serialisable.
 %
 As we demonstrate in \cref{sec:cm}, using execution tests on key-value stores, we can specify all well-known consistency models (weak or strong) subject to a few basic conditions. 
+%
+Moreover, in \cref{sec:verify-impl} we encode many implementations as kv-stores and views and verify against to our specification using execution tests.
 
 
 %Suppose that we have an integer valued key-value store. Four different 
