@@ -5,10 +5,12 @@
 \section{Overview}
 \label{sec:overview}
 
+\pg{In introduction, we need to introduce the notation kv-store.}
+
 Consider a simple counter object, $\mathsf{Counter}(\ke)$, 
-defined over a key-value store: 
-clients can manipulate the value of key $\ke$ via two operations, 
-$\ctrinc(\ke)$ and $\ctrread(\ke)$, defined below:
+defined over a distribued kv store.
+Clients can manipulate the value of key $\ke$ via two operations, 
+$\ctrinc(\ke)$ and $\ctrread(\ke)$:
 \[
 \begin{array}{r @{\hspace{2pt}} l @{\hspace{20pt}} r @{\hspace{2pt}} l}
 \ctrinc(\ke) \eqdef 
@@ -28,24 +30,48 @@ $\ctrinc(\ke)$ and $\ctrread(\ke)$, defined below:
 \end{session}
 \end{array}
 \]
-The code of each operation is wrapped in square brackets, denoting that the enclosed code 
-must be executed \emph{atomically} as a \emph{transaction}. 
-Command \( \pderef{\pv{x}}{\ke} \) reads the value of key \( \ke \) to local variable \( \vx \),
-and \( \pmutate{\ke}{\pv{x}+1} \) writes \( \pv{x}+1 \) to key \( \ke \) when the transaction commits.
-At first glance, one may think that this implementation is correct; 
-in reality, however, correctness depends heavily on implementation details of the key-value store, 
-and in particular on the \emph{consistency model} it provides. 
+Command \( \pderef{\pv{x}}{\ke} \) reads the value of key \( \ke \) to
+local variable \( \vx \) and command \( \pmutate{\ke}{\pv{x}+1} \)
+writes the value of \( \pv{x}+1 \) to key \( \ke \).  The code of each
+operation is wrapped in square brackets, denoting that the enclosed
+code must be executed \emph{atomically} as a transaction.  
+%At first
+%glance, one may think that this implementation provides the correct atomic
+%behaviour. In reality, 
+Correctness of such atomic transactions is subtle, depending heavily
+on implementation details of the distributed key-value store and, in
+particular, on its \emph{consistency model}.
+
 
 \mypar{Consistency Models}
-A well-known consistency model is that of \emph{serialisability}, where transactions appear to execute in a sequential (serial) order, one after another. 
-However, implementing serialisability comes at a significant performance cost, 
-especially when the key-value store may be distributed across several \emph{replicas} (copies)%
-\footnote{Another technique is sharding that a key is hosted in a specific shard.}. 
-In such replicated key-value stores, clients run each operation on an arbitrary replica, 
-and then propagate the operation effects (if any) to other replicas.
+A well-known consistency model is that of \emph{serialisability},
+where transactions appear to execute in a sequential (serial) order,
+one after another. 
+However, implementing serialisability for distributed kv-stores
+comes at a significant performance cost. Instead, implementors are content
+with {weaker} consistency models, such as \emph{causal
+  consistency} satisfied by the 
+COPS implementation of a replicated kv-store~\cite{.} and 
+\emph{snapshot isolation}  satisfied by  the CLOCK-SI implementation
+of a partitioned  kv-store~\cite{.}. 
+
+We motive these weak consistency models using replicated kv-stores. In
+such stores, clients run each operation on an arbitray replica, and
+propogate the effects of the operations (if any) to other
+replicas. In this setting, concurrent calls to counter
+operations can lead to weak behaviours that are not present with
+serialisability.
+%described in Section~\ref{.} comes at a significant performance cost.
+%
+%especially when the key-value store may be distributed across several \emph{replicas} (copies)%
+%\footnote{Another technique is sharding that a key is hosted in a specific shard.}. 
+%In such replicated key-value stores, clients run each operation on an arbitrary replica, 
+%and then propagate the operation effects (if any) to other replicas.
 %To overcome the performance cost of serialisability, the database community has turned to \emph{weaker} consistency models. 
-In such replicated settings, concurrent calls to counter operations can lead to \emph{weak} behaviours not present under serialisability. 
-For instance, consider the program below where the $\cl_1$, $\cl_2$ clients run $\ctrinc(\ke)$ concurrently: 
+%In such replicated settings, concurrent calls to counter operations
+%can lead to \emph{weak} behaviours not present under serialisability. 
+%
+For instance, consider the program below where  $\cl_1$, $\cl_2$ clients run $\ctrinc(\ke)$ concurrently: 
 \begin{align}
 	\cl_1: \ctrinc(\ke)
 	\;\; || \;\;
@@ -54,20 +80,25 @@ For instance, consider the program below where the $\cl_1$, $\cl_2$ clients run 
 	\label{prog:inc2}
 \end{align}
 Let us assume that  $\ke$ initially holds value $0$.
-Intuitively, since transactions are executed atomically, after both calls to $\ctrinc(\ke)$ have terminated, the counter must hold $2$.
+Intuitively, since transactions are executed atomically, after both
+calls to $\ctrinc(\ke)$ have terminated, the counter must hold 
+the value $2$.
 This is indeed the only outcome allowed under serialisability. 
-However, when clients execute $\ctrinc(\ke)$ at different replicas, 
-if the underlying key-value store provides no synchronisation mechanism, 
-both clients may read the same initial value for $\ke$ ($0$) at their distinct replicas and update it to $1$. 
-Consequently, propagating the effect of each transaction (\ie the update of $\ke$ to $1$) to the other replica leaves the replicas unchanged. 
-As such, once both calls to $\ctrinc(\ke)$ have terminated and their effects have been propagated, 
-both replicas hold $1$ for $\ke$, 
+However, when clients execute $\ctrinc(\ke)$ at different replicas,
+if the underlying kv-store provides no synchronisation mechanism,
+ then 
+both clients may read the same initial value $0$ for $\ke$ at their
+distinct replicas and update them to $1$. 
+In this case, the effect of propagating  each transaction to the other
+replica can leave  the replicas unchanged, with value  $1$ for $\ke$, 
 %If at Clients performing a 
 %$\ctrread(\ke)$ operation will read a final value of $1$ for the counter, 
 despite two separate increments on $\ke$. 
-This weak behaviour is known as the \emph{lost update} anomaly, allowed under causal consistency but serialisability. 
+This weak behaviour is known as the \emph{lost update} anomaly, which
+is  allowed under causal consistency but not allowed under snapshot
+isolation and serialisability. 
 
-\mypar{KV-Stores and Views}
+\mypar{Centralised KV-Stores and Views}
 The number of replicas in distributed key-value stores may be very high; 
 as such, reasoning about client programs interacting with such key-value 
 stores may be cumbersome and error-prone. 
