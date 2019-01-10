@@ -1,22 +1,33 @@
 \section{Program Analysis}
+%
+%Contents: \\
+%transactional implementation of a counter. \\
+%Counter is not robust when a 
+%weak consistency model (i.e. causal consistency, in practice anything that does not 
+%guarantee both write-conflict detection and monotonic reads) is assumed. \\
+%A single counter is robust as long as the consistency model used by the database 
+%guarantees both write-conflict detection and monotonic reads.\\
+%Multiple counters are not robust even when monotonic reads and write-conflict 
+%detection are guaranteed by the database. In particular, multiple counters are 
+%not robust when PSI is guaranteed by the database.\\
+%Multiple counters are robust if a stronger consistency models, such as SI, is employed 
+%by the database.
+We give two applications of our theory aimed at showing the 
+robustness of a transactional library against a given consistency 
+model. The first application considers a single counter library, 
+and proves that it is robust against Parallel Snapshot Isolation. 
+The second application aims at proving the robustness of two 
+counters against Snapshot Isolation. 
 
-Contents: \\
-transactional implementation of a counter. \\
-Counter is not robust when a 
-weak consistency model (i.e. causal consistency, in practice anything that does not 
-guarantee both write-conflict detection and monotonic reads) is assumed. \\
-A single counter is robust as long as the consistency model used by the database 
-guarantees both write-conflict detection and monotonic reads.\\
-Multiple counters are not robust even when monotonic reads and write-conflict 
-detection are guaranteed by the database. In particular, multiple counters are 
-not robust when PSI is guaranteed by the database.\\
-Multiple counters are robust if a stronger consistency models, such as SI, is employed 
-by the database.
+\mypar{Code for Counter Objects} 
+We start by reviewing the transactional code for the 
+increment and read operations provided by a counter 
+object over a key $\ke$, denoted as  $\ctrinc(\ke)$ and 
+$\ctrread(\ke)$, respectively.
 
-\paragraph{Counter Code}
 \[
 \begin{array}{lrlr}
-\mathsf{inc}(\ke) = &
+\ctrinc(\ke) = &
 \begin{session}
 \begin{transaction}
 \pderef{\pv{a}}{\ke};\\
@@ -24,7 +35,7 @@ by the database.
 \end{transaction}
 \end{session}
 &
-\hspace{10pt}\mathsf{read}(\ke) = &
+\hspace{10pt}\ctrread(\ke) = &
 \begin{session}
 \begin{transaction}
 \pderef{\pv{a}}{\ke};\\
@@ -32,30 +43,38 @@ by the database.
 \end{session}
 \end{array}
 \]
-
 %For the moment, we assume that the key-value store contains a single object $\ke$. 
-Also, clients can interact with the key-value store only by invoking the $\mathsf{inc}(\ke)$ and 
-$\mathsf{read}(\ke)$ operations.
+Clients can interact with the key-value store only by invoking the $\ctrinc(\ke)$ and 
+$\ctrread(\ke)$ operations. A transactional library is a set of transactional operations. 
+For a single counter over key $\ke$, we define the transactional library $\Counter(\ke) = \{ \ctrinc(\ke), \ctrread(\ke)\}$, 
+while for multiple counters over a set of keys $\mathsf{K} = \{\ke_i\}_{i \in I}$, respectively, we define $\Counter(\mathsf{K}) = 
+\bigcup_{i \in I} \Counter(\ke_i)$.
+
+\mypar{KV-store semantics of a transactional library}
 Given the transactional code 
 $\ptrans{\trans}$, we define $\opset(\hh, \vi, \ptrans{\trans})$ 
 to be the fingerprint that would be produced by a client that has view $\vi$ 
 over the kv-store $\hh$, upon executing $\ptrans{\trans}$.
-For example, we have that 
+For the $\ctrinc(\ke)$ and $\ctrread(\ke)$ operations discussed above, 
+we have that 
 %$\opset(\hh, \vi, \mathsf{inc}(\ke))$ is the fingerprint generated 
 %by a client $\cl$ with view $\vi$ after executing the operation $\mathsf{inc}(\ke)$. 
 %Specifically, 
-$\opset(\hh, \vi, \mathsf{inc}(\ke)) = \{(\otR, \ke, n), (\otW, \ke, n+1) \mid 
-n = \snapshot(\hh, \vi)\}$. Similarly, $\opset(\hh, \vi ,\mathsf{read}(\ke)) = 
+$\opset(\hh, \vi, \ctrinc(\ke)) = \{(\otR, \ke, n), (\otW, \ke, n+1) \mid 
+n = \snapshot(\hh, \vi)\}$, and $\opset(\hh, \vi ,\mathsf{read}(\ke)) = 
 \{(otR, \ke, n) \mid n = \snapshot(\hh, \vi)\}$.
-A transactional module is a set of transaction codes $\{\ptrans{\trans_i}_{i \in I}\}$.
-Given an execution test $\ET$, and a transactional module $\{\ptrans{\trans_i}\}_{i \in I}$, 
-we define the set of valid $\ET$-traces for the transactional module as the set 
+%A transactional module is a set of transaction codes $\{\ptrans{\trans_i}_{i \in I}\}$.
+Given an execution test $\ET$, and a transactional library $L = \{\ptrans{\trans_i}\}_{i \in I}$, 
+we define the set of valid $\ET$-traces for t$L$ as the set 
 $\mathsf{Traces}(\ET, \{\ptrans{\trans_i}\}_{i \in I})$ 
 of $\ET$-traces in which only $\ET$-reductions of the form 
 \[
-(\hh, \viewFun) \xrightarrowtriangle{\left(\cl, \opset\left(\hh, \viewFun(\cl), \ptrans{\trans_{i}}\right)\right)}_{\ET} (\hh', \viewFun')
+(\hh_{0}, \viewFun_{0}) \xrightarrow{(\cl_0, \lambda_0)}_{\ET} (\hh_{1}, \viewFun_{1}) \xrightarrow{(\cl_1, \lambda_1)}_{\ET} \cdots 
+\xrightarrow{(\cl_{n-1}, \lambda_{n-1})}_{\ET} (\hh_{n}, \viewFun_{n}),
 \]
-are allowed. 
+where for any $j=0,\cdots,n-1$, either $\lambda_{j} = \varepsilon$ or $\lambda_{j} = \opset(\hh_{j}, \viewFun_{j}(\cl_{j}), \ptrans{\trans_{i}})$ 
+for some $i \in I$. Henceforth we commit an abuse of notation and write $(\hh, \viewFun) \xrightarrow{(\cl, \ptrans{\trans})}_{\ET} (\hh', \viewFun')$ 
+in lieu of $(\hh, \viewFun) \xrightarrow{(\cl, \opset(\hh,\viewFun(\cl), \ptrans{\trans})}_{\ET} (\hh', \viewFun')$.
 We also let $\mathsf{KVStores}(\ET, \{\ptrans{\trans_i}\}_{i \in I})$ be the set of kv-stores 
 that can be obtained when clients can only perform operations from $\{\ptrans{\trans_i}\}_{i \in I}$ 
 under the execution test $\ET$. Specifically, 
@@ -64,13 +83,16 @@ under the execution test $\ET$. Specifically,
 \xrightarrowtriangle{\cdot}_{\ET} (\hh, \_)\right) \in \mathsf{Traces}(\ET, \{\ptrans{\trans_{i}}\}_{i \in I}) \}.
 \]
 
-\paragraph{Anomaly under Causal Consistency.}
-It is well known that even when the key-value store consists of a single object $\ke$, which 
-can be manipulated via the $\mathsf{inc}(\ke)$ and $\mathsf{read}(\ke)$ transactions, 
-then it is possible to obtain non-serialisable executions over the kv-store. Henceforth, 
-we write $(\hh, \viewFun) \xrightarrowtriangle{(\cl, \ptrans{\trans})}_{\ET} (\hh', \viewFun')$ 
-as a shorthand for $(\hh, \viewFun) \xrightarrowtriangle{\left(\cl, \opset\left(\hh, \viewFun(\cl), \ptrans{\trans}\right)\right)}_{\ET} (\hh', \viewFun')$. 
-For simplicity, let us assume that $\Keys = \ke$.
+\mypar{Anomaly of a single counter under Causal Consistency.}
+It is well known that the transactional library consisting of a single counter over a single 
+key, $\Counter(\ke)$, implemented on top of a kv-store guaranteeing Causal Consistency, 
+leads to executions over the kv-store that cannot be simulated by the same transactional 
+library implemented on top of a serialisable kv-store. 
+%can be manipulated via the $\ctr(\ke)$ and $\mathsf{read}(\ke)$ transactions, 
+%then it is possible to obtain non-serialisable executions over the kv-store. Henceforth, 
+%we write $(\hh, \viewFun) \xrightarrowtriangle{(\cl, \ptrans{\trans})}_{\ET} (\hh', \viewFun')$ 
+%as a shorthand for $(\hh, \viewFun) \xrightarrowtriangle{\left(\cl, \opset\left(\hh, \viewFun(\cl), \ptrans{\trans}\right)\right)}_{\ET} (\hh', \viewFun')$. 
+For simplicity, let us assume that $\Keys = \{ke\}$.
 Let $\hh_{0} = [\ke \mapsto (0, \txid_{0}, \emptyset)]$,  
 $\hh_1 = [\ke \mapsto (0, \txid_{0}, \{\txid_{\cl_1}^{1}\} \lcat (0, \txid_{\cl_1}^{1}, \emptyset)$, 
 $\hh_2 = [\ke \mapsto (0, \txid_{0}, \{\txid_{\cl_1}^{1}, \txid_{\cl_2}^{1}\}) \lcat (0, \txid_{\cl_1}^{1}, \emptyset) 
@@ -81,20 +103,26 @@ $\vi_{0} = [\ke \mapsto {0}]$. Then we have that
 (\hh_1, [\cl_1 \mapsto \_, \cl_2 \mapsto \vi_0]) \xrightarrowtriangle{(\cl_1, \mathsf{inc(\ke)})}_{\ET_{\CC}} 
 (\hh_2, \_).
 \]
-If we now draw the dependency graph $\graphof(\hh_2)$, we immediately find a cycle of the form 
-$\txid_{\cl_1}^{1} \xrightarrow{\AD(\ke)} \txid_{\cl_2}^{1} \xrightarrow{\AD(\ke)} \txid_{\cl_1}^{1}$, 
-which proves that $\hh_2$ cannot be obtained in any serialisable execution.
+By looking at the kv-store $\hh_{2}$, we immediately find a cycle in the graph induced by 
+the relations $\PO_{\hh_{2}}, \RF_{\hh_{2}}, \VO_{\hh_{2}}, \AD_{\hh_{2}}$: 
+$\txid_{\cl_1}^{1} \xrightarrow{\AD} \txid_{\cl_2}^{1} \xrightarrow{\AD} \txid_{\cl_1}^{1}$. 
+Following from \cref{thm:serialisable_nocycle}, then 
+which proves that $\hh_2$ is not included in $\CMs(\ET_{\SER})$, i.e. it is 
+not serialisable.
 
-\paragraph{Robustness of a Single counter under Parallel Snapshot Isolation.}
-In practice we show that a single counter is robust under any consistency model 
+\mypar{Robustness of a Single counter under Parallel Snapshot Isolation.}
+Here we show that the  single counter library $\Counter(\ke)$ is robust under any consistency model 
 that guarantees both write conflict detection (formalised by the execution test 
 $\ET_{\UA}$), monotonic reads (formalised by the execution test $\ET_{\MRd}$) 
-and read your writes (formalised by the execution test $\ET_{\RYW}$).
+and read your writes (formalised by the execution test $\ET_{\RYW}$). 
+Because $\ET_{\PSI}$ guarantees all such consistency guarantees, i.e. 
+$\CMs(\ET_{\PSI}) \subseteq \CMs(\ET_{\MRd} \cap \ET_{\RYW} \cap \ET_{\UA})$, 
+then it also follows that a single counter is robust under Parallel Snapshot Isolation.
 \begin{proposition}
 \label{prop:counter_hhshape}
-Let $\mathsf{Counter}(\ke) = \{\mathsf{inc}(\ke), \mathsf{read}(\ke)\}$.
-Let $\hh$ be in $\mathsf{KVStores}(\ET_{\UA} \cap \ET_{\MRd} \cap \ET_{\RYW}, \mathsf{Counter}(\ke))$. Then we have that 
-there exist $\{\txid_i\}_{i = 1}^{n}$ and $\{\T_{i}\}_{i = 0}^{n}$ such that 
+%Let $\mathsf{Counter}(\ke) = \{\mathsf{inc}(\ke), \mathsf{read}(\ke)\}$.
+Let $\hh \in \mathsf{KVStores}(\ET_{\UA} \cap \ET_{\MRd} \cap \ET_{\RYW}, \Counter(\ke))$. 
+Then there exist $\{\txid_i\}_{i = 1}^{n}$ and $\{\T_{i}\}_{i = 0}^{n}$ such that 
 \begin{align}
 \hh(\ke) = \left( (0, \txid_{0}, \T_{0} \uplus \{\txid_1\}) \lcat \cdots \lcat (n-1, \txid_{n-1}, \T_{n-1} \uplus \{\txid_{n}\}) \right) 
 \lcat (n, \txid_{n}, \T_{n}) \label{eq:psi_counter_shape}\\
@@ -120,14 +148,14 @@ there exist $\{\txid_i\}_{i = 1}^{n}$ and $\{\T_{i}\}_{i = 0}^{n}$ such that
 \end{proposition}
 
 \begin{proof}
-It suffices to prove that the properties \eqref{eq:psi_counter_rwtxs}, \eqref{eq:psi_counter_shape} 
+It suffices to prove that the properties \eqref{eq:psi_counter_shape},\eqref{eq:psi_counter_rwtxs}, 
 \eqref{eq:psi_counter_so} given in \cref{prop:counter_hhshape}, are invariant under 
-$\ET$-reductions of the form 
+$(\ET_{\MRd} \cap \ET_{\RYW} \cap \ET_{\UA})$-reductions of the form 
 \begin{align}
 (\hh, \viewFun) \xrightarrow{(\cl, \mathsf{inc}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd} \cap \ET_{\RYW}} (\hh', \viewFun') \label{eq:psi_counter_inc}\\
-(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{read}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd} \cap \ET_{\RYW}} (\hh', \viewFun) \label{eq:psi_counter_read}
+(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{read}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd} \cap \ET_{\RYW}} (\hh', \viewFun). \label{eq:psi_counter_read}
 \end{align}
-to this end, we will need the following auxiliary result which holds for any configuration $(\hh, \viewFun)$ 
+To this end, we will need the following auxiliary result which holds for any configuration $(\hh, \viewFun)$ 
 that can be obtained under the execution test $\ET_{\RYW} \cap \ET_{\MRd}$:
 %\begin{equation}
 %\forall i, n.\; \forall \cl.\; \txid_{\cl}^{n} \in \{\WTx(\hh(\ke, i))\} \cup \RTx(\hh(\ke, i)) \implies 
@@ -141,13 +169,13 @@ that can be obtained under the execution test $\ET_{\RYW} \cap \ET_{\MRd}$:
 
 \begin{equation}
 \forall i, j, n,m, \cl, \ke. \; \txid_{\cl}^{n} \in \{\WTx(\hh(\ke, i))\} \cup \RTx(\hh(\ke, i)) 
-\wedge \txid_{\cl}^{n} \in \{\WTx(\hh(\ke, j))\} \cup \RTx(\hh(\ke, j)) \wedge m < n 
+\wedge \txid_{\cl}^{m} \in \{\WTx(\hh(\ke, j))\} \cup \RTx(\hh(\ke, j)) \wedge m < n 
 \wedge i \in \viewFun(\cl)(\ke) \implies 
 j \in \viewFun(\cl)(\ke). \label{eq:psi_counter_view}
 \end{equation} 
 
 Suppose that there exist two sets $\{\txid_{i}\}_{i=1}^{n}$ and 
-$\{\T_{i}\}_{i=0}^{n}$ such that $(\hh, \{\txid_{i}\}_{i=1}^{n}, \{\T_{i}\}_{i=1}^{n})$ 
+$\{\T_{i}\}_{i=0}^{n}$ such that $(\hh, \{\txid_{i}\}_{i=1}^{n}, \{\T_{i}\}_{i=0}^{n})$ 
 satisfies the properties \eqref{eq:psi_counter_shape}-\eqref{eq:psi_counter_so}. 
 We prove that, for transitions of the form \eqref{eq:psi_counter_inc}-\eqref{eq:psi_counter_read}, 
 there exist an index $m$ and two collections $\{\txid_{i}\}_{i=1}^{m}$, $\{\T'_{i}\}_{i=0}^{m}$ 
@@ -158,7 +186,7 @@ such that $(\hh', \{\txid_{i}\}_{i=1}^{m}, \{\T'_{i}\}_{i=0}^{m})$ satisfies the
 \item 
 Assume that
 \[
-(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{inc}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd} \cap \cap \ET_{\RYW}} (\hh', \viewFun')
+(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{inc}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd} \cap  \ET_{\RYW}} (\hh', \viewFun')
 \]
 for some $\cl, \hh', \viewFun'$. Let $n+1 = \lvert \hh(\ke) \rvert$. Because of the definition of 
 $\ET_{\UA}$, we must have that $\viewFun(\cl) = [\ke \mapsto \{0, \cdots, n\}]$. Also, 
@@ -228,7 +256,7 @@ hence it must be $i \leq n < n+1$.
 %$(\hh, \viewFun)$ satisfies the properties \eqref{eq:psi_counter_rwtxs}-\eqref{eq:psi_counter_view}; 
 %assume also that 
 \[
-(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{read}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd} \cap \cap \ET_{\RYW}} (\hh', \viewFun').
+(\hh, \viewFun) \xrightarrow{(\cl, \mathsf{read}(\ke))}_{\ET_{\UA} \cap \ET_{\MRd} \cap \ET_{\RYW}} (\hh', \viewFun').
 \]
 As in the previous case, we have that $\hh' = \updateKV(\hh, \viewFun(\cl), \txid, \{(\otR, \ke, i)\})$, where 
 $m = \snapshot(\hh, \viewFun(\cl))(\ke)$  - 
@@ -352,38 +380,44 @@ then $\graphof(\hh)$ is acyclic.
 Let $\{\txid_{i}\}_{i=1}^{n}$, $\{\T_{i}\}_{i=0}^{n}$ 
 be such that $(\{\txid_{i}\}_{i=1}^{n}, \{\T_{i}\}_{i=0}^{n})$ 
 satisfies properties \eqref{eq:psi_counter_shape}-\eqref{eq:psi_counter_so}. 
-Note that we have the following: 
+First, we define a partial order between transactions appearing in $\hh$ 
+as the smallest relation $\dashrightarrow$ such that for any $\txid, \txid', \txid''$ and 
+$i,j = 0,\cdots, n$
+\[
+\begin{array}{ll}
+\txid \in \T_{i} &\implies \txid_{i} \dashrightarrow \txid,\\
+i < j &\implies \txid_{i} \dashrightarrow \txid_{j},\\
+\txid \in \T_{i} \wedge i < j & \implies \txid \dashrightarrow \txid_{j}\\
+\txid, \txid' \in \T_{i} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \dashrightarrow \txid'\\
+\txid \dashrightarrow \txid' \rightarrow \txid'' &\implies \txid \dashrightarrow \txid''
+\end{array}
+\]
+It is immediate that if $\txid \dashrightarrow \txid'$ then either $\txid \in \{\txid_{i}\} \cup \T_i$, 
+$\txid' = \{\txid_{j}\} \cup \T_{j}$ for some $i,j$ such that $i < j$, or $\txid = \txid_{i}$, $\txid' \in \T_i$, 
+or $\txid, \txid' \in \T_{i}$ and $\txid \xrightarrow{\PO_{\hh}} \txid'$. A consequence of this fact, 
+is that $\dashrightarrow$ is irreflexive.
+
+Next, observe that we have the following: 
 \begin{itemize}
 \item whenever $\txid \xrightarrow{\RF_{\hh}} \txid'$, then 
 there exists an index $i = 0,\cdots, n$ such that $\txid = \txid_{i}$, 
 and either $i < n$ and $\txid' \in \T_{i} \cup \{ \txid_{i+1} \}$, 
-or $i = n$ and $\txid' \in \T_{i}$, 
+or $i = n$ and $\txid' \in \T_{i}$: by definition, we have that $\txid \dashrightarrow \txid'$;
 \item whenever $\txid, \xrightarrow{\VO_{\hh}} \txid'$, 
 then there exist two indexes $i, j: 0 \leq i < j \leq n$ such that 
-$\txid = \txid_{i}, \txid' = \txid_{j}$; 
+$\txid = \txid_{i}, \txid' = \txid_{j}$; again, we have that $\txid \dashrightarrow \txid'$, 
 \item whenever $\txid \xrightarrow{\AD_{\hh}} \txid'$, then 
 there exist two indexes $i, j: 0 \leq i < j \leq n$ such that either 
 $\txid \in \T_{i}$ and $\txid' = \txid_{j}$, or $\txid = \txid_{i+1}$, 
-$i+1 < j$ and $\txid' = \txid_{j}$, 
+$i+1 < j$ and $\txid' = \txid_{j}$; in both cases, we obtain that $\txid \dashrightarrow \txid'$,
 \item whenever $\txid \xrightarrow{\PO_{\hh}} \txid'$, then 
 $\txid \in \{\txid_{i}\} \cup \T_{i}$ for some $i=0,\cdots,n$, 
 and either $\txid' = \txid_{j}$ for some $i < j$,  or $\txid' \in \T_{j}$ for 
-some $i \leq j$.
+some $i \leq j$; it follows that $\txid \dashrightarrow \txid'$.
 \end{itemize}
-Next, we define a partial order between transactions appearing in $\hh$ 
-as the smallest relation $\rightarrow$ such that for any $\txid, \txid', \txid''$ and 
-$i,j = 0,\cdots, n$
-\[
-\begin{array}{ll}
-\txid \in \T_{i} &\implies \txid_{i} \rightarrow \txid,\\
-i < j &\implies \txid_{i} \rightarrow \txid_{j},\\
-\txid \in \T_{i} \wedge i < j & \implies \txid \rightarrow \txid_{j}\\
-\txid, \txid' \in \T_{i} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \rightarrow \txid'\\
-\txid \rightarrow \txid' \rightarrow \txid'' &\implies \txid \rightarrow \txid''
-\end{array}
-\]
-It is immediate to observe that $\rightarrow$ is an irreflexive relation that contains $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$, 
-hence the latter must also be irreflexive. Equivalently, $\graphof(\hh)$ is acyclic.
+
+We have proved that $\dashrightarrow$ is an irreflexive relation, and it contains $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$; 
+because any subset of an irreflexive relation is itself irreflexive, we obtain that $\graphof(\hh)$ is acyclic.
 \end{proof}
 
 \begin{corollary}
@@ -394,10 +428,10 @@ $\mathsf{KVStores}(\ET_{\PSI}, \mathsf{Counter}(\ke)) \subseteq \mathsf{KVStores
 Let $\hh \in \mathsf{KVStores}(\ET_{\PSI}, \mathsf{Counter}(\ke))$. Because $\ET_{\PSI} \supseteq \ET_{\MRd} \cap \ET_{\RYW} \cap \ET_{\UA}$, 
 we have that $\hh \in \mathsf{KVStores}(\ET_{\MRd} \cap \ET_{\RYW} \cap \ET_{\UA}, \mathsf{Counter}(\ke))$. 
 By \cref{cor:psi_counter_acyclic} we have that $\graphof(\hh)$ is acyclic. We can now employ the construction 
-outlined in \cite{?,laws} to recover an abstract execution $\aexec = (\T_{\hh}, \PO, \VIS, \AR)$ such that $\PO \subseteq \VIS$ and $\AR \subseteq \VIS$, 
+outlined in \cite{laws} to recover an abstract execution $\aexec = (\T_{\hh}, \VIS, \AR)$ such that $\PO \subseteq \VIS$ and $\AR \subseteq \VIS$, 
 and $\graphof(\aexec) = \graphof(\hh)$.
-Finally, by Theorem \ref{thm:}, from $\aexec$ we can recover a $\ET_{\SER}$-trace in 
-$\mathsf{Traces}(\ET_{\SER}, \mathsf{Counter}(\ke))$
+Finally, the results from \cref{sec:sound-complete-ser} establish that, from $\aexec$ we can recover a $\ET_{\SER}$-trace in 
+$\mathsf{Traces}(\ET_{\SER}, \mathsf{Counter}(\ke))$ 
 whose last configuration is $(\hh', \_)$, and 
 $\graphof(\hh') = \graphof(\aexec) = \graphof(\hh)$, leading to $\hh' = \hh$. It follows that $\hh \in 
 \mathsf{KVStores}(\ET_{\SER}, \mathsf{Counter}(\ke))$.
@@ -463,7 +497,7 @@ Snapshot Isolation:
 \begin{proposition}
 \label{prop:si_cycles}
 Let $\hh \in \CM(\ET_{\SI})$. Then the relation $((\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh}) ; \AD_{\hh}?)^{+}$ is 
-irreflexive. 
+irreflexive. ALternatively, $\hh$ only admits cycles with two consecutive $\AD_{\hh}$-edges.
 \end{proposition}
 
 \begin{proof}
@@ -474,18 +508,19 @@ is irreflexive (\cite{feketeSI,SIanalysis,laws}).
 \end{proof}
 
 We only consider 
-the case where the key-value store consists of two counters $\mathsf{Counter}(\ke_1)$ and $\mathsf{Counter}(\ke_2)$, 
-although our line of reasoning can be generalised to an arbitrary number of counters. 
-Therefore, let $\mathsf{Counter} = \mathsf{Counter}(\ke_1) \cup \mathsf{Counter}(\ke_2)$. 
+the case where the transactional library contains two counters, i.e. we 
+consider the transactional library $\Counter(\{\ke_1, \ke_2\})$ for some $\ke_1, \ke_2 \in \Keys$. 
+However, our line of reasoning can be generalised to an arbitrary number of counters. 
+%Therefore, let $\mathsf{Counter} = \mathsf{Counter}(\ke_1) \cup \mathsf{Counter}(\ke_2)$. 
 
-Let also $\hh$ be in $\mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$. Because 
+Let also $\hh$ be in $\mathsf{KVStores}(\ET_{\SI}, \Counter(\{\ke_1, \ke_2\})$. Because 
 $\ET_{\SI} \subseteq \ET_{\PSI}$, $\hh(\ke_1)$ and $\hh(\ke_2)$ satisfy the 
 properties from Proposition \ref{prop:counter_hhshape}. 
 Furthermore, none of the transaction identifiers appearing in $\hh$ appears 
 both in $\hh_{\ke_1}$ and $\hh_{\ke_2}$.
 \begin{proposition}
 \label{prop:si_counter_hhshape1}
-Let $\hh$ be in $\mathsf{KVStores}(\ET_{\PSI}, \mathsf{Counter})$. 
+Let $\hh$ be in $\mathsf{KVStores}(\ET_{\SI}, \Counter(\{\ke_1, \ke_2\}))$. 
 Let $n_1 = \lvert \hh(\ke_1) \rvert$, $n_2 = \lvert \hh(\ke_2) \rvert$. 
 Then there exist $\{\txid_{i}^{\ke_1}\}_{i=1}^{n_1 - 1}$, $\{\txid_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$, 
 $\{\T_{i}^{\ke_1}\}_{i=0}^{n_1-1}$, $\{\T_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$ such that, 
@@ -512,12 +547,12 @@ for $h = 1,2$:
 Each of the properties \eqref{eq:psi_counter_shape}, \eqref{eq:si_counter_rwtxs}, \eqref{eq:si_counter_so} 
 can be proved as in \cref{prop:counter_hhshape}. The fact that $(\hh, \{\txid_{i}^{\ke_{1}}\}_{i=1}^{n_1 - 1}, \{\txid^{\ke_2}_{i}\}_{i=1}^{n_2 - 1}, 
 \{\T_{i}^{\ke_1}\}_{i=0}^{n_1 - 1}, \{\T_{i}^{\ke_2}\}_{i=0}^{n_2-1})$ also satisfies Property \eqref{eq:si_counter_disjoint} 
-follows from the fact that each of the operations in $\mathsf{Counter}$ only access a single key. 
+follows from the fact that each of the operations in $\Counter(\{\ke_1, \ke_2\})$ only access a single key. 
 \end{proof}
 
 Following the proof pattern we employed for a single counter under $\ET_{\PSI}$, we now 
 define a strict partial order $\rightarrow$ among transaction identifiers appearing in a store 
-$\hh \in \mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$, and show that such a 
+$\hh \in \mathsf{KVStores}(\ET_{\SI},  \Counter(\{\ke_1, \ke_2\}))$, and show that such a 
 total order covers the relation $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}$. 
 Because clients may invoke counter operations on different keys, and because the 
 order in which a clients observes versions of different keys is regulated by $\ET_{\SI}$, 
@@ -526,79 +561,123 @@ obtained for a single-key counter under $\ET_\PSI$.
 
 \begin{definition}
 \label{def:si_counter_order}
-Let $\hh \in \mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$, and let 
+Let $\hh \in \mathsf{KVStores}(\ET_{\SI}, \Counter(\{\ke_1, \ke_2\})$, and let 
 $n_1 = \lvert \hh(\ke_1) \rvert$, $n_2 = \lvert \hh(\ke_2) \rvert$. 
 and $\{\txid_{i}^{\ke_1}\}_{i=1}^{n_1 - 1}$, $\{\txid_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$, 
 $\{\T_{i}^{\ke_1}\}_{i=0}^{n_1-1}$, $\{\T_{i}^{\ke_2}\}_{i=0}^{n_2 - 1}$ the indexes 
 and sets such that $(\hh, \{\txid_{i}^{\ke_{1}}\}_{i=1}^{n_1 - 1}, \{\txid^{\ke_2}_{i}\}_{i=1}^{n_2 - 1}, 
 \{\T_{i}^{\ke_1}\}_{i=0}^{n_1 - 1}, \{\T_{i}^{\ke_2}\}_{i=0}^{n_2-1})$ satisfies the property from 
 Proposition \ref{prop:si_counter_hhshape1}. Let $h, l \in \{1,2\}$ with $h \neq l$; we 
-let $\rightarrow$ be the smallest relation such that 
+let $(\dashrightarrow, \twoheadrightarrow, \rightarrow)$ be the smallest relation such that 
 \[
 \begin{array}{ll}
-\txid \in \T^{\ke_{h}}_{i} &\implies \txid^{\ke_{h}}_{i} \rightarrow \txid,\\
-i < j &\implies \txid_{i} \rightarrow \txid_{j},\\
-\txid \in \T^{\ke_{h}}_{i} \wedge i < j & \implies \txid \rightarrow \txid^{\ke_{h}}_{j}\\
-\txid, \txid' \in \T^{\ke_{h}}_{i} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \rightarrow \txid'\\
-\txid \in (\T^{\ke_{h}}_{I} \cup \{\txid^{\ke_{h}}_{l}\}) \wedge \txid' \in (\T^{\ke_{l}}{j} \cup \{\txid^{\ke_l}_{j}\} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \rightarrow \txid'\\
-\txid \rightarrow \txid' \rightarrow \txid'' &\implies \txid \rightarrow \txid''
+\txid \in \T^{\ke_{h}}_{i} &\implies \txid^{\ke_{h}}_{i} \dashrightarrow \txid,\\
+i < j &\implies \txid_{i} \dashrightarrow \txid_{j},\\
+\txid \in \T^{\ke_{h}}_{i} \wedge i < j & \implies \txid \dashrightarrow \txid^{\ke_{h}}_{j}\\
+\txid, \txid' \in \T^{\ke_{h}}_{i} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \dashrightarrow \txid'\\
+\txid \dashrightarrow \txid'' \dashrightarrow \txid &\implies \txid \dashrightarrow \txid'\\
+\txid \in (\T^{\ke_{h}}_{I} \cup \{\txid^{\ke_{h}}_{l}\}) \wedge \txid' \in (\T^{\ke_{l}}{j} \cup \{\txid^{\ke_l}_{j}\} \wedge \txid \xrightarrow{\PO} \txid' &\implies \txid \twoheadrightarrow \txid'\\
+\txid \dashrightarrow \txid' \vee \txid \twoheadrightarrow \txid' &\implies \txid \rightarrow \txid'\\
+\txid \rightarrow \txid'' \rightarrow \txid' &\implies \txid \rightarrow \txid'
 \end{array}
 \]
-
-For the sake of clarity, we write $\txid \twoheadrightarrow \txid'$ in the case that $\txid \rightarrow \txid'$ 
-and either $\txid \in \hh(\ke_1), \txid' \in \hh(\ke_2)$, or $\txid \in \hh(\ke_2), \txid' \in \hh(\ke_1)$. 
-We also let $\txid \dashrightarrow \txid'$ if $\txid \rightarrow \txid'$, and $\txid, \txid' \in \hh(\ke_h)$ 
-for $h = 1,2$.
+%
+%For the sake of clarity, we write $\txid \twoheadrightarrow \txid'$ in the case that $\txid \rightarrow \txid'$ 
+%and either $\txid \in \hh(\ke_1), \txid' \in \hh(\ke_2)$, or $\txid \in \hh(\ke_2), \txid' \in \hh(\ke_1)$. 
+%We also let $\txid \dashrightarrow \txid'$ if $\txid \rightarrow \txid'$, and $\txid, \txid' \in \hh(\ke_h)$ 
+%for $h = 1,2$.
 \end{definition}
-Note that the definition of $\dashrightarrow$ coincides with partial order over transaction 
-identifiers from the proof of \cref{cor:psi_counter_acyclic}, and therefore it is irreflexive.
+Given $\hh \in \CMs(\ET_{\SI}, \Counter(\{\ke_1, \ke_2\}))$, 
+It is important to observe that the definition of $\dashrightarrow$ is a generalisation of the relation 
+with the same notation we defined for a single counter over $\ET_{\PSI}$, and therefore it is irreflexive. 
+Furthermore, whenever $\txid \xrightarrow{\RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh}} \txid'$, it must be the case that 
+$\txid \dashrightarrow \txid'$ (the same does not hold anymore in the case of $\txid \xrightarrow \txid'$, 
+We also observe that whenever $\txid \twoheadrightarrow \txid'$, then it cannot be $\txid \xrightarrow{\RF \cup \VO \cup \AD} \txid'$, 
+because the relation $\twoheadrightarrow$ only relates transactions accessing different keys, and the structure of 
+the multiple counter library ensures that transactions always access exactly one of the two keys $\ke_1, \ke_2$). 
+Finally, note that whenever $\txid \xrightarrow{\PO_{\hh}} \txid'$, then either $\txid, \txid'$ access the same 
+key, and therefore $\txid \dashrightarrow \txid'$, or $\txid, \txid'$ access different keys, and therefore 
+$\txid \twoheadrightarrow \txid'$. It follows that $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{+}$ 
+is contained in $(\dashrightarrow \cup \twoheadrightarrow)^{+} = \rightarrow$; therefore, 
+to prove that $\hh \in \CMs(\ET_{\SER}  \Counter(\{\ke_1, \ke_2\}))$, it suffices to prove that 
+the relation$\rightarrow$ is irreflexive.
+%
+%Note that the definition of $\dashrightarrow$ coincides with partial order over transaction 
+%identifiers from the proof of \cref{cor:psi_counter_acyclic}, and therefore it is irreflexive.
 
 \begin{proposition}
 Let $\hh \in \mathsf{KVStores}(\ET_{\SI}, \mathsf{Counter})$: the relation $\rightarrow$ 
 defined by \cref{def:si_counter_order} is irreflexive.
 \end{proposition}
 
-\begin{proof}[Sketch]
+\begin{proof}
 By contradiction. Suppose that there exists a transaction identifier $\txid \in \hh$ such that 
 $\txid \rightarrow \txid$. Then there exists a cyclic sequence of transaction identifiers 
 $\txid^{0}, \cdots, \txid^{n}$ such that $\txid^{n} =  \txid^{0} = \txid$, and
 \[ 
 \txid^{0} \rightarrow \txid^{1} \rightarrow \cdots \rightarrow \txid^{n}.
 \]
-Without loss of generality, we may assume that such a cycle is minimal: i.e., 
-there exists no shorter cycle induced by the relation $\rightarrow$.
-Because $\txid^{0}$ appears only in $\hh(\ke_1)$ or $\hh(\ke_2)$ 
-(Property \ref{eq:si_counter_disjoint}), and because transitions of the form 
-$\txid \twoheadrightarrow \txid'$ are defined between transaction identifiers 
-appearing in the list of versions of different keys in $\hh$, then it 
-must be the case that the sequence above contains an even number of 
-$\twoheadrightarrow$ transitions. If such a number is zero, then it is immediate to observe that 
-$\txid^{0} \neq \txid^{n}$, leading to a contradiction. 
-Suppose then that that there exist two different indexes $i, j$ such that 
-$\txid^{i} \twoheadrightarrow \txid^{i+1}$ and $\txid^{j} \twoheadrightarrow \txid^{j+1}$. Without loss of 
-generality, suppose that $i < j$, and for no index $h: h < i \vee h > j$ we have $\txid^{h} \twoheadrightarrow \txid^{h+1}$. 
-%Let $\dashrightarrow$ be the reflexive, transitive closure of $\rightarrow$, and 
-Observe that in this case we have $\txid^{i} \twoheadrightarrow \txid^{i+1} \dashrightarrow^{?} \txid{j} \twoheadrightarrow \txid^{j+1} 
-(\dashrightarrow)^{?} \txid^{i}$, where $\dashrightarrow^{?}$ is the reflexive closure of $\dashrightarrow$.
-In fact, by definition, $\txid^{i+1} \in \{\WTx(\hh(\ke_{h}, p)\} \cup \RTx(\hh(\ke_{h}, p))$ 
-for $h=1,2$ and $p = 0,\cdots, \lvert \hh(\ke_{h}) \rvert - 1$, 
-$\txid_{j} \in \{ \WTx(\hh(\ke_{h}, q)\} \cup \RTx(\hh(\ke_{h}, q))$ for some $q = 0,\cdots, \lvert \hh(\ke_{h}) \rvert - 1$. 
-Observe that for any two transaction identifier $\txid, \txid' \in \hh(\ke_h)$ we have that either 
-$\txid \dashrightarrow \txid'$, $\txid = \txid'$ or $\txid' \dashrightarrow \txid$. In particular, 
-either $\txid^{i+1} \dashrightarrow \txid^{j}, \txid^{i+1} = \txid^{j}$ or $\txid^{j} \dashrightarrow \txid^{i+1}$. 
-If we have that $\txid^{j+1} \dashrightarrow \txid^{j}$, then we can easily find a cycle of the form
-$\txid^{j} \rightarrow \txid^{i+1} \rightarrow{\txid^{j}}$, contradicting the minimality of the cycle that we have considered. 
-Therefore, it must be $\txid^{i+1} \dashrightarrow^{?} \txid^{j}$. The fact that $\txid^{j+1} \dashrightarrow^{?} \txid^{i}$ 
-follows from the fact that we chose the indexes $i, j$ so that for no index $h: h < i \vee h > j$ we have $\txid^{h} \twoheadrightarrow \txid^{h+1}$. 
-
-Finally, note that the cyclic path $\txid^{i} \twoheadrightarrow \txid^{i+1} \dashrightarrow^{?} \txid{j} \twoheadrightarrow \txid^{j+1} 
-(\dashrightarrow)^{?} \txid^{i}$ correspond to a cycle in $\graphof(\hh)$ of the form: 
-\[
-\txid^{i} \xrightarrow{\PO_{\hh}} \txid^{i+1} \xrightarrow{(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}} 
-\txid^{j} \xrightarrow{\PO_{\hh}} \txid^{j+1} \xrightarrow{(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}} 
-\txid^{i}
+First note that, because $\rightarrow = (\dashrightarrow \cup \twoheadrightarrow)^{+}$, 
+and because $\dashrightarrow$ is transitive and irreflexive, then it must be the 
+case that the cycle above contains at least one edge of the form $\txid^{i} \twoheadrightarrow \txid^{i+1}$. 
+Because the relation $\twoheadrightarrow$ only relates transactions accessing different object, 
+then it must be the case that the cycle above also contains a second edge $\txid^{j} \twoheadrightarrow \txid^{j+1}$, 
+where $j \neq i$: this is because if the cycle above contained exactly one edge labelled as $\twoheadrightarrow$, 
+then $\txid^{0} = \txid^{n}$ would need to access both keys $\ke_1$ and $\ke_2$, contradicting the 
+fact that the operations from $\Counter(\{\ke_1, \ke_2\})$ only access a single object. 
+Thus, the cycle above can be rewritten as 
+\[ 
+\txid \twoheadrightarrow \txid^{a} (\dashrightarrow \cup \twoheadrightarrow)^{+} \txid^{b} \twoheadrightarrow  \txid^{c} (\dashrightarrow \cup \twoheadrightarrow)^{+} \txid, 
 \]
-which contradicts Proposition \ref{prop:si_cycles}.
+where $\txid = \txid^{i}$ for some $i=0,\cdots, n-1$. Note that it cannot be $\txid^{a} = \txid^{b}$, because 
+otherwise we would have $\txid \twoheadrightarrow \twoheadrightarrow \txid$, or equivalently 
+$\txid \xrightarrow{\PO_{\hh}} \txid$, contradicting the acycicity of the relation $\PO_{\hh}$. 
+Also note that the relation $(\dashrightarrow \cup \twoheadrightarrow)^{+} ; \twoheadrightarrow$ can be rewritten as 
+$(\dashrightarrow^{*} ; \twoheadrightarrow)^{+}$, and because $\dashrightarrow$ is transitive, 
+this is equivalent to $(\dashrightarrow^{?} ; \twoheadrightarrow)^{+}$, where $\dashrightarrow^{?}$ is 
+the reflexive closure of $\dashrightarrow^{?}$. 
+We have determined that the presence of a cycle in the relation $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{+}$ 
+implies the existence of a cycle of the form 
+\[
+\txid \twoheadrightarrow \_ \dashrightarrow^{?} \ \cdots \twoheadrightarrow \_ \dashrightarrow^{?} \txid.
+\]
+However, because any edge labelled as $\twoheadrightarrow$ cannot correspond to a $\AD_{\hh}$ edge, 
+it follows that the orignal cycle cannot have two adjacent $\AD_{\hh}$-edges. 
+%
+%Without loss of generality, we may assume that such a cycle is minimal: i.e., 
+%there exists no shorter cycle induced by the relation $\rightarrow$.
+%Because $\txid^{0}$ appears only in $\hh(\ke_1)$ or $\hh(\ke_2)$ 
+%(Property \ref{eq:si_counter_disjoint}), and because transitions of the form 
+%$\txid \twoheadrightarrow \txid'$ are defined between transaction identifiers 
+%appearing in the list of versions of different keys in $\hh$, then it 
+%must be the case that the sequence above contains an even number of 
+%$\twoheadrightarrow$ transitions. If such a number is zero, then it is immediate to observe that 
+%$\txid^{0} \neq \txid^{n}$, leading to a contradiction. 
+%Suppose then that that there exist two different indexes $i, j$ such that 
+%$\txid^{i} \twoheadrightarrow \txid^{i+1}$ and $\txid^{j} \twoheadrightarrow \txid^{j+1}$. Without loss of 
+%generality, suppose that $i < j$, and for no index $h: h < i \vee h > j$ we have $\txid^{h} \twoheadrightarrow \txid^{h+1}$. 
+%%Let $\dashrightarrow$ be the reflexive, transitive closure of $\rightarrow$, and 
+%Observe that in this case we have $\txid^{i} \twoheadrightarrow \txid^{i+1} \dashrightarrow^{?} \txid{j} \twoheadrightarrow \txid^{j+1} 
+%(\dashrightarrow)^{?} \txid^{i}$, where $\dashrightarrow^{?}$ is the reflexive closure of $\dashrightarrow$.
+%In fact, by definition, $\txid^{i+1} \in \{\WTx(\hh(\ke_{h}, p)\} \cup \RTx(\hh(\ke_{h}, p))$ 
+%for $h=1,2$ and $p = 0,\cdots, \lvert \hh(\ke_{h}) \rvert - 1$, 
+%$\txid_{j} \in \{ \WTx(\hh(\ke_{h}, q)\} \cup \RTx(\hh(\ke_{h}, q))$ for some $q = 0,\cdots, \lvert \hh(\ke_{h}) \rvert - 1$. 
+%Observe that for any two transaction identifier $\txid, \txid' \in \hh(\ke_h)$ we have that either 
+%$\txid \dashrightarrow \txid'$, $\txid = \txid'$ or $\txid' \dashrightarrow \txid$. In particular, 
+%either $\txid^{i+1} \dashrightarrow \txid^{j}, \txid^{i+1} = \txid^{j}$ or $\txid^{j} \dashrightarrow \txid^{i+1}$. 
+%If we have that $\txid^{j+1} \dashrightarrow \txid^{j}$, then we can easily find a cycle of the form
+%$\txid^{j} \rightarrow \txid^{i+1} \rightarrow{\txid^{j}}$, contradicting the minimality of the cycle that we have considered. 
+%Therefore, it must be $\txid^{i+1} \dashrightarrow^{?} \txid^{j}$. The fact that $\txid^{j+1} \dashrightarrow^{?} \txid^{i}$ 
+%follows from the fact that we chose the indexes $i, j$ so that for no index $h: h < i \vee h > j$ we have $\txid^{h} \twoheadrightarrow \txid^{h+1}$. 
+%
+%Finally, note that the cyclic path $\txid^{i} \twoheadrightarrow \txid^{i+1} \dashrightarrow^{?} \txid{j} \twoheadrightarrow \txid^{j+1} 
+%(\dashrightarrow)^{?} \txid^{i}$ correspond to a cycle in $\graphof(\hh)$ of the form: 
+%\[
+%\txid^{i} \xrightarrow{\PO_{\hh}} \txid^{i+1} \xrightarrow{(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}} 
+%\txid^{j} \xrightarrow{\PO_{\hh}} \txid^{j+1} \xrightarrow{(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{\ast}} 
+%\txid^{i}
+%\]
+This contradicts Proposition \ref{prop:si_cycles}.
 %Finally, let us consider the order in which transactions $\txid^{i}, \txid^{i+1}, \txid^{j}, \txid^{j+1}$ must have been 
 %executed to give rise to the kv-store $\hh$. Because $\txid^{i} \twoheadrightarrow \txid^{i+1}$, it must 
 %be the case that $\txid^{i}$ has been executed before $\txid^{i+1}$; similarly we can prove that $\txid^{i}$ 
