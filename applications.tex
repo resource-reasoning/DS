@@ -129,69 +129,72 @@ and so is $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$.
 
 \subsection{Verifying Implementations}
 \label{sec:verify-impl}
-\sx{
-    Short intro why it is good to use our models
-
-    What are cops and then clock-si.
-    how we verify
-}
-Compared with graph-based models including dependency graphs and abstract executions,
-our state-based model is useful for verifying implementations,
-because many implementations embed notions of global kv-stores and local views.
-For centralise databases, the state of the centralised server corresponds the kv-store,
-and the views reflect the initial local states that transactions work on.
-For distributed databases, since most distributed databases satisfy eventual consistency, 
-\ie servers among the system eventually agree on states,
-these states collectively can be encoded to a kv-store.
-Views reflect the local states of servers.
-We verify two implementations in the literature, 
+%\sx{
+%    Short intro why it is good to use our models
+%
+%    What are cops and then clock-si.
+%    how we verify
+%}
+Our representation of database state as kv-stores and client views closely matches the representation of database state in many well-known implementations~\cite{??}.
+As such, when verifying such implementations, our state-based formalisms is better-suited than the existing graph-based formalisms of dependency graphs and abstract executions. 
+In centralised databases, the state of the centralised server corresponds to a kv-store,
+and the local snapshots that transactions operate on are extracted from our views.  
+In distributed databases, each replica state corresponds to a view. 
+Moreover, since most distributed databases are eventual consistent, 
+\ie all replicas eventually agree on the database state,
+replica states can be collectively encoded as a kv-store.
+We verify the correctness of two database implementations in the literature,
 COPS~\cite{Lloyd:2011:DSE:2043556.2043593} and Clock-SI~\cite{Du:2013:CSI:2553409.2553434}.
 
-\mypar{\bf COPS}
-COPS is a fully replicated database, that is, 
-each server also known as replica contains all keys yet the associated values may be out of date.
-Synchronisation between replicas guarantees that each replica is in a valid yet maybe out-of-date state.
-Therefore, clients only read or write to a replica.
-A replica stores all versions that are aware of,
-Versions among all keys are totally ordered given that
-COPS restraints the API that only allows single-write or multiple reads transactions.
-Each version has a \emph{dependency} that are other versions it depends on.
-COPS uses the dependencies to ensure any reads satisfy causal consistency.
-A client maintains a context which are versions 
-that have been fetched from some replicas or committed to ones.
+\mypar{COPS}
+COPS is a fully replicated database: each replica contains all keys, but their associated values may be out of date.
+Database clients operate on a single replica; 
+synchronisation between replicas ensures that each replica is in a consistent (albeit out-of-date) state.
+The COPS API follows the multiple-readers-single-writer paradigm: 
+at any given time, the database can be accessed by either multiple read-only concurrent transactions, or a single writing transaction. 
+As such, all versions (on all keys) are totally ordered. 
+To ensure causal consistency, each version $\ver$ records a \emph{dependency set}, written $\func{dep}{\ver}$,
+tracking the versions on which $\ver$ depends.
+A client maintains a context tracking the versions that have been either fetched from, or committed to, other replicas.
+%
+%When running a read-only transaction, 
+%the replica returns a list of versions,  $\vilist = \ver^{1}_{\ke_1}, \dots \ver^{n}_{\ke_n}$,
+%such that each $\ver^i_\ke \in \vilist$ is greater than or equal than those in the dependency of $\vilist$.
+%That is, $\for{\ke} \for{\ver, \ver_\ke^i \in \vilist} \for{\ver_\ke^j \in \func{dep}{\ver}} i \geq j$. 
+%
+%%%%%To read multiple keys in a transaction, the replica returns a list of versions \( \vilist = \ver^{i_1}_{\ke_1}, \dots \ver^{i_n}_{\ke_n} \) 
+%%%%%that are either equal or greater than any versions in the dependencies,
+%%%%%\ie \( \fora{\ke, \ver, \ver^{i}_{\ke}, \ver^{j}_{\ke}} \ver \in \vilist \land \ver^{i}_{\ke} \in \vilist \land \ver^{j}_{\ke} \in \func{dep}{\ver} \implies i \geq j \).
+%
+%After running a writing transaction, in order to commit a new version to the replica, the client must provide its context. 
+%A version is accepted by the replica only once all versions from the dependency have been made known to the same replica,
+%otherwise it is put in the pending list.
+%
+We encode the COPS replicas as a kv-store, and encode client contexts as views.  
+%We encode kv-store that includes all versions from all replicas, at any given time.
+%A client context then converts to a view on the kv-store, 
+%\ie if a version in the context then it is in the view.
+We show that the COPS implementation is causally consistent in that it is sound with respect to the $\CMs(\ET_\CC)$
+specification, where $\ET_\CC$ is the causal consistency execution test in \cref{fig:execution_tests}.
+%We show that the views before and after any COPS transaction,
+%satisfy the execution tests for causal consistency in \cref{fig:execution.tests}.
+The COPS implementation and our soundness proof are given in \cref{sec:cops}.
 
-To read multiple keys in a transaction, the replica returns a list of versions \( \vilist = \ver^{i_1}_{\ke_1}, \dots \ver^{i_n}_{\ke_n} \) 
-that are either equal or greater than any versions in the dependencies,
-\ie \( \fora{\ke, \ver, \ver^{i}_{\ke}, \ver^{j}_{\ke}} \ver \in \vilist \land \ver^{i}_{\ke} \in \vilist \land \ver^{j}_{\ke} \in \func{dep}{\ver} \implies i \geq j \).
-To commit a new version, the client also provides the context as the dependency.
-A version is accepted by a replica
-only until all versions from the dependency have been aware to the same replica,
-otherwise it is put in the pending list.
-
-We encode kv-store that includes all versions from all replicas, at any given time.
-A client context then converts to a view on the kv-store, 
-\ie if a version in the context then it is in the view.
-We show that the views before and after any COPS transaction,
-satisfy the execution tests for causal consistency in \cref{fig:execution.tests}.
-The full detail is in \cref{sec:cops}.
-
-\mypar{\bf Clock-SI}
-Clock-SI is a sharded database implementation for snapshot isolation.
-A server also called a shard hosts a disjointed fragment of keys.
-To implements snapshot isolation, Clock-SI uses physical times.
-Obviously, times on shards will not always match, but it is assumed that the difference is bounded.
-Each key keeps the history of versions consisting of the values and the commit times.
-When a transaction starts, it gets a snapshot time by a shard 
-and from now on this shard is the coordinator for the transaction.
-Such transaction can read other shard, delegated by the coordinator, only if the local time is greater than the snapshot time.
-At the end, a transaction can commit if there is no transaction with conflict writes since the snapshot time.
-
-We encode kv-store as the union of all shard.
-Over the kv-store, 
-A time corresponds to a unique view,
-which contains all versions committed before.
-To verify the Clock-SI, 
-we show the views constructed from the snapshot time and commit time,
-if a transaction successfully commits, 
-satisfy the execution tests for snapshot isolation in \cref{fig:execution.tests}.
-The full detail is in \cref{sec:clock-si}.
+\mypar{Clock-SI}
+Clock-SI is a \emph{sharded} database implementation for snapshot isolation (SI),
+where different shards host disjoint fragments of keys.
+As with the original definition of SI, Clock-SI uses timestamps to maintain different versions. 
+The clocks on different shards may not agree; however, the difference is assumed to be bounded.
+Each key keeps a history of versions, where each version comprises a value and the commit timestamp.
+Each transaction $\txid$ is assigned to a designated shard, known as the $\txid$ \emph{coordinator}. 
+When $\txid$ starts, it obtains a snapshot and records the snapshot timestamp at its coordinator shard.
+Transaction $\txid$ may then read from shards other than its coordinator, so long as the current timestamp at those shards are greater than the recorded snapshot time. 
+Once $\txid$ completes, it may commit if  no transaction with a conflicting write has committed since the snapshot time.
+%
+We encode the shards collectively as a kv-store. 
+Each snapshot timestamp is encoded as a view, contains all versions committed before that timestamp.
+We show that Clock-SI is sound with respect to the $\CMs(\ET_\SI)$
+specification, where $\ET_\SI$ is the snapshot isolation execution test in \cref{fig:execution_tests}.
+%We show that the views before and after any COPS transaction,
+%satisfy the execution tests for causal consistency in \cref{fig:execution.tests}.
+The Clock-SI implementation and our soundness proof are given in \cref{sec:clock-si}.
