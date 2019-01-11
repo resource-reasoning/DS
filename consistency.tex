@@ -92,18 +92,17 @@ initial configuration.
 \begin{definition}[Consistency Model]
 \label{def:cm}
 Given an execution test $\ET$,  
-%and an initial configuration $\conf_0$ (\cref{def:configuration}),
 \ac{The configuration $\Gamma_0$ is not free in the definition above, 
 so you don't need to assume an initial configuration $\conf_{0}$. I removed 
 it.}
 the set of \emph{configurations induced by $\ET$},  $\Confs(\ET)$, is   given by: 
-\[
+\(
 \Confs(\ET)\defeq 
 \Setcon{ \conf}{ 
 	\exsts{\conf_0 \in \Confs_0}
 	\conf_0 \xrightarrowtriangle{}_{\ET}^{*} \conf
 }
-\]
+\).
 The \emph{consistency model} induced by $\ET$ is defined as:
 \( 
 \CMs(\ET) \defeq \Setcon{ \hh }{ (\hh, \stub) \in \Confs(\ET) }
@@ -144,7 +143,6 @@ Consider the following:
 \end{array}
 \]
 with 
-%\begin{align*}
 \[
     \begin{array}{l@{} l}
     \hh_{\ke} & = \hh_{0}[\ke \mapsto (0, \txid_{0}, \emptyset) \lcat (1, \_, \emptyset)] \\
@@ -153,7 +151,6 @@ with
                 ,\ke' \mapsto (0, \txid_{0}, \emptyset) \lcat (1, \_, \emptyset)] \\
 \end{array}
 \]
-%\end{align*}
 As both $\ET_1$ and $\ET_2$ allow a version with value $1$ to be written for 
 $\ke, \ke'$,  we have $\hh' \in \CMs(\ET_1) \cap \CMs(\ET_2)$. 
 However, $\ET_1$ and $\ET_2$ enforce a different order in which the writes on $\ke, \ke'$ must happen; 
@@ -162,6 +159,79 @@ thus $\hh' \notin \CMs(\ET_1 \cap \ET_2)$.
 In this example, compositionality fails because execution tests 
 enforced a particular order in which the updates must be committed, even though such updates 
 are non-conflicting: the kv-store obtained after committing such updates is independent of the commit order. This observation is captures in the following definition: 
+
+\begin{figure*}[!t]
+\begin{center}
+    \scalebox{.9}{%
+    \begin{tabular}{ @{} l  r ||  l  r @{} }
+\hline
+Model & Execution Test: \((\hh, \vi) \csat \opset : (\mkvs',\vi')\) &
+Model & Execution Test: \((\hh, \vi) \csat \opset : (\mkvs',\vi')\)
+\\
+\hline
+\MRd & $\vi \viewleq \vi'$ &
+\UA & $(\otW, \ke,  \stub) \in \opset \land 0 \leq i < \lvert \hh(\ke)
+      \rvert \implies i \in \vi(\ke) $
+\\
+\MW & 
+$j \in \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO^?} \WTx(\hh(\ke, j)) 
+\implies i \in \vi(\ke')$ &
+\PSI & $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$
+\\
+\RYW & $ \txid \in \mkvs' \wedge \txid \notin \mkvs \land \WTx(
+\mkvs'(\ke, i) ) \xrightarrow{\PO^?} \txid \implies i \in \vi'(\ke) $ &
+\CP & \( \Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW \) 
+\\
+\WFR & $j \in \vi(\ke) \wedge \txid \in \RTx(\hh(\ke', i)) \wedge \txid {\xrightarrow{\PO^?}}
+\WTx(\mkvs(\ke, j))  \implies i \in \vi(\ke')$ &
+$\SI$ & $\Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\ddagger} \cap \ET_\MRd \cap \ET_\RYW  \cap \ET_\UA $
+\\
+\CC & $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$ &
+\SER & $ 0 \leq i < \lvert \hh(\ke) \rvert \implies i \in \vi(\ke) $\\
+\hline
+\end{tabular}%
+}
+\end{center}
+%
+with
+\vspace*{-5pt}
+\[  
+    \begin{rclarray}
+        \dagger 
+        & \eqdef &  
+        \fora{\ke, \ke', i, j}
+         i \in \vi(\ke)  \wedge 
+         \WTx(\hh(\ke', j)) \toEdge{((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup \WW_\hh )^{+}} \WTx(\hh(\ke, i))
+        \implies j \in \vi(\ke')  \\
+        \ddagger 
+        & \eqdef &
+        \fora{\ke, \ke', i, j}
+        i \in \vi(\ke)
+        \wedge \WTx(\hh(\ke', j)) \toEdge{((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup (\WW_\hh; \RW_\hh^{?}) )^{+}} \WTx(\hh(\ke, i))
+        \implies j \in \vi(\ke')    
+    \end{rclarray}
+\]
+\vspace*{-5pt}
+\[
+    \begin{rclarray}
+       \RF_{\hh} &\defeq& \{ (\txid, \txid') \mid \exists \ke, i.\; \txid = \WTx(\hh(\ke, i)) \wedge \txid' \in \RTx(\hh(\ke, i))\}\\
+     \VO_{\hh} &\defeq& \{ (\txid, \txid') \mid \exists \ke, i, j.\; \txid = \WTx(\hh(\ke, i)) \wedge \txid' = \WTx(\hh(\ke, j)) \wedge i < j\}\\
+        \AD_{\hh}&\defeq& \{ (\txid, \txid') \mid \exists \ke, i,
+        j.\; \txid \in \RTx(\hh(\ke, i)) \wedge \txid' = \WTx(\hh(\ke,
+        j)) \wedge i < j \land \txid \neq \txid'\}
+\end{rclarray}
+\]
+\hrule\vspace{5pt}
+\captionsetup{width=\linewidth}
+\caption{Execution tests of client-centric (left) and data-centric (right) consistency models, 
+with $\PO$ as defined in \cref{subsec:kvstores}. 
+All free variables are universally quantified.
+}
+\label{fig:execution.tests}
+\label{fig:execution_tests}
+\vspace*{-10pt}
+\end{figure*}
+
 
 \begin{definition}
 Two fingerprints $\opset_1$ and $\opset_2$ are \emph{conflicting} 
@@ -199,19 +269,7 @@ and for any
 $i=1,\cdots, \lvert \tau_1'\rvert$, the pre and post kv-store of $\tau_1'(i)$,
  coincide with the action, pre and post kv-store 
 of $\tau_2(i)$.
-%$\ET_1$ is a commutative execution test, and consider two traces, 
-%produced under the execution tests $\ET_1$ and $\ET_2$, respectively, 
-%that terminate in a configuration of the form $(\hh, \stub)$. Let $n$ be 
-%the number of reductions appearing in the $\ET_2$-trace.
-% Intuitively, the kv-store $\hh$ determines the set of fingerprints that appear in 
-%such two traces, which therefore must be the same; furthermore, 
-%the commutativity of $\ET_1$ guarantees that we can re-order the 
-%sequence of reductions of the considered $\ET$-trace so that, for any 
-%$i=1,n$, the action of its $i$-th reduction matches the action of the 
-%$i$-th reduction in the $\ET_2$-trace. Similarly, we ensure that 
-%the pre and post kv-store of the $i$-th reduction of the re-ordered $\ET_1$ 
-%trace coincide with the pre and post kv-store of the $i$-th reduction of the 
-%$\ET_2$ trace.
+
 
 Commutativity alone does not ensure that, for $i=1,\cdots,\lvert \tau_2 \rvert$ the 
 pre-views and post-views of $\tau_1'(i)$ 
@@ -299,84 +357,11 @@ are inherently non-commutative.
 %\ac{This paragraph does not make sense anymore, as we did not introduce the examples of execution tests yet. Move somewhere else.}
 
 
-\subsection{Examples}\label{subsec:cm_examples}
 
-\begin{figure*}
-\begin{center}
-    \scalebox{.9}{%
-    \begin{tabular}{ @{} l  r ||  l  r @{} }
-\hline
-Model & Execution Test: \((\hh, \vi) \csat \opset : (\mkvs',\vi')\) &
-Model & Execution Test: \((\hh, \vi) \csat \opset : (\mkvs',\vi')\)
-\\
-\hline
-\MRd & $\vi \viewleq \vi'$ &
-\UA & $(\otW, \ke,  \stub) \in \opset \land 0 \leq i < \lvert \hh(\ke)
-      \rvert \implies i \in \vi(\ke) $
-\\
-\MW & 
-$j \in \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO^?} \WTx(\hh(\ke, j)) 
-\implies i \in \vi(\ke')$ &
-\PSI & $\ET_{\PSI} = \ET_{\CC} \cap \ET_{\UA}$
-\\
-\RYW & $ \txid \in \mkvs' \wedge \txid \notin \mkvs \land \WTx(
-\mkvs'(\ke, i) ) \xrightarrow{\PO^?} \txid \implies i \in \vi'(\ke) $ &
-\CP & \( \Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW \) 
-\\
-\WFR & $j \in \vi(\ke) \wedge \txid \in \RTx(\hh(\ke', i)) \wedge \txid {\xrightarrow{\PO^?}}
-\WTx(\mkvs(\ke, j))  \implies i \in \vi(\ke')$ &
-$\SI$ & $\Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\ddagger} \cap \ET_\MRd \cap \ET_\RYW  \cap \ET_\UA $
-\\
-\CC & $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$ &
-\SER & $ 0 \leq i < \lvert \hh(\ke) \rvert \implies i \in \vi(\ke) $\\
-\hline
-\end{tabular}%
-}
-\end{center}
-%
-with
-\vspace*{-5pt}
-\[  
-    \begin{rclarray}
-        \dagger 
-        & \eqdef &  
-        \fora{\ke, \ke', i, j}
-         i \in \vi(\ke)  \wedge 
-         \WTx(\hh(\ke', j)) \toEdge{((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup \WW_\hh )^{+}} \WTx(\hh(\ke, i))
-        \implies j \in \vi(\ke')  \\
-        \ddagger 
-        & \eqdef &
-        \fora{\ke, \ke', i, j}
-        i \in \vi(\ke)
-        \wedge \WTx(\hh(\ke', j)) \toEdge{((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup (\WW_\hh; \RW_\hh^{?}) )^{+}} \WTx(\hh(\ke, i))
-%     \wedge \WTx(\hh(\ke', j)) \toEdge{(\WW_\hh \cup \WR_\hh \cup \SO \cup ( (\WR_\hh \cup \SO) ; \RW_\hh ) \cup (\WW_\hh; \RW_\hh) )^{+}} \WTx(\hh(\ke, i)) 
-        \implies j \in \vi(\ke')    
-    \end{rclarray}
-\]
-\vspace*{-5pt}
-%
-%   \RF_{\hh} \VO_{\hh}  \AD_{\hh}
-\[
-    \begin{rclarray}
-       \RF_{\hh} &\defeq& \{ (\txid, \txid') \mid \exists \ke, i.\; \txid = \WTx(\hh(\ke, i)) \wedge \txid' \in \RTx(\hh(\ke, i))\}\\
-     \VO_{\hh} &\defeq& \{ (\txid, \txid') \mid \exists \ke, i, j.\; \txid = \WTx(\hh(\ke, i)) \wedge \txid' = \WTx(\hh(\ke, j)) \wedge i < j\}\\
-        \AD_{\hh}&\defeq& \{ (\txid, \txid') \mid \exists \ke, i,
-        j.\; \txid \in \RTx(\hh(\ke, i)) \wedge \txid' = \WTx(\hh(\ke,
-        j)) \wedge i < j \land \txid \neq \txid'\}
-\end{rclarray}
-\]
-\hrule\vspace{5pt}
-\captionsetup{width=\linewidth}
-\caption{Execution tests of client-centric (left) and data-centric (right) consistency models, 
-with $\PO$ as defined in \cref{subsec:kvstores}. 
-All free variables are universally quantified.
-}
-\label{fig:execution.tests}
-\label{fig:execution_tests}
-\end{figure*}
 
 \input{\RootPath/specs/anomalies-fig.tex}
 
+\subsection{Examples}\label{subsec:cm_examples}
 We now give examples of execution tests in~\cref{fig:execution.tests},
 where the associated consistency models for kv-stores correspond to
 widely adopted consistency guaranteees for distributed databases.
@@ -486,95 +471,31 @@ $\AD_{\hh}$ defined in \ref{fig:execution.tests}, adapted from well-known
 transaction relations associated with dependency graphs~\cite{adya-icde,adya}. 
 If $(\txid,\txid') \in \WR_\hh$ (resp. \SO) then it {must} be
 the case that $\txid$ commits before the start of $\txid'$, hence before the commit of $\txid'$.
-If $(\txid,\txid'') \in \RF_{\hh}$ (resp. \SO) and $(\txid'',\txid') \in \AD_\hh$, then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, since a property of
+If $(\txid,\txid'') \in \RF_{\hh}$ (resp. \SO) and $(\txid'',\txid') \in \AD_\hh$, 
+then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, since a property of
 $\txid'' \toEdge{\AD_\hh} \txid$ is that the start of $\txid''$ must occur before $\txid'$ commits.
 Last, if $(\txid,\txid') \in \WW_\hh$ then it {must} be
 the case that $\txid$ commits before the commit of $\txid'$.
 The relation $((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup \WW_\hh )^{+} \ni (\txid, \txid')$
-captures that, {\em all} the transactions $\txid$ that {must} have already committed to the kv-store before commit of \( \txid' \).
+captures that, {\em all} the transactions $\txid$ that {must} 
+have already committed to the kv-store before the commit of \( \txid' \).
 The $\dagger$ in \cref{fig:execution.tests} captures the property that if a transaction sees 
 the writes of a transaction then it observes the writes of all previously committed
 transactions. 
 The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MRd \cap \ET_\RYW$,
 where the latter enforces a client sees its own commits.
-
-\pg{Example?}
- %The interesting
-%case is the use of the $\AD_{\hh}$ relation: by itself, this relation
-%only identifies reads happening before writes; however, used in the
-%relations $\PO ;
-%\AD_{\hh}$, it identifies further  writes happening
-%before $t$. The $\ddagger$ relation
-%\[
-%\WTx(\hh(\ke', j)) \toEdge{((\PO ; \AD_{\hh}? )\cup \RF_{\hh} \cup \etVO_{\hh})^{+}} t
-%\]
-%identifies all the writes that occur before $t$, where $+$ is the
-%transitive closure. 
-
-
-
-%ensures that the initial view is 
-%closed with respect to this $\dagger$  relation, and the updated view 
-%increases ($ \ET_\MRd $) and 
-%includes the writes associated with the fingerprint using the
-%session order ($\ET_\RYW $).
-
-%\pg{Above, presumably, with Section 5 you have proved somewhere that \[
-%\WTx(\hh(\ke', j)) \toEdge{((\PO ; \AD_{\hh}? )\cup \RF_{\hh} \cup \VO_{\hh})^{+}} t
-%\]
-%identifies all the writes that occur before $t$? Can you reference
-%this? All we know from here is that the writes happen before $t$, we
-%do not know that we have all of them.
-
-%We coupld perhaps justify transitivity and $\ET_{\CP}$ more. }
-
-
-\pg{Do we know that the CM relation commutes with union and ;? }
-
-%\pg{Below are my old comments when I had lost it.  I like above much
- % better than below because it's explained in terms of kv-stores
- % alone. Here we are justifying kv-stores, next section we are linking
- % to dependency graphs and abstract execution.}
-
-%Inspired by dependency graph \cite{.....},
-%there are minimum observable transactions for each transaction derived from the following:
-%\[
- %   \SO  \subseteq  \VIS \qquad
-  %  ( ( ( \SO \cup \WR ) ; \RW? )^* \cup \WW ) ; \VIS \subseteq \VIS
-%\]
-
-%define earlier so not explained here, get rid of all but essential
-%detail as difficult enough, people do not need to be reminded what
-%composition is
-%where the \( R? \) is the reflexive closure of the relation \( R \) 
-%and \( R_1 ; R_2 \defeq \Setcon{(a,b)}{\exsts{c} (a,c) \in R_1 \land
-%(c,b) \in R_2 } \) is the composition of the two relation.
-%\pg{What are the minimum observable transitions?}
-%Given the minimum observable transactions, we can specify $\CP$. 
-%\pg{Next sentence, the  English and formal relation $
- % \ET_\RYW $ do not match.}
-%First, \( \SO \subseteq \VIS \) means a transaction observes all previous transactions from the same client,
-%and it is enforced by \( \ET_\RYW \).
-%\pg{At this point, I previously gave up.}
-%Then the combination of \( \dagger\) (\cref{fig:execution-tests}) and
-%\( \ET_\MRd \) gives us \( ( ( ( \SO \cup \WR ) ; \RW? )^* \cup \WW )
-% \VIS \subseteq \VIS \).
-
-
-
-%Let consider a client \( \cl \) and the view \( \vi \).
-%Assume two transactions \( \txid, \txid' \)  such that \( \txid' \) is in the view \( \vi \) and \( \txid \toEdge{( ( ( \SO \cup \WR ) ; \RW? )^* \cup \WW )} \txid' \).
-%If \( \txid' \) is a transaction already observable by some previous transaction from the client \( \cl \), 
-%the transaction \( \txid \) must be observable by that time,
-%therefore by the \( \ET_\MRd \), the transaction \( \txid \) is in the current view \( \vi \).
-%Otherwise, if \( \txid' \) is a transaction that is first time observed by the client \( \cl \),
-%the \( \ddagger \) predicate enforces \( \txid \) is also in the view
-%\( \vi \).
-
-
+For the long fork anomaly \cref{fig:cp-disallowed},
+if \( \txid_{\cl_2}^2\) is the last transaction, it reads and thus sees \( \txid' \).
+From the kv-store, we have:
+\[
+\txid \toEdge{\WR_\hh} \txid^1_{\cl_1} \toEdge{\SO} \txid^2_{\cl_1} \toEdge{\RW_\hh} \txid'
+\]
+which means, by \( \dagger \), transactions \( \txid_{\cl_2}^2 \) must see \( \txid \).
+However, \(  \txid_{\cl_2}^2 \) reads a older version of \( \ke_1 \) than the one written by \( \txid \).
+Similarly,
+if \( \txid_{\cl_1}^2\) is the last transaction, it sees \( \txid \) and so must see \( \txid' \).
 
 \mypar{Snapshot Isolation (\SI)}
-
 When the total order in which transactions commit is known then
 $\SI = \CP \cap \UA$~\cite{gsi,framework-concur}.  When we just have
 the partial order given by kv-stores and views, then the analogous equality does
@@ -583,7 +504,7 @@ included in both $\CMs(\ET_{\CP})$ and $\CMs(\ET_{\UA})$, but is
 disallowed by \SI.  
 In our specification, \( \ET_\SI \) is the combination of \( \ET_\UA \), all constraint from \( \ET_\CP \),
 and \( \ddagger \), a strengthening of \( \dagger \) (\cref{fig:execution.tests}).
-Previously in \( \CP \), if \( (\txid, \txid'') \in \WW_\hh \) and \( (\txid'',\txid') \in \RW_\hh \),
+Previously in \( \CP \) if \( (\txid, \txid'') \in \WW_\hh \) and \( (\txid'',\txid') \in \RW_\hh \),
 transaction \( \txid \) may not commit before \( \txid' \):
 \[
     \begin{array}{l}
@@ -594,79 +515,22 @@ transaction \( \txid \) may not commit before \( \txid' \):
 \]
 However, write-conflict freedom (\( \UA \)) enforces \( \txid''\) must see \( \txid \), that is,
 \( \func{commit}{\txid} \to \func{start}{\txid''} \).
-This means, as result of \( \UA \), commit of transactions \( \txid \) must commit before \( \txid' \) commits.
+As result of \( \UA \) the commit of transactions \( \txid \) must commit before \( \txid' \) commits, so it should be included in the view.
+In \cref{fig:si-disallowed}, transaction \( \txid_4 \) reads the last version of \( \ke_2 \) written by \( \txid_3 \) then installs a newer version so does not violate \( \UA \).
+Let us consider the read especially for \( \ke_2 \).
+From the \( \txid_3 \) we have edges:
+\(
+    \txid_1 \toEdge{\WW_\ww} \txid_2 \toEdge{\RW_\hh} \txid_3
+    \)
+Snapshot isolation \( \SI \) requires that if a transaction sees \( \txid_3 \) it must see \( \txid_1 \) by the \( \ddagger \), yet it is not the case in \( \CP \).
 %----------
-
-\pg{
-explain WW; RW tc --> t''c and t''s ---> t'c, so not always before
-with UA (write-conflict freedom), we have tc --> t''s so not must be before
-hence double dagger
-explain example
-}
-
+%\pg{
+%explain WW; RW tc --> t''c and t''s ---> t'c, so not always before
+%with UA (write-conflict freedom), we have tc --> t''s so not must be before
+%hence double dagger
+%explain example
+%}
 %---------
-
-The technical reason for this is that
-Theorem~\ref{??}  only holds under certain conditions on
-\( \ET_1 \) and \( \ET_2 \)\footnote{%
-  This issue also arises with dependency graphs~\cite{.}, see
-  Section~\ref{5}.  }, and these conditions are not met by $\ET_{\CP}$
-and $\ET_{\UA}$. 
-We are able to capture  $\SI$ using  $\ddagger$ which 
-states that, if a transation observes a
-the effect of a transaction, then it observes the effect of all previous
-transactions. The execution test $\ET_{\SI}$ is the intersection of
-$\ddagger$, $\ET_\MRd $, $\ET_\RYW $ and $ \ET_{\UA}$.
-
-\pg{In above, presumably you can pinpoint exactly why these conditions are not
-  met by $\ET_{\CP}$ and $\ET_{\UA}$? } 
-
-\pg{Is it the case that the intersection equality holds when using
-  $\ddagger$. Presumably so. }
-
-
-%Again inspired by~\cite{.}, we can formulate the  $\SI $ property
-%without having full knowledge of the total order on transactions.
-%The additional component in the relation for $\SI$, compared
-%with the relation of $\CP$, is the use of the relation
-%$\VO_{\hh}; \AD_{\hh} $....
-%\pg{And now I don't know what to say, because this clearly gives more
- % writes than CP before $t$, so I've got the English of CP wrong. This
- % needs to be subtly explained.}
-%The execution test $\ET_{\CP}$ ensures that the initial view is 
-%closed with respect to this $\ddagger$  relation and 
-%sees all the whole history of keys associated with the fingerprint
-%($\ET_{\UA}$, and the updated view 
-%increases ($ \ET_\MRd $) and 
-%includes the writes associated with the fingerprint using the
-%session order ($\ET_\RYW $).
-
-
-%\pg{Below, I had previously given  up. I think the above style is
- % better. Now definitely out of time.}
-%We are inspired by the following constraint that has been proven satisfying \( \SI \) \cite{cerone:snapshot}:
-%\[
-  %  (\SO \cup \WW) \subseteq \VIS \quad  ( (\SO \cup \WW \cup \WR) ; \RW? ) ; \VIS \subseteq \VIS
-%\]
-%where write-write relation \( (\txid, \txid') \in \WW \) means the transaction \( \txid \) installs a version for a key \( \ke \) following by \( \txid' \) installing a new version for the key \( \ke \).
-%The constraint \( \SO \subseteq \VIS \) coincides with \( \ET_\RYW \).
-%The \( \WW \subseteq \VIS \) means two transactions cannot concurrently write to the same key,
-%which is enforced by \( \ET_\UA \).
-%Let consider \( ( (\SO \cup \WW \cup \WR) ; \RW? ) ; \VIS \subseteq \VIS \).
-%Similar to the argument we made in Consistent Prefix (\pageref{para:cp}), 
-%let assume a client \( \cl \), its view \( \vi \) and two transactions \( \txid, \txid' \) such that 
-%\( \txid' \) is in the view \( \vi \)
-%and \( \txid \toEdge{(\SO \cup \WW \cup \WR) ; \RW?} \txid' \).
-%If \( \txid' \) is observable by any previous transaction of the client \( \cl \),
-%then \( \txid \) is also observable before.
-%By \( \ET_\MRd\), it is the case \( \txid \) is in the view \( \vi \).
-%If \( \txid' \) is a new transaction observed by the client \( \cl \),
-%the \( \ddagger \) enforces that \( \txid \) should be included \( \vi \).
-
-
-As we discuss in \cref{sec:applications} and prove in the Appendix~\ref{LHKJHK},  the Clock-SI
-implementation~\cite{Du:2013:CSI:2553409.2553434} satisfies
+As we discuss in \cref{sec:applications} and prove in the \ref{sec:clock-si}, 
+the Clock-SI implementation~\cite{Du:2013:CSI:2553409.2553434} satisfies
 $\ET_{\SI}$. 
-
-%\input{\RootPath/model/kvstore-view.tex}
-%\input{\RootPath/model/exec-test.tex}
