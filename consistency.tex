@@ -20,9 +20,9 @@ to their existing definitions over distributed databases.
 
 
 
-An execution test is a set $\ET$ of tuples of the form $(\mkvs, \vi, \opset, \vi')$,
+An execution test is a set $\ET$ of tuples of the form $(\mkvs, \vi, \opset, \mkvs', \vi')$,
 denoting that a client with view $\vi$ on kv-store $\hh$  may commit an atomic transaction 
-with fingerprint $\opset$  and obtain an updated view $\vi'$. 
+with fingerprint $\opset$, and obtain an updated kv-store \( \mkvs' \) and an updated view $\vi'$. 
 We often write
 $\ET \vdash (\hh, \vi) \triangleright \opset: ( \mkvs', \vi')$ for
 $(\mkvs, \vi, \opset, \mkvs', \vi') \in \ET$.
@@ -31,7 +31,7 @@ $(\mkvs, \vi, \opset, \mkvs', \vi') \in \ET$.
 \begin{definition}
 \label{def:execution.test}
 An \emph{execution test} is a set of tuples $\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \HisHeaps \times \Views$ 
-such that for all $(\hh, \vi, \opset, \mkvs', \vi') \in \ET$ and all $\otR, \ke, \val$:
+such that for all $(\hh, \vi, \opset, \mkvs', \vi') \in \ET$ and all $\ke, \val$:
 \begin{align}
     & 
 	(\otR, \ke, \val) \in \opset \Rightarrow
@@ -80,7 +80,9 @@ is the smallest relation such that for all $\cl, \hh, \hh', \viewFun, \opset, \v
 	\phantom{a} \hfill $\implies (\hh, \viewFun) \xrightarrowtriangle{\hspace{-5pt}(\cl, \opset)\hspace{-5pt}}_{\ET} (\hh', \viewFun\rmto{\cl}{\vi'})$
 \end{enumerate}
 Given an execution test $\ET$, an \emph{$\ET$-trace} is a sequence of $\ET$-reductions of the form $\conf_{0} \xrightarrowtriangle{\alpha_{0}}_{\ET} \cdots 
-\xrightarrow{\alpha_{n-1}} \conf_{n}$. $\ET$-traces are ranged over by $\tau, \tau', \cdots$.
+\xrightarrowtriangle{\alpha_{n-1}} \conf_{n}$. $\ET$-traces are ranged over by $\tau, \tau', \cdots$; 
+given a $\ET$-trace $\tau$, $\lvert \tau \rvert$ denotes the number of $\ET$-reductions in $\tau$, and 
+for $i=1,\cdots,n$, $\tau(i)$ denotes the $i$-th reduction of $\tau$.
 \end{definition}
 
 A \emph{consistency model} induced by $\ET$ is a set of kv-stores
@@ -89,7 +91,11 @@ initial configuration.
 
 \begin{definition}[Consistency Model]
 \label{def:cm}
-Given an execution test $\ET$ and an initial configuration $\conf_0$ (\cref{def:configuration}),
+Given an execution test $\ET$,  
+%and an initial configuration $\conf_0$ (\cref{def:configuration}),
+\ac{The configuration $\Gamma_0$ is not free in the definition above, 
+so you don't need to assume an initial configuration $\conf_{0}$. I removed 
+it.}
 the set of \emph{configurations induced by $\ET$},  $\Confs(\ET)$, is   given by: 
 \[
 \Confs(\ET)\defeq 
@@ -115,7 +121,7 @@ We examine the \emph{compositionality} of the consistency models induced by exec
 $\CMs(\ET_1 \cap \ET_2) = \CMs(\ET_1) \cap \CMs(\ET_2)$ hold? 
 The monotonicity of execution tests guarantees that 
 %It is straightforward to show that the left-to-right direction holds:
- for all $\ET_1, \ET_2$, \( \CMs(\ET_1 \cap \ET_2) \subseteq \CMs(\ET_1) \cap \CMs(\ET_2) \) 
+ for all $\ET_1, \ET_2$, \( \CMs(\ET_1 \cap \ET_2) \subseteq \CMs(\ET_1) \cap \CMs(\ET_2) \). 
 However, the other direction \( \CMs(\ET_1) \cap \CMs(\ET_2) \subseteq \CMs(\ET_1 \cap \ET_2) \) does not hold for arbitrary consistency models.
 Consider the following:
 \[
@@ -150,32 +156,28 @@ with
 %\end{align*}
 As both $\ET_1$ and $\ET_2$ allow a version with value $1$ to be written for 
 $\ke, \ke'$,  we have $\hh' \in \CMs(\ET_1) \cap \CMs(\ET_2)$. 
-However, $\ET_1$ and $\ET_2$ enforce a different order in which the updates on $\ke, \ke'$ must happen; 
+However, $\ET_1$ and $\ET_2$ enforce a different order in which the writes on $\ke, \ke'$ must happen; 
 thus $\hh' \notin \CMs(\ET_1 \cap \ET_2)$. 
 
 In this example, compositionality fails because execution tests 
 enforced a particular order in which the updates must be committed, even though such updates 
-are non-conflicting: \ie the kv-store obtained after committing such updates is independent of the commit order. This observation is captures in the following definition: 
+are non-conflicting: the kv-store obtained after committing such updates is independent of the commit order. This observation is captures in the following definition: 
+
 \begin{definition}
 Two fingerprints $\opset_1$ and $\opset_2$ are \emph{conflicting} 
 iff there exists $\ke$ such that 
 $(\otW, \ke, -) \in \opset_1 \land (\otW, \ke, -) \in \opset_2$. 
-
 An execution test $\ET$ is \emph{commutative}, written $\com{\ET}$, if 
-for all views $\vi_1, \vi_2 \in \Views(\hh_0)$, 
-clients $\cl_1, \cl_2$,
-fingerprints $\opset_1, \opset_2$, 
-kv-stores $\hh'$,
-and view functions $\viewFun, \viewFun'$:
+for all \( \mkvs, \mkvs', \cl_1, \cl_2, \opset_1, \opset_2, \viewFun, \viewFun'\) and \( \vi_1, \vi_2 \in \Views(\hh) \):
 \[
 \begin{array}{@{}r @{\hspace{10pt}} l @{}}
 	\text{if} &  
-	(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
+	(\hh, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
 	\_ \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh', \viewFun') \\
 	& \land\ \cl_1 \ne \cl_2 \land \opset_1, \opset_2  \text{ are non-conflicting}\\
 %
 %	
-	\text{then} & (\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
+	\text{then} & (\hh, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
 \_ \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh', \viewFun')
 \end{array}
 \]
@@ -190,14 +192,13 @@ reductions of $\tau_1$ as to match exactly the sequence of
 reductions of $\tau_2$. 
 In \cref{sec:et-comp}, we show that if $\ET_1$ is commutative, 
 we can indeed re-order the sequence of reductions in the 
-$\ET_1$-trace leading to a trace $\tau_1'$ such that $\lvert \tau'_1 \rvert = \lvert \tau_2 \rvert$, 
-where $\vert \tau'_1 \rvert$ is the 
-number of $\ET_1$-reductions of$\tau_1'$ (and similarly for $\tau_2$)\footnote{In fact, 
+$\ET_1$-trace leading to a trace $\tau_1'$ such that $(\lvert \tau'_1 \rvert = \lvert \tau_2 \rvert)$\footnote{In fact, 
 to ensure that $\lvert \tau_1' \rvert = \lvert \tau_2 \rvert$ we require to further manipulate 
-$\tau_1$ prior to re-ordering its sequence of $\ET_1$-reductions.}; and for any 
-$i=1,\cdots, \lvert \tau_1'\rvert$, the pre and post kv-store of its
-$it$-th reduction in the re-ordered $\ET_1$, coincide with the action, pre and post kv-store 
-of the $\ET_2$-trace.
+$\tau_1$ prior to re-ordering its sequence of $\ET_1$-reductions.}, 
+and for any 
+$i=1,\cdots, \lvert \tau_1'\rvert$, the pre and post kv-store of $\tau_1'(i)$,
+ coincide with the action, pre and post kv-store 
+of $\tau_2(i)$.
 %$\ET_1$ is a commutative execution test, and consider two traces, 
 %produced under the execution tests $\ET_1$ and $\ET_2$, respectively, 
 %that terminate in a configuration of the form $(\hh, \stub)$. Let $n$ be 
@@ -212,19 +213,17 @@ of the $\ET_2$-trace.
 %trace coincide with the pre and post kv-store of the $i$-th reduction of the 
 %$\ET_2$ trace.
 
-Commutativity alone does not ensure that, for $i=1,\cdots,n$ the 
-pre-views and post-views of the $i$-th $\ET_1$-reduction of $\tau_1'$ 
-coincide with the pre-views and post-views of the $i$-th 
-$\ET_2$-reduction in the $\tau_2$-trace, which is a necessary to show 
+Commutativity alone does not ensure that, for $i=1,\cdots,\lvert \tau_2 \rvert$ the 
+pre-views and post-views of $\tau_1'(i)$ 
+match the pre-views and post-views of the $\tau_2(i)$, which is necessary to show 
 that $\tau_1'$ and $\tau_2$ can be recast as a $(\ET_1 \cap \ET_2)$-trace. 
 In \cref{sec:et-comp} we present three other basic requirements to be 
-satisfied by $\ET_1$ and $\ET_2$, that guarantee that $\tau'_1$ and 
-$\tau_2$ agree on the pre-views and post-views of each of their reductions. 
-The first two of these requirements, which we call 
-\emph{no blind writes} and \emph{minimum footprint}, ensure that 
-the pre-views of the reductions in $\tau_1'$ and $\tau_2$ match, 
+satisfied by $\ET_1$ and $\ET_2$, that guarantee that $\tau'_1(i)$ and 
+$\tau_2(i)$ agree on the pre-views and post-views for $i=1,\cdots, \lvert \tau_2 \rvert$. 
+The first two of these requirements,  \emph{no blind writes} and \emph{minimum footprint}, 
+ensure that the pre-views of the reductions $\tau_1'(i)$ and $\tau_2(i)$ match, 
 while the third requirement, which we call \emph{monotonic post-views}, 
-guarantees that the post-views of the reductions in $\tau_1'$ and $\tau_2$ 
+guarantees that the post-views of the reductions $\tau_1'(i)$ and $\tau_2(i)$ 
 match. 
 %
 %is not sufficient to ensure the compositionality 
@@ -289,11 +288,15 @@ then $\CMs(\ET_1 \cap \ET_2) {=} \CMs(\ET_1) \cap \CMs(\ET_2)$;
 if $\com{\ET_1} \land \com{\ET_2}$, then $\com{\ET_1 \cap \ET_2}$.
 \end{theorem}
 
-Most of the execution tests that we introduce shortly,  \cref{fig:execution_tests} can be minimally adapted to satisfy these 
-properties, without excluding any anomalous (weak) behaviour. However, the definitions 
-of $\ET_{\SI}$ and $\ET_{\CP}$ are inherently non-commutative (counter example in \cref{sec:comm-counter-cp-si}), which also motivates 
-why $\ET_{\UA} \cap \ET_{\CP}$ is not an appropriate execution test for Snapshot Isolation.
-\ac{This paragraph does not make sense anymore, as we did not introduce the examples of execution tests yet. Move somewhere else.}
+Most of the execution tests that we introduce shortly 
+can be tweaked to satisfy no-blind writes, minimum footprints and monotonic post-views 
+without sacrificing any anomalous behaviours. However, some of these execution tests) 
+are inherently non-commutative.
+%\cref{fig:execution_tests} can be minimally adapted to satisfy these 
+%properties, without excluding any anomalous (weak) behaviour. However, the definitions 
+%of $\ET_{\SI}$ and $\ET_{\CP}$ are inherently non-commutative (counter example in \cref{sec:comm-counter-cp-si}), which also motivates 
+%why $\ET_{\UA} \cap \ET_{\CP}$ is not an appropriate execution test for Snapshot Isolation.
+%\ac{This paragraph does not make sense anymore, as we did not introduce the examples of execution tests yet. Move somewhere else.}
 
 
 \subsection{Examples}\label{subsec:cm_examples}
@@ -318,11 +321,11 @@ $j \in \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO^?} \WTx(\hh(\ke, j))
 \\
 \RYW & $ \txid \in \mkvs' \wedge \txid \notin \mkvs \land \WTx(
 \mkvs'(\ke, i) ) \xrightarrow{\PO^?} \txid \implies i \in \vi'(\ke) $ &
-\CP & \( \Setcon{(\mkvs, \vi, \f, \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW \) 
+\CP & \( \Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW \) 
 \\
 \WFR & $j \in \vi(\ke) \wedge \txid \in \RTx(\hh(\ke', i)) \wedge \txid {\xrightarrow{\PO^?}}
 \WTx(\mkvs(\ke, j))  \implies i \in \vi(\ke')$ &
-$\SI$ & $\Setcon{(\mkvs, \vi, \f, \vi')}{\ddagger} \cap \ET_\MRd \cap \ET_\RYW  \cap \ET_\UA $
+$\SI$ & $\Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\ddagger} \cap \ET_\MRd \cap \ET_\RYW  \cap \ET_\UA $
 \\
 \CC & $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$ &
 \SER & $ 0 \leq i < \lvert \hh(\ke) \rvert \implies i \in \vi(\ke) $\\
@@ -339,13 +342,14 @@ with
         & \eqdef &  
         \fora{\ke, \ke', i, j}
          i \in \vi(\ke)  \wedge 
-         \WTx(\hh(\ke', j)) \toEdge{(((\PO \cup \RF_{\hh}) ; \AD_{\hh}^?) \cup \VO_{\hh})^{+}} \WTx(\hh(\ke, i))
+         \WTx(\hh(\ke', j)) \toEdge{((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup \WW_\hh )^{+}} \WTx(\hh(\ke, i))
         \implies j \in \vi(\ke')  \\
         \ddagger 
         & \eqdef &
         \fora{\ke, \ke', i, j}
         i \in \vi(\ke)
-        \wedge \WTx(\hh(\ke', j)) \toEdge{((\PO \cup \RF_{\hh} \cup \VO_{\hh}) ; \AD_{\hh}^?)^{+}} \WTx(\hh(\ke, i))
+        \wedge \WTx(\hh(\ke', j)) \toEdge{((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup (\WW_\hh; \RW_\hh^{?}) )^{+}} \WTx(\hh(\ke, i))
+%     \wedge \WTx(\hh(\ke', j)) \toEdge{(\WW_\hh \cup \WR_\hh \cup \SO \cup ( (\WR_\hh \cup \SO) ; \RW_\hh ) \cup (\WW_\hh; \RW_\hh) )^{+}} \WTx(\hh(\ke, i)) 
         \implies j \in \vi(\ke')    
     \end{rclarray}
 \]
@@ -386,83 +390,49 @@ consistency models.
 
 \mypar{Monotonic Reads ($\MRd$)}
 It states that a client cannot loose information from the view and 
-hence read operations can only read increasingly more up-to-date versions. 
+hence can only see increasingly more up-to-date versions. 
 This prevents \eg the kv-store of \cref{fig:mr-disallowed},
-since client $\cl$ first observes the latest version of $\ke$ in $\txid_{\cl}^{1}$, 
-and then observes the older, initial version of $\ke$ in $\txid_{\cl}^{2}$.  
+since client $\cl$ first reads the latest version of $\ke$ in $\txid_{\cl}^{1}$, 
+and then reads the older, initial version of $\ke$ in $\txid_{\cl}^{2}$.  
 The execution test $\ET_{\MRd}$ ensures that clients  can only extend their views. 
 
 \mypar{Monotonic Writes ($\MW$)}
-It states that whenever a transaction observes a version installed by a client $\cl$,
-then it observes all previous versions installed by $\cl$. 
+It states that whenever a transaction sees a version installed by a client $\cl$,
+then it sees all previous versions installed by $\cl$. 
 This prevents \eg the kv-store of \cref{fig:mw-disallowed}, since 
-transaction $\txid'$ observes the second version of $\ke_2$, 
+transaction $\txid'$ reads the second version of $\ke_2$, 
 with value $\val_2$ written by client $\cl$, 
-but it does not observe the second version of $\ke_1$, 
+but it does not read, hence does not see, the second version of $\ke_1$
 with value $\val_1$ and previously written by the same client.
 The execution test $\ET_{\MW}$  ensures that, prior to executing a transaction,
 the set of versions included in the view of the client are write 
 prefix-closed with respect to the relation $\PO^?$.
 
 \mypar{Read Your Writes (\RYW)}
-It states that a client must always be able to read the versions previously written by the client itself.
+It states that a client must always see the versions previously written by the client itself.
 This prevents the kv-store in \cref{fig:ryw-disallowed}, 
 as the initial version of $\ke$ holds value $0$ 
 and client $\cl$ tries to increment the value of $\ke$ by $1$ twice.  
-For its first transaction, it reads the initial value $0$ and then installs  a new version with value $1$. 
-For its second transaction, since the client need not read its own writes, 
+For its first transaction, it reads the initial value $0$ and then installs a new version with value $1$. 
+For its second transaction, since the client need not see its own writes, 
 it might read the initial value $0$ again and install a new version with value $1$.
 The execution test $\RYW$ ensures that, after committing a transaction, 
 the client view includes all the versions it wrote.  
 
-\pg{Below, not well explained at all, I  keep thinking I'm saying
-  the same thing again and again.}
 \mypar{Write Follows Reads (\WFR)}
-%It states that if a client \( \cl \) writes some version $\ver$ in a transaction,
-%following  another transaction (or in the same transaction of) who reads of some version $\ver'$, 
-%then a transaction may observe version $\ver$ only if it also
-%observes $\ver'$. 
-It states that, if a transaction observes a version written by a
-client $\cl$, then it must also observe the versions previously read by $\cl$ (in $\PO^?$ relation).
+It states that, if a transaction sees a version written by a
+client $\cl$, then it must also see the versions previously read by $\cl$ (in $\PO^?$ relation).
 This prevents the kv-store of \cref{fig:wfr-disallowed},
-since transaction $\txid$ observes a version written by $\cl$ but
+since transaction $\txid$ reads a version written by $\cl$ but
 not a version previously read by $\cl$.
-% the version $\ver_2$ of $\ke_2$ carrying value $\val_2$ written by client $\cl$,
-%but the same transaction $\txid$ does not observe the version of $\ke_1$ carrying value $\val_1$, read by $\cl$ prior to writing $\%ver$. 
-The execution test $\ET_{\WFR}$  ensures
+The execution test $\ET_{\WFR}$ ensures
 that a view includes all versions previously read by a client 
 if the view already includes a write from that client. 
 
-%\azalea{For \CC, the English and the definition definitely don't match and it is hard to see 
-%$\ET_{\MRd} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$ is indeed the necessary and sufficient condition for the English description. 
-%Since we are short on space, I suggest we simply say:
-%``The causal consistency guarantee has been defined in the literature~\cite{session2causal} as the conjunction of the four \emph{session guarantees} \MRd, \MW, \RYW\ and \WFR. 
-%Analogously, we have defined $\ET_\CC$ as the intersection of the execution tests corresponding to the four session guarantees."
-%\sx{Agree}
-%}
-
 
 \mypar{Causal Consistency (\CC)}
-%Causal Consistency ensures that if a client observes a version $\ver$, 
-%then it also observes the versions on which $\ver$ \emph{depends} \cite{cops} via the
-%$\PO^?$  and $\RF_{\hh}$ (defined in \cref{fig:execution_tests}) relations.
-%In case of $\PO^?$, this ensures that when a view includes the effects of a transaction by client $\cl$, 
-%it also includes the effects of the earlier transactions (in $\PO$ order) of $\cl$. 
-%In case of $\RF_{\hh}$, this ensures that when a view includes a transaction,
-%it must include all writes that the transaction read from.
-%
-%
-%\pg{Above sentence, I don't know what to write here as I don't understand what it is
-%  saying.  For $    \RF_{\hh}$, it means when a view includes a transaction (the versions it write),
-%it must include all the writes that the transaction read from.}
-%
-%A necessary and sufficient condition is to enforce the four session
-%guarantees $\MRd, \MW, \RYW$ and $\WFR$ \cite{session2causal}:
-%$\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} \cap \ET_{\RYW} \cap
-%\ET_{\WFR}$.
-%
-%
-The causal consistency guarantee is defined in the literature~\cite{session2causal} as the conjunction (composition) of the four \emph{session guarantees} \(\MRd\), \(\MW\), \(\RYW\) and \(\WFR\):   
+The causal consistency is defined in the literature~\cite{session2causal} 
+as the conjunction (composition) of the four \emph{session guarantees} \(\MRd\), \(\MW\), \(\RYW\) and \(\WFR\):   
 $\CMs_{\CC} \eqdef \CMs_{\MRd} \cap \CMs_{\MW} \cap \CMs_{\RYW} \cap \CMs_{\WFR}$. 
 Analogously, we have defined $\ET_\CC$ as the conjunction (composition) of the execution tests corresponding to the four session guarantees.
 As we discuss in \cref{sec:other_formalisms}, we can do this thanks to the \emph{compositionality} of our execution tests:
@@ -470,12 +440,8 @@ the composition of several consistency models is equivalent to the consistency m
 That is, $\CMs(\ET_\CC) = \CMs(\ET_{\MRd}) \cap \CMs(\ET_{\MW}) \cap
 \CMs(\ET_{\RYW}) \cap \CMs(\ET_{\WFR}) = \CMs(\ET_{\MRd} \cap
 \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR})$.
-
-
-
-As we discuss in \cref{sec:applications} and prove in the Appendix~\ref{},  the COPS
-implementation~\cite{} satisfies
-$\ET_{\CC}$. 
+As we discuss in \cref{sec:applications} and prove in \ref{sec:cops}, the COPS
+implementation~\cite{cops} satisfies $\ET_{\CC}$. 
 
 \mypar{Update Atomic ($\UA$)}
 This model has been proposed in~\cite{framework-concur};
@@ -483,7 +449,8 @@ however we are not aware of an implementation that exactly meets  this model.
 Nevertheless, many implementations meet a
 \emph{strengthening} of $\UA$.
 $\UA$ disallows concurrent transactions writing to the same key,
-a property known as \emph{write-write conflict freedom}.
+a property known as \emph{write-write conflict freedom}, that is, 
+when two transactions want to write to the same key, one must see another.
 This prevents the kv-store of \cref{fig:ua-disallowed},
 as $\txid, \txid'$ concurrently increment the initial version of $\ke$ by $1$.
 Note that $\UA$ generalises $\RYW$: unlike $\RYW$, $\UA$ does not require $\txid, \txid'$ to be executed by the same client.
@@ -495,7 +462,6 @@ The guarantees of $\PSI$ have been defined as the conjunction of the guarantees 
 Analogously, we have defined $\ET_\PSI$ as the intersection of $\ET_\CC$ and $\ET_\UA$. 
 Once again, this compositional definition is due to the \emph{compositionality} of our execution tests, as discussed in \cref{sec:other_formalisms}.
 
-
 \mypar{(Strict) serialisability (\SER)}
 Serialisability is the strongest consistency model, requiring that there exist a sequential schedule of transactions. 
 The execution test $\ET_{\SER}$ thus allows clients to execute transactions only when 
@@ -505,50 +471,34 @@ In the former case when $\txid_1$ commits first, then its write to $\ke_2$ must 
 The latter case is analogously prohibited. 
 This example is allowed by all the other execution tests in~\cref{fig:execution_tests}.
 
-
-
-
-
 \mypar{Consistent Prefix ($\CP$)}
 \label{para:cp}
-
-When the total order in which transactions commit is known, then $\CP$
-is described by the following property: if a client observes the
-effects of a transaction $\txid$, then it must also observe the
-effects of any transaction that commits before $\txid$.  Our
-configurations of kv-stores and views only provides {\em partial}
-information about the order in which transactions commit, but this
-information is enough to define the consistency models we seek.
-
-
-
+When the total order in which transactions commit is known, then 
+$\CP$ is described by the following property: 
+if a client sees a transaction $\txid$,
+then it must also see any transaction that commits before $\txid$. 
+Our configurations of kv-stores and views only provides {\em
+  partial} information about the order in which transactions commit,
+but this information is enough to define the consistency models we
+seek. 
 Consider the transaction relations $\RF_{\hh}$, $\VO_{\hh}$ and
-$\AD_{\hh}$ defined in Figure~\ref{.}, adapted from well-known
-transaction relations associated with dependency graphs~\cite{??}.  If
-$(t,t')$ is in $\RF_{\hh}$ or $\PO$ then it {must} be
-the case that $t$ commits before the start of $t'$.
- If
-$(t,t')$ is in 
- $\VO_{\hh}$ then it {must} be
-the case that $t$ commits before the commit of $t'$.
-If $(t,t')$ is in
-$(\RF_{\hh} \cup \PO); \AD_{\hh}$, then it {must} also be the case that
-$t$ commits before the commit  of $t'$, since a property of
-$(t'', t') \in \AD_{\hh}$ is that the start of $t''$ must occur before
-$t'$ commits. In fact, the relation
-$... \ni (t,t') $
-captures that, if transaction $t'$ writes to the kv-store, then the
-relation identifies {\em all} the  transactions $t$ that {must} have been written written to the kv-store.
-The $\dagger$ relation 
-captures the property that if a transation observes 
-the effect of a transaction then it observes the effect of all previous
+$\AD_{\hh}$ defined in \ref{fig:execution.tests}, adapted from well-known
+transaction relations associated with dependency graphs~\cite{adya-icde,adya}. 
+If $(\txid,\txid') \in \WR_\hh$ (resp. \SO) then it {must} be
+the case that $\txid$ commits before the start of $\txid'$, hence before the commit of $\txid'$.
+If $(\txid,\txid'') \in \RF_{\hh}$ (resp. \SO) and $(\txid'',\txid') \in \AD_\hh$, then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, since a property of
+$\txid'' \toEdge{\AD_\hh} \txid$ is that the start of $\txid''$ must occur before $\txid'$ commits.
+Last, if $(\txid,\txid') \in \WW_\hh$ then it {must} be
+the case that $\txid$ commits before the commit of $\txid'$.
+The relation $((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup \WW_\hh )^{+} \ni (\txid, \txid')$
+captures that, {\em all} the transactions $\txid$ that {must} have already committed to the kv-store before commit of \( \txid' \).
+The $\dagger$ in \cref{fig:execution.tests} captures the property that if a transaction sees 
+the writes of a transaction then it observes the writes of all previously committed
 transactions. 
-The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MRd \cap \ET_\RYW $.
+The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MRd \cap \ET_\RYW$,
+where the latter enforces a client sees its own commits.
 
 \pg{Example?}
-
-
-
  %The interesting
 %case is the use of the $\AD_{\hh}$ relation: by itself, this relation
 %only identifies reads happening before writes; however, used in the
@@ -631,15 +581,30 @@ the partial order given by kv-stores and views, then the analogous equality does
 not hold. For example, the kv-store of \cref{fig:si-disallowed} is
 included in both $\CMs(\ET_{\CP})$ and $\CMs(\ET_{\UA})$, but is
 disallowed by \SI.  
+In our specification, \( \ET_\SI \) is the combination of \( \ET_\UA \), all constraint from \( \ET_\CP \),
+and \( \ddagger \), a strengthening of \( \dagger \) (\cref{fig:execution.tests}).
+Previously in \( \CP \), if \( (\txid, \txid'') \in \WW_\hh \) and \( (\txid'',\txid') \in \RW_\hh \),
+transaction \( \txid \) may not commit before \( \txid' \):
+\[
+    \begin{array}{l}
+    \func{commit}{\txid} \to \func{commit}{\txid''} 
+    \land \func{start}{\txid''} \to \func{commit}{\txid'}  \\
+    {} \qquad \not\implies \func{commit}{\txid} \to \func{commit}{\txid'}
+    \end{array}
+\]
+However, write-conflict freedom (\( \UA \)) enforces \( \txid''\) must see \( \txid \), that is,
+\( \func{commit}{\txid} \to \func{start}{\txid''} \).
+This means, as result of \( \UA \), commit of transactions \( \txid \) must commit before \( \txid' \) commits.
+%----------
 
-----------
+\pg{
+explain WW; RW tc --> t''c and t''s ---> t'c, so not always before
+with UA (write-conflict freedom), we have tc --> t''s so not must be before
+hence double dagger
+explain example
+}
 
---explain WW; RW tc --> t''c and t''s ---> t'c, so not always before
---with UA (write-conflict freedom), we have tc --> t''s so not must be before
---hence double dagger
---explain example
-
----------
+%---------
 
 The technical reason for this is that
 Theorem~\ref{??}  only holds under certain conditions on
@@ -653,11 +618,8 @@ the effect of a transaction, then it observes the effect of all previous
 transactions. The execution test $\ET_{\SI}$ is the intersection of
 $\ddagger$, $\ET_\MRd $, $\ET_\RYW $ and $ \ET_{\UA}$.
 
-
-
 \pg{In above, presumably you can pinpoint exactly why these conditions are not
   met by $\ET_{\CP}$ and $\ET_{\UA}$? } 
-
 
 \pg{Is it the case that the intersection equality holds when using
   $\ddagger$. Presumably so. }
