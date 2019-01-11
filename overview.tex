@@ -8,7 +8,7 @@
 \pg{In introduction, we need to introduce the notation kv-store.}
 
 Consider a simple counter object, $\mathsf{Counter}(\ke)$, 
-defined over a distribued kv-store.
+defined over a distributed kv-store.
 Clients can manipulate the value of key $\ke$ via two operations, 
 $\ctrinc(\ke)$ and $\ctrread(\ke)$:
 \[
@@ -46,11 +46,14 @@ where transactions appear to execute in a sequential (serial) order,
 one after another. 
 However, implementing serialisability for distributed kv-stores
 comes at a significant performance cost. Instead, implementors are content
-with {weaker} consistency models: for example, \emph{causal
-  consistency} satisfied by the 
-COPS implementation of a replicated kv-store~\cite{.}; and 
-\emph{snapshot isolation}  satisfied by  the CLOCK-SI implementation
-of a partitioned  kv-store~\cite{.}. 
+with {weaker} consistency models, 
+that have been implemented both in geo-replicated and sharded databases 
+\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}.
+%: for example, \emph{causal
+%  consistency} satisfied by the 
+%COPS implementation of a replicated kv-store~\cite{.}; and 
+%\emph{snapshot isolation}  satisfied by  the CLOCK-SI implementation
+%of a partitioned  kv-store~\cite{.}. 
 
 We motivate  these weak consistency models using replicated kv-stores. In
 such stores, clients run each operation on an arbitray replica, and
@@ -91,109 +94,110 @@ distinct replicas, update them to $1$ and propagate the update so that
 %If at Clients performing a 
 %$\ctrread(\ke)$ operation will read a final value of $1$ for the counter, 
 This weak behaviour is known as the \emph{lost update} anomaly, which
-is  allowed under causal consistency but not allowed under snapshot
-isolation and serialisability. 
+is  allowed under causal consistency \cite{cops,wren,redblue}.
+%but not allowed under snapshot
+%isolation and serialisability. 
 
+\input{lu-kvstores.tex}
 \mypar{Centralised KV-Stores and Views}
 \pg{Need a start that dovetails with introduction.}
-
 ...
-To overcome this, we model key-value store as global, centralised entities, and 
+To overcome this, we model kv-stores as global, centralised entities, and 
 we abstract from replication through two mechanisms: \emph{multi-versioning} and \emph{client views}. 
 Multi-versioning mandates that we record all versions of each key written, 
 together with the meta-data of the transactions that access it. 
 This then yields a history of each key, and may be thought as projecting the local state of each replica into a global, centralised state. 
 Client views (or simply views) allow different clients to observe only a subset of the versions available in 
-the key-value store: this makes it possible for different clients to observe different states 
-of the key-value store, thus allowing for weak behaviours such as the lost update anomaly. 
+the kv-store: this makes it possible for different clients to observe different states 
+of the kv-store, thus allowing for weak behaviours such as the lost update anomaly. 
 
-\begin{figure*}[t]
-\captionsetup[subfigure]{aboveskip=-5pt, belowskip=5pt}
-\begin{tabular}{@{} c | c | c | c@{}}
-\hline
-\phantom{-}& \phantom{-}& \phantom{-}& \phantom{-}\\
-\begin{subfigure}{0.15\textwidth}
-\begin{centertikz}
-%Location x
-\node(locx) {$\ke \mapsto$};
+%\begin{figure*}[h]
+%\captionsetup[subfigure]{aboveskip=-5pt, belowskip=5pt}
+%\begin{tabular}{@{} c | c | c | c@{}}
+%\hline
+%\phantom{-}& \phantom{-}& \phantom{-}& \phantom{-}\\
+%\begin{subfigure}{0.15\textwidth}
+%\begin{centertikz}
+%%Location x
+%\node(locx) {$\ke \mapsto$};
+%
+%\matrix(versionx) [version list]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%    {a} & $\txid_0$ \\
+%    {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\end{centertikz}\vspace{5pt}%
+%\caption{Initial state}
+%\label{fig:counter_kv_initial}
+%\end{subfigure}
+%&
+%\begin{subfigure}{0.22\textwidth}
+%\begin{centertikz}
+%
+%%Location x
+%\node(locx) {$\ke_1 \mapsto$};
+%
+%\matrix(versionx) [version list, column 2/.style={text width=6mm}, column 4/.style={text width=6mm}]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%    {a} & $\txid_0$ & {a} & $\txid$\\
+%    {a} & $\left\{\txid \right\}$ & {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+%
+%\end{centertikz}\vspace{5pt}
+%\caption{After \(\txid \)}
+%\label{fig:counter_kv_first_inc}
+%\end{subfigure}
+%&
+%\begin{subfigure}{0.22\textwidth}
+%\begin{centertikz}
+%
+%%Location x
+%\node(locx) {$\ke \mapsto$};
+%
+%\matrix(versionx) [version list, column 2/.style={text width=6mm}, column 3/.style={dotted}, column 4/.style={text width=6mm,dotted}]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%    {a} & $\txid_0$ & {a} & $\color{gray}\txid$\\
+%    {a} & $\left\{\txid \right\}$ & {a} & $\color{gray}\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\node[version node,fit=(versionx-1-3) (versionx-2-3),fill=white,inner sep=0pt,draw=none] (locx-v1) {\color{gray}$1$};
+%
+%\end{centertikz}\vspace{5pt}
+%\caption{View of \( \cl_2 \) before \( \txid' \)}
+%\label{fig:counter_kv_view}
+%\end{subfigure} 
+%&
+%\begin{subfigure}{0.30\textwidth}
+%\begin{centertikz}
+%\node(locx) {$\ke \mapsto$};
+%\matrix(versionx) [version list, column 2/.style={text width=10mm}]
+%    at ([xshift=\tikzkvspace]locx.east) {
+%    {a} & $\txid_0$ & {a} & $\txid$ & {a} & $\txid'$\\
+%    {a} & $\{\txid, \txid'\}$ & {a} & $\emptyset$ & {a} & $\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+%\tikzvalue{versionx-1-5}{versionx-2-5}{locx-v2}{$1$};
+%\end{centertikz}%
+%\vspace{5pt}
+%\caption{After \( \txid' \), lost update}
+%\label{fig:counter_kv_final}
+%\label{fig:ua-disallowed}
+%\end{subfigure}\\
+%\hline
+%\end{tabular}
+%\caption{Example key-value stores (\subref{fig:counter_kv_initial}, \subref{fig:counter_kv_first_inc}, \subref{fig:counter_kv_final}); a client view (\subref{fig:counter_kv_view})}
+%\end{figure*}
 
-\matrix(versionx) [version list]
-    at ([xshift=\tikzkvspace]locx.east) {
-    {a} & $\txid_0$ \\
-    {a} & $\emptyset$ \\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\end{centertikz}\vspace{5pt}%
-\caption{Initial state}
-\label{fig:counter_kv_initial}
-\end{subfigure}
-&
-\begin{subfigure}{0.22\textwidth}
-\begin{centertikz}
-
-%Location x
-\node(locx) {$\ke_1 \mapsto$};
-
-\matrix(versionx) [version list, column 2/.style={text width=6mm}, column 4/.style={text width=6mm}]
-    at ([xshift=\tikzkvspace]locx.east) {
-    {a} & $\txid_0$ & {a} & $\txid$\\
-    {a} & $\left\{\txid \right\}$ & {a} & $\emptyset$ \\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
-
-\end{centertikz}\vspace{5pt}
-\caption{After \(\txid \)}
-\label{fig:counter_kv_first_inc}
-\end{subfigure}
-&
-\begin{subfigure}{0.22\textwidth}
-\begin{centertikz}
-
-%Location x
-\node(locx) {$\ke \mapsto$};
-
-\matrix(versionx) [version list, column 2/.style={text width=6mm}, column 3/.style={dotted}, column 4/.style={text width=6mm,dotted}]
-    at ([xshift=\tikzkvspace]locx.east) {
-    {a} & $\txid_0$ & {a} & $\color{gray}\txid$\\
-    {a} & $\left\{\txid \right\}$ & {a} & $\color{gray}\emptyset$ \\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\node[version node,fit=(versionx-1-3) (versionx-2-3),fill=white,inner sep=0pt,draw=none] (locx-v1) {\color{gray}$1$};
-
-\end{centertikz}\vspace{5pt}
-\caption{View of \( \cl_2 \) before \( \txid' \)}
-\label{fig:counter_kv_view}
-\end{subfigure} 
-&
-\begin{subfigure}{0.30\textwidth}
-\begin{centertikz}
-\node(locx) {$\ke \mapsto$};
-\matrix(versionx) [version list, column 2/.style={text width=10mm}]
-    at ([xshift=\tikzkvspace]locx.east) {
-    {a} & $\txid_0$ & {a} & $\txid$ & {a} & $\txid'$\\
-    {a} & $\{\txid, \txid'\}$ & {a} & $\emptyset$ & {a} & $\emptyset$ \\
-};
-\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
-\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
-\tikzvalue{versionx-1-5}{versionx-2-5}{locx-v2}{$1$};
-\end{centertikz}%
-\vspace{5pt}
-\caption{After \( \txid' \), lost update}
-\label{fig:counter_kv_final}
-\label{fig:ua-disallowed}
-\end{subfigure}\\
-\hline
-\end{tabular}
-\caption{Example key-value stores (\subref{fig:counter_kv_initial}, \subref{fig:counter_kv_first_inc}, \subref{fig:counter_kv_final}); a client view (\subref{fig:counter_kv_view})}
-\end{figure*}
-
-Let us illustrate how we can produce the lost update anomaly in \eqref{prog:inc2} using our key-value stores. 
-The initial key value store comprises a single key $\ke$, with only one 
+Let us illustrate how we can produce the lost update anomaly in \eqref{prog:inc2} using our kv-stores. 
+The initial kv-store comprises a single key $\ke$, with only one 
 version denoted as $(0, \txid_{0}, \emptyset)$, stating that $\ke$ holds value $0$, 
 that the version \emph{writer} is the initialising transaction $\txid_0$ (this version has been written by $\txid_0$), 
 and that the version \emph{reader set} is empty (no transactions have read this version as of yet). 
-\Cref{fig:counter_kv_initial} depicts this initial key-value store, with the version
+\Cref{fig:counter_kv_initial} depicts this initial kv-store, with the version
 %We represent this key-value store graphically in \cref{fig:counter_kv_initial}. 
 %A version is 
 represented as a box sub-divided to three sections. 
@@ -205,7 +209,7 @@ $\cl_1$ first obtains a unique transaction identifier, $\txid$,
 and then proceeds with $\ctrinc$. 
 It then reads the (only) version of $\ke$ (with value $0$), 
 and installs a new value $1$ for $\ke$. 
-The resulting key-value store is depicted in \cref{fig:counter_kv_first_inc}.
+The resulting kv-store is depicted in \cref{fig:counter_kv_first_inc}.
 Note that the initial version of $\ke$ is updated to reflect that it has been read by $\txid$; 
 moreover, versions are ordered (left to right), from the oldest to the newest.
 
@@ -213,10 +217,10 @@ Next, client $\cl_2$ invokes $\ctrinc$ on \cref{fig:counter_kv_first_inc}.
 As there are now two versions available for $\ke$, 
 we need to determine the version from which $\cl_2$ fetches its value, before running $\ctrinc(\ke)$.
 This is where \emph{client views} come into play.
-Intuitively, a view of client $\cl_2$ comprises those versions in the key-value store that are \emph{visible} to $\cl_2$, 
+Intuitively, a view of client $\cl_2$ comprises those versions in the kev-store that are \emph{visible} to $\cl_2$, 
 \ie those whose values can be read by $\cl_2$. 
 If more than one version is visible, then the newest (right-most) such version is selected, 
-modelling the \emph{last writer wins} resolution policy used by several key-value stores~\cite{vogels:2009:ec:1435417.1435432}. 
+modelling the \emph{last writer wins} resolution policy used by several kv-stores~\cite{vogels:2009:ec:1435417.1435432}. 
 In our example, there are two possible view candidates for $\cl_2$ when running $\ctrinc(\ke)$ on \cref{fig:counter_kv_first_inc}: 
 one containing only the initial version of $\ke$, 
 another containing both versions of $\ke$.%
@@ -227,10 +231,10 @@ to have the initial version of each key marked as visible.}
 In the former case, the view is depicted in \cref{fig:counter_kv_view};
 running $\ctrinc(\ke)$ on this view reads value $0$ and writes a new version with value $1$, as depicted in \cref{fig:counter_kv_final}.
 In the latter case, running $\ctrinc(\ke)$ reads the latest value ($1$) and writes a new version with value $2$.
-As before, in the former case the resulting key-value store (\cref{fig:counter_kv_final}) does not contain a version with value $2$, despite two increments on $\ke$, producing the lost update anomaly.
+As before, in the former case the resulting kv-store (\cref{fig:counter_kv_final}) does not contain a version with value $2$, despite two increments on $\ke$, producing the lost update anomaly.
 
 \mypar{Execution Tests}
-To avoid the lost update anomaly, distributed key-value stores introduce a check at commit time to ensure that 
+To avoid the lost update anomaly, distributed kv-stores introduce a check at commit time to ensure that 
 at most one of concurrent transactions writing to the same key commits. 
 This property is known as \emph{write conflict freedom}. 
 In our framework, we can simulate this behaviour by introducing the notion of \emph{execution tests}. 
@@ -241,12 +245,12 @@ In our \eqref{prog:inc2} example, this prevents $\cl_2$ from running $\ctrinc(\k
 if its view only contains the initial version of $\ke$. 
 Instead, the $\cl_2$ view must contain both versions of $\ke$, 
 thus enforcing $\cl_2$ to install a version with value $2$ after running $\ctrinc(\ke)$
-In \cref{sec:program-analysis}, we prove that if the key-value store 
+In \cref{sec:program-analysis}, we prove that if the kv-store 
 ensures write-conflict freedom as well as a few other properties, then clients can increment 
-and read from a single counter as if the key-value store were (strictly) serialisable.
+and read from a single counter as if the kv- store were (strictly) serialisable.
 
-However, the situation becomes more complicated if the key-value store contains multiple counters. 
-In this case, as each client has its own view on the key-value store, and since the views 
+However, the situation becomes more complicated if the kv-store contains multiple counters. 
+In this case, as each client has its own view on the kv-store, and since the views 
 of clients are independent from each other, it is possible for two 
 clients to observe the increments on two distinct counters, $\Counter(\ke_1)$ and $\Counter(\ke_2)$, in different orders. 
 %This scenario cannot be replicated in a strictly serialisable key-value store. 
@@ -285,7 +289,7 @@ The long fork anomaly is disallowed under strong models \eg serialisability and 
 but allowed under weak models \eg PSI (parallel SI). 
 As such, the execution test for PSI does not need additional constraints/ 
 However, to rule out long-fork under strong models such as serialisability and SI, 
-we must strengthen the execution test associated with the key-value store.
+we must strengthen the execution test associated with the kv-store.
 Informally, as we discuss in \cref{sec:cm}, the candidate execution test recovers the order in which 
 updates of versions have been observed by different clients (\eg $\cl_1$), 
 and allows a transaction to commit only if the observations made by the committing client (\eg $\cl_2$) 
@@ -297,9 +301,10 @@ Under this strengthened execution test, in the \eqref{prog:LF} example $\cl_2$ c
 observe $1$ for $\ke_2$ after observing $0$ for $\ke_1$; 
 this is because $\cl_1$ has already established that the increment on $\ke_2$ happens after 
 the one of $\ke_1$. 
-In \cref{sec:program-analysis}, we prove that if the key-value store consists of multiple counter objects, and the execution test employed by transactions guarantees SI, then the key-value store behaves as is it were strictly serialisable.
+In \cref{sec:program-analysis}, we prove that if the kv-store consists of multiple counter objects, and the execution test employed by transactions guarantees SI, then the kv-store 
+behaves as is it were strictly serialisable.
 %
-As we demonstrate in \cref{sec:cm}, using execution tests on key-value stores, we can specify all well-known consistency models (weak or strong) subject to a few basic conditions. 
+As we demonstrate in \cref{sec:cm}, using execution tests on kv-stores, we can specify all well-known consistency models (weak or strong) subject to a few basic conditions. 
 %
 Moreover, in \cref{sec:verify-impl} we encode two implementations, COPS and Clock-SI, to kv-stores and views,
 and verify them against our specification using execution tests.
