@@ -1,132 +1,119 @@
 \section{Applications}
 \label{sec:applications}
 
+We showcase the applications of or formalism by showing how we can prove the robustness of transactional libraries (\cref{sec:program-analysis}), and verify database implementations (\cref{sec:verify-impl}).
+
 \subsection{Program Analysis}
 \label{sec:program-analysis}
-A transactional library is a set of transactions 
-$L = \{\ptrans{\trans}_{i}\}_{i \in I}$ that can be invoked 
-by clients of a kv-store. A transactional library is said to be 
-\emph{robust} against an execution test of $\ET$ if the set of kv-stores 
-obtainable by letting clients only invoke operations from $L$ can also be obtained by 
-if the same sequence of operations were performed under $\ET_{\SER}$.
-As an application of our theory, we show how we 
-can prove the robustness of some simple applications. 
-In the following, we let $\CMs(\ET, L)$ be 
-the set of kv-stores that can be obtained if clients 
-only invoke operations from $L$.
+A transactional library, $L = \{\ptrans{\trans}_{i}\}_{i \in I}$, 
+provides a set of operations through which the library clients can access the kv-store. 
+For instance, the set of operations of the counter library on key $\ke$ in \cref{sec:overview} is $\Counter(\ke) = \{\ctrinc(\ke), \ctrread(\ke)\}$.
+A program $\prog$ is a \emph{client} of library $L$ if the only transactional calls in $\prog$ are those to library $L$ operations.  
+A transactional library $L$ is \emph{robust} against an execution test $\ET$ if: 
+for all client programs $\prog$ of library $L$, the set of kv-stores by running $\prog$ are included in the set of kv-stores obtained by running $\prog$ under $\ET_{\SER}$.
+As an application of our theory, we show how we can prove the robustness of simple transactional libraries. 
+In the following, we write $\CMs(\ET, L)$ for the set of kv-stores obtained from running a client program $\prog$ of $L$. 
 
-Elaborating on the examples from \cref{sec:overview}, in this Section 
-we prove the robustness of a single counter against $\ET_{\PSI}$, 
-and multiple counters against $\ET_{\SI}$. Previous techniques for 
-checking the robustness of a transactional library \cite{giovanni_concur16,SIanalysis,laws,sureshConcur} 
-are based on static analysis: because the session order of clients cannot be determined at compile 
-time, these techniques abstract from sessions. To the best of our knowledge, 
-we give the first proofs of robustness of transactional libraries that take sessions into 
-account.
+We prove the robustness of single and multiple counters (\cref{sec:overview}) against $\ET_{\PSI}$ and $\ET_{\SI}$, respectively.
+Previous techniques for checking robustness~\cite{giovanni_concur16,SIanalysis,laws,sureshConcur} 
+are based on static analysis: since the session order of clients cannot be determined at compile 
+time, these techniques abstract from sessions. 
+To our knowledge, we give the first robustness proofs that take sessions into account.
 
-Our proof technique for robustness uses the following result, which can be though 
-as the kv-store counterpart of another well known result for dependency graphs \cite{adya}:
+Our proof technique for robustness uses the following result, which is the kv-store counterpart of another well-known result on dependency graphs~\cite{adya}:
 \begin{theorem}
 \label{thm:serialisable_nocycle}
-Let $\hh$ be a kv-store. Then $\hh \in \CMs(\ET_{\SER})$ if and only if $(\PO_{\hh} \cup \RF_{\hh} 
+For all kv-stores $\hh$: $\hh \in \CMs(\ET_{\SER})$ iff $(\PO_{\hh} \cup \RF_{\hh} 
 \cup \VO_{\hh} \cup \AD_{\hh})^{+}$ is irreflexive.
 \end{theorem}
-To prove the robustness of a transactional library $L$ against an execution test 
-$\ET$, we identify an invariant of kv-stores $\hh$ obtainable by letting clients 
-invoke only operations contained in $L$, and prove that the invariant 
-implies the irreflexivity of the relation $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup 
-\AD_{\hh})^{+}$.
-
-\mypar{Robustness of a single counter against $\ET_{\PSI}$}
-Fix a key $\ke \in \Keys$, and let $\Counter(\ke) = \{\ctrinc(\ke), 
-\ctrread(\ke)\}$. Let $\hh \in \CMs(\ET_{\PSI}, \mathsf{Counter}(\ke))$.
-Clients can only write a version for key $\ke$ by invoking the 
-operation $\ctrinc(\ke)$; because $\ET_{\PSI}$ 
-enforces write-conflict detection freedom, in any key-value store 
-$\hh \in \CMs(\ET_{\PSI}, \mathsf{Counter})$, we have that 
-for all \( \txid, i > 0\):
-$\txid = \WTx(\hh(\ke, i)) \implies \txid \in \RTx(\hh(\ke, i-1))$. 
-Furthermore, because 
-$\ET_{\PSI}$ satisfies the monotonic reads, 
-$\ET_{\PSI} \subseteq \ET_{\MRd}$, the order in which 
-a client $\cl$ observes the versions of $\ke$ by invocations of $\ctrread(\ke)$, 
-is consistent with the order of the index of such versions in $\hh(\ke)$. 
-Formally, we have:
-\begin{align*}
-\hh(\ke) & = (0, \txid_{0}, \T^{\mathsf{r}}_{0} \cup \{\txid^{\mathsf{w}}_1\}) 
-\lcat (1, \txid^{\mathsf{w}}_{1}, \T^{\mathsf{r}}_{1} \cup \{\txid^{\mathsf{w}}_2\}) 
-\lcat \cdots  \\
-& \qquad \cdots \lcat (n-1, \txid^{\mathsf{w}}_{n-1}, \T^{\mathsf{r}}_{n-1} \cup \Set{\txid^{\mathsf{w}}_n})
-\lcat (n, \txid^{\mathsf{w}}_n, \T^{\mathsf{r}}_{n})
-\end{align*}
-where $\{\txid^{\mathsf{w}}_{i}\}_{i=1}^{n}$ is the 
-set of transactions invoking operation $\ctrinc(\ke)$, and $\bigcup_{i=0}^{n} 
-\T^{\mathsf{r}}_{i}$ is the set of transactions invoking operation $\ctrread(\ke)$. 
-Next, we define a relation $\dashrightarrow$ between
-transactions appearing in $\hh$ as the smallest transitive relation that 
-satisfies the following constraints: 
+Given this theorem, to prove the robustness of $L$ against $\ET$, 
+for an arbitrary a kv-store $\hh$, we 
 \begin{enumerate*}
-\item $\txid^{\mathsf{w}}_{i} 
-\dashrightarrow \txid$ whenever $\txid \in \T^{\mathsf{r}}_{i}$ 
-or $\txid = \txid^{\mathsf{w}}_{i+1}$; 
-\item $\txid \dashrightarrow \txid'$ 
-for some $\txid \in \T^{\mathsf{r}}_{i}$,
-whenever $\txid' = \txid^{\mathsf{w}}_{i+1}$
-or $\txid' \in \T^{\mathsf{r}}_{i} \land \txid \xrightarrow{\PO} \txid'$. 
+	\item identify a property of $\hh$ that remains \emph{invariant} when running any client program of $L$ on $\hh$; and 
+	\item show that the invariant implies the irreflexivity of $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{+}$.
 \end{enumerate*}
-Because of the structure of $\hh$, the relation $\dashrightarrow$ corresponds to a 
-total order over transactions appearing in $\hh$; furthermore, it comprises 
-the relations $\PO_{\hh}, \RF_{\hh}, \VO_{\hh}$ and $\AD_{\hh}$, which implies 
-the robustness of the library $\Counter(\ke)$ under $\ET_{\PSI}$.
+
+\mypar{Robustness of a Single Counter against $\ET_{\PSI}$}
+Pick an arbitrary key $\ke$ and $\hh \in \CMs(\ET_{\PSI}, \mathsf{Counter}(\ke))$, 
+with $\Counter(\ke) {=} \{\ctrinc(\ke), \ctrread(\ke)\}$. 
+Note that clients can only write to $\ke$ by calling $\ctrinc(\ke)$.
+As such, since $\ET_{\PSI}$ enforces write conflict freedom, we have: 
+% in all $\hh \in \CMs(\ET_{\PSI}, \mathsf{Counter})$, we have:
+$\for{\txid, i > 0} \txid {=} \WTx(\hh(\ke, i)) \implies \txid \in \RTx(\hh(\ke, i{-}1))$. 
+Furthermore, because $\ET_{\PSI}$ satisfies monotonic reads ($\ET_{\PSI} \subseteq \ET_{\MRd}$),
+the order in which clients observe the versions of $\ke$ (by calling $\ctrread(\ke)$), 
+is consistent with the order of the index of such versions in $\hh(\ke)$:
+%
+\begin{align*}
+	\hh(\ke) & = (0, \txid_{0}, \T^{\mathsf{r}}_{0} \cup \{\txid^{\mathsf{w}}_1\}) 
+	\lcat (1, \txid^{\mathsf{w}}_{1}, \T^{\mathsf{r}}_{1} \cup \{\txid^{\mathsf{w}}_2\}) 
+	\lcat \cdots  \\
+	& \qquad \cdots \lcat (n-1, \txid^{\mathsf{w}}_{n-1}, \T^{\mathsf{r}}_{n-1} \cup \Set{\txid^{\mathsf{w}}_n})
+	\lcat (n, \txid^{\mathsf{w}}_n, \T^{\mathsf{r}}_{n})
+\end{align*}
+%
+where $\{\txid^{\mathsf{w}}_{i}\}_{i=1}^{n}$ is the set of transactions calling $\ctrinc(\ke)$, 
+and $\bigcup_{i=0}^{n} \T^{\mathsf{r}}_{i}$ is the set of transactions calling $\ctrread(\ke)$. 
+
+Next, we define a relation $\dashrightarrow$ between
+the transactions in $\hh$ as the smallest transitive relation that 
+satisfies the following: 
+\begin{enumerate*}
+	\item $\txid^{\mathsf{w}}_{i} 
+	\dashrightarrow \txid$ if $\txid \in \T^{\mathsf{r}}_{i}$ 
+	or $\txid {=} \txid^{\mathsf{w}}_{i+1}$; 
+	\item $\txid \dashrightarrow \txid'$ 
+	for some $\txid \in \T^{\mathsf{r}}_{i}$,
+	if $\txid' {=} \txid^{\mathsf{w}}_{i+1}$
+	or $\txid' \in \T^{\mathsf{r}}_{i} \land \txid \xrightarrow{\PO} \txid'$. 
+\end{enumerate*}
+%
+Note that $\dashrightarrow$ yields a total order over the transactions in $\hh$, 
+and includes $\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh}$. 
+As such, $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$ is irreflexive, 
+ensuring the robustness of $\Counter(\ke)$ against $\ET_{\PSI}$.
 
 
-\mypar{Robustness of multiple counters against $\ET_{\SI}$}
+\mypar{Robustness of Multiple Counters against $\ET_{\SI}$}
+Recall from \cref{sec:overview} that for the library comprising two or more counters we can 
+observe the long fork anomaly disallowed under serialisability ($\ET_{\SER}$). 
 While a library comprising a single counter is robust against 
-$\ET_{\SI}$, the same does not hold if the library two or more counters. 
-In \cref{sec:overview} we have outlined how in this scenario it is 
-possible to obtain an anomaly, known as long fork, which cannot be 
-replicated under $\ET_{\SER}$. 
-This anomaly happens because different clients can observe increments 
-over two different counters appearing in a different order. Here we prove 
-that, if we strengthen the execution test from $\ET_{\PSI}$ to $\ET_{\SI}$, 
-then we recover the robustness of the multiple counter library. For the 
-sake of simplicity, here we assume that our library consists of only two 
-counters: $\mathsf{Counters} = \Counter(\ke_1) \cup \Counter(\ke_2)$.
-To this end, we need the following result for kv-stores included in $\CMs(\ET_{\SI})$, 
-which is the kv-store counterpart of a very well known result for snapshot isolation 
-\cite{feketeSI,SIanalysis}: 
+As such, unlike the single counter above, multiple counters are not robust against $\ET_{\PSI}$. 
+The long fork anomaly arises because different clients can observe increments 
+over two different counters in a different order.
+As this anomaly does not arise under $\SI$, 
+we show that if we strengthen $\ET_{\PSI}$ to $\ET_{\SI}$, 
+we can analogously recover the robustness of multiple counters.
+For simplicity, here we assume that the library comprises only two counters: 
+$\mathsf{Counters} {=} \Counter(\ke_1) \cup \Counter(\ke_2)$.
+
+We use the following result, which is the kv-store counterpart of a well-known result for SI~\cite{feketeSI,SIanalysis}: 
 \begin{theorem}
 \label{thm:si_cycles}
-Any cycle induced by the relations $\PO_{\hh}, \RF_{\hh}, \VO_{\hh}, \AD_{\hh}$ 
-for $\hh \in \CMs(\ET_{\SI})$ has two adjacent $\AD_{\hh}$-edges.
+For all $\hh \in \CMs(\ET_{\SI})$, any cycle in $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$ has two adjacent $\AD_{\hh}$-edges.
 \end{theorem}
 
 Consider a kv-store $\hh \in \CMs(\ET_{\SI}, \mathsf{Counters})$. 
-Because $\ET_{\SI} \subseteq \ET_{\PSI}$, each of the list of versions $\hh(\ke_1)$ and 
-$\hh(\ke_2)$ must follow the same structure given for kv-stores resulting from clients 
-using a single counter under $\ET_{\PSI}$. this structure embeds a total order $\dashrightarrow$ 
-over transactions appearing in $\hh(\ke_1)$ and $\hh(\ke_2)$; however, because the same 
-client can perform operations over two different counters, it is not the case anymore that 
-the relation $\dashrightarrow$ comprises the relation $\SO_{\hh}$. In this case, 
-we define a second relation $\twoheadrightarrow$ as
+As $\ET_{\SI} \subseteq \ET_{\PSI}$, the list of versions of $\hh(\ke_1)$ and $\hh(\ke_2)$ 
+must both follow the same structure as that described above for a single counter under $\ET_{\PSI}$. 
+Recall that this structure embeds a total order $\dashrightarrow$ over transactions in $\hh(\ke_1)$ and $\hh(\ke_2)$.
+However, since a client can perform operations over two different counters, the $\dashrightarrow$ no longer comprises $\SO_{\hh}$. 
+
+We thus define a second relation $\twoheadrightarrow$, where
 $\txid \twoheadrightarrow \txid'$ if $\txid \in \{\WTx(\hh(\ke_{i}, \_)\} \cup \RTx(\hh(\ke_{i}, \_))$ 
-and $\txid' \in \{\WTx(\hh(\ke_{j}, \_)\} \cup \RTx(\hh(\ke_{j}, \_))$ where $i,j \in \Set{1,2} \land j \neq i$,  
+and $\txid' \in \{\WTx(\hh(\ke_{j}, \_)\} \cup \RTx(\hh(\ke_{j}, \_))$ with $i,j \in \Set{1,2} \land j \neq i$,  
 and $\txid \xrightarrow{\PO} \txid'$.
-Relation $\twoheadrightarrow$ tracks the session order of transactions 
-performing operations on different keys. If we let $\rightarrow = (\dashrightarrow \cup \twoheadrightarrow)^{+}$, 
-we now have that the relation $\rightarrow$ embeds the relation $(\PO_{\hh} \cup \RF_{\hh} \cup 
-\VO_{\hh} \cup \AD_{\hh})^{+}$; furthermore, because the library $\mathsf{Counters}$ does 
-not contain any operation that accesses both keys $\ke_1$ and $\ke_2$, 
-and because the relation $\dashrightarrow$ is acyclic, 
-any cycle in $\rightarrow$ must contain at least two edges from the relation $\twoheadrightarrow$. 
-In \cref{app:robustness} we show that in fact the existence of such a cycle implies the 
+Relation $\twoheadrightarrow$ tracks the session order of transactions performing operations on different keys. 
+Let $\rightarrow \eqdef (\dashrightarrow \cup \twoheadrightarrow)^{+}$; 
+we then know that $\rightarrow$ embeds $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{+}$.
+Furthermore, because $\mathsf{Counters}$ contains no operation that accesses both $\ke_1$ and $\ke_2$, and since $\dashrightarrow$ is acyclic, 
+any cycle in $\rightarrow$ contains at least two edges from $\twoheadrightarrow$. 
+In \cref{app:robustness} we show that the existence of such a cycle implies the 
 existence of a cycle in $\rightarrow$ of the form $\txid \dashrightarrow \txid_{a} \twoheadrightarrow 
-\txid_{b} \dashrightarrow \txid_{c} \twoheadrightarrow \txid$. However, this scenario cannot 
-happen in $\hh$, because otherwise we would have a cycle in the relation $(\PO_{\hh} \cup \RF_{\hh} 
-\cup \VO_{\hh} \cup \AD_{\hh})^{+}$ with no adjacent $\AD_{\hh}$-edges (recall that an edge 
-labelled as $\twoheadrightarrow$ can only  represent two transactions related by $\PO_{\hh}$, 
-thus contradicting \cref{thm:si_cycles}). It follows that the relation $\rightarrow$ is irreflexive, 
-and so is $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$.
+\txid_{b} \dashrightarrow \txid_{c} \twoheadrightarrow \txid$. 
+However, this cannot happen in $\hh$, as otherwise we would have a cycle in $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^{+}$ with no adjacent $\AD_{\hh}$-edges (a $\twoheadrightarrow$ edge represents two  $\PO_{\hh}$-related transactions, 
+thus contradicting \cref{thm:si_cycles}). 
+It then follows that $\rightarrow$ is irreflexive, and thus so is $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$.
 
 \subsection{Verifying Database Implementations}
 \label{sec:verify-impl}
@@ -136,7 +123,7 @@ and so is $(\PO_{\hh} \cup \RF_{\hh} \cup \VO_{\hh} \cup \AD_{\hh})^+$.
 %    What are cops and then clock-si.
 %    how we verify
 %}
-Our representation of database state as kv-stores and client views closely matches the representation of database state in many well-known implementations~\cite{??}.
+Our representation of database state as kv-stores and client views closely matches the representation of database state in many well-known implementations~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}.
 As such, when verifying such implementations, our state-based formalisms is better-suited than the existing graph-based formalisms of dependency graphs and abstract executions. 
 In centralised databases, the state of the centralised server corresponds to a kv-store,
 and the local snapshots that transactions operate on are extracted from our views.  
@@ -145,7 +132,7 @@ Moreover, since most distributed databases are eventual consistent,
 \ie all replicas eventually agree on the database state,
 replica states can be collectively encoded as a kv-store.
 We verify the correctness of two database implementations in the literature,
-COPS~\cite{Lloyd:2011:DSE:2043556.2043593} and Clock-SI~\cite{Du:2013:CSI:2553409.2553434}.
+COPS~\cite{cops} and Clock-SI~\cite{clock-si}.
 
 \mypar{COPS}
 COPS is a fully replicated database: each replica contains all keys, but their associated values may be out of date.
