@@ -20,9 +20,9 @@ to their existing definitions over distributed databases.
 
 
 
-An execution test is a set $\ET$ of tuples of the form $(\mkvs, \vi, \opset, \vi')$,
+An execution test is a set $\ET$ of tuples of the form $(\mkvs, \vi, \opset, \mkvs', \vi')$,
 denoting that a client with view $\vi$ on kv-store $\hh$  may commit an atomic transaction 
-with fingerprint $\opset$  and obtain an updated view $\vi'$. 
+with fingerprint $\opset$, and obtain an updated kv-store \( \mkvs' \) and an updated view $\vi'$. 
 We often write
 $\ET \vdash (\hh, \vi) \triangleright \opset: ( \mkvs', \vi')$ for
 $(\mkvs, \vi, \opset, \mkvs', \vi') \in \ET$.
@@ -155,27 +155,22 @@ thus $\hh' \notin \CMs(\ET_1 \cap \ET_2)$.
 
 In this example, compositionality fails because execution tests 
 enforced a particular order in which the updates must be committed, even though such updates 
-are non-conflicting: \ie the kv-store obtained after committing such updates is independent of the commit order. This observation is captures in the following definition: 
+are non-conflicting: the kv-store obtained after committing such updates is independent of the commit order. This observation is captures in the following definition: 
 \begin{definition}
 Two fingerprints $\opset_1$ and $\opset_2$ are \emph{conflicting} 
 iff there exists $\ke$ such that 
 $(\otW, \ke, -) \in \opset_1 \land (\otW, \ke, -) \in \opset_2$. 
-
 An execution test $\ET$ is \emph{commutative}, written $\com{\ET}$, if 
-for all views $\vi_1, \vi_2 \in \Views(\hh_0)$, 
-clients $\cl_1, \cl_2$,
-fingerprints $\opset_1, \opset_2$, 
-kv-stores $\hh'$,
-and view functions $\viewFun, \viewFun'$:
+for all \( \mkvs, \mkvs', \cl_1, \cl_2, \opset_1, \opset_2, \viewFun, \viewFun'\) and \( \vi_1, \vi_2 \in \Views(\hh) \):
 \[
 \begin{array}{@{}r @{\hspace{10pt}} l @{}}
 	\text{if} &  
-	(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
+	(\hh, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
 	\_ \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh', \viewFun') \\
 	& \land\ \cl_1 \ne \cl_2 \land \opset_1, \opset_2  \text{ are non-conflicting}\\
 %
 %	
-	\text{then} & (\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
+	\text{then} & (\hh, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
 \_ \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh', \viewFun')
 \end{array}
 \]
@@ -318,11 +313,11 @@ $j \in \vi(\ke) \wedge \WTx(\hh(\ke', i)) \xrightarrow{\PO^?} \WTx(\hh(\ke, j))
 \\
 \RYW & $ \txid \in \mkvs' \wedge \txid \notin \mkvs \land \WTx(
 \mkvs'(\ke, i) ) \xrightarrow{\PO^?} \txid \implies i \in \vi'(\ke) $ &
-\CP & \( \Setcon{(\mkvs, \vi, \f, \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW \) 
+\CP & \( \Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\dagger} \cap \ET_\MRd \cap \ET_\RYW \) 
 \\
 \WFR & $j \in \vi(\ke) \wedge \txid \in \RTx(\hh(\ke', i)) \wedge \txid {\xrightarrow{\PO^?}}
 \WTx(\mkvs(\ke, j))  \implies i \in \vi(\ke')$ &
-$\SI$ & $\Setcon{(\mkvs, \vi, \f, \vi')}{\ddagger} \cap \ET_\MRd \cap \ET_\RYW  \cap \ET_\UA $
+$\SI$ & $\Setcon{(\mkvs, \vi, \f, \mkvs', \vi')}{\ddagger} \cap \ET_\MRd \cap \ET_\RYW  \cap \ET_\UA $
 \\
 \CC & $\ET_{\CC} = \ET_{\MRd} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$ &
 \SER & $ 0 \leq i < \lvert \hh(\ke) \rvert \implies i \in \vi(\ke) $\\
@@ -339,13 +334,13 @@ with
         & \eqdef &  
         \fora{\ke, \ke', i, j}
          i \in \vi(\ke)  \wedge 
-         \WTx(\hh(\ke', j)) \toEdge{(((\PO \cup \RF_{\hh}) ; \AD_{\hh}^?) \cup \VO_{\hh})^{+}} \WTx(\hh(\ke, i))
+         \WTx(\hh(\ke', j)) \toEdge{(((\PO \cup \RF_{\hh}) ; \AD_{\hh}) \cup \PO \cup \RF_{\hh} \cup \VO_{\hh})^{+}} \WTx(\hh(\ke, i))
         \implies j \in \vi(\ke')  \\
         \ddagger 
         & \eqdef &
         \fora{\ke, \ke', i, j}
         i \in \vi(\ke)
-        \wedge \WTx(\hh(\ke', j)) \toEdge{((\PO \cup \RF_{\hh} \cup \VO_{\hh}) ; \AD_{\hh}^?)^{+}} \WTx(\hh(\ke, i))
+        \wedge \WTx(\hh(\ke', j)) \toEdge{(((\PO \cup \RF_{\hh}) ; \AD_{\hh}) \cup \PO \cup \RF_{\hh} \cup \VO_{\hh} \cup (\WW_\hh ; \RW_\hh) )^{+}} \WTx(\hh(\ke, i))
         \implies j \in \vi(\ke')    
     \end{rclarray}
 \]
