@@ -468,20 +468,26 @@ but this information is enough to define the consistency models we
 seek. 
 Consider the transaction relations $\RF_{\hh}$, $\VO_{\hh}$ and
 $\AD_{\hh}$ defined in \ref{fig:execution.tests}, adapted from well-known
-transaction relations associated with dependency graphs~\cite{adya-icde,adya}. 
-If $(\txid,\txid') \in \WR_\hh$ (resp. \SO) then it {must} be
-the case that $\txid$ commits before the start of $\txid'$, hence before the commit of $\txid'$.
-If $(\txid,\txid'') \in \RF_{\hh}$ (resp. \SO) and $(\txid'',\txid') \in \AD_\hh$, 
-then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, since a property of
-$\txid'' \toEdge{\AD_\hh} \txid$ is that the start of $\txid''$ must occur before $\txid'$ commits.
-Last, if $(\txid,\txid') \in \WW_\hh$ then it {must} be
+transaction relations associated with dependency graphs~\cite{adya-icde,adya}.
+In \cite{laws} an alternative definition of $\CP$ is given: if a client sees a transaction $\txid$, 
+then it must also see the subset of transactions that committed before $\txid$, that can 
+be computed from $\SO, \RF_{\hh}, \VO_{\hh}, \AD_{\hh}$. This property is captured 
+by $\dagger$ in \cref{fig:execution.tests}.
+The pair $(\txid,\txid') \in \WR_\hh$ means that $\txid$ reads the version of some key $\ke$ 
+written by $\txid'$, therefore  it {must} be
+the case that $\txid$ commits before $\txid'$ starts, and therefore before $\txid'$ commits. 
+Similarly, $(\txid, \txid') \in \SO$ implies that $\txid'$ 
+The pair $(\txid, \txid') \in \AD_{\hh}$ means that $\txid''$ reads one version for some key that 
+is later overwritten by $\txid'$; then $\txid$ is prevented from seeing the write of $\txid'$, 
+and therefore it {must} be the case that $\txid$ starts before 
+$\txid'$ commits. 
+As a consequence, if 
+$(\txid,\txid'') \in \RF_{\hh}$ (resp. \SO) and $(\txid'',\txid') \in \AD_\hh$, then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, 
+Last, if $(\txid,\txid') \in \WW_\hh$ means that $\txid'$ overwrites a version written by $\txid$ for some 
+key, then it {must} be
 the case that $\txid$ commits before the commit of $\txid'$.
 The relation $((\SO ; \RW_{\hh}^{?}) \cup (\WR_{\hh} ; \RW_{\hh}^{?}) \cup \WW_\hh )^{+} \ni (\txid, \txid')$
-captures that, {\em all} the transactions $\txid$ that {must} 
-have already committed to the kv-store before the commit of \( \txid' \).
-The $\dagger$ in \cref{fig:execution.tests} captures the property that if a transaction sees 
-the writes of a transaction then it observes the writes of all previously committed
-transactions. 
+captures that, {\em all} the transactions $\txid$ that {must} have already committed to the kv-store before commit of \( \txid' \).
 The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MRd \cap \ET_\RYW$,
 where the latter enforces a client sees its own commits.
 For the long fork anomaly \cref{fig:cp-disallowed},
@@ -496,26 +502,27 @@ Similarly,
 if \( \txid_{\cl_1}^2\) is the last transaction, it sees \( \txid \) and so must see \( \txid' \).
 
 \mypar{Snapshot Isolation (\SI)}
-When the total order in which transactions commit is known then
-$\SI = \CP \cap \UA$~\cite{gsi,framework-concur}.  When we just have
-the partial order given by kv-stores and views, then the analogous equality does
-not hold. For example, the kv-store of \cref{fig:si-disallowed} is
+When the total order in which transactions commit is known then 
+$\SI$ can be specified compositionally from $\CP$ and $\UA$
+When we can rely only on 
+a partial order of transaction execution, inferred from 
+kv-stores and views, then this compositional result does not 
+hold\footnote{This issue arises also if dependency graphs are used in 
+place of kv-stores. See \cref{?}}. For example, the kv-store of \cref{fig:si-disallowed} is
 included in both $\CMs(\ET_{\CP})$ and $\CMs(\ET_{\UA})$, but is
-disallowed by \SI.  
-In our specification, \( \ET_\SI \) is the combination of \( \ET_\UA \), all constraint from \( \ET_\CP \),
-and \( \ddagger \), a strengthening of \( \dagger \) (\cref{fig:execution.tests}).
-Previously in \( \CP \) if \( (\txid, \txid'') \in \WW_\hh \) and \( (\txid'',\txid') \in \RW_\hh \),
-transaction \( \txid \) may not commit before \( \txid' \):
-\[
-    \begin{array}{l}
-    \func{commit}{\txid} \to \func{commit}{\txid''} 
-    \land \func{start}{\txid''} \to \func{commit}{\txid'}  \\
-    {} \qquad \not\implies \func{commit}{\txid} \to \func{commit}{\txid'}
-    \end{array}
-\]
-However, write-conflict freedom (\( \UA \)) enforces \( \txid''\) must see \( \txid \), that is,
-\( \func{commit}{\txid} \to \func{start}{\txid''} \).
-As result of \( \UA \) the commit of transactions \( \txid \) must commit before \( \txid' \) commits, so it should be included in the view.
+disallowed by the execution test $\ET_\SI$, introduced presently
+In our specification, \( \ET_\SI \) by replacing property dagger in $\ET_{\CP}$ with 
+\( \ddagger \) (\cref{fig:execution.tests}) and by intersecting the result with $\ET_{\UA}$.
+Similarly as for $\CP$, the $\ddagger$ property captures the 
+fact that if transaction $\txid$ sees the writes of another transaction $\txid'$, then 
+it must see the subset of transactions committing before $\txid'$ that can be computed 
+from $\SO, \RF_{\hh}, \VO_{\hh}, \AD_{\hh}$. However, because snapshot isolation enforces 
+write-conflict freedom, the computation of this subset 
+differs from the one for $\CP$. 
+Under $\SI$, if  $\txid \xrightarrow{\VO_{\hh}} \txid''$ it must be not only the case that $\txid$ commits 
+before $\txid''$, but $\txid$ commits before $\txid''$ start. Because $\txid'' \xrightarrow{\AD_{\hh}} 
+\txid'$ implies that $\txid''$ starts before $\txid'$ commits, then it must be the case that 
+when $\txid \xrightarrow{\VO_{\hh} ; \AD_{\hh}} \txid'$, then $\txid$ commits before $\txid'$ does. 
 In \cref{fig:si-disallowed}, transaction \( \txid_4 \) reads the last version of \( \ke_2 \) written by \( \txid_3 \) then installs a newer version so does not violate \( \UA \).
 Let us consider the read especially for \( \ke_2 \).
 From the \( \txid_3 \) we have edges:
@@ -523,14 +530,5 @@ From the \( \txid_3 \) we have edges:
     \txid_1 \toEdge{\WW_\ww} \txid_2 \toEdge{\RW_\hh} \txid_3
     \)
 Snapshot isolation \( \SI \) requires that if a transaction sees \( \txid_3 \) it must see \( \txid_1 \) by the \( \ddagger \), yet it is not the case in \( \CP \).
-%----------
-%\pg{
-%explain WW; RW tc --> t''c and t''s ---> t'c, so not always before
-%with UA (write-conflict freedom), we have tc --> t''s so not must be before
-%hence double dagger
-%explain example
-%}
-%---------
 As we discuss in \cref{sec:applications} and prove in the \ref{sec:clock-si}, 
-the Clock-SI implementation~\cite{Du:2013:CSI:2553409.2553434} satisfies
-$\ET_{\SI}$. 
+the Clock-SI implementation~\cite{Du:2013:CSI:2553409.2553434} satisfies $\ET_{\SI}$. 
