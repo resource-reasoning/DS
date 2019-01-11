@@ -33,9 +33,10 @@ $\ctrinc(\ke)$ and $\ctrread(\ke)$:
 Command \( \pderef{\pv{x}}{\ke} \) reads the value of key \( \ke \) to
 local variable \( \vx \) and command \( \pmutate{\ke}{\pv{x}+1} \)
 writes the value of \( \pv{x}+1 \) to key \( \ke \).  The code of each
-operation is wrapped in square brackets, denoting that the enclosed
-code must be executed \emph{atomically} as a transaction.  
-Correctness of such atomic transactions is subtle, depending heavily
+operation is wrapped in square brackets, denoting that 
+%the enclosed code 
+it must be executed \emph{atomically} as a transaction.  
+Correctness of atomic transactions is subtle, depending heavily
 on implementation details of the distributed kv-store and, in
 particular, on its \emph{consistency model}.
 
@@ -103,7 +104,9 @@ Multi-versioning mandates that we record all versions of each key written,
 together with the meta-data of the transactions that access it. 
 This then yields a history of each key, and may be thought as projecting the local state of each replica into a global, centralised state. 
 Client views (or simply views) allow different clients to observe only a subset of the versions available in 
-the kv-store: this makes it possible for different clients to observe different states 
+the kv-store: 
+%this makes it possible for different clients to 
+therefore, different clients can observe different states 
 of the kv-store, thus allowing for weak behaviours such as the lost update anomaly. 
 
 %\begin{figure*}[h]
@@ -201,7 +204,7 @@ Proceeding clockwise from the left, these sections represent the version value, 
 Suppose that $\cl_1$ first invokes $\ctrinc$ on \cref{fig:counter_kv_initial}. 
 In order to mark the versions that $cl_1$ reads and writes while executing the underlying transaction of $\ctrinc$,  
 $\cl_1$ first obtains a unique transaction identifier, $\txid$, 
-and then proceeds with $\ctrinc$. 
+and then proceeds with $\ctrinc(\ke)$. 
 It then reads the (only) version of $\ke$ (with value $0$), 
 and installs a new value $1$ for $\ke$. 
 The resulting kv-store is depicted in \cref{fig:counter_kv_first_inc}.
@@ -223,10 +226,11 @@ another containing both versions of $\ke$.%
 are four possible view candidates. 
 However, as we explain in \cref{sec:full-semantics}, we always require the view of a client 
 to have the initial version of each key marked as visible.}
-In the former case, the view is depicted in \cref{fig:counter_kv_view};
-running $\ctrinc(\ke)$ on this view reads value $0$ and writes a new version with value $1$, as depicted in \cref{fig:counter_kv_final}.
+In the former case, the view is depicted in \cref{fig:counter_kv_view}:
+running $\ctrinc(\ke)$ on this view reads value $0$ and writes a new version with value $1$, as depicted in \cref{fig:counter_kv_final};
+such a kv-store does not contain a version with value $2$, despite two increments on $\ke$, producing the lost update anomaly.
 In the latter case, running $\ctrinc(\ke)$ reads the latest value ($1$) and writes a new version with value $2$.
-As before, in the former case the resulting kv-store (\cref{fig:counter_kv_final}) does not contain a version with value $2$, despite two increments on $\ke$, producing the lost update anomaly.
+%As before, in the former case the resulting kv-store (\cref{fig:counter_kv_final}) does not contain a version with value $2$, despite two increments on $\ke$, producing the lost update anomaly.
 
 \mypar{Execution Tests}
 To avoid the lost update anomaly, distributed kv-stores introduce a check at commit time to ensure that 
@@ -241,7 +245,7 @@ if its view only contains the initial version of $\ke$.
 Instead, the $\cl_2$ view must contain both versions of $\ke$, 
 thus enforcing $\cl_2$ to install a version with value $2$ after running $\ctrinc(\ke)$
 In \cref{sec:program-analysis}, we prove that if the kv-store 
-ensures write-conflict freedom as well as a few other properties, then clients can increment 
+ensures write-conflict freedom as well as few other properties, then clients can increment 
 and read from a single counter as if the kv- store were (strictly) serialisable.
 
 However, the situation becomes more complicated if the kv-store contains multiple counters. 
@@ -280,19 +284,28 @@ that is, from the point of view of $\cl_2$, the increment of $\ke_2$
 happens before the increment of $\ke_1$. 
 This behaviour is known as the \emph{long fork} anomaly (\cref{fig:ser-disallowed}). 
 
-The long fork anomaly is disallowed under strong models \eg serialisability and SI (snapshot isolation), 
-but allowed under weak models \eg PSI (parallel SI). 
-As such, the execution test for PSI does not need additional constraints/ 
-However, to rule out long-fork under strong models such as serialisability and SI, 
-we must strengthen the execution test associated with the kv-store.
-Informally, as we discuss in \cref{sec:cm}, the candidate execution test recovers the order in which 
+The long fork anomaly is disallowed under strong models, \eg serialisability and snapshot isolation 
+(SI) \cite{fekete-tods}, 
+but allowed under weak models \eg PSI (parallel SI) \cite{PSI}. 
+%As such, the execution test for PSI does not need additional constraints/ 
+%
+%To rule out the long fork anomaly under strong models such as serialisability and SI, 
+%we must strengthen the execution test associated with the kv-store.
+To capture such consistency models and rule out the long form anomaly as a possible result 
+of the program \eqref{prog:LF}, we must strengthen the execution test associated with the kv-store. 
+For serialisability, we strengthen the execution test by requiring that a client can execute a transaction 
+only if its view contains all the versions available in the global state. 
+For SI, 
+%Informally, as we discuss in \cref{sec:cm}, 
+the candidate execution test recovers the order in which 
 updates of versions have been observed by different clients (\eg $\cl_1$), 
 and allows a transaction to commit only if the observations made by the committing client (\eg $\cl_2$) 
-are consistent with previous clients (\ie $\cl_1$). 
+are consistent with previous clients (\ie $\cl_1$): we give the formal definition of this execution test 
+in \cref{sec:cm}
 %In \cref{sec:cm} we give an example of such an execution test, that ensures that the underlying key-value 
 %store guarantees the (strong session) snapshot isolation consistency model. 
 %For example, 
-Under this strengthened execution test, in the \eqref{prog:LF} example $\cl_2$ cannot
+Under of such strengthened execution tests, e.g. the one for SI, in the \eqref{prog:LF} example $\cl_2$ cannot
 observe $1$ for $\ke_2$ after observing $0$ for $\ke_1$; 
 this is because $\cl_1$ has already established that the increment on $\ke_2$ happens after 
 the one of $\ke_1$. 
@@ -301,5 +314,6 @@ behaves as is it were (strictly) serialisable.
 %
 As we demonstrate in \cref{sec:cm}, using execution tests on kv-stores, we can specify all well-known consistency models (weak or strong) subject to a few basic conditions. 
 %
-Moreover, in \cref{sec:verify-impl} we encode two implementations, COPS and Clock-SI, to kv-stores and views,
-and verify them against our specification using execution tests.
+Moreover, in \cref{sec:verify-impl} we encode two different distributed protocols using kv-stores and views: COPS \cite{cops}, 
+a geo-replicated protocol for causal consistency, and Clock-SI \cite{clocksi}, a protocol for SI under partitioned key-value stores.
+Each of these protocols is verified against our specifications using execution tests.
