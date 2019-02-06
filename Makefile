@@ -3,6 +3,8 @@ BIBS = $(shell find . -type f -name '*.bib')
 STYS = $(shell find . -type f -name '*.sty') 
 OUTDIR = OUT
 
+.PHONY: all clean
+
 all: main.pdf draft.pdf
 
 draft.pdf : $(OUTDIR)/draft.pdf
@@ -20,8 +22,6 @@ $(OUTDIR)/main.pdf :  $(TEXS) $(BIBS) $(STYS)
 	latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode" -bibtex -outdir=$(OUTDIR) -use-make main.tex
 
 $(TEXS) $(BIBS) $(STYS):
-
-.PHONY: clean
 
 clean:
 	rm -rf $(OUTDIR)
