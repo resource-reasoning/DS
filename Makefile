@@ -4,7 +4,7 @@ STYS = $(shell find . -type f -name '*.sty')
 OUTDIR = .temp
 DRAFTTEX = .draft.tex
 
-.PHONY: all clean try
+.PHONY: all clean try stat
  
 all:  main.pdf draft.pdf
 
@@ -36,6 +36,11 @@ $(OUTDIR)/.draft.bbl :
 
 try : $(TEXS) $(BIBS) $(STYS) 
 	latexmk  -pdf -pdflatex="pdflatex -halt-on-error" -outdir=$(OUTDIR) -bibtex- main.tex
+
+stat : .statistic
+
+.statistic : $(TEXS) $(BIBS) $(STYS)
+	./run-statistic.sh
 
 $(TEXS) $(BIBS) $(STYS):
 
