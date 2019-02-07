@@ -14,8 +14,8 @@ main.pdf : $(OUTDIR)/main.pdf
 $(OUTDIR)/main.pdf : $(TEXS) $(BIBS) $(STYS)
 	latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" -bibtex -outdir=$(OUTDIR) -use-make main.tex
 
-draft.pdf : $(OUTDIR)/draft.pdf
-	cp $(OUTDIR)/draft.pdf draft.pdf
+draft.pdf : $(OUTDIR)/.draft.pdf
+	cp $(OUTDIR)/.draft.pdf draft.pdf
 
 $(OUTDIR)/main.bbl :
 	cp *.bib $(OUTDIR)
@@ -23,14 +23,14 @@ $(OUTDIR)/main.bbl :
 	bibtex main
 	cd ..
 
-$(OUTDIR)/draft.pdf :  $(TEXS) $(BIBS) $(STYS)
-	sed 's/CommentEditsfalse/CommentEditstrue/g' main.tex > draft.tex
+$(OUTDIR)/.draft.pdf :  $(TEXS) $(BIBS) $(STYS)
+	sed 's/CommentEditsfalse/CommentEditstrue/g' main.tex > $(DRAFTTEX)
 	latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" -bibtex -outdir=$(OUTDIR) -use-make $(DRAFTTEX)
-	rm draft.tex
+	rm $(DRAFTTEX)
 
-$(OUTDIR)/draft.bbl :
+$(OUTDIR)/.draft.bbl :
 	cd $(OUTDIR)
-	cp main.bbl draft.bbl
+	cp main.bbl .draft.bbl
 	cd ..
 
 
