@@ -7,34 +7,34 @@
 
 \pg{In introduction, we need to introduce the notation kv-store.}
 
-Consider a simple counter object, $\mathsf{Counter}(\ke)$, 
+Consider a simple counter object, $\mathsf{Counter}(\key)$, 
 defined over a distributed kv-store.
-Clients can manipulate the value of key $\ke$ via two operations, 
-$\ctrinc(\ke)$ and $\ctrread(\ke)$:
+Clients can manipulate the value of key $\key$ via two operations, 
+$\ctrinc(\key)$ and $\ctrread(\key)$:
 %
 \[\small
 \begin{array}{r @{\hspace{2pt}} l @{\hspace{18pt}} r @{\hspace{2pt}} l}
-\ctrinc(\ke) \eqdef 
+\ctrinc(\key) \eqdef 
 &
 \begin{session}
 \begin{transaction}
-\pderef{\pv{x}}{\ke}; \ 
-\pmutate{\ke}{\pv{x}+1}
+\pderef{\pv{x}}{\key}; \ 
+\pmutate{\key}{\pv{x}+1}
 \end{transaction}
 \end{session}
 &
-\ctrread(\ke) \eqdef &
+\ctrread(\key) \eqdef &
 \begin{session}
 \begin{transaction}
-\pderef{\pv{x}}{\ke}\\
+\pderef{\pv{x}}{\key}\\
 \end{transaction}
 \end{session}
 \end{array}
 \]
 %
-Command \( \pderef{\pv{x}}{\ke} \) reads the value of key \( \ke \) to
-local variable \( \vx \) and \( \pmutate{\ke}{\pv{x}+1} \)
-writes the value of \( \pv{x}+1 \) to key \( \ke \).  The code of each
+Command \( \pderef{\pv{x}}{\key} \) reads the value of key \( \key \) to
+local variable \( \vx \) and \( \pmutate{\key}{\pv{x}+1} \)
+writes the value of \( \pv{x}+1 \) to key \( \key \).  The code of each
 operation is wrapped in square brackets, denoting that 
 %the enclosed code 
 it must be executed \emph{atomically} as a transaction.  
@@ -60,26 +60,26 @@ replicas. In this setting, concurrent calls to
 operations can lead to weak behaviours not present with
 serialisability.
 For instance, consider the program below where clients $\cl_1$ and 
-$\cl_2$  run $\ctrinc(\ke)$ concurrently: 
+$\cl_2$  run $\ctrinc(\key)$ concurrently: 
 %
 \begin{align}
-	\cl_1: \ctrinc(\ke)
+	\cl_1: \ctrinc(\key)
 	\;\; || \;\;
-	\cl_2: \ctrinc(\ke)
+	\cl_2: \ctrinc(\key)
 	\tag{\textsc{LU}}
 	\label{prog:inc2}
 \end{align}%
 %
-Let us assume that  $\ke$ initially holds value $0$.
+Let us assume that  $\key$ initially holds value $0$.
 Intuitively, since transactions are executed atomically, after both
-calls to $\ctrinc(\ke)$ have terminated, the counter should hold 
+calls to $\ctrinc(\key)$ have terminated, the counter should hold 
 the value $2$.
 Indeed, this is the only outcome allowed under serialisability. 
-However, when clients execute $\ctrinc(\ke)$ at different replicas,
+However, when clients execute $\ctrinc(\key)$ at different replicas,
 if the kv-store provides no synchronisation mechanism for transactions,
-then it is possible for both clients to read the same initial value $0$ for $\ke$ at their
+then it is possible for both clients to read the same initial value $0$ for $\key$ at their
 distinct replicas, update them to $1$, and propagate their updates. Consequently, both
-replicas are unchanged with value  $1$ for $\ke$.
+replicas are unchanged with value  $1$ for $\key$.
 This weak behaviour is known as the \emph{lost update} anomaly, which
 is  allowed under causal consistency \cite{cops,wren,redblue}.
 
@@ -105,8 +105,8 @@ of the kv-store, allowing for weak behaviours such as the \emph{lost update} ano
 
 
 Let us illustrate how we can produce the lost update anomaly in \eqref{prog:inc2} using our kv-stores. 
-The initial kv-store comprises a single key $\ke$, with only one 
-version, $(0, \txid_{0}, \emptyset)$, stating that $\ke$ holds value $0$, 
+The initial kv-store comprises a single key $\key$, with only one 
+version, $(0, \txid_{0}, \emptyset)$, stating that $\key$ holds value $0$, 
 that the version \emph{writer} is the initialising transaction $\txid_0$ (this version was written by $\txid_0$), 
 and that the version \emph{reader set} is empty (no transaction has read this version as of yet). 
 \Cref{fig:counter_kv_initial} depicts this initial kv-store, with the version
@@ -116,31 +116,31 @@ proceeding clockwise from the left, they represent the version value, writer and
 Suppose that $\cl_1$ first invokes $\ctrinc$ on \cref{fig:counter_kv_initial}. 
 In order to mark the versions that $cl_1$ reads and writes while executing the underlying transaction of $\ctrinc$,  
 $\cl_1$ first obtains a unique transaction identifier, $\txid$, 
-and then proceeds with $\ctrinc(\ke)$. 
-It then reads the (only) version of $\ke$ (with value $0$), 
-and writes a new value $1$ for $\ke$. 
+and then proceeds with $\ctrinc(\key)$. 
+It then reads the (only) version of $\key$ (with value $0$), 
+and writes a new value $1$ for $\key$. 
 The resulting kv-store is depicted in \cref{fig:counter_kv_first_inc}.
-Note that the initial version of $\ke$ is updated to reflect that it has been read by $\txid$; 
+Note that the initial version of $\key$ is updated to reflect that it has been read by $\txid$; 
 moreover, versions are ordered (left to right), from the oldest to the newest.
 
 Next, client $\cl_2$ invokes $\ctrinc$ on \cref{fig:counter_kv_first_inc}. 
-As there are now two versions available for $\ke$, 
-we need to determine the version from which $\cl_2$ fetches its value, before running $\ctrinc(\ke)$.
+As there are now two versions available for $\key$, 
+we need to determine the version from which $\cl_2$ fetches its value, before running $\ctrinc(\key)$.
 This is where \emph{client views} come into play.
 Intuitively, a view of client $\cl_2$ comprises those versions in the kev-store that are \emph{visible} to $\cl_2$, 
 \ie those whose values can be read by $\cl_2$. 
 If more than one version is visible, then the newest (right-most) such version is selected, 
 modelling the \emph{last writer wins} resolution policy used by several kv-stores~\cite{vogels:2009:ec:1435417.1435432}. 
-In our example, there are two possible view candidates for $\cl_2$ when running $\ctrinc(\ke)$ on \cref{fig:counter_kv_first_inc}: 
-one containing only the initial version of $\ke$, 
-another containing both versions of $\ke$.%
+In our example, there are two possible view candidates for $\cl_2$ when running $\ctrinc(\key)$ on \cref{fig:counter_kv_first_inc}: 
+one containing only the initial version of $\key$, 
+another containing both versions of $\key$.%
 \footnote{
 As we explain in \cref{sec:full-semantics}, we always require the view of a client 
 to have the initial version of each key marked as visible.}
 In the former case, the view is depicted in \cref{fig:counter_kv_view}:
-running $\ctrinc(\ke)$ on this view reads $0$ and writes a new version with value $1$, as depicted in \cref{fig:counter_kv_final}.
-Such a kv-store does not contain a version with value $2$, despite two increments on $\ke$, producing the lost update anomaly.
-In the latter case, running $\ctrinc(\ke)$ reads the latest value ($1$) and writes a new version with value $2$.
+running $\ctrinc(\key)$ on this view reads $0$ and writes a new version with value $1$, as depicted in \cref{fig:counter_kv_final}.
+Such a kv-store does not contain a version with value $2$, despite two increments on $\key$, producing the lost update anomaly.
+In the latter case, running $\ctrinc(\key)$ reads the latest value ($1$) and writes a new version with value $2$.
 
 \mypar{Execution Tests}
 To avoid the lost update anomaly, distributed kv-stores introduce a check at commit time to ensure that 
@@ -148,12 +148,12 @@ at most one of concurrent transactions writing to the same key commits.
 This property is known as \emph{write conflict freedom}. 
 In our framework, we can simulate this behaviour by introducing the notion of \emph{execution tests}. 
 Intuitively, an execution test determines whether a client with a given view can execute a transaction. 
-For example, write-conflict freedom can be enforced by requiring that a client commit a transaction writing to $\ke$ 
+For example, write-conflict freedom can be enforced by requiring that a client commit a transaction writing to $\key$ 
 only if its view contains all versions available in the global state for such a view. 
-In our \eqref{prog:inc2} example, this prevents $\cl_2$ from running $\ctrinc(\ke)$ on \cref{fig:counter_kv_first_inc}
-if its view only contains the initial version of $\ke$. 
-Instead, the $\cl_2$ view must contain both versions of $\ke$, 
-thus enforcing $\cl_2$ to write a version with value $2$ after running $\ctrinc(\ke)$
+In our \eqref{prog:inc2} example, this prevents $\cl_2$ from running $\ctrinc(\key)$ on \cref{fig:counter_kv_first_inc}
+if its view only contains the initial version of $\key$. 
+Instead, the $\cl_2$ view must contain both versions of $\key$, 
+thus enforcing $\cl_2$ to write a version with value $2$ after running $\ctrinc(\key)$
 In \cref{sec:program-analysis}, we prove that if the kv-store 
 ensures write-conflict freedom as well as few other properties, then clients can increment 
 and read from a single counter as if the kv- store were (strictly) serialisable.
@@ -161,38 +161,38 @@ and read from a single counter as if the kv- store were (strictly) serialisable.
 However, the situation becomes more complicated if the kv-store contains multiple counters. 
 In this case, as each client has its own view on the kv-store, and since the views 
 of clients are independent from each other, it is possible for two 
-clients to observe the increments on two distinct counters, $\Counter(\ke_1)$ and $\Counter(\ke_2)$, in different orders. 
+clients to observe the increments on two distinct counters, $\Counter(\key_1)$ and $\Counter(\key_2)$, in different orders. 
 For instance, consider the following program:
 %
 \begin{align}
 	\begin{array}[t]{@{} r @{\hspace{2pt}} l || r @{\hspace{2pt}} l || r @{\hspace{2pt}} l @{}}
 		\cl_0: 
-		& \ctrinc(\ke_1) 
+		& \ctrinc(\key_1) 
 		& \cl_1: 
-		& \ctrread(\ke_1)
+		& \ctrread(\key_1)
 		& \cl_2: 
-		& \ctrread(\ke_1)\\
+		& \ctrread(\key_1)\\
 %
-		& \ctrinc(\ke_2) 
-		&& \ctrread(\ke_2)
-		&& \ctrread(\ke_2)
+		& \ctrinc(\key_2) 
+		&& \ctrread(\key_2)
+		&& \ctrread(\key_2)
 	\end{array}
 	\tag{\textsc{LF}}
 	\label{prog:LF}
 \end{align}
 %   
-Suppose that $\cl_0$ executes first and increments $\ke_1$, $\ke_2$. 
-Both $\ke_1$ and $\ke_2$ then have two versions with values $0$ and $1$. 
-Let us assume that the $\cl_1$ view contains both versions of $\ke_1$, but only 
-the initial version of $\ke_2$ (value $0$). 
-When next client $\cl_1$ executes, it thus reads $1$ for $\ke_1$ and $0$ for $\ke_2$; 
-that is, from the point of view of $\cl_1$, the increment of $\ke_1$ 
-happens before the increment of $\ke_2$. 
-Conversely, let us assume that the $\cl_2$ view contains both versions for $\ke_2$, but only 
-the initial version of $\ke_1$ (value $0$). 
-As such, when $\cl_2$ executes , it reads $0$ for $\ke_1$ and $1$ for $\ke_2$;
-that is, from the point of view of $\cl_2$, the increment of $\ke_2$ 
-happens before the increment of $\ke_1$. 
+Suppose that $\cl_0$ executes first and increments $\key_1$, $\key_2$. 
+Both $\key_1$ and $\key_2$ then have two versions with values $0$ and $1$. 
+Let us assume that the $\cl_1$ view contains both versions of $\key_1$, but only 
+the initial version of $\key_2$ (value $0$). 
+When next client $\cl_1$ executes, it thus reads $1$ for $\key_1$ and $0$ for $\key_2$; 
+that is, from the point of view of $\cl_1$, the increment of $\key_1$ 
+happens before the increment of $\key_2$. 
+Conversely, let us assume that the $\cl_2$ view contains both versions for $\key_2$, but only 
+the initial version of $\key_1$ (value $0$). 
+As such, when $\cl_2$ executes , it reads $0$ for $\key_1$ and $1$ for $\key_2$;
+that is, from the point of view of $\cl_2$, the increment of $\key_2$ 
+happens before the increment of $\key_1$. 
 This behaviour is known as the \emph{long fork} anomaly (\cref{fig:cp-disallowed}). 
 
 The long fork anomaly is disallowed under strong models, \eg \(\SER\) and 
@@ -210,9 +210,9 @@ and allows a transaction to commit only if the observations made by the committi
 are consistent with previous clients (\ie $\cl_1$): we give the formal definition of this execution test 
 in \cref{sec:cm}
 Under such strengthened execution tests, e.g. the one for \(\SI\), in the \eqref{prog:LF} example $\cl_2$ cannot
-observe $1$ for $\ke_2$ after observing $0$ for $\ke_1$; 
-this is because $\cl_1$ has already established that the increment on $\ke_2$ happens after 
-the one of $\ke_1$. 
+observe $1$ for $\key_2$ after observing $0$ for $\key_1$; 
+this is because $\cl_1$ has already established that the increment on $\key_2$ happens after 
+the one of $\key_1$. 
 In \cref{sec:program-analysis}, we prove that if the kv-store consists of multiple counter objects, and the execution test employed by transactions guarantees SI, then the kv-store 
 behaves as is it were (strictly) serialisable.
 As we demonstrate in \cref{sec:cm}, using execution tests on kv-stores, we can define all well-known consistency models (weak or strong) subject to a few basic conditions. 

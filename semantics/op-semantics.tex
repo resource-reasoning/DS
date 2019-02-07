@@ -80,10 +80,10 @@ describing how the snapshot and stack evolve upon executing $\transpri$:
 % \cref{fig:semantics}.
 \[
 \begin{array}{rcl @{\qquad} rcl}
-(\stk, \h)  & \toLTS{\passign{\var}{\expr}}          & (\stk\rmto{\var}{\evalE{\expr}}, \h)                  &
-(\stk, \h)  & \toLTS{\passume{\expr}}                & (\stk, \h) \text{ where } \evalE{\expr} \neq 0        \\
-(\stk, \h)  & \toLTS{\pderef{\var}{\expr}}           & (\stk\rmto{\var}{\h(\evalE{\expr})}, \h)              &
-(\stk, \h)  & \toLTS{\pmutate{\expr_{1}}{\expr_{2}}} & (\stk, \h\rmto{\evalE{\expr_{1}}}{\evalE{\expr_{2}}}) \\
+(\stk, \sn)  & \toLTS{\passign{\var}{\expr}}          & (\stk\rmto{\var}{\evalE{\expr}}, \sn)                  &
+(\stk, \sn)  & \toLTS{\passume{\expr}}                & (\stk, \sn) \text{ where } \evalE{\expr} \neq 0        \\
+(\stk, \sn)  & \toLTS{\pderef{\var}{\expr}}           & (\stk\rmto{\var}{\sn(\evalE{\expr})}, \sn)              &
+(\stk, \sn)  & \toLTS{\pmutate{\expr_{1}}{\expr_{2}}} & (\stk, \sn\rmto{\evalE{\expr_{1}}}{\evalE{\expr_{2}}}) \\
 \end{array}                                                                                               
 \]
 
@@ -93,10 +93,10 @@ $\func{fp}{\stub} : \Stacks \times \Snapshots \times \transpri \rightarrow \Ops 
 %
 \[
 \begin{array}{rcl @{\quad} rcl}
-\func{fp}{\stk, \h, \passign{\var}{\expr}}          & \defeq & \emptyop                                     &
-\func{fp}{\stk, \h, \passume{\expr}}                & \defeq & \emptyop                                     \\
-\func{fp}{\stk, \h, \pderef{\var}{\expr}}           & \defeq & (\otR, \evalE{\expr}, \h(\evalE{\expr}))     &
-\func{fp}{\stk, \h, \pmutate{\expr_{1}}{\expr_{2}}} & \defeq & (\otW, \evalE{\expr_{1}}, \evalE{\expr_{2}}) \\
+\func{fp}{\stk, \sn, \passign{\var}{\expr}}          & \defeq & \emptyop                                     &
+\func{fp}{\stk, \sn, \passume{\expr}}                & \defeq & \emptyop                                     \\
+\func{fp}{\stk, \sn, \pderef{\var}{\expr}}           & \defeq & (\otR, \evalE{\expr}, \sn(\evalE{\expr}))     &
+\func{fp}{\stk, \sn, \pmutate{\expr_{1}}{\expr_{2}}} & \defeq & (\otW, \evalE{\expr_{1}}, \evalE{\expr_{2}}) \\
 \end{array}
 \]
 %and a \emph{fingerprint composition operator} \( \addO \).
@@ -109,26 +109,26 @@ For instance, when executing $ \ptrans{\trans}$ with $\trans \eqdef \transpri^1;
 the effect of each $\transpri^i$ is calculated via the $\op_i = \func{fp}{-, -, \transpri^i}$ function, 
 with the overall fingerprint given as the $\addO$-composition of the constituent effects: $\op_1 \addO \cdots \addO \op_n$. 
 
-For each key $\ke$, the composition operator \( \addO \) records
-the first value a transaction reads (before a subsequent write) for $\ke$, 
-and the last value the transaction writes for $\ke$.
+For each key $\key$, the composition operator \( \addO \) records
+the first value a transaction reads (before a subsequent write) for $\key$, 
+and the last value the transaction writes for $\key$.
 This is in line with our assumption that transactions read from an atomic snapshot of the kv-store.
-In particular, for each key $\ke$, 
-only the first read from $\ke$ fetches its value from the kv-store,
+In particular, for each key $\key$, 
+only the first read from $\key$ fetches its value from the kv-store,
 and since clients observe either none or all effects of a transaction, 
-only the last write to $\ke$ is committed.
+only the last write to $\key$ is committed.
 %
 \[
 \begin{rclarray}
-    \fp \addO (\otR, \addr, \val)  & \defeq  &
+    \fp \addO (\otR, \key, \val)  & \defeq  &
     \begin{cases}
-        \fp \cup \{(\otR, \addr, \val)\} & \text{if } \for{l, v'} (l, \addr, v') \notin \fp \\
+        \fp \cup \{(\otR, \key, \val)\} & \text{if } \for{l, v'} (l, \key, v') \notin \fp \\
         \fp &  \text{otherwise} \\
     \end{cases} 
     	\qqquad 
     \fp \addO \emptyop  \defeq  \fp  \\
-    \fp \addO (\otW, \addr, \val) & \defeq & 
-    \left( \fp \setminus \setcomp{(\otW, \addr, v')}{v' \in \Val} \right) \cup\ \{(\otW, \addr, \val)\} 
+    \fp \addO (\otW, \key, \val) & \defeq & 
+    \left( \fp \setminus \setcomp{(\otW, \key, v')}{v' \in \Val} \right) \cup\ \{(\otW, \key, \val)\} 
 %    \fp \addO \emptyop & \defeq & \fp \\
 \end{rclarray}
 \]
@@ -140,39 +140,39 @@ only the last write to $\ke$ is committed.
 \hrulefill
 \begin{mathpar}
     \inferrule[\rl{TPrimitive}]{%
-        (\stk, \h) \toLTS{\transpri} (\stk', \h')
-        \\ \op = \func{fp}{\stk, \h, \transpri}
+        (\stk, \sn) \toLTS{\transpri} (\stk', \sn')
+        \\ \op = \func{fp}{\stk, \sn, \transpri}
     }{%
-        (\stk, \h, \fp) , \transpri \ \toL \  (\stk', \h', \fp \addO \op) , \pskip 
+        (\stk, \sn, \fp) , \transpri \ \toL \  (\stk', \sn', \fp \addO \op) , \pskip 
     }
     \\
     \inferrule[\rl{TChoice}]{
         i \in \Set{1,2}
     }{%
-        (\stk, \h, \fp) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\stk, \h, \fp) , \trans_{i}
+        (\stk, \sn, \fp) , \trans_{1} \pchoice \trans_{2} \ \toL \  (\stk, \sn, \fp) , \trans_{i}
     }
     \and
     \inferrule[\rl{TIter}]{ }{%
-        (\stk, \h, \fp),  \trans\prepeat \ \toL \  (\stk, \h, \fp), \pskip \pchoice (\trans \pseq \trans\prepeat)
+        (\stk, \sn, \fp),  \trans\prepeat \ \toL \  (\stk, \sn, \fp), \pskip \pchoice (\trans \pseq \trans\prepeat)
     } 
     \and
     \inferrule[\rl{TSeqSkip}]{ }{%
-        (\stk, \h, \fp), \pskip \pseq \trans \ \toL \  (\stk, \h, \fp), \trans
+        (\stk, \sn, \fp), \pskip \pseq \trans \ \toL \  (\stk, \sn, \fp), \trans
     }
     \and
     \inferrule[\rl{TSeq}]{%
-        (\stk, \h, \fp), \trans_{1} \ \toL \  (\stk', \h', \fp'), \trans_{1}'
+        (\stk, \sn, \fp), \trans_{1} \ \toL \  (\stk', \sn', \fp'), \trans_{1}'
     }{%
-        (\stk, \h, \fp), \trans_{1} \pseq \trans_{2} \ \toL \  (\stk', \h', \fp'), \trans_{1}' \pseq \trans_{2}
+        (\stk, \sn, \fp), \trans_{1} \pseq \trans_{2} \ \toL \  (\stk', \sn', \fp'), \trans_{1}' \pseq \trans_{2}
     }
 \end{mathpar}
 \hrulefill
 \[
     \inferrule[\rl{PCommit}]{%
         \vi \orderVI  \vi''
-        \qquad \h = \clpsHH{\mkvs,\vi''}
-        \qquad \txid \in \nextTxId(\cl, \mkvs)
-        \\\\ (\stk, \h, \emptyset), \trans \ \toL^{*} \  (\stk', \stub,  \fp) , \pskip
+        \qquad \sn = \snapshot[\mkvs,\vi'']
+        \qquad \txid \in \nextTxid(\cl, \mkvs)
+        \\\\ (\stk, \sn, \emptyset), \trans \ \toL^{*} \  (\stk', \stub,  \fp) , \pskip
         \\ \ET \vdash (\mkvs, \vi'') \triangleright \fp : \vi'
     }{%
         \cl \vdash ( \mkvs, \vi, \stk ), \ptrans{\trans} \ \toT{(\cl, \vi'', \fp)}_{\ET} \ ( \updateKV(\mkvs, \vi, \txid, \fp),\vi', \stk' ) , \pskip
@@ -214,19 +214,19 @@ We refer the reader to \cref{sec:full-semantics} for the full operational semant
 \fi%
 %
 %The rules presented in the top part of \cref{fig:semantics} pertains to that of executing transactional code (within the transaction boundaries in $\ptrans{}$). 
-Transactional rules are of the form $(\stk, \h, \fp), \toL (\stk', \h', \fp'), \trans'$, 
+Transactional rules are of the form $(\stk, \sn, \fp), \toL (\stk', \sn', \fp'), \trans'$, 
 stating that when the fingerprint accumulated so far is recorded in $\fp$, 
 executing $\trans$ for one step transforms the client-local stack $\stk$ 
-and snapshot $\h$ %(used to fetch the values of read operations),
-to $\stk'$ and $\h'$, respectively, with the extended fingerprint $\fp'$, and continuation $\trans'$.
+and snapshot $\sn$ %(used to fetch the values of read operations),
+to $\stk'$ and $\sn'$, respectively, with the extended fingerprint $\fp'$, and continuation $\trans'$.
 The \rl{TSeq} rule is in a standard format; 
 the \rl{TPrimitive}  models the execution of primitive transactional commands.
 %The transaction maintains a client-local-stack $\stk$, 
-%a snapshot $\h$ used to fetch the value of read operations, 
+%a snapshot $\sn$ used to fetch the value of read operations, 
 %and a set of operations $\fp$ recording the transaction fingerprint to be applied to the kv-store upon committing the transaction. 
-When $(\stk, \h)$ is transformed to $(\stk', \h')$ via the transition system $\toLTS{\transpri}$,
-$\func{fp}{\stk, \h, \transpri} = \op$, and the fingerprint recorded so far is given by $\fp$, 
-then executing $\transpri$ transforms $(\stk, \h)$ to $(\stk', \h')$, with the fingerprint updated to $\fp \addO \op$ (to incorporate the effect of $\transpri$), with continuation $\pskip$. 
+When $(\stk, \sn)$ is transformed to $(\stk', \sn')$ via the transition system $\toLTS{\transpri}$,
+$\func{fp}{\stk, \sn, \transpri} = \op$, and the fingerprint recorded so far is given by $\fp$, 
+then executing $\transpri$ transforms $(\stk, \sn)$ to $(\stk', \sn')$, with the fingerprint updated to $\fp \addO \op$ (to incorporate the effect of $\transpri$), with continuation $\pskip$. 
 
 
 
@@ -271,17 +271,17 @@ Given the new view $\vi''$, the transaction proceeds by obtaining a snapshot $\s
 %
 
 The transaction is now ready to commit and may propagate its changes to $\mkvs$.
-To this end, a \emph{fresh} transaction identifier $\txid \in \nextTxId(\cl, \mkvs)$ (defined shortly) is picked
+To this end, a \emph{fresh} transaction identifier $\txid \in \nextTxid(\cl, \mkvs)$ (defined shortly) is picked
 to identify the completed transaction, and the changes performed by $\txid$ are propagated to $\mkvs$. 
 This is done via the $\func{updateMKVS}{\mkvs, \vi, \txid, \fp}$ function (defined shortly) to update $\mkvs$. 
-%The fresh identifier $\txid$ is given by the $t \in \nextTxId(\cl, \mkvs)$ function defined shortly.
+%The fresh identifier $\txid$ is given by the $t \in \nextTxid(\cl, \mkvs)$ function defined shortly.
 Once the kv-store is updated, the client subsequently updates its view to $\vi'$ with respect to its fingerprint. 
 Lastly, to ensure that the effect of the transaction (its fingerprint  $\fp$) is permitted by the underlying consistency model, 
 the last premise requires that the updates be permitted by the execution test $\ET$, \ie \( (\mkvs, \vi'') \etto \fp : \vi'\).
 
-The $\nextTxId(\cl, \mkvs)$ returns the set of transactions identifiers associated with $\cl$ that are fresh with respect to $\mkvs$: 
-$\nextTxId(\cl, \mkvs) \defeq \Setcon{\txid_{\cl}^{n}}{\fora{m} \txid_{\cl}^{m} \in \mkvs \Rightarrow m < n }$.
-Note that when $\txid_\cl^n = \nextTxId(\cl, \mkvs)$ in the premise of \rl{PCommit}, then $\txid_\cl^n$ is greater than any transaction identifier 
+The $\nextTxid(\cl, \mkvs)$ returns the set of transactions identifiers associated with $\cl$ that are fresh with respect to $\mkvs$: 
+$\nextTxid(\cl, \mkvs) \defeq \Setcon{\txid_{\cl}^{n}}{\fora{m} \txid_{\cl}^{m} \in \mkvs \Rightarrow m < n }$.
+Note that when $\txid_\cl^n = \nextTxid(\cl, \mkvs)$ in the premise of \rl{PCommit}, then $\txid_\cl^n$ is greater than any transaction identifier 
 (with respect to session order $\xrightarrow{\PO}$) 
 of the form $\txid_{\cl}^{i}$ appearing in $\mkvs$,
 as to reflect the fact that $\txid_\cl^n$ is the most recent transaction executed by $\cl$.
@@ -298,15 +298,15 @@ $\vilist' = \ver_0, \cdots, \ver_{i-1}, \ver, \ver_{i+1}, \cdots, \ver_{n}$.
 \begin{equation*}
 \begin{rclarray}         
     \updateKV(\mkvs, \vi, \txid, \emptyset) &\defeq & \mkvs \\
-    \updateKV(\mkvs, \vi, \txid, \fp \uplus \Set{(\otR, \ke, \stub)}) & \defeq &  
+    \updateKV(\mkvs, \vi, \txid, \fp \uplus \Set{(\otR, \key, \stub)}) & \defeq &  
     \begin{array}[t]{@{}l}
-        \texttt{let } (\val, \txid', \txidset) = \mkvs(\ke, \max_{<}(\vi(\ke))), \\
-        \vilist = \mkvs(\ke)\rmto{\max_{<}(\vi(\ke))}{(\val, \txid', \txidset \uplus \{ t \})}\\
-        \quad \texttt{in } \updateKV(\mkvs\rmto{\ke}{\vilist}, \vi, \txid, \fp)
+        \texttt{let } (\val, \txid', \txidset) = \mkvs(\key, \max_{<}(\vi(\key))), \\
+        \vilist = \mkvs(\key)\rmto{\max_{<}(\vi(\key))}{(\val, \txid', \txidset \uplus \{ t \})}\\
+        \quad \texttt{in } \updateKV(\mkvs\rmto{\key}{\vilist}, \vi, \txid, \fp)
     \end{array} \\
-    \updateKV(\mkvs, \vi, \txid, \fp \uplus \Set{(\otW, \ke, \val)} )& \defeq &  
+    \updateKV(\mkvs, \vi, \txid, \fp \uplus \Set{(\otW, \key, \val)} )& \defeq &  
     \begin{array}[t]{@{}l}
-        \texttt{let } \mkvs' = \mkvs\rmto{\ke}{ ( \mkvs(\ke) \lcat (\val, \txid, \emptyset) ) } \\
+        \texttt{let } \mkvs' = \mkvs\rmto{\key}{ ( \mkvs(\key) \lcat (\val, \txid, \emptyset) ) } \\
         \quad \texttt{in } \updateKV(\mkvs', \vi, \txid, \fp)
     \end{array} 
 \end{rclarray}
@@ -314,14 +314,14 @@ $\vilist' = \ver_0, \cdots, \ver_{i-1}, \ver, \ver_{i+1}, \cdots, \ver_{n}$.
 \end{equation*}
 %
 %
-For every read operation $(\otR, \ke, \stub)$ in fingerprint $\fp$,
+For every read operation $(\otR, \key, \stub)$ in fingerprint $\fp$,
 since a transaction reads the values of keys from 
 the atomic snapshot determined by the view of the client, 
-the version read by $\txid$ for key $\ke$ corresponds to $\mkvs(\ke, \max_{<}(\vi(\ke)))$.
+the version read by $\txid$ for key $\key$ corresponds to $\mkvs(\key, \max_{<}(\vi(\key)))$.
 As such, to commit the transaction, 
-the reader set of the version $\mkvs(\ke, \max_{<}(\vi(\ke)))$ is extended with a new reader $\txid_\cl^n$.
-Similarly, for every write operation $(\otW, \ke, \val)$ in fingerprint $\fp$, 
-the list of versions $\mkvs(\ke)$ is extended with a new version $(\val, \txid, \emptyset)$, 
+the reader set of the version $\mkvs(\key, \max_{<}(\vi(\key)))$ is extended with a new reader $\txid_\cl^n$.
+Similarly, for every write operation $(\otW, \key, \val)$ in fingerprint $\fp$, 
+the list of versions $\mkvs(\key)$ is extended with a new version $(\val, \txid, \emptyset)$, 
 denoting that $\txid_\cl^n$ is the writer of this version which has no readers as of yet. 
 
 Note that the assumption that 
@@ -332,7 +332,7 @@ Moreover, under the assumption that fingerprints contain at most one read and on
 operation per key, and the identifier is fresh $\txid \notin \mkvs$%
 \footnote{%
 We write $\txid \in \mkvs$ when there exists a key 
-$\ke$ and an index $i=0,\cdots, \lvert \mkvs(\ke) \rvert -1$ such that $\txid \in \{\WTx(\mkvs(\ke, i)\} \cup \RTx(\mkvs(\ke, i))$.}, 
+$\key$ and an index $i=0,\cdots, \lvert \mkvs(\key) \rvert -1$ such that $\txid \in \{\WTx(\mkvs(\key, i)\} \cup \RTx(\mkvs(\key, i))$.}, 
 the $\updateKV$ is well-defined.
 
 \subsubsection{Operational Semantics of Programs}
