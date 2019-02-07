@@ -39,8 +39,10 @@ try : $(TEXS) $(BIBS) $(STYS)
 
 stat : .statistic
 
-.statistic : $(TEXS) $(BIBS) $(STYS)
+.statistic : $(TEXS) $(BIBS) $(STYS) run-statistic.sh statistic.py
 	./run-statistic.sh
+
+run-statistic.sh statistic.py :
 
 $(TEXS) $(BIBS) $(STYS):
 
