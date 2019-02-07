@@ -9,7 +9,7 @@ Intuitively, a consistency model can be thought as a property on key-value store
 defining the degree of consistency of the data stored in it.
 From a formal point of view, we define a consistency model 
 $\CMs$ to be a set of key-value stores.  
-Each $\hh \in \CMs$ represents a possible outcome that 
+Each $\mkvs \in \CMs$ represents a possible outcome that 
 can be obtained as the result of multiple clients committing several transactions each. 
 However, depending on the particular consistency model being considered, the set of transactions that a client is allowed to commit  
 from a configuration $\conf$, must be restricted to those whose effects comply with the data-consistency guarantee associated with 
@@ -18,18 +18,18 @@ To this end, we introduce the notion of \emph{execution tests},
 execution tests are used to determine whether a client may commit a transaction into a key-value store.
 
 \subsubsection{Execution Tests}
-An execution test of a transaction is a quadruple $(\hh, \vi, \opset, \vi')$, where $\hh$ denotes a kv-store;
+An execution test of a transaction is a quadruple $(\mkvs, \vi, \fp, \vi')$, where $\mkvs$ denotes a kv-store;
 the $\vi$ denotes the \emph{initial} view, recorded at the beginning of the transaction; 
-the $\opset$ denotes the fingerprint of the transaction; and 
+the $\fp$ denotes the fingerprint of the transaction; and 
 $\vi'$ demotes the \emph{final} view of the transaction, obtained after committing the transaction. 
-An execution test $(\mkvs, \vi, \opset, \vi')$ states that when the kv-store is described by $\hh$, a client with view $\vi$ is allowed to execute a single transaction with fingerprint $\opset$, commit the transaction and obtain an updated view $\vi'$. 
+An execution test $(\mkvs, \vi, \fp, \vi')$ states that when the kv-store is described by $\mkvs$, a client with view $\vi$ is allowed to execute a single transaction with fingerprint $\fp$, commit the transaction and obtain an updated view $\vi'$. 
 
 \ac{
 For example, \emph{serialisability} can be described as the set 
 of key-value stores for which it is possible to recover a total schedule of transactions, 
 such that each read operation on key $\ke$ fetches its value from the 
 most recent write on the same key \cite{??????}.
-In this sense, the kv-store $\hh$ from \cref{fig:hheap-a} is not serialisable: 
+In this sense, the kv-store $\mkvs$ from \cref{fig:hheap-a} is not serialisable: 
 transaction $\txid_1$ reads the initial version carrying value $\val'_0$ for key $\ke_{2}$, 
 and installs a new version of $\ke_{2}$ carrying value $\val_1$. The transaction $\txid_2$ 
 reads the initial version carrying value $\val'_0$, and therefore, 
@@ -39,11 +39,11 @@ cannot be scheduled after $\txid_1$. Similarly, $\txid_2$ cannot be scheduled af
 \begin{definition}
 \label{def:execution.test}
 An \emph{execution test} is a set of tuples $\ET \subseteq \HisHeaps \times \Views \times \powerset{\Ops} \times \Views$ 
-such that for all $(\hh, \vi, \opset, \vi') \in \ET$:
+such that for all $(\mkvs, \vi, \fp, \vi') \in \ET$:
 \begin{align}
-    & \fora{\otR, \ke, \val} (\otR, \ke, \val) \in \opset \implies \hh(\ke, \max{}_{<}(\vi(\ke))) = \val \tag{Ext} \label{eq:read-external} \\
+    & \fora{\otR, \ke, \val} (\otR, \ke, \val) \in \fp \implies \mkvs(\ke, \max{}_{<}(\vi(\ke))) = \val \tag{Ext} \label{eq:read-external} \\
     & \fora{\ke} \vi(\ke) \neq \vi'(\ke) \implies
-    ( (\otR, \ke, \_) \in \opset \vee (\otW, \ke, \_)) \in \opset) \tag{ValidViewUpd} \label{eq:valid-view-update}
+    ( (\otR, \ke, \_) \in \fp \vee (\otW, \ke, \_)) \in \fp) \tag{ValidViewUpd} \label{eq:valid-view-update}
 \end{align}
 \end{definition}
 
@@ -54,12 +54,12 @@ For minimum footprint on the views, a transaction is only allowed to update the 
 \azalea{Explain the two conditions in 1 and 2.}
 
 %Given an execution test $\ET$, 
-%then $(\hh, \vi, \opset, \vi') \in \ET$ means that 
-%a client whose view over the key-value store $\hh$ is $\vi$, 
-%can commit a transaction whose fingerprint is $\opset$;
+%then $(\mkvs, \vi, \fp, \vi') \in \ET$ means that 
+%a client whose view over the key-value store $\mkvs$ is $\vi$, 
+%can commit a transaction whose fingerprint is $\fp$;
 %as a result of this operation, the view of the client must be updated to $\vi'$.
-Hereafter, we adopt a more suggestive notation and write $\ET \vdash (\hh, \vi) \triangleright \opset: \vi'$ 
-for $(\hh, \vi, \opset, \vi') \in \ET$.
+Hereafter, we adopt a more suggestive notation and write $\ET \vdash (\mkvs, \vi) \triangleright \fp: \vi'$ 
+for $(\mkvs, \vi, \fp, \vi') \in \ET$.
 Execution tests induce \emph{consistency models} \( \CMs(\ET) \) as defined in \cref{def:reduction,def:cm}.
 
 \azalea{Add an example of execution test, \eg for serialisability.}
@@ -73,25 +73,25 @@ Later in \cref{sec:spec} we present more examples of execution tests of well-kno
 \begin{definition}[$\ET$-reductions]
 \label{def:reduction}
 An \emph{action} $\alpha \in \Act$ has either the form $(\cl, \varepsilon)$, 
-or $(\cl, \opset)$, 
-where $\cl$ is a client and $\opset$ is a fingerprint. 
+or $(\cl, \fp)$, 
+where $\cl$ is a client and $\fp$ is a fingerprint. 
 Given an execution test $\ET$, the $\ET$-\emph{reduction}, 
 $\xrightarrowtriangle{}_{\ET} \subseteq \Confs \times \Act \times \Confs$, 
-is the smallest relation such that for all $\vi, \vi', \cl, \hh, \hh', \viewFun, \opset$:
+is the smallest relation such that for all $\vi, \vi', \cl, \mkvs, \mkvs', \viewFun, \fp$:
 \begin{enumerate}
 	\item 
     $
     \viewFun(\cl) = \vi 
     \wedge \vi \sqsubseteq \vi' 
-    \implies (\hh, \viewFun) \xrightarrowtriangle{(\cl, \varepsilon)}_{\ET} 
-    (\hh, \viewFun\rmto{\cl}{\vi'})$; and
+    \implies (\mkvs, \viewFun) \xrightarrowtriangle{(\cl, \varepsilon)}_{\ET} 
+    (\mkvs, \viewFun\rmto{\cl}{\vi'})$; and
 	\item 
     $\viewFun(\cl) = \vi
-        \wedge (\ET \vdash (\hh, \vi) \triangleright \opset: \vi')  
-        \wedge \hh' \in \updateKV(\hh, \vi, \cl, \opset) \implies
+        \wedge (\ET \vdash (\mkvs, \vi) \triangleright \fp: \vi')  
+        \wedge \mkvs' \in \updateKV(\mkvs, \vi, \cl, \fp) \implies
 	$  \\
 	\phantom{a} \hfill 
-	$(\hh, \viewFun) \xrightarrowtriangle{(\cl, \opset)}_{\ET} (\hh', \viewFun\rmto{\cl}{\vi'})$
+	$(\mkvs, \viewFun) \xrightarrowtriangle{(\cl, \fp)}_{\ET} (\mkvs', \viewFun\rmto{\cl}{\vi'})$
 \end{enumerate}
 %Such relations take the name of $\ET$-reductions, or simply reductions.
 %
@@ -119,7 +119,7 @@ Given an execution test $\ET$, the set of configurations induced by $\ET$ is giv
 \]
 The \emph{consistency model} induced by $\ET$ is:
 \( 
-\CMs(\ET) \defeq \Setcon{ \hh }{ (\hh, \stub) \in \Confs(\ET) }
+\CMs(\ET) \defeq \Setcon{ \mkvs }{ (\mkvs, \stub) \in \Confs(\ET) }
 \)
 \end{definition}
 
@@ -139,45 +139,45 @@ Let $\ET_1 \subseteq \ET_2$. Then $\CMs(\ET_1) \subseteq \CMs(\ET_2)$.
 \end{proof}
 
 \begin{definition}
-Two triples $(\cl_1, \opset_1)$ and $(\cl_2, \opset_2)$ are 
+Two triples $(\cl_1, \fp_1)$ and $(\cl_2, \fp_2)$ are 
 conflicting if either $\cl_1 = \cl_2$, or there exists a key $\ke$ such that 
-$(\otW, \ke, \_) \in \opset_1, (\otW, \ke, \_) \in \opset_2$. 
+$(\otW, \ke, \_) \in \fp_1, (\otW, \ke, \_) \in \fp_2$. 
 
-An execution test is $\ET$ is \emph{commutative} if, whenever $(\cl_1, \vi_1, \opset_1)$, 
-$(\cl_2, \vi_2, \opset_2)$ are non-conflicting, and $\vi_1, \vi_2 \in \Views(\hh_0)$,  
-then for any $\hh_0, \hh', \viewFun, \viewFun'$ we have that 
+An execution test is $\ET$ is \emph{commutative} if, whenever $(\cl_1, \vi_1, \fp_1)$, 
+$(\cl_2, \vi_2, \fp_2)$ are non-conflicting, and $\vi_1, \vi_2 \in \Views(\hh_0)$,  
+then for any $\hh_0, \mkvs', \viewFun, \viewFun'$ we have that 
 \[
 \begin{array}{lr}
-(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} 
-\_ \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} (\hh', \viewFun') &\implies \\
-(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \opset_2)}_{\ET} 
-\_ \xrightarrowtriangle{(\cl_1, \opset_1)}_{\ET} (\hh', \viewFun')
+(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_1, \fp_1)}_{\ET} 
+\_ \xrightarrowtriangle{(\cl_2, \fp_2)}_{\ET} (\mkvs', \viewFun') &\implies \\
+(\hh_0, \viewFun) \xrightarrowtriangle{(\cl_2, \fp_2)}_{\ET} 
+\_ \xrightarrowtriangle{(\cl_1, \fp_1)}_{\ET} (\mkvs', \viewFun')
 \end{array}
 \]
 \end{definition}
 
 \begin{definition}
-An execution test $\ET$ has \emph{no blind writes} if, whenever $\ET \vdash (\hh, \vi) \triangleright \opset \cup \{(\otW, \ke, \_)\} : \vi'$, 
-then $(\otR, \ke, \_) \in \opset$.
+An execution test $\ET$ has \emph{no blind writes} if, whenever $\ET \vdash (\mkvs, \vi) \triangleright \fp \cup \{(\otW, \ke, \_)\} : \vi'$, 
+then $(\otR, \ke, \_) \in \fp$.
 \end{definition}
 
 \begin{definition}
-An execution test $\ET$ has \emph{minimum footprints} if for any key-value store \( \hh \)
+An execution test $\ET$ has \emph{minimum footprints} if for any key-value store \( \mkvs \)
 views \( \vi, \vi',\vi''\) and fingerprint \( \f \),
 \[
 \begin{array}{@{}l@{}}
     ( \fora{ \ke} (\stub, \ke, \stub) \in \f \implies \vi(\ke) = \vi'(\ke) ) \land {} \\
-    \quad \ET \vdash (\hh, \vi) \triangleright \opset : \vi'' \implies \ET \vdash (\hh, \vi') \triangleright \opset : \vi''
+    \quad \ET \vdash (\mkvs, \vi) \triangleright \fp : \vi'' \implies \ET \vdash (\mkvs, \vi') \triangleright \fp : \vi''
 \end{array}
 \]
 \end{definition}
 
 \begin{definition}
-An execution test $\ET$ has \emph{continuous post-views} if for any key-value store \( \hh \)
+An execution test $\ET$ has \emph{continuous post-views} if for any key-value store \( \mkvs \)
 views \( \vi, \vi',\vi''\) and fingerprint \( \f \), 
 \[
 \begin{array}{@{}l@{}}
-    \quad \ET \vdash (\hh, \vi) \triangleright \opset : \vi' \land \vi' \sqsubseteq \vi'' \implies \ET \vdash (\hh, \vi) \triangleright \opset : \vi''
+    \quad \ET \vdash (\mkvs, \vi) \triangleright \fp : \vi' \land \vi' \sqsubseteq \vi'' \implies \ET \vdash (\mkvs, \vi) \triangleright \fp : \vi''
 \end{array}
 \]
 \end{definition}
