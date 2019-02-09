@@ -1,1 +1,1 @@
-python3 statistic.py .statistic $(find . -name "*.tex" -o -name "*.sty") 
+python3 statistic.py $1 $(find . -name "*.tex" -o -name "*.sty") 

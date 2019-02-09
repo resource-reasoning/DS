@@ -78,7 +78,7 @@ If so, by the second line, the transaction fetches the latest version for key \(
             \key = \evalE{\expr} \\
             (\otW, \key, \stub ) \notin \fp \\
             \ct < \cts(\func{shardOf}{\key}) \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:snapshot-time-grt-than-shard}} \\\\
-            n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\key, j)) \land n' < \ct } \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-i-from-shard}} \\\\ 
+            n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \wtOf(\mkvs(\key, j)) \land n' < \ct } \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-i-from-shard}} \\\\ 
             \mkvs(\key, i) = (\val, \txid^n, \stub) 
         }{%
         \cl \vdash \mkvs, \ct, \cts, \stk, \runtrans{\plookup{\vx}{\expr}}{\ct}{\fp} \toCMD{\cl,\ct,\fp \addO (\otR, \key, \val), \perp}
@@ -134,7 +134,7 @@ therefore it suffices to assume they are one atomic step.
 
 \[
     \inferrule[Commit]{ 
-        \fora{\key,i} (\otW, \key, \stub) \in \fp \land \WTx(\mkvs(\key,i)) < \ct \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:check-concur-write}} \\\\  
+        \fora{\key,i} (\otW, \key, \stub) \in \fp \land \wtOf(\mkvs(\key,i)) < \ct \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:check-concur-write}} \\\\  
         n = \max\left( \Setcon{\ct'}{\exsts{\key} (\stub, \key, \stub) \in \fp \land \ct' = \cts(\func{shardOf}{\key})} \cup \Set{\ct} \right) \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:pick-time-1,line:pick-time-2,line:pick-time-3}} \\\\
         \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\fp} \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:clock-si-commit-1,line:clock-si-commit-2}} \\\\
         \fora{\sd}
@@ -158,7 +158,7 @@ where
 \begin{rclarray}
     \func{commitKV}{\mkvs,\ct,\txid,\fp \uplus \Set{(\otR,\key,\val)}} & \defeq & 
     \begin{array}[t]{@{}l@{}}
-    \texttt{let} \ n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\key, j)) \land n' < \ct } \\
+    \texttt{let} \ n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \wtOf(\mkvs(\key, j)) \land n' < \ct } \\
     \texttt{and} \ \mkvs(\key,i) = (\val, \txid^n, \T) \\
     \texttt{and} \ \mkvs' = \func{commitKV}{\mkvs,\ct,\txid,\fp} \\
     \texttt{in} \ \mkvs'\rmto{\key}{\mkvs'(\key)\rmto{i}{(\val, \txid^n, \T \cup \Set{\txid})}}
@@ -408,7 +408,7 @@ The following definition \( \func{viewOf}{\mkvs,\ct} \) extracts the view from s
     the initial view of the transaction is defined as the following:
     \[
         \begin{rclarray}
-            \func{viewOf}{\mkvs,\ct} & \defeq & \lambda \key \ldotp \Setcon{i}{\exsts{\txid^{n} } \WTx(\mkvs(\key,i)) = \txid^{n} \land n < \ct}
+            \func{viewOf}{\mkvs,\ct} & \defeq & \lambda \key \ldotp \Setcon{i}{\exsts{\txid^{n} } \wtOf(\mkvs(\key,i)) = \txid^{n} \land n < \ct}
         \end{rclarray}
     \]
 \end{definition}
@@ -428,8 +428,8 @@ we first prove that clock-si produces a well-formed key-value store (\cref{def:m
     Assume a key-value store \( \mkvs \) and a snapshot time \( \ct \).
     Suppose a version \( i \) in the view \( i \in \func{viewOf}{\mkvs,\ct}(\key)\) for some key \( \key \).
     By \cref{def:clock-si-view}, the version is committed before the snapshot time,
-    \ie \( \txid^n = \WTx(\mkvs(\key, i)) \land n < \ct\).
-    Assume another version \( \txid^n = \WTx(\mkvs(\key', j)) \) for some key \( \key' \) and index \( j \).
+    \ie \( \txid^n = \wtOf(\mkvs(\key, i)) \land n < \ct\).
+    Assume another version \( \txid^n = \wtOf(\mkvs(\key', j)) \) for some key \( \key' \) and index \( j \).
     By \cref{def:clock-si-view} we have \( j \in \func{viewOf}{\mkvs,\ct}(\key') \).
     Similarly \( \func{viewOf}{\mkvs, \ct'} \) is a well-formed view.
 \end{proof}
@@ -468,16 +468,16 @@ both \( \func{commitKV} \) and \( \updateKV \) produce the same result.
             \]
         \item \caseI{\( \fp \uplus (\otR, \key, \val) \)}
             Let \( \mkvs(\key,i) \) be the version being read.
-            That is, the writer \( \txid^n = \WTx(\mkvs(\key,i)) \)
+            That is, the writer \( \txid^n = \wtOf(\mkvs(\key,i)) \)
             is the latest transaction written to the key \( \key \) before the snapshot time \( \ct \),
             \[
                 n = \max\Setcon{n'}{%
                     \exsts{j} 
-                    \txid^{n'} = \WTx(\mkvs(\key, j)) 
+                    \txid^{n'} = \wtOf(\mkvs(\key, j)) 
                     \land n' < \ct%
                 } 
             \]
-            Let the new version \( \ver = \left( \valueOf(\mkvs(\key,i)), \WTx(\mkvs(\key,i)), \RTx(\mkvs(\key,i)) \uplus \Set{\txid_\cl^{\ct'}} \right) \).
+            Let the new version \( \ver = \left( \valueOf(\mkvs(\key,i)), \wtOf(\mkvs(\key,i)), \rsOf(\mkvs(\key,i)) \uplus \Set{\txid_\cl^{\ct'}} \right) \).
             By \cref{lem:well-formed-clock-si-view}, it follows \( i \in \func{viewOf}{\mkvs,\ct}(\key) \), then by \cref{lem:clock-si-mono-writer}, the version is the latest one \( i = \max(\func{viewOf}{\mkvs,\ct}(\key)) \).
             Therefore we have,
             \[
@@ -502,8 +502,8 @@ both \( \func{commitKV} \) and \( \updateKV \) produce the same result.
     \[
         \begin{array}{@{}l@{}}
             \fora{\mkvs,\key,i,j,\txid^n,\txid^m} 
-            \WTx(\mkvs(\key,i)) = \txid^n 
-            \land \WTx(\mkvs(\key,j)) = \txid^m 
+            \wtOf(\mkvs(\key,i)) = \txid^n 
+            \land \wtOf(\mkvs(\key,j)) = \txid^m 
             \land i < j
             \implies 
             n < m
@@ -612,7 +612,7 @@ all transactional execution can be replaced by \cref{fig:semantics-trans}.
                 By the premiss of the \rl{ReadRemote}, the value read is from the last version before the snapshot time:
                 \[
                     n = \max\Setcon{n'}{%
-                        \exsts{j} \txid^{n'} = \WTx(\mkvs(\key, j)) \land n' < \ct%
+                        \exsts{j} \txid^{n'} = \wtOf(\mkvs(\key, j)) \land n' < \ct%
                     } 
                     \land \valueOf(\mkvs_i(\key,n) ) = \val
                 \]                 
@@ -666,15 +666,15 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
     %where
     %\[
     %\begin{rclarray}
-        %\WR_{\mkvs} &\defeq& \{ (\txid, \txid') \mid \exists \key, i.\; \txid = \WTx(\mkvs(\key, i)) \wedge \txid' \in \RTx(\mkvs(\key, i))\}\\
-        %\WW_{\mkvs} &\defeq& \{ (\txid, \txid') \mid \exists \key, i, j.\; \txid = \WTx(\mkvs(\key, i)) \wedge \txid' = \WTx(\mkvs(\key, j)) \wedge i < j\}\\
-        %\RW_{\mkvs} &\defeq& \{ (\txid, \txid') \mid \exists \key, i, j.\; \txid \in \RTx(\mkvs(\key, i)) \wedge \txid' = \WTx(\mkvs(\key, j)) \wedge i < j\}\\
+        %\WR_{\mkvs} &\defeq& \{ (\txid, \txid') \mid \exists \key, i.\; \txid = \wtOf(\mkvs(\key, i)) \wedge \txid' \in \rsOf(\mkvs(\key, i))\}\\
+        %\WW_{\mkvs} &\defeq& \{ (\txid, \txid') \mid \exists \key, i, j.\; \txid = \wtOf(\mkvs(\key, i)) \wedge \txid' = \wtOf(\mkvs(\key, j)) \wedge i < j\}\\
+        %\RW_{\mkvs} &\defeq& \{ (\txid, \txid') \mid \exists \key, i, j.\; \txid \in \rsOf(\mkvs(\key, i)) \wedge \txid' = \wtOf(\mkvs(\key, j)) \wedge i < j\}\\
         %\SO &\defeq& \{ (\txid, \txid') \mid \exists \cl, m, n.\; \txid = \txid_{\cl}^{m} \wedge \txid' = \txid_{\cl}^{n} \wedge m < n \}\\
         %\dagger & \equiv &
         %\begin{array}[t]{@{}l@{}}
                %\fora{\key, \key', i, j} 
             %\begin{array}{@{}l@{}}
-            %i \in \vi(\key)  \wedge \WTx(\mkvs(\key', j)) \toEDGE{((\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs}) ; \RW_{\mkvs}?)^+} \WTx(\mkvs(\key, i))
+            %i \in \vi(\key)  \wedge \wtOf(\mkvs(\key', j)) \toEDGE{((\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs}) ; \RW_{\mkvs}?)^+} \wtOf(\mkvs(\key, i))
             %\implies j \in \vi(\key') 
             %\end{array}
         %\end{array} \\
@@ -687,23 +687,23 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
             Assume a version \( i \in \func{viewOf}{\mkvs,\ct}(\key) \) for some key \( \key \).
             Suppose a version \( \mkvs(\key',j)\) such that 
             \[ 
-                \WTx(\mkvs(\key',j)) \toEDGE{((\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs}) ; \RW_{\mkvs}?)^+} \WTx(\mkvs(\key,i))
+                \wtOf(\mkvs(\key',j)) \toEDGE{((\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs}) ; \RW_{\mkvs}?)^+} \wtOf(\mkvs(\key,i))
             \]
-            Let \( \txid^n = \WTx(\mkvs(\key',j)) \) and \( \txid^m = \WTx(\mkvs(\key,i)) \).
+            Let \( \txid^n = \wtOf(\mkvs(\key',j)) \) and \( \txid^m = \wtOf(\mkvs(\key,i)) \).
             By \cref{lem:clock-si-rw,lem:clock-si-wr-ww-so}, we know \( n < m \) then \( j  \in \func{viewOf}{\mkvs,\ct}(\key')\).
         \item \( \ET_\MR \).
             By \rl{Commit}, we know \( \ct \leq n < \cts''(\cl) \) then \( \func{viewOf}{\mkvs,\ct} \viewleq \func{viewOf}{\mkvs,\cts''(\cl)} \).
         \item \( \ET_\MW \).
             By \rl{Commit}, for any write \( (\otW, \key, \val) \in \fp \), there is a new version written by the client \( \cl \) in the \( \mkvs'  \),
             \[
-                \WTx(\mkvs'(\key,\abs{\mkvs'(\key)} - 1)) = \txid_\cl^{n}
+                \wtOf(\mkvs'(\key,\abs{\mkvs'(\key)} - 1)) = \txid_\cl^{n}
             \]
             Since \( n < \cts''(\cl)\), it follows \( \abs{\mkvs'(\key)} - 1 \in \func{viewOf}{\mkvs,\cts''(\cl)}(\key) \).
         \item \( \ET_\UA \).
             By the premiss of \rl{Commit}, for any write \( (\otW, \key, \val) \in \fp \), any existed versions of the key \( \key \)
             must be installed by some transactions before the snapshot time of \( \ct \),
             \[
-                \fora{\key,i} (\otW, \key, \stub) \in \fp \land \WTx(\mkvs(\key,i)) < \ct 
+                \fora{\key,i} (\otW, \key, \stub) \in \fp \land \wtOf(\mkvs(\key,i)) < \ct 
             \]
             It implies that 
             \[ 
@@ -728,8 +728,8 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
     By definition of \( \txid_\cl^n \toEDGE{\RW_{\mkvs''}?} \txid_{\cl'}^m \),
     it follows that
     \[
-        \txid_\cl^n \in \RTx(\mkvs''(\key,i)) 
-        \land \txid_{\cl'}^m = \WTx(\mkvs''(\key,j)) 
+        \txid_\cl^n \in \rsOf(\mkvs''(\key,i)) 
+        \land \txid_{\cl'}^m = \wtOf(\mkvs''(\key,j)) 
         \land i < j
     \]                              
     for some key \( \key \) and indexes \( i,j \).
@@ -751,8 +751,8 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
             Given \( \ct > m \), by \rl{ReadRemote} the transaction \( \txid_\cl^n \) should at least read the version written by \( \txid_{\cl'}^m \) for the key \( \key \).
             That is,
             \[
-                \txid_\cl^n \in \RTx(\mkvs''(\key,i)) 
-                \land \txid_{\cl'}^m = \WTx(\mkvs''(\key,j)) 
+                \txid_\cl^n \in \rsOf(\mkvs''(\key,i)) 
+                \land \txid_{\cl'}^m = \wtOf(\mkvs''(\key,j)) 
                 \land i > j
             \]
             which contradict  \( \txid_\cl^n \toEDGE{\RW_{\mkvs''}?} \txid_{\cl'}^m  \).
@@ -812,15 +812,15 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
     If  \( \txid_{\cl'}^m \) reads a version written \ by \( \txid_{\cl}^n\)
     \[
         \begin{array}{@{}l@{}}
-            \WTx(\mkvs''(\key,i)) = \txid^n 
-            \land \txid^m \in \RTx(\mkvs''(\key,j))
+            \wtOf(\mkvs''(\key,i)) = \txid^n 
+            \land \txid^m \in \rsOf(\mkvs''(\key,j))
         \end{array}
     \]
     Then, the snapshot times of readers of a version is greater then the commit time of the writer \( n < \ct' \)
 \end{lemma}
 \begin{proof}
-    Trivially, \( \WTx(\mkvs'(\key,i)) = \txid^n \).
-    By the \rl{ReadRemote}, it follows \( n  = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \WTx(\mkvs(\key, j)) \land n' < \ct' } \) which implies \( n < \ct' \).
+    Trivially, \( \wtOf(\mkvs'(\key,i)) = \txid^n \).
+    By the \rl{ReadRemote}, it follows \( n  = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \wtOf(\mkvs(\key, j)) \land n' < \ct' } \) which implies \( n < \ct' \).
 \end{proof}
 
 
