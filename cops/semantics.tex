@@ -160,8 +160,8 @@ It says for the version \( \ver \) that is included in the client view and has t
 \[
     \begin{rclarray}
         \func{ccv}{\mkvsCOPS, \key, \viCL} & \defeq &
-        \max\Setcon{(\val, \txid, \T, \dep)}{\exsts{i} (\val, \txid, \T, \dep) = \mkvsCOPS(\key, i) \land i \in \viCL(\key)} \\
-        (\val, \txidCOPS{\repl}{\cl}{n}{n'}, \T, \dep) > (\val', \txidCOPS{\repl'}{\cl'}{n''}{n'''}, \T', \dep') & \iff & (n, \repl, n') > (n'', \repl, n''') \\
+        \max\Setcon{(\val, \txid, \txidset, \dep)}{\exsts{i} (\val, \txid, \txidset, \dep) = \mkvsCOPS(\key, i) \land i \in \viCL(\key)} \\
+        (\val, \txidCOPS{\repl}{\cl}{n}{n'}, \txidset, \dep) > (\val', \txidCOPS{\repl'}{\cl'}{n''}{n'''}, \txidset', \dep') & \iff & (n, \repl, n') > (n'', \repl, n''') \\
     \end{rclarray}
 \]
 any dependency of the version \( \ver \) is also included in the view.
@@ -173,7 +173,7 @@ It is different from \( \snapshot \) because \( \snapshot \) fetches the latest 
 \[
     \begin{rclarray}
         \func{getMax}{\mkvsCOPS, \viCL} & \defeq &
-        \lambda \key \ldotp \left( \max_\txid\Setcon{(\val, \txid, \T, \dep)}{\exsts{i} (\val, \txid, \T, \dep) = \mkvsCOPS(\key, i) \land i \in \viCL(\key)} \right)\projection{1}
+        \lambda \key \ldotp \left( \max_\txid\Setcon{(\val, \txid, \txidset, \dep)}{\exsts{i} (\val, \txid, \txidset, \dep) = \mkvsCOPS(\key, i) \land i \in \viCL(\key)} \right)\projection{1}
     \end{rclarray}
 \]
 The rest part are trivial be picking a new transaction identifier with larger read counter and committing to key-value store.
@@ -306,9 +306,9 @@ First we prove that the key-value stores from COPS trace satisfy \cref{def:mkvs}
     \label{lem:cl-observe-own}
     A client observes all its own transactions, that is, for any key-value store \( \mkvsCOPS \) and view \( \viCL \):
     \[
-        \fora{i,\key, \val, \dep, \txid, \T, \txidCOPS{\stub}{\cl}{\stub}{\stub}} (\val, \txid, \T, \dep)  = \mkvsCOPS(\key,i) 
+        \fora{i,\key, \val, \dep, \txid, \txidset, \txidCOPS{\stub}{\cl}{\stub}{\stub}} (\val, \txid, \txidset, \dep)  = \mkvsCOPS(\key,i) 
         \land \txid = \txidCOPS{\stub}{\cl}{\stub}{\stub} 
-        \lor \txidCOPS{\stub}{\cl}{\stub}{\stub} \in \T
+        \lor \txidCOPS{\stub}{\cl}{\stub}{\stub} \in \txidset
         \implies i \in \viCL(\key)
     \]
     Similarly, a replica observes all its own transactions.
@@ -406,7 +406,7 @@ A COPS's normal trace is a trace \( \tr \) if it is semi-normal trace and the si
     \end{equation}
     The intuition here is to swap the reduction steps of these two transactions and those read-only transactions following them.
     We assume \( \txid \)  and \( \txid' \) write to the same key, otherwise it is safe to swap.
-    For any read-only transactions \( \txid_{\rd} \in \T_{\rd} \) following \( \txid \), we knows \( \txid' \notin \depOf(\mkvsCOPS_i, \txid_{\rd}) \), otherwise it violate \( \func{maxVersion}{\tr, \txid_\rd} = \txid \).
+    For any read-only transactions \( \txid_{\rd} \in \txidset_{\rd} \) following \( \txid \), we knows \( \txid' \notin \depOf(\mkvsCOPS_i, \txid_{\rd}) \), otherwise it violate \( \func{maxVersion}{\tr, \txid_\rd} = \txid \).
     Thus it is safe to swap the reduction steps.
 \end{proof}
 
@@ -507,12 +507,12 @@ Then by the following theorem (\cref{thm:cops-cc}), we proof the COPS trace sati
     \[
         \mkvsCOPS_0, \vienvCOPS_0, \thdenv_0, \prog_0 {\toPROG{}}^* \mkvsCOPS_i, \vienvCOPS_i, \thdenv_i, \prog_i 
     \]
-    for any versions \( ( \val,\txid,\T,\dep ) = \mkvsCOPS_i(\key,j) \) and \( ( \val',\txid',\T',\dep' ) = \mkvsCOPS_i(\key',m) \), if \( \txid \) depends on \( \txid' \), \ie
+    for any versions \( ( \val,\txid,\txidset,\dep ) = \mkvsCOPS_i(\key,j) \) and \( ( \val',\txid',\txidset',\dep' ) = \mkvsCOPS_i(\key',m) \), if \( \txid \) depends on \( \txid' \), \ie
     \[
         \begin{array}{@{}l@{}}
             \txid' \toEDGE{\SO ?} \txid
             \lor \exsts{\txid''}
-            \txid'' \in \T' \land
+            \txid'' \in \txidset' \land
             \txid'' \toEDGE{\SO ?} \txid
         \end{array}
     \]
@@ -542,7 +542,7 @@ Then by the following theorem (\cref{thm:cops-cc}), we proof the COPS trace sati
                 \begin{array}{@{}l@{}}
                     \txid' \toEDGE{\SO ?} \txid
                     \lor \exsts{\txid''}
-                    \txid'' \in \T' \land
+                    \txid'' \in \txidset' \land
                     \txid'' \toEDGE{\SO ?} \txid
                 \end{array}
             \]
@@ -576,26 +576,26 @@ Then by the following theorem (\cref{thm:cops-cc}), we proof the COPS trace sati
     %does not start with a view containing all the versions for the key the transactions \( \txid \) want to write.
     %Initially let \( \tr' = \tr \).
     %Let pick the first single-write transaction \( \txid \), assuming it is i-\emph{step}, 
-    %who installs a version \( \mkvsCOPS_{i+1}(\key,j) = (\val,\txid,\T,\dep )\) with a initial view \( \viCL \) does not contain all versions \( \mkvsCOPS_i(\key,m) \)
+    %who installs a version \( \mkvsCOPS_{i+1}(\key,j) = (\val,\txid,\txidset,\dep )\) with a initial view \( \viCL \) does not contain all versions \( \mkvsCOPS_i(\key,m) \)
     %for some key \( \key \), client \( \cl \) and index \( m \) and \( j \).
     %Since \( \txid \) is the first transaction does not contain all versions \( \mkvsCOPS_i(\key,m) \),
     %it means the view \( \viCL \) does not include only the last version \( \mkvsCOPS_i(\key,j-1) \).
-    %Suppose the version \( \mkvsCOPS_i(\key,j-1) = (\val',\txid',\T',\dep' ) \) for some transaction \( \txid' \).
+    %Suppose the version \( \mkvsCOPS_i(\key,j-1) = (\val',\txid',\txidset',\dep' ) \) for some transaction \( \txid' \).
     %Note that \( \txid' \)  and \( \txid \) comes from different client, otherwise it violate \( \ET_\RYW \).
     %Thus let assume the initial view for \( \txid' \) is \( \viCL[\cl'] \) for client \( \cl' \) such that \( \cl' \neq \cl \).
     %We performance case analysis as the following.
     %\begin{itemize}                                                               
-        %\item Suppose \( \depOf(\txid') \subseteq \depOf(\txid_\rd) \), for all read-only transactions \( \txid_\rd \in \T \).
+        %\item Suppose \( \depOf(\txid') \subseteq \depOf(\txid_\rd) \), for all read-only transactions \( \txid_\rd \in \txidset \).
             %It means it is safe to include \( j-1 \) version into \( \viCL \),
             %\ie the new initial view for \( \txid \) is \( \viCL' = \viCL\rmto{\key}{j-1} \).
-            %Given that, all the initial views for the read-only transactions \( \txid_\rd \in \T \) also include \( \mkvsCOPS(\key,j) \).
+            %Given that, all the initial views for the read-only transactions \( \txid_\rd \in \txidset \) also include \( \mkvsCOPS(\key,j) \).
             %Yet because \( \depOf(\txid') \subseteq \depOf(\txid_\rd) \), the version \(\mkvsCOPS(\key,j)  \) is already in the initial view of \( \txid_\rd \).
             %By the new initial view \( \viCL' \), it is easy to see 
             %\( \ET_\UA \vdash (\mkvsCOPS_i, \viCL') \csat \Set{(\otW, \key, \val)}, \viCL'' \).
-        %\item there exists a read-only transaction \( \txid_\rd \in \T \) such that 
+        %\item there exists a read-only transaction \( \txid_\rd \in \txidset \) such that 
               %\( \depOf(\txid') \not\subseteq \depOf(\txid_\rd) \).
               %\begin{itemize}
-                  %\item If it is safe to include \( \depOf(\txid') \) into \( \depOf(\txid_\rd) \), consequently changing the initial for \( \txid_\rd \), for all read-only transactions \( \txid_\rd \in \T \), then we are back to the first case.
+                  %\item If it is safe to include \( \depOf(\txid') \) into \( \depOf(\txid_\rd) \), consequently changing the initial for \( \txid_\rd \), for all read-only transactions \( \txid_\rd \in \txidset \), then we are back to the first case.
                   %\item If there exists a read-only transaction \( \txid_\rd \) that is not safe to include \( \depOf(\txid') \).
                       %That is, there exists a single-write transaction  \( \txid'' \) who installs a version \( \mkvsCOPS_i(\key',x)\) for a key \( \key' \) and a index \( x \) and the \( \txid_\rd \) read this version.
                       %Given that it is not safe for  \( \depOf(\txid_\rd) \) to includes \( \depOf(\txid') \), 
@@ -606,7 +606,7 @@ Then by the following theorem (\cref{thm:cops-cc}), we proof the COPS trace sati
                       %\]
                       %therefore 
                       %\[
-                          %\fora{\txid'_\rd \in \T'} \depOf{\mkvsCOPS_i(\key',x)} \subseteq \depOf{ \txid'_\rd}
+                          %\fora{\txid'_\rd \in \txidset'} \depOf{\mkvsCOPS_i(\key',x)} \subseteq \depOf{ \txid'_\rd}
                       %\]
             %\end{itemize}
     %\end{itemize}
