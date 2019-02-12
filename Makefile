@@ -57,8 +57,10 @@ $(OUTDIR)/.draft.bbl : $(OUTDIR)/draft.aux
 
 # a quick run
 once : $(SOURCES) 
-	$(PDFLATEX) main.tex
-	cp $(OUTDIR)/main.pdf main.pdf
+	sed 's/CommentEditsfalse/CommentEditstrue/g' main.tex > $(DRAFTTEX)
+	$(PDFLATEX) $(DRAFTTEX) 
+	cp $(OUTDIR)/.draft.pdf draft.pdf
+	rm $(DRAFTTEX)
 
 $(OUTDIR) :
 	mkdir $(OUTDIR)
