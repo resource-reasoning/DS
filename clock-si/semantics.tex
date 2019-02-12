@@ -8,7 +8,7 @@ Sometime we also write \( \txid_\cl^\ct \) or omit the client label, \ie \( \txi
 
 Database is partitioned into several \emph{shards}.
 A shard \(\sd \in \Shards \)  contains some keys which are disjointed from keys in other shards.
-The \( \func{shardOf}{\key} \) denotes the shard where the key \( \key \) locates.
+The \( \func{shardOf}[\key] \) denotes the shard where the key \( \key \) locates.
 
 Shards and clients are associated with clock times, \(  \ct \in \ClockTimes \defeq \Nat \), which represent the current times of shards and clients.
 We use notation \( \cts \in (\Shards \cup \Clients ) \parfinfun \ClockTimes\).
@@ -71,13 +71,13 @@ the transaction read from the write set immediately.
 \]
 
 Otherwise, the transaction needs to fetch the value from the shard.
-The first premiss says the transaction must wait until the shard local time \( \cts(\func{shardOf}{\key}) \) is greater than the snapshot time \( \ct \).
+The first premiss says the transaction must wait until the shard local time \( \cts(\func{shardOf}[\key]) \) is greater than the snapshot time \( \ct \).
 If so, by the second line, the transaction fetches the latest version for key \( \key \) before the snapshot time \( \ct \).
 \[
     \inferrule[ReadRemote]{ 
             \key = \evalE{\expr} \\
             (\otW, \key, \stub ) \notin \fp \\
-            \ct < \cts(\func{shardOf}{\key}) \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:snapshot-time-grt-than-shard}} \\\\
+            \ct < \cts(\func{shardOf}[\key]) \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:snapshot-time-grt-than-shard}} \\\\
             n = \max\Setcon{n'}{ \exsts{j} \txid^{n'} = \wtOf(\mkvs(\key, j)) \land n' < \ct } \quad \texttt{---> \cref{lst:simplified-read}, \cref{line:read-i-from-shard}} \\\\ 
             \mkvs(\key, i) = (\val, \txid^n, \stub) 
         }{%
@@ -135,11 +135,11 @@ therefore it suffices to assume they are one atomic step.
 \[
     \inferrule[Commit]{ 
         \fora{\key,i} (\otW, \key, \stub) \in \fp \land \wtOf(\mkvs(\key,i)) < \ct \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:check-concur-write}} \\\\  
-        n = \max\left( \Setcon{\ct'}{\exsts{\key} (\stub, \key, \stub) \in \fp \land \ct' = \cts(\func{shardOf}{\key})} \cup \Set{\ct} \right) \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:pick-time-1,line:pick-time-2,line:pick-time-3}} \\\\
-        \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\fp} \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:clock-si-commit-1,line:clock-si-commit-2}} \\\\
+        n = \max\left( \Setcon{\ct'}{\exsts{\key} (\stub, \key, \stub) \in \fp \land \ct' = \cts(\func{shardOf}[\key])} \cup \Set{\ct} \right) \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:pick-time-1,line:pick-time-2,line:pick-time-3}} \\\\
+        \mkvs' =  \func{commitKV}[\mkvs,\ct,\txid_\cl^n,\fp] \quad \texttt{---> \cref{lst:simplified-commit}, \cref{line:clock-si-commit-1,line:clock-si-commit-2}} \\\\
         \fora{\sd}
         {\left( \begin{array}{@{}l@{}}
-            \sd \in \Setcon{\func{shardOf}{\key}}{(\stub, \key, \stub) \in \fp} \\
+            \sd \in \Setcon{\func{shardOf}[\key]}{(\stub, \key, \stub) \in \fp} \\
             \quad \implies \cts'(\sd) = \cts(\sd) + 1 
         \end{array} \right)} \lor (\cts'(\sd) = \cts(\sd)) \quad \texttt{--->  simulate time elapses}
         }{%
@@ -152,7 +152,7 @@ To commit the new transaction, it needs to check, by the first premiss,
 there is no other transactions writing to the same keys after the snapshot time.
 If it passes, by the second line it picks the maximum time \( n \) among all participants
 as the commit time.
-The new key-value store \( \mkvs' =  \func{commitKV}{\mkvs,\ct,\txid_\cl^n,\fp} \),
+The new key-value store \( \mkvs' =  \func{commitKV}[\mkvs,\ct,\txid_\cl^n,\fp] \),
 where 
 \begin{align*}
     \func{commitKV}[\mkvs,\ct,\txid,\fp \uplus \Set{(\otR,\key,\val)}] & \defeq 
@@ -162,9 +162,9 @@ where
     \texttt{and} \ \mkvs' = \func{commitKV}[\mkvs,\ct,\txid,\fp] \\
     \texttt{in} \ \mkvs'\rmto{\key}{\mkvs'(\key)\rmto{i}{(\val, \txid^n, \txidset \cup \Set{\txid})}}
     \end{multlined} \\
-    \func{commitKV}{\mkvs,\ct,\txid,\fp \uplus \Set{(\otW,\key,\val)}} & \defeq 
+    \func{commitKV}[\mkvs,\ct,\txid,\fp \uplus \Set{(\otW,\key,\val)}] & \defeq 
     \begin{multlined}[t]
-    \texttt{let} \ \mkvs' = \func{commitKV}{\mkvs,\ct,\txid,\fp} \\
+    \texttt{let} \ \mkvs' = \func{commitKV}[\mkvs,\ct,\txid,\fp] \\
     \texttt{in} \ \mkvs'\rmto{\key}{\mkvs'(\key) \lcat (\val, \txid, \emptyset)}
     \end{multlined} 
 \end{align*}
@@ -243,7 +243,7 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
     By the \rl{read} rule, \( \ct_j < n \) implies the transaction \( \txid_{\cl_j}^m \) never read any version written by \( \txid_{\cl_i}^n \).
 
     \item Let consider any possible time tick for those shard \( \sd \) that has been updated by \( \txid_{\cl_j}^m \),
-    that is, \( \sd = \func{shardOf}{\key}\) for some key \( \key \)  that \( (\otW, \key, \stub) \in \fp_i \) and
+    that is, \( \sd = \func{shardOf}[\key]\) for some key \( \key \)  that \( (\otW, \key, \stub) \in \fp_i \) and
     \begin{equation}
     \label{equ:time-tick-move-afterwards}
     \begin{array}{@{}l@{}}
@@ -302,7 +302,7 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
                 \[
                     (\otR, \key, \stub) \in \fp \land (\otW, \key, \stub) \in \fp'
                 \]
-                Let \( \sd = \func{shardOf}{\key} \).
+                Let \( \sd = \func{shardOf}[\key] \).
                 By the \rl{ReadRemote}, we know the current clock time for the shard \( \sd \) is greater than \( \ct \) which is the snapshot time of \( \txid \), 
                 that is, \( \cts'(\sd) > \ct \).
                 Then by \rl{commit}, the commit time of \( \txid' \) is picked as the maximum of the shards it touched, 
@@ -331,7 +331,7 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
         \begin{itemize}
             \item if the transaction \( \txid \) does not read from the shard \( \sd \), it means for any key \( \key \),
                 \[
-                    \func{shardOf}{\key} \neq \sd
+                    \func{shardOf}[\key] \neq \sd
                 \]
             In this case, it is safe to swap the two steps
             \[
@@ -341,7 +341,7 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
             \]
             \item if the transaction \( \txid \) read from the shard \( \sd \), it means that there exists a key \( \key \)
             \[
-                \func{shardOf}{\key} = \sd
+                \func{shardOf}[\key] = \sd
             \]
             By the \rl{ReadRemote}, we know the current clock time for the shard \( \sd \) is greater than the snapshot time of \( \txid \), 
             that is, \( \cts'(\sd) > \ct \).
@@ -372,7 +372,7 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
             Let \( \ct \) be the clock time before committing, \( \ct = \cts(\cl)\).
             By the premiss of the rule, the new client time \( n + 1 \) satisfies that, 
             \[
-                n = \max\left( \Setcon{\ct'}{\exsts{\key} (\stub, \key, \stub) \in \fp \land \ct' = \cts(\func{shardOf}{\key})} \cup \Set{\ct} \right)
+                n = \max\left( \Setcon{\ct'}{\exsts{\key} (\stub, \key, \stub) \in \fp \land \ct' = \cts(\func{shardOf}[\key])} \cup \Set{\ct} \right)
             \]
             It means \( \ct < (n + 1)\).
         \item \rl{StartTrans}.
@@ -395,7 +395,7 @@ For any clock-SI trace \( \tr \), there exists an equivalent normal trace \( \tr
 \end{proof}
 
 Clock-SI also has a notion view which corresponds the snapshot time.
-The following definition \( \func{viewOf}{\mkvs,\ct} \) extracts the view from snapshot time.
+The following definition \( \func{viewOf}[\mkvs,\ct] \) extracts the view from snapshot time.
 \begin{definition}
     \label{clock-si-view}
     \label{def:clock-si-view}
@@ -409,7 +409,7 @@ The following definition \( \func{viewOf}{\mkvs,\ct} \) extracts the view from s
     \end{align*}
 \end{definition}
 
-Given the view \( \func{viewOf}{\mkvs,\ct} \) for each transaction, 
+Given the view \( \func{viewOf}[\mkvs,\ct] \) for each transaction, 
 we first prove that clock-si produces a well-formed key-value store (\cref{def:mkvs}).
 \begin{lemma}
     \label{lem:well-formed-clock-si-view}
@@ -417,20 +417,20 @@ we first prove that clock-si produces a well-formed key-value store (\cref{def:m
     \[
         \tr = \cdots \toPROG{\stub} \mkvs, \cts, \cts', \thdenv, \prog \to{\cl, \ct, \fp, \ct'} \cdots
     \]
-    \func{viewOf}{\mkvs, \ct} and \func{viewOf}{\mkvs, \ct'} (\cref{clock-si-view}) produce well-formed views.
+    \func{viewOf}[\mkvs, \ct] and \func{viewOf}[\mkvs, \ct'] (\cref{clock-si-view}) produce well-formed views.
 \end{lemma}
 \begin{proof}                     
     It suffices to prove that \cref{eq:view.atomic} in \cref{def:view}.
     Assume a key-value store \( \mkvs \) and a snapshot time \( \ct \).
-    Suppose a version \( i \) in the view \( i \in \func{viewOf}{\mkvs,\ct}(\key)\) for some key \( \key \).
+    Suppose a version \( i \) in the view \( i \in \func{viewOf}[\mkvs,\ct](\key)\) for some key \( \key \).
     By \cref{def:clock-si-view}, the version is committed before the snapshot time,
     \ie \( \txid^n = \wtOf(\mkvs(\key, i)) \land n < \ct\).
     Assume another version \( \txid^n = \wtOf(\mkvs(\key', j)) \) for some key \( \key' \) and index \( j \).
-    By \cref{def:clock-si-view} we have \( j \in \func{viewOf}{\mkvs,\ct}(\key') \).
-    Similarly \( \func{viewOf}{\mkvs, \ct'} \) is a well-formed view.
+    By \cref{def:clock-si-view} we have \( j \in \func{viewOf}[\mkvs,\ct](\key') \).
+    Similarly \( \func{viewOf}[\mkvs, \ct'] \) is a well-formed view.
 \end{proof}
 
-Second, given the view \( \func{viewOf}{\mkvs,\ct} \) for each transaction, 
+Second, given the view \( \func{viewOf}[\mkvs,\ct] \) for each transaction, 
 both \( \func{commitKV} \) and \( \updateKV \) produce the same result.
 \begin{lemma}
     Given a normal clock-SI trace \( \tr \) and a transaction \( \txid_\cl \), such that
@@ -439,26 +439,26 @@ both \( \func{commitKV} \) and \( \updateKV \) produce the same result.
     \] 
     the following holds:
     \[
-        \func{commitKV}{\mkvs,\ct,\txid_\cl^{\ct'},\fp} = \updateKV[\mkvs, \func{viewOf}{\mkvs, \ct},\fp, \txid_\cl^{\ct'}] 
+        \func{commitKV}[\mkvs,\ct,\txid_\cl^{\ct'},\fp] = \updateKV[\mkvs, \func{viewOf}[\mkvs, \ct],\fp, \txid_\cl^{\ct'}] 
     \]
 \end{lemma}
 \begin{proof}
     We prove by induction on \( \fp \).
     \begin{itemize}
         \item \caseB{\( \fp = \emptyset \)}
-            It is easy to see that \( \func{commitKV}{\mkvs,\ct,\txid_\cl^{\ct'},\emptyset} = \mkvs =  \updateKV{\mkvs, \func{viewOf}{\mkvs, \ct},\fp, \txid_\cl^{\ct'}} \).
+            It is easy to see that \( \func{commitKV}[\mkvs,\ct,\txid_\cl^{\ct'},\emptyset] = \mkvs =  \updateKV{\mkvs, \func{viewOf}[\mkvs, \ct],\fp, \txid_\cl^{\ct'}} \).
         \item \caseI{\( \fp \uplus (\otW, \key, \val) \)}
             Because in both functions, the new version is installed at the tail of the list associated with \( \key \),
             \[
                 \begin{array}{@{}l@{}}
-                \func{commitKV}{\mkvs,\ct,\txid_\cl^{\ct'},\fp \uplus (\otW, \key, \val)}  \\
+                \func{commitKV}[\mkvs,\ct,\txid_\cl^{\ct'},\fp \uplus (\otW, \key, \val)]  \\
                 \quad \begin{array}[t]{@{}c l@{}}
                 = &
-                \func{commitKV}{\mkvs,\ct,\txid_\cl^{\ct'},\fp}\rmto{\key}{\mkvs(\key) \lcat \List{(\val, \txid, \emptyset)}} \\
+                \func{commitKV}[\mkvs,\ct,\txid_\cl^{\ct'},\fp]\rmto{\key}{\mkvs(\key) \lcat (\val, \txid, \emptyset)} \\
                 = & 
-                \updateKV[\mkvs,\func{viewOf}{\mkvs,\ct},\fp,\txid_\cl^{\ct'}]\rmto{\key}{\mkvs(\key) \lcat \List{(\val, \txid, \emptyset)}} \\
+                \updateKV[\mkvs,\func{viewOf}[\mkvs,\ct],\fp,\txid_\cl^{\ct'}]\rmto{\key}{\mkvs(\key) \lcat \List{(\val, \txid, \emptyset)}} \\
                 = & 
-                \updateKV[\mkvs,\func{viewOf}{\mkvs,\ct},\fp \uplus (\otW, \key, \val),\txid_\cl^{\ct'}]
+                \updateKV[\mkvs,\func{viewOf}[\mkvs,\ct],\fp \uplus (\otW, \key, \val),\txid_\cl^{\ct'}]
                 \end{array}
                 \end{array}
             \]
@@ -474,18 +474,18 @@ both \( \func{commitKV} \) and \( \updateKV \) produce the same result.
                 } 
             \]
             Let the new version \( \ver = \left( \valueOf(\mkvs(\key,i)), \wtOf(\mkvs(\key,i)), \rsOf(\mkvs(\key,i)) \uplus \Set{\txid_\cl^{\ct'}} \right) \).
-            By \cref{lem:well-formed-clock-si-view}, it follows \( i \in \func{viewOf}{\mkvs,\ct}(\key) \), then by \cref{lem:clock-si-mono-writer}, the version is the latest one \( i = \max(\func{viewOf}{\mkvs,\ct}(\key)) \).
+            By \cref{lem:well-formed-clock-si-view}, it follows \( i \in \func{viewOf}[\mkvs,\ct](\key) \), then by \cref{lem:clock-si-mono-writer}, the version is the latest one \( i = \max(\func{viewOf}[\mkvs,\ct](\key)) \).
             Therefore we have,
             \[
                 \begin{array}{@{}l@{}}
-                \func{commitKV}{\mkvs,\ct,\txid_\cl^{\ct'},\fp \uplus (\otR, \key, \val)}  \\
+                \func{commitKV}[\mkvs,\ct,\txid_\cl^{\ct'},\fp \uplus (\otR, \key, \val)]  \\
                 \quad \begin{array}[t]{@{}c l@{}}
                 = &
-                \func{commitKV}{\mkvs,\ct,\txid_\cl^{\ct'},\fp}\rmto{\key}{\mkvs(\key)\rmto{i}{\ver}} \\
+                \func{commitKV}[\mkvs,\ct,\txid_\cl^{\ct'},\fp]\rmto{\key}{\mkvs(\key)\rmto{i}{\ver}} \\
                 = & 
-                \updateKV[\mkvs,\func{viewOf}{\mkvs,\ct},\fp,\txid_\cl^{\ct'}]\rmto{\key}{\mkvs(\key)\rmto{i}{\ver}} \\
+                \updateKV[\mkvs,\func{viewOf}[\mkvs,\ct],\fp,\txid_\cl^{\ct'}]\rmto{\key}{\mkvs(\key)\rmto{i}{\ver}} \\
                 = & 
-                \updateKV[\mkvs,\func{viewOf}{\mkvs,\ct},\fp \uplus (\otR, \key, \val),\txid_\cl^{\ct'}]
+                \updateKV[\mkvs,\func{viewOf}[\mkvs,\ct],\fp \uplus (\otR, \key, \val),\txid_\cl^{\ct'}]
                 \end{array}
                 \end{array}
             \]
@@ -519,7 +519,7 @@ all transactional execution can be replaced by \cref{fig:semantics-trans}.
     \]
     for some \( i \), there exists a trace
     \[
-        (\stk_0, \snapshot(\mkvs_0,\func{viewOf}{\mkvs_0,\ct}), \emptyset), \trans \toTRANS^*
+        (\stk_0, \snapshot(\mkvs_0,\func{viewOf}[\mkvs_0,\ct]), \emptyset), \trans \toTRANS^*
         (\stk_i, \sn_i, \fp_i), \pskip
     \]
     that produces the same final fingerprint in the end.
@@ -532,7 +532,7 @@ all transactional execution can be replaced by \cref{fig:semantics-trans}.
     \]
     We construct the following trace,
     \[
-        (\stk_0, \snapshot(\mkvs_0,\func{viewOf}{\mkvs_0,\ct}), \fp_0), \trans_0 \toTRANS^*
+        (\stk_0, \snapshot(\mkvs_0,\func{viewOf}[\mkvs_0,\ct]), \fp_0), \trans_0 \toTRANS^*
         (\stk_i, \sn_i, \fp_i), \trans_i
     \]
     Let consider how many transactional internal steps.
@@ -544,7 +544,7 @@ all transactional execution can be replaced by \cref{fig:semantics-trans}.
         \]
         It is easy to construct the following
         \[
-            (\stk_0, \snapshot(\mkvs,\func{viewOf}{\mkvs,\ct}), \fp_0), \trans_0 
+            (\stk_0, \snapshot(\mkvs,\func{viewOf}[\mkvs,\ct]), \fp_0), \trans_0 
         \]
         \item \caseI{i + 1}
         Suppose  a trace with \(i\) steps,
@@ -554,7 +554,7 @@ all transactional execution can be replaced by \cref{fig:semantics-trans}.
         \]
         and a trace
         \[
-            (\stk_0, \snapshot(\mkvs_0,\func{viewOf}{\mkvs_0,\ct}), \fp_0), \trans_0 \toTRANS^*
+            (\stk_0, \snapshot(\mkvs_0,\func{viewOf}[\mkvs_0,\ct]), \fp_0), \trans_0 \toTRANS^*
             (\stk_i, \sn_i, \fp_i), \trans_i
         \]
         Now let consider the next step.
@@ -612,7 +612,7 @@ all transactional execution can be replaced by \cref{fig:semantics-trans}.
                     } 
                     \land \valueOf(\mkvs_i(\key,n) ) = \val
                 \]                 
-                By the definition of \( \vi_0 = \func{viewOf}{\mkvs_0,\ct} \) and \( \snapshot[\mkvs_0,\vi_0] \) and the fact that there is no write to the key \( \key \),
+                By the definition of \( \vi_0 = \func{viewOf}[\mkvs_0,\ct] \) and \( \snapshot[\mkvs_0,\vi_0] \) and the fact that there is no write to the key \( \key \),
                 it follows \( \sn_i(\key) = \val \).
                 Thus, by the \rl{TPrimitive}, we have 
                 \[
@@ -655,29 +655,29 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
     \[
         \tr = \cdots \toPROG{\cl, \ct, \fp, \perp} \mkvs, \cts, \cts', \thdenv, \prog  \toPROG{\cl, \ct, \fp, n} \mkvs', \cts'', \cts''', \thdenv', \prog' \toPROG{\stub} \cdots
     \]
-    the transaction satisfies \( \ET_\SI \), \ie \( \ET_\SI \vdash (\mkvs, \func{viewOf}{\mkvs,\ct}) \csat \fp : \func{viewOf}{\mkvs,\cts''(\cl)} \)
+    the transaction satisfies \( \ET_\SI \), \ie \( \ET_\SI \vdash (\mkvs, \func{viewOf}[\mkvs,\ct]) \csat \fp : \func{viewOf}[\mkvs,\cts''(\cl)] \)
 \end{theorem}
 \begin{proof}
     Recall \( \ET_\SI  = \Setcon{(\mkvs, \vi, \fp, \vi')}{\dagger} \cap \ET_\MR \cap \ET_\RYW  \cap \ET_\UA \)
     Note that final view of the client, \( \cts''(\cl) = n + 1 \).
     We prove the four parts separately.
     \begin{itemize}
-        \item \( \Setcon{(\mkvs, \func{viewOf}{\mkvs,\ct}, \fp, \func{viewOf}{\mkvs,\cts''(\cl)})}{\dagger} \).
-            Assume a version \( i \in \func{viewOf}{\mkvs,\ct}(\key) \) for some key \( \key \).
+        \item \( \Setcon{(\mkvs, \func{viewOf}[\mkvs,\ct], \fp, \func{viewOf}[\mkvs,\cts''(\cl)])}{\dagger} \).
+            Assume a version \( i \in \func{viewOf}[\mkvs,\ct](\key) \) for some key \( \key \).
             Suppose a version \( \mkvs(\key',j)\) such that 
             \[ 
                 \wtOf(\mkvs(\key',j)) \toEDGE{((\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs}) ; \RW_{\mkvs}\rflx)^+} \wtOf(\mkvs(\key,i))
             \]
             Let \( \txid^n = \wtOf(\mkvs(\key',j)) \) and \( \txid^m = \wtOf(\mkvs(\key,i)) \).
-            By \cref{lem:clock-si-rw,lem:clock-si-wr-ww-so}, we know \( n < m \) then \( j  \in \func{viewOf}{\mkvs,\ct}(\key')\).
+            By \cref{lem:clock-si-rw,lem:clock-si-wr-ww-so}, we know \( n < m \) then \( j  \in \func{viewOf}[\mkvs,\ct](\key')\).
         \item \( \ET_\MR \).
-            By \rl{Commit}, we know \( \ct \leq n < \cts''(\cl) \) then \( \func{viewOf}{\mkvs,\ct} \viewleq \func{viewOf}{\mkvs,\cts''(\cl)} \).
+            By \rl{Commit}, we know \( \ct \leq n < \cts''(\cl) \) then \( \func{viewOf}[\mkvs,\ct] \viewleq \func{viewOf}[\mkvs,\cts''(\cl)] \).
         \item \( \ET_\MW \).
             By \rl{Commit}, for any write \( (\otW, \key, \val) \in \fp \), there is a new version written by the client \( \cl \) in the \( \mkvs'  \),
             \[
                 \wtOf(\mkvs'(\key,\abs{\mkvs'(\key)} - 1)) = \txid_\cl^{n}
             \]
-            Since \( n < \cts''(\cl)\), it follows \( \abs{\mkvs'(\key)} - 1 \in \func{viewOf}{\mkvs,\cts''(\cl)}(\key) \).
+            Since \( n < \cts''(\cl)\), it follows \( \abs{\mkvs'(\key)} - 1 \in \func{viewOf}[\mkvs,\cts''(\cl)](\key) \).
         \item \( \ET_\UA \).
             By the premiss of \rl{Commit}, for any write \( (\otW, \key, \val) \in \fp \), any existed versions of the key \( \key \)
             must be installed by some transactions before the snapshot time of \( \ct \),
@@ -686,7 +686,7 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
             \]
             It implies that 
             \[ 
-                \fora{i} i \in \dom(\mkvs(\key)) \implies i \in \func{viewOf}{\mkvs,\ct}(\key) 
+                \fora{i} i \in \dom(\mkvs(\key)) \implies i \in \func{viewOf}[\mkvs,\ct](\key) 
             \]
     \end{itemize}
 \end{proof}
@@ -815,7 +815,7 @@ Last, we prove such trace also satisfies \( \ET_\SI \).
 \begin{proof}
     It is easy to see by \rl{ClientStep} and then \rl{Commit} that 
     \[
-        n > n - 1 \max\left( \Setcon{\ct'}{\exsts{\key} (\stub, \key, \stub) \in \fp \land \ct' = \cts'(\func{shardOf}{\key})} \cup \Set{\ct} \right)
+        n > n - 1 \max\left( \Setcon{\ct'}{\exsts{\key} (\stub, \key, \stub) \in \fp \land \ct' = \cts'(\func{shardOf}[\key])} \cup \Set{\ct} \right)
     \]
     so \( \ct < n \).
 \end{proof}
