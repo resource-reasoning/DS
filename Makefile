@@ -49,7 +49,7 @@ $(DRAFTDIR)/.draft.bbl : $(OUTDIR)/main.bbl
 
 # a quick run
 once : $(SOURCES) $(DRAFTDIR) $(DRAFTTEX)
-	$(PDFLATEX) -output-directory=$(OUTDIR) $(DRAFTTEX) 
+	$(PDFLATEX) -output-directory=$(DRAFTDIR) $(DRAFTTEX) 
 	cp $(DRAFTDIR)/.draft.pdf draft.pdf
 
 $(OUTDIR) :
