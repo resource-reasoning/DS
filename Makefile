@@ -1,11 +1,12 @@
-TEXS = $(shell find . -type f -name '*.tex') 
-BIBS = $(shell find . -type f -name '*.bib') 
-STYS = $(shell find . -type f -name '*.sty') 
-OUTDIR = .temp
-SOURCES = $(TEXS) $(BIBS) $(STYS) $(OUTDIR) 
 DRAFTTEX = .draft.tex
-PDFLATEX=pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -no-shell-escape -output-directory=$(OUTDIR) 
-LATEXMK=latexmk -pdf -pdflatex="$(PDFLATEX)" -bibtex -output-directory=$(OUTDIR) -use-make
+TEXS = $(filter-out $(DRAFTTEX), $(shell find * -type f -name '*.tex'))
+BIBS = $(shell find * -type f -name '*.bib') 
+STYS = $(shell find * -type f -name '*.sty') 
+OUTDIR = .temp
+DRAFTDIR = $(OUTDIR)/draft
+SOURCES = $(TEXS) $(BIBS) $(STYS)
+PDFLATEX=pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -no-shell-escape 
+LATEXMK=latexmk -pdf -pdflatex="$(PDFLATEX)" -bibtex -use-make
 
 # all : default; generate main.tex and draft.tex
 # main : generate main.tex
@@ -17,17 +18,17 @@ LATEXMK=latexmk -pdf -pdflatex="$(PDFLATEX)" -bibtex -output-directory=$(OUTDIR)
 # clean : clean everything
 .PHONY: all main draft once stat clean 
  
-all:  main draft
+all: main draft
 
 main : main.pdf
 
 main.pdf : $(OUTDIR)/main.pdf
 	cp $< $@
 
-$(OUTDIR)/main.pdf : $(SOURCES)
-	 $(LATEXMK) main.tex
+$(OUTDIR)/main.pdf : $(SOURCES) $(OUTDIR)
+	 $(LATEXMK) -output-directory=$(OUTDIR) main.tex
 
-$(OUTDIR)/main.bbl : $(OUTDIR)/main.aux
+$(OUTDIR)/main.bbl : $(SOURCES)
 	cp *.bib $(OUTDIR)
 	cd $(OUTDIR)
 	bibtex main
@@ -35,37 +36,32 @@ $(OUTDIR)/main.bbl : $(OUTDIR)/main.aux
 
 draft : draft.pdf
 
-draft.pdf : $(OUTDIR)/.draft.pdf
+draft.pdf : $(DRAFTDIR)/.draft.pdf
 	cp $< $@
 
 # switch on the CommentEdits flag in the tex 
-$(OUTDIR)/.draft.pdf : $(SOURCES)
-	sed 's/CommentEditsfalse/CommentEditstrue/g' main.tex > $(DRAFTTEX)
-	$(LATEXMK) $(DRAFTTEX)
-	rm $(DRAFTTEX)
+$(DRAFTDIR)/.draft.pdf : $(SOURCES) $(DRAFTDIR) $(DRAFTTEX)
+	$(LATEXMK) -output-directory=$(DRAFTDIR) $(DRAFTTEX) 
 
 # generate draft.bbl or copy from main.bbl
-$(OUTDIR)/.draft.bbl : $(OUTDIR)/draft.aux
-	ifeq ($(wildcard $(OUTDIR)/main.bbl), )
-		cp *.bib $(OUTDIR)
-		cd $(OUTDIR)
-		bibtex draft
-		cd ..
-	else
-		cp $(OUTDIR)/main.bbl $@
-	endfi
+$(DRAFTDIR)/.draft.bbl : $(OUTDIR)/main.bbl
+	cp $< $@
 
 # a quick run
-once : $(SOURCES) 
-	sed 's/CommentEditsfalse/CommentEditstrue/g' main.tex > $(DRAFTTEX)
-	$(PDFLATEX) $(DRAFTTEX) 
-	cp $(OUTDIR)/.draft.pdf draft.pdf
-	rm $(DRAFTTEX)
+once : $(SOURCES) $(DRAFTDIR) $(DRAFTTEX)
+	$(PDFLATEX) -output-directory=$(OUTDIR) $(DRAFTTEX) 
+	cp $(DRAFTDIR)/.draft.pdf draft.pdf
 
 $(OUTDIR) :
-	mkdir $(OUTDIR)
+	mkdir -p $@
+
+$(DRAFTDIR) :
+	mkdir -p $@
 
 $(SOURCES):
+
+$(DRAFTTEX): main.tex 
+	sed 's/CommentEditsfalse/CommentEditstrue/g' $< > $@
 
 *.aux: 
 
@@ -77,9 +73,9 @@ stat : .statistic
 
 run-statistic.sh statistic.py :
 
-
 clean:
 	rm -rf $(OUTDIR)
 	rm main.pdf
 	rm draft.pdf
 	rm .statistic
+	rm $(DRAFTTEX)
