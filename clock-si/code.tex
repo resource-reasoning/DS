@@ -75,10 +75,12 @@ and the corresponding time is less the \verb|t| snapshot time.
 \begin{lstlisting}[caption={Read from original shard},label={lst:clock-si-read-original}]
 Read( Trans t, key k )
     if ( k in t.ws ) return ws(k);
-    if ( k is updated by t' and t'.state = committing and t.snapshotTime > t'.committingTime)
+    if ( k is updated by t' and t'.state = committing 
+                and t.snapshotTime > t'.committingTime)
         wait until t'.state == committed;
-    if ( k is updated by t' and t'.state = prepared and t.snapshotTime > t'.preparedTime 
-                and t.snapshotTime > t'.committingTime )
+    if ( k is updated by t' 
+                    and t'.state = prepared and t.snapshotTime > t'.preparedTime 
+                    and t.snapshotTime > t'.committingTime )
         wait until t'.state == committed;
     return K(k,i), where i is the latest version before t.snapshotTime;
 \end{lstlisting}
@@ -97,12 +99,13 @@ If all the keys in the write set are hosted in the original shard that the trans
 the write set only needs to commit local.
 \begin{lstlisting}[caption={Local Commit},label={lst:clock-si-local-commit}]
 localCommit( Trans t )
-    if noConcurrentWrite(t)
+    if noConcurrentWrite(t) {
         t.state = committing;
         t.commitTime = getClockTime();
         log t.commitTime;
         log t.ws;
         t.state = committed;
+    }
 \end{lstlisting}
 To commit local, it first checks, by \verb|noConcurrentWrite(t)|,
 if there is any transaction \verb|t'| 
@@ -119,22 +122,21 @@ To commit to several shards,
 Clock-SI uses two-phase protocol.
 \begin{lstlisting}[caption={Distributed Commit},label={lst:clock-si-distributed-commit}]
 distributedCommit( Trans t )
-    for p in t.updatedPartitions
-        send ``prepare t'' to p;
+    for p in t.updatedPartitions { send ``prepare t'' to p; }
     wait receiving ``t prepared'' from all participants, store into prep;
     t.state = committing;
     t.commitTime = max(prep);
     log t.commitTime;
     t.state = committed;
-    for p in t.updatedPartitions
-        send ``commit t'' to p;
+    for p in t.updatedPartitions { send ``commit t'' to p; }
 
 On receiving ``prepare t''
-    if noConcurrentWrite(t)
+    if noConcurrentWrite(t) {
         log t.ws and t.coordinator ID
         t.state = prepared;
         t.prepareTime = getClockTime();
         send ``t prepared'' to t.coordinator
+    }
 
 On receiving ``commit t''
     log t.commitTime

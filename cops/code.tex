@@ -54,7 +54,6 @@ and then the version is added into the context.
 
 \begin{lstlisting}[caption={Client API for write},label={lst:cops-client-api-write}]
 Ctx put(k,v,ctx) {
-
     // add up all the read and write dependency
     deps = ctx_to_dep(ctx);
     // call replica API
@@ -64,14 +63,12 @@ Ctx put(k,v,ctx) {
     return ctx;
 }
 
-Dep ctx_to_dep(ctx) {
-    return { (k,ver) | (k,ver,_) (*$\in$*) ctx.readers (*$\lor$*)
-                (k,ver,_) (*$\in$*) ctx.writers }
+Dep ctx_to_dep(ctx) { 
+    return { (k,ver) | (k,ver,_) (*$\in$*) ctx.readers (*$\lor$*) (k,ver,_) (*$\in$*) ctx.writers } 
 }
 
 Dep dep_to_nearest(deps) {
-    return { (k,ver) | (*$\forall$*)k',ver',deps'.
-            (k',ver',deps') (*$\in$*) deps (*$\implies$*) (k,ver) (*$\notin$*) deps' };
+    return { (k,ver) | (*$\forall$*)k',ver',deps'. (k',ver',deps') (*$\in$*) deps (*$\implies$*) (k,ver) (*$\notin$*) deps' };
 }
 \end{lstlisting}
 
@@ -83,8 +80,7 @@ later on it will broad case to other replica\footnote{It uses message queue for 
 
 \begin{lstlisting}[caption={Replica API for write},label={lst:cops-replica-api-write}]
 VersionNo put_after(k,v,deps,nearest,vers){
-    for (k,ver) in nearest
-        wait until (_,ver,_) (*$\in$*) kv(k);
+    for (k,ver) in nearest { wait until (_,ver,_) (*$\in$*) kv(k); }
 
     time = inc(local_time);
 
@@ -102,9 +98,7 @@ Last, the replica updates the local time if the new version's time is greater th
 
 \begin{lstlisting}[caption={Receive update message},label={lst:cops-replica-receive-msg}]
 on_receive(k,v,ver,deps) {
-    for (k',ver') in deps {
-        wait until (_,ver',_) (*$\in$*) kv(k');
-    }
+    for (k',ver') in deps { wait until (_,ver',_) (*$\in$*) kv(k'); }
 
     list_isnert(kv[k],(v,ver,deps));
     (remote_local_time + id) = ver;
@@ -132,26 +126,21 @@ if the version fetched in the first phase is older than \verb|ccv[k]|.
 
 \begin{lstlisting}[caption={Reads},label={lst:cops-client-read}]
 List(Val) get_trans(ks,ctx) {
-    for k in ks {
-        // only guarantee to read up-to-date value 
-        // the moment reading the individual key
-        rst[k] = get_by_version(k,LATEST);
-    }
+    // only guarantee to read up-to-date value 
+    // the moment reading the individual key
+    for k in ks { rst[k] = get_by_version(k,LATEST); }
 
     for k in ks {
         ccv[k] = max (ccv[k],rst[k].ver);
         for dep in rst[k].deps
-            if ( dep.key (*$\in$*) ks )
-                ccv[k] = max (ccv[dep.key],dep.vers);
+            if ( dep.key (*$\in$*) ks ) ccv[k] = max (ccv[dep.key],dep.vers);
     }
 
     for k in ks 
-        if ccv[k] > rst[k].vers
-            rst[k] = get_by_version(k,ccv[k]);
+        if ( ccv[k] > rst[k].vers ) rst[k] = get_by_version(k,ccv[k]);
 
     // update the ctx
-    for (k,ver,deps) in rst
-        ctx.readers += (k,ver,deps);
+    for (k,ver,deps) in rst { ctx.readers += (k,ver,deps); }
 
     return to_vals(rst);
 }                                   
@@ -161,10 +150,7 @@ The client API \verb|get_by_version(k,ver)| returns the version \verb|ver| for k
 
 \begin{lstlisting}[caption={Replica API for read},label={lst:cops-replica-read}]
 (Val,Version,Dep) get_by_version(k,ver) {
-
-    if (ver  = LATEST){
-        ver = max(kv[k].vers);
-    }
+    if (ver  = LATEST){ ver = max(kv[k].vers); }
 
     wait until (_,ver,_) (*$\in$*) kv(k);
     
