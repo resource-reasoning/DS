@@ -282,16 +282,21 @@ $\fora{\key \in \Keys, l  \in \Set{\otR, \otW}}
 
 Note that the last constraint ensure that for each key, a fingerprint contains at most one read operation and at most one write operation 
 reflecting the fact that we work with transactions that are
-atomically visible~\cite{laws}; 
+atomically visible~\cite{laws,sureshConcur}; 
 that is, reads are taken from a single snapshot of the kv-store, 
 and since clients see either none or all the writes of a transaction, only the last write to each key is 
 committed.
 
-We provide an operational description of the behaviour of a transactional command, $\trans$,
-starting from an initial client stack, a transactional state and the empty fingerprint $\emptyset$. 
-First, we define a transition system describing how client stack and transactional state are updated via primitive transactional commands.
-For any function \( \mathsf f \), let \( \mathsf f\rmto{\mathsf d}{\mathsf r} \) denotes a new function where \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = {\mathsf r} \) if \( \mathsf d = \mathsf d' \), otherwise \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = \mathsf f(\mathsf d') \).
-
+\Cref{fig:semantics-trans} presents the rules for transactional commands.
+Except \( \rl{TPrimitive} \) rule that updates transactional state and accumulates fingerprint,
+the rules for compound commands are standard.
+%We provide an operational description of the behaviour of a transactional command, $\trans$,
+%starting from an initial client stack, a transactional state and the empty fingerprint $\emptyset$. 
+For \( \rl{TPrimitive} \) rule, first, we define a transition system describing 
+how client stack and transactional state are updated via primitive transactional commands.
+For any function \( \mathsf f \), let \( \mathsf f\rmto{\mathsf d}{\mathsf r} \) denotes a new function 
+where \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = {\mathsf r} \) if \( \mathsf d = \mathsf d' \), 
+otherwise \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = \mathsf f(\mathsf d') \).
 
 \begin{definition}
 \label{def:primitive_semantics}
@@ -317,7 +322,8 @@ is defined by:
 }%
 %
 \end{definition}
-\noindent Second, we define a \emph{fingerprint function}, $\mathsf{op}$, computing the fingerprint of primitive transactional commands:
+
+Second, we define a \emph{fingerprint function}, $\mathsf{op}$, computing the fingerprint of primitive transactional commands:
 \[
 \begin{aligned}
     \func{op}[\stk, \sn, \passign{\var}{\expr}] & \defeq  \emptyop 
@@ -416,9 +422,74 @@ that required no access to $\mkvs$,
 or $(\cl, \vi'', \fp)$ denoting that $\cl$ committed an atomic transaction with final fingerprint $\fp$ under the view $\vi''$.
 Transitions are parametric in the choice of \emph{execution test} $\ET$, defined shortly in \cref{sec:cm}.
 Intuitively, an execution test captures the \emph{consistency model} under which a transaction executes.
-In \cref{sec:cm} we present the execution tests associated with several well-known consistency models.  %in the literature.
+In \cref{sec:cm} we present the execution tests associated with several well-known consistency models
+such as causal consistency and snapshot isolation.
 
-\begin{figure*}[t]
+%\begin{figure*}[t]
+%\begin{mathpar}
+    %\inferrule[\rl{CPrimitive}]{
+		%\stk \toLTS{\cmdpri} \stk'
+    %}{
+        %\cl \vdash 
+        %( \mkvs, \vi, \stk ) , \cmdpri 
+        %\toCMD{(\cl,\iota)}_{\ET} 
+        %( \mkvs, \vi, \stk' ) , \pskip
+    %}%
+    %\\
+    %\inferrule[\rl{CAtomicTrans}]{%
+        %\vi \viewleq  \vi'' 
+        %\\
+        %\sn = \snapshot[\mkvs,\vi''] 
+        %\\\\
+        %(\stk, \sn, \emptyset), \trans \toTRANS^{*}   (\stk', \stub,  \fp) , \pskip
+        %\\\\
+        %\txid \in \nextTxid[\cl, \mkvs] 
+        %\\
+        %\mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid] 
+        %\\\\
+        %\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs',\vi')
+    %}{%
+        %\cl \vdash 
+        %( \mkvs, \vi, \stk ), \ptrans{\trans} 
+        %\toCMD{(\cl, \vi'', \fp)}_{\ET}
+        %(\mkvs',\vi', \stk' ) , \pskip
+    %}%
+    %\and
+    %\inferrule[\rl{PProg}]{%
+		%\ \vi = \vienv (\cl)
+        %\\
+        %\! \vienv' = \vienv\rmto{\cl}{\vi'}
+        %\\\\
+        %\ \stk = \thdenv(\cl)
+        %\\
+        %\thdenv' = \thdenv\rmto{\cl}{\stk'}
+        %\\\\
+        %\cmd = \prog(\cl)
+        %\\
+        %\prog' = \prog\rmto{\cl}{\cmd'}
+        %\\\\
+		%\cl \vdash 
+		%( \mkvs, \vi, \stk ) , \cmd
+		%\toCMD{\lambda}_{\ET} 
+		%( \mkvs', \vi', \stk' ) , \cmd'  
+    %}{%
+		%\vdash 
+		%(\mkvs, \vienv, \thdenv ), \prog
+		%\toCMD{\lambda}_{\ET} 
+		%( \mkvs', \vienv', \thdenv' ) , \prog' ) 
+    %}%
+%\end{mathpar}
+%\hrulefill
+
+%\caption{Semantic rules for primitive  commands, atomic transactions and programs}
+%\label{fig:semantics}
+%\end{figure*}
+
+
+%\cref{fig:semantics} contains the rules for primitive commands and atomic transactions.  
+The rules for the compound commands, similar to \cref{fig:semantics-trans}, are straightforward and are given in \cref{sec:full-semantics}.
+The transition system $\toLTS{\cmdpri} \subseteq \Stacks \times \Stacks$ in the rule for primitive commands, $\rl{CPrimitive}$ shown below, 
+lifts the transition system $\toLTS{\transpri}$ (\cref{def:primitive_semantics}) to those primitive commands that only affect the client stack:
 \begin{mathpar}
     \inferrule[\rl{CPrimitive}]{
 		\stk \toLTS{\cmdpri} \stk'
@@ -428,18 +499,26 @@ In \cref{sec:cm} we present the execution tests associated with several well-kno
         \toCMD{(\cl,\iota)}_{\ET} 
         ( \mkvs, \vi, \stk' ) , \pskip
     }%
-    \\
+    \and
+    \begin{array}{r @{\ }c @{\ } l}
+        \stk & \toLTS{\passign{\var}{\expr}} & \stk\rmto{\var}{\evalE{\expr}} \\
+        \stk & \toLTS{\passume{\expr}} & \stk \ \text{where} \ \evalE{\expr} \neq 0
+\end{array}
+\end{mathpar}
+The rule for atomic transactions, \rl{CAtomicTrans}, describes the execution of an atomic 
+transaction under execution test $\ET$:
+\begin{mathpar}
     \inferrule[\rl{CAtomicTrans}]{%
         \vi \viewleq  \vi'' 
         \\
         \sn = \snapshot[\mkvs,\vi''] 
-        \\\\
+        \\
         (\stk, \sn, \emptyset), \trans \toTRANS^{*}   (\stk', \stub,  \fp) , \pskip
         \\\\
         \txid \in \nextTxid[\cl, \mkvs] 
         \\
         \mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid] 
-        \\\\
+        \\
         \ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs',\vi')
     }{%
         \cl \vdash 
@@ -447,60 +526,23 @@ In \cref{sec:cm} we present the execution tests associated with several well-kno
         \toCMD{(\cl, \vi'', \fp)}_{\ET}
         (\mkvs',\vi', \stk' ) , \pskip
     }%
-    \and
-    \inferrule[\rl{PProg}]{%
-	    \ \vi = \vienv (\cl)
-        \\
-        \! \vienv' = \vienv\rmto{\cl}{\vi'}
-        \\\\
-        \ \stk = \thdenv(\cl)
-        \\
-        \thdenv' = \thdenv\rmto{\cl}{\stk'}
-        \\\\
-        \cmd = \prog(\cl)
-        \\
-        \prog' = \prog\rmto{\cl}{\cmd'}
-        \\\\
-		\cl \vdash 
-		( \mkvs, \vi, \stk ) , \cmd
-		\toCMD{\lambda}_{\ET} 
-		( \mkvs', \vi', \stk' ) , \cmd'  
-    }{%
-		\vdash 
-		(\mkvs, \vienv, \thdenv ), \prog
-		\toCMD{\lambda}_{\ET} 
-		( \mkvs', \vienv', \thdenv' ) , \prog' ) 
-    }%
 \end{mathpar}
-\hrulefill
-
-\caption{Semantic rules for primitive  commands, atomic transactions and programs}
-\label{fig:semantics}
-\end{figure*}
-
-
-\cref{fig:semantics} contains the rules for primitive commands and atomic transactions.  
-The rules for the compound commands are straightforward and are given in \cref{sec:full-semantics}.
-The transition system $\toLTS{\cmdpri}\; \subseteq \Stacks \times \Stacks$ in the rule for primitive commands, $\rl{CPrimitive}$, lifts the transition system 
-$\toLTS{\transpri}$ (\cref{def:primitive_semantics}) to those primitive commands that only affect the client stack:
-\[
-\stk \toLTS{\passign{\var}{\expr}} \stk\rmto{\var}{\evalE{\expr}}
-\qquad 
-\stk \toLTS{\passume{\expr}} \stk \text{ where } \evalE{\expr} \neq 0
-\]
-The rule for atomic transactions, \rl{CAtomicTrans}, describes the execution of an atomic 
-transaction under execution test $\ET$.  
 The first premise
 states that the current view $\vi$ of the executing command maybe advanced to a newer atomic view $\vi''$ (see \cref{def:views}). 
 This corresponds to the client receiving new updates.
 Given the new view $\vi''$, the transaction obtains a snapshot $\ss$ of the kv-store $\mkvs$, 
 and executes $\trans$ locally to completion ($\pskip$), updating the stack to $\stk'$, while accumulating the fingerprint $\fp$. 
 Note that the resulting snapshot is ignored (denoted by $\stub$) as the effect of the transaction is recorded in the fingerprint $\fp$. 
-%
 
-The transaction is now ready to commit. The rule picks a fresh transaction identifier $\txid \in \nextTxid[\cl, \mkvs]$, 
-and updates the kv-store via $\mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid]$
-if the commit is permitted by $\ET$ using the judgement $\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$.
+The transaction is now ready to commit. 
+The \( \rl{CAtomicTrans} \) rule
+\begin{enumerate*}
+\item picks a fresh transaction identifier $\txid \in \nextTxid[\cl, \mkvs]$, 
+\item computes the new kv-store via $\mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid]$ and 
+\item check if the transition from \( (\mkvs, \vi'') \)  to 
+    \( (\mkvs', \vi') \) via fingerprint \( \fp \) is permitted by execution test $\ET$
+    using the judgement $\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$.
+\end{enumerate*}
 The set $\nextTxid[\cl, \mkvs]$ provides the transactions identifiers
 associated with $\cl$ that are fresh for  $\mkvs$:
 \(
@@ -510,18 +552,13 @@ associated with $\cl$ that are fresh for  $\mkvs$:
 \).
 By construction, all elements of $\nextTxid[\cl, \mkvs]$ are greater (with respect to session order $\SO$) 
 than transaction identifiers previously used by $\cl$. 
-The judgement $\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$
-states that the fingerprint $\fp$ is compatible with kv-store $\mkvs$
-and view $\vi''$, and the resulting view $\vi'$ 
-is compatible with view \( \vi'' \) and final kv-store \( \mkvs' \).
-In \cref{sec:cm}, we give several examples of such judgements.
-Finally, having selected a suitable transaction identifier $\txid$,
-the $\updateKV[\mkvs, \vi, \fp, \txid]$, defined below, describes how the final fingerprint $\fp$ of $\txid$ executed 
-under view $\vi$ updates $\mkvs$.
-The function $\updateKV[\mkvs, \vi, \fp, \txid]$ updates $\mkvs$ with $\fp$ as follows: 
-for each read operation $(\otR, \key, \_) \in \fp$, it adds $t$ 
+
+The new kv-store $\updateKV[\mkvs, \vi, \fp, \txid]$, defined by \cref{def:updatekv}, 
+describes how the final fingerprint $\fp$ of $\txid$ executed under view $\vi$ updates $\mkvs$:
+%The function $\updateKV[\mkvs, \vi, \fp, \txid]$ updates $\mkvs$ with $\fp$ as follows: 
+for each read operation $(\otR, \key, \val) \in \fp$, it adds $\txid$ 
 to the reader set of the last version of $\key$ that is included in the view $\vi$ of the client; 
-for each write operation $(\otW, \key, \val)$, it appends a new version $(\val, t, \emptyset)$ 
+for each write operation $(\otW, \key, \val)$, it appends a new version $(\val, \txid, \emptyset)$ 
 to $\mkvs(\key)$. 
 Given a list of versions $\vilist = \ver_0 \lcat \cdots \lcat \ver_n$ 
 and any index $i: 0 \leq i \leq n$, 
@@ -558,16 +595,45 @@ operation per key and the identifier is fresh for $\mkvs$,
 the transaction update function and the transaction update set for
 $\cl$ are well-defined. 
 
-The last rule of \cref{fig:semantics} captures the execution of a program step, 
-given a \emph{client environment} $\thdenv \in \ThdEnv$. 
+Finally, the client \( \cl \) can pick a new view \( \vi' \) as long as 
+the transition from \( (\mkvs, \vi'') \) to \( (\mkvs', \vi') \)  via fingerprint \( \fp \) 
+is permitted by execution test $\ET$ using the judgement $\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$.
+Intuitively, the judgement states that 
+\begin{enumerate*}
+    \item the fingerprint $\fp$ is allowed to commit to kv-store $\mkvs$ under view $\vi''$, 
+    and \item the newly picked view $\vi'$ is at least the minimum view on final kv-store \( \mkvs' \) 
+    for future transactions from the same client.
+\end{enumerate*}
+In \cref{sec:cm}, we give several examples of such judgements.
+%Finally, having selected a suitable transaction identifier $\txid$,
+
+The last rule, \( \rl{PProg} \), captures the execution of a program step 
+given a \emph{client environment} $\thdenv \in \ThdEnv$:
+\begin{mathpar}
+    \inferrule[\rl{PProg}]{%
+	    \vi = \vienv (\cl)
+        \\
+        \stk = \thdenv(\cl)
+        \\
+        \cmd = \prog(\cl)
+        \\
+		\cl \vdash 
+		( \mkvs, \vi, \stk ) , \cmd
+		\toCMD{\lambda}_{\ET} 
+		( \mkvs', \vi', \stk' ) , \cmd'  
+    }{%
+		\vdash 
+		(\mkvs, \vienv, \thdenv ), \prog
+		\toCMD{\lambda}_{\ET} 
+		( \mkvs', \vienv\rmto{\cl}{\vi'}, \thdenv\rmto{\cl}{\stk'} ) , \prog\rmto{\cl}{\cmd'} ) 
+    }%
+\end{mathpar}
 A client environment $\thdenv$ is a function from client identifiers to variable stacks, associating each client with its stack. 
 We assume that the domain of client environments contains 
 the domain of the program throughout the execution: 
 $\dom(\prog) \subseteq \dom(\thdenv)$.
 Program transitions are simply defined in terms of the transitions of
 their constituent client commands. 
-This  yields a  standard interleaving semantics for concurrent
-programs; 
-that is, 
-a client performs a reduction in an atomic step without
-affecting other clients. 
+This yields an interleaving semantics for transactions of different clients; 
+that is, a client executes a transaction in an atomic step without
+interfering with other clients. 
