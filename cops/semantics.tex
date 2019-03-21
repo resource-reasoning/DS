@@ -54,7 +54,7 @@ The following is the rule corresponds to \cref{lst:simplified-put}:
         ( \stk, \ss, \emptyset ), \pmutate{\key}{\vx} \toTRANS
         ( \stk', \stub, \Set{(\otW, \key, \val )} ), \pskip
         \\\\
-        \dep = \Set{(\key', \txid)}[\exsts{i} i \in \viCL(\key') \land \txid = \wtOf(\mkvsCOPS(\key', i)) \lor (\key', \txid) \in \depOf{\mkvsCOPS(\key', i)} ] \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-ctx-to-deps}} 
+        \dep = \Set{(\key', \txid)}[\exsts{i} i \in \viCL(\key') \land \txid = \wtOf(\mkvsCOPS(\key', i)) \lor (\key', \txid) \in \depOf[\mkvsCOPS(\key', i)] ] \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-ctx-to-deps}} 
         \\\\
         \txid = \min\Set{%
         \txidCOPS{\repl}{\cl}{n'}{0}
@@ -294,7 +294,7 @@ First we prove that the key-value stores from COPS trace satisfy \cref{def:mkvs}
     we have the proof.
 \end{proof}
 
-\paragraph{\bf COPS normal trace}
+\mypar{COPS normal trace}
 We define COPS semi-normal trace then normal trace.
 Later, we prove for any COPS trace, there exists an equivalent normal trace.
 
@@ -383,10 +383,7 @@ A COPS's normal trace is a trace \( \tr \) if it is semi-normal trace and the si
     For any read-only transactions \( \txid_{\rd} \in \txidset_{\rd} \) following \( \txid \), we knows \( \txid' \notin \depOf[\mkvsCOPS_i, \txid_{\rd}] \), otherwise it violate \( \func{maxVersion}[\tr, \txid_\rd] = \txid \).
     Thus it is safe to swap the reduction steps and alter views that includes either or both versions.
     Note that if a view \( \vi \) includes both \( \txid \)  and \( \txid' \), and if \( \txid' \) also write to the same key \( \key \) with value \( \val' \), the \( \vi \) will fetch the value from \( \txid' \):
-    \begin{equation}
-        \label{equ:out-order-wrte-older-value}
-        \func{getMax}[\mkvsCOPS_i,\vi](\key) = \val'
-    \end{equation}
+    \( \func{getMax}[\mkvsCOPS_i,\vi](\key) = \val' \)
 \end{proof}
 
 \begin{corollary}
@@ -439,10 +436,10 @@ Then by the following theorem (\cref{thm:cops-cc}), we proof the COPS trace sati
     with respect to \( (\SO \cup \WR) \).
     \[
         \begin{array}{@{}l@{}}
-        \fora{\txid} 
-        \txid \in \mkvsCOPS 
+        \fora{\txid,\key,j} 
+        \txid = \wtOf[\mkvsCOPS_i(\key,j)]
         \implies 
-        ((\SO \cup \WR)^{-1})^*(\txid) \subseteq \depOf[\mkvsCOPS_i,\txid]
+        ((\SO \cup \WR)^{-1})^*(\txid) \subseteq \depOf[\mkvsCOPS_i(\key,j)]
         \end{array}
     \]
     if the view \( \vi \) includes a version, 
@@ -474,145 +471,64 @@ Then by the following theorem (\cref{thm:cops-cc}), we proof the COPS trace sati
                 By invariants \( I_1 \) and \( I_2 \),
                 we know \( \viCL = \getView[\mkvsCOPS_i,((\SO \cup \WR)^{-1})^{*}(\Tx[\mkvsCOPS_i,\viCL])]\).
                 Now we need to re-establish the \( I_1 \) for the new views \( \viCL' \) and \( \vienvCOPS' \) and \( I_2 \) for the new transaction \( \txid \).
-                Since it is a single-write transaction,
-                assume it appends \( j\)-\emph{th} version to key \( \key \).
-                This means the new client views \( \viCL' = \viCL\rmto{\key}{ \viCL(\key) \cup \Set{j} } \),
-                Let \( \dep \) be the dependency for the new version, \ie \( \dep = \depOf(\mkvsCOPS_{i+1}(\key,j)) \).
-                By the premiss, the \( \dep \) includes all versions included in \( \viCL \).
-                This means for any key \( \key' \) and index \( m \):
+                \begin{itemize}
+                    \item Since it is a single-write transaction,
+                    assume it appends \( j\)-\emph{th} version to key \( \key \).
+                    This means the new client views \( \viCL' = \viCL\rmto{\key}{ \viCL(\key) \cup \Set{j} } \),
+                    Let \( \dep \) be the dependency for the new version, \ie \( \dep = \depOf(\mkvsCOPS_{i+1}(\key,j)) \).
+                    By the premiss, the \( \dep \) includes all versions included in \( \viCL \).
+                    This means for any key \( \key' \) and index \( m \):
+                    \[
+                        (\key',\wtOf[\mkvsCOPS_i(\key',m)]) \in \dep \implies m \in \viCL'(\key')
+                    \]
+                    Note that \( \viCL' \viewleq \viREPL' \),
+                    therefore the invariant \( I_1 \) holds.
+                    \item 
+                    It is enough to only consider the newly committed transaction \( \txid \).
+                    Since it is a write transaction,
+                    let assume any transaction \( \txid' \) such that \( \txid' \toEDGE{\SO} \txid \).
+                    By \( \MR \) and \( \RYW \), transaction \( \txid' \) is in the view \( \viCL \),
+                    that is, for some \(\key',m \):
+                    \[
+                        \txid' \in \Set{\wtOf[\mkvsCOPS_i(\key',m)]} \cup \rsOf[\mkvsCOPS_i(\key',m)] \implies m \in \viCL(\key')
+                    \]
+                    Given the definition of dependencies the new version written by \( \txid \):
+                    \[ 
+                        \dep = \Set{(\key'', \txid'')}[
+                            \exsts{z} z \in \viCL(\key'') \land \txid'' = \wtOf(\mkvsCOPS_i(\key'', z)) \lor (\key'', \txid'') \in \depOf[\mkvsCOPS_i(\key'', z)] 
+                        ]
+                    \] 
+                    it follows \( (\key',m) \in \dep \).
+                    By \ih of invariant \( I_2 \), we know that  \( \dep \) is close with respect to \( \SO \cup \WR \).
+                    Thus we know for the new transaction \( ((\SO \cup \WR)^{-1})^*(\txid) \subseteq \depOf[\mkvsCOPS_i,\txid] \),
+                    that is, we re-establish invariant for \( i+1 \).
+                \end{itemize}
+                \item 
+                For \rl{GetTrans}, the client \( \cl \) commits a read-only transaction.
+                By the premiss of the rule, the client will pick a new view \( \viCL' \)
+                such that \( \vi_0 = \viCL \viewleq \viCL' = \vi_j \) and:
                 \[
-                    (\key',\wtOf[\mkvsCOPS_i(\key',m)]) \in \dep \implies m \in \viCL'(\key')
+                    {\begin{array}{@{}l@{}}
+                        \mathsf{for} \ z \ \mathsf{in} \Set{1, \dots, j} \\
+                        \quad m_z \in \viREPL(\key_z) \\
+                        \quad \vi'_z = \vi_{z-1}\rmto{\key_z}{\vi_{z-1}(\key_z) \cup \Set{m_z}}  \\
+                        \quad \vi_z = \lambda \key \ldotp \vi'_z(\key) \cup \Set{x}[(\key,\wtOf[\mkvsCOPS(\key,x)]) \in \depOf[\mkvsCOPS(\key_z,m_z)]]  \\
+                    \end{array}}
                 \]
-                Since \( \viCL \viewleq \vienvCOPS \),
-                therefore the invariant \( I_1 \) has been preserved.
-                \item 
-                For \rl{GetTrans}, the client \( \cl \) commits a read-only transaction.
-                By the premiss of the rule, the new view \( \vienvCOPS_{i+1}(\cl) \) satisfies the invariant.
-            \end{itemize}
-
-        \item \( \ET_\WFR \).
-            By \cref{lem:cops-dep} and the invariant, we have to proof.
-            Now we need to re-establish the invariant \( I_{i+1} \).
-            \begin{itemize}
-                \item 
-                For \rl{GetTrans}, the client \( \cl \) commits a read-only transaction.
-                By the premiss of the rule, the new view \( \vienvCOPS_{i+1}(\cl) \) satisfies the invariant.
-                \item For \rl{Put}, the new view \( \vienvCOPS_{i+1}(\cl) = \viCL\rmto{\key}{j} \),
-                where the new version \( \mkvsCOPS_{i+1}(\key,j)\) is written by the client \( \cl \).
-                Let \( \dep \) be the dependency for the new view, \ie \( \dep = \depOf(\mkvsCOPS_{i+1}(\key,j)) \).
-                By the premiss, the \( \dep \) includes all version included in \( \viCL \), 
-                therefore the invariant has been preserved.
+                We prove each iteration preserves the invariant \( I_1 \).
+                Suppose the invariants holds after \((z-1)\)-\emph{th}, let consider \(z\)-\emph{th}.
+                By construction, \( \vi'_z = \vi_{z-1}\rmto{\key_z}{\vi_{z-1}(\key_z) \cup \Set{m_z}} \),
+                the \( m_z \) version of some key \( \key_z \) is included in \( \vi'_z \).
+                Then all the versions \( \mkvsCOPS_i(\key_z, m_z) \) is is included in \( \vi_z \) as 
+                \[
+                     \vi_z = \lambda \key \ldotp \vi'_z(\key) \cup \Set{x}[(\key,\wtOf[\mkvsCOPS(\key,x)]) \in \depOf[\mkvsCOPS(\key_z,m_z)]] 
+                \]
+                This implies \( I_1 \) for \( \vi_z \).
+                For \( I_2 \), we apply \ih of invariant \( I_2 \),
+                since the new transaction is a read-only transaction.
+            \item For \rl{Sync}, the premiss of the rule implies that \( I_1 \) holds under the new replica view \( \viREPL' \).
+            For \( I_2 \), we apply \ih of invariant \( I_2 \).
             \end{itemize}
     \end{itemize}
 \end{proof}
 
-\begin{lemma}
-    \label{lem:cops-dep}
-    Given the initial key-value store \( \mkvsCOPS_0 \), initial views \( \vienvCOPS_0 \) and some programs \( \prog_0 \), for any \( \mkvsCOPS_i \) and \( \vienvCOPS_i \)  such that: 
-    \[
-        \mkvsCOPS_0, \vienvCOPS_0, \thdenv_0, \prog_0 {\toPROG{}}^* \mkvsCOPS_i, \vienvCOPS_i, \thdenv_i, \prog_i 
-    \]
-    for any versions \( ( \val,\txid,\txidset,\dep ) = \mkvsCOPS_i(\key,j) \) and \( ( \val',\txid',\txidset',\dep' ) = \mkvsCOPS_i(\key',m) \), if \( \txid \) depends on \( \txid' \), \ie
-    \[
-        \begin{array}{@{}l@{}}
-            \txid' \toEDGE{\SO\rflx} \txid
-            \lor \exsts{\txid''}
-            \txid'' \in \txidset' \land
-            \txid'' \toEDGE{\SO\rflx} \txid
-        \end{array}
-    \]
-    then \( \txid' \) and \( \dep' \) is in the dependency \( \dep \), \ie
-    \[
-        (\stub, \txid') \in \dep \land \dep' \subseteq \dep
-    \]
-\end{lemma}
-\begin{proof}
-    We prove by induction on the length of trace \( i \).
-    \begin{itemize}
-        \item 
-        \caseB{\(i = 0\)}
-        It trivially holds.
-        \item  
-        \caseI{\( i > 0 \)}
-        Suppose \( \mkvsCOPS_i \) satisfies the property, let consider the next key-value store \( \mkvsCOPS_{i+1}\).
-        We perform case analysis.
-        \begin{itemize}
-            \item 
-            \rl{Put}.
-            Assume a client \( \cl \) commit a new transaction \( \txid \) that installs a new version to key \( \key \).
-            Assume the initial view for the client is \( \viCL \).
-            In the new key-value store \( \mkvsCOPS_{i+1} \), for versions other than \( \mkvsCOPS_{i+1}(\key, \abs{\mkvsCOPS_{i+1}} - 1 ) \), they still satisfy the property by \ih
-            By \cref{lem:cl-observe-own}, it follows that for any preview transaction from the same client \( \txid' \):
-            \[
-                \begin{array}{@{}l@{}}
-                    \txid' \toEDGE{\SO\rflx} \txid
-                    \lor \exsts{\txid''}
-                    \txid'' \in \txidset' \land
-                    \txid'' \toEDGE{\SO\rflx} \txid
-                \end{array}
-            \]
-            the version written by the transaction \( \txid' \) is included in the view \( \viCL \).
-            By the premiss of \rl{Put} that how the new \( \dep \) is constructed, we have proof.
-
-            \item 
-            \rl{GetTrans}.
-            Since it only commits a read-only transaction, 
-            the \( \mkvsCOPS_{i+1} \)  satisfies the property by \ih
-        \end{itemize}
-    \end{itemize}
-\end{proof}
-
-%\begin{theorem}[COPS satisfy parallel snapshot isolation]
-    %For any COPS's trace \( \tr \) starting from the initial key-value store \( \mkvsCOPS_0 \), initial views \( \vienvCOPS_0 \) and some programs \( \prog_0 \), 
-    %there exists an equivalent trace \( \tr' \) where \( \mkvsCOPS'_i \) and \( \vienvCOPS'_i \)  such that: 
-    %\[
-        %\mkvsCOPS'_i, \vienvCOPS'_i, \thdenv'_i, \prog'_i \toPROG{\viCL',\fp'} \mkvsCOPS'_{i+1}, \vienvCOPS'_{i+1}, \thdenv'_{i+1}, \prog'_{i+1} 
-    %\]
-    %then the i-\emph{th} step satisfies \( \ET_\PSI \), \ie
-    %\[
-%\ET_\PSI \vdash ( \mkvsCOPS'_i, \viCL' ) \csat \fp' : ( \mkvsCOPS'_{i+1}, \vienvCOPS'_{i+1}(\cl) )
-    %\]
-%\end{theorem}
-%\begin{proof}
-    %By \cref{thm:cops-cc}, we already the trace \( \tr \) satisfying \( \ET_\CC \).
-    %It is sufficient to construct the trace \( \tr' \) so that 
-%\( \ET_\PSI \vdash ( \mkvsCOPS'_i, \viCL' ) \csat \fp' : ( \mkvsCOPS'_{i+1}, \vienvCOPS'_{i+1}(\cl) ) \) since \( \ET_\PSI = \ET_\CC \cap \ET_\UA\).
-    %We inductively alter all single-write transactions \( \txid \) that 
-    %does not start with a view containing all the versions for the key the transactions \( \txid \) want to write.
-    %Initially let \( \tr' = \tr \).
-    %Let pick the first single-write transaction \( \txid \), assuming it is i-\emph{step}, 
-    %who installs a version \( \mkvsCOPS_{i+1}(\key,j) = (\val,\txid,\txidset,\dep )\) with a initial view \( \viCL \) does not contain all versions \( \mkvsCOPS_i(\key,m) \)
-    %for some key \( \key \), client \( \cl \) and index \( m \) and \( j \).
-    %Since \( \txid \) is the first transaction does not contain all versions \( \mkvsCOPS_i(\key,m) \),
-    %it means the view \( \viCL \) does not include only the last version \( \mkvsCOPS_i(\key,j-1) \).
-    %Suppose the version \( \mkvsCOPS_i(\key,j-1) = (\val',\txid',\txidset',\dep' ) \) for some transaction \( \txid' \).
-    %Note that \( \txid' \)  and \( \txid \) comes from different client, otherwise it violate \( \ET_\RYW \).
-    %Thus let assume the initial view for \( \txid' \) is \( \viCL[\cl'] \) for client \( \cl' \) such that \( \cl' \neq \cl \).
-    %We performance case analysis as the following.
-    %\begin{itemize}                                                               
-        %\item Suppose \( \depOf(\txid') \subseteq \depOf(\txid_\rd) \), for all read-only transactions \( \txid_\rd \in \txidset \).
-            %It means it is safe to include \( j-1 \) version into \( \viCL \),
-            %\ie the new initial view for \( \txid \) is \( \viCL' = \viCL\rmto{\key}{j-1} \).
-            %Given that, all the initial views for the read-only transactions \( \txid_\rd \in \txidset \) also include \( \mkvsCOPS(\key,j) \).
-            %Yet because \( \depOf(\txid') \subseteq \depOf(\txid_\rd) \), the version \(\mkvsCOPS(\key,j)  \) is already in the initial view of \( \txid_\rd \).
-            %By the new initial view \( \viCL' \), it is easy to see 
-            %\( \ET_\UA \vdash (\mkvsCOPS_i, \viCL') \csat \Set{(\otW, \key, \val)}, \viCL'' \).
-        %\item there exists a read-only transaction \( \txid_\rd \in \txidset \) such that 
-              %\( \depOf(\txid') \not\subseteq \depOf(\txid_\rd) \).
-              %\begin{itemize}
-                  %\item If it is safe to include \( \depOf(\txid') \) into \( \depOf(\txid_\rd) \), consequently changing the initial for \( \txid_\rd \), for all read-only transactions \( \txid_\rd \in \txidset \), then we are back to the first case.
-                  %\item If there exists a read-only transaction \( \txid_\rd \) that is not safe to include \( \depOf(\txid') \).
-                      %That is, there exists a single-write transaction  \( \txid'' \) who installs a version \( \mkvsCOPS_i(\key',x)\) for a key \( \key' \) and a index \( x \) and the \( \txid_\rd \) read this version.
-                      %Given that it is not safe for  \( \depOf(\txid_\rd) \) to includes \( \depOf(\txid') \), 
-                      %there exists anther version \( \mkvsCOPS_i(\key',y) \) for the same key \( \key' \) and a index \( y \) such that \( y > x \).
-                      %It follows 
-                      %\[ 
-                        %\depOf{\mkvsCOPS_i(\key',x)} \subseteq \depOf{\mkvsCOPS_i(\key',y) \subseteq \depOf{\txid'} } 
-                      %\]
-                      %therefore 
-                      %\[
-                          %\fora{\txid'_\rd \in \txidset'} \depOf{\mkvsCOPS_i(\key',x)} \subseteq \depOf{ \txid'_\rd}
-                      %\]
-            %\end{itemize}
-    %\end{itemize}
-%\end{proof}
