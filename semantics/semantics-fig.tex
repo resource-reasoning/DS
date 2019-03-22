@@ -4,32 +4,33 @@
 \toTRANS & : ((\Stacks \times \Snapshots \times \Fingerprints) \times \Transactions) \times ((\Stacks \times \Snapshots \times \Fingerprints) \times \Transactions)
 \end{align*}
 \begin{mathpar}
-    \infer[\rl{TPrimitive}]{%
-        (\stk, \sn, \fp) , \transpri \ \toTRANS \  (\stk', \sn', \fp \addO \op) , \pskip 
+    \inferrule[\rl{TPrimitive}]{%
+        (\stk, \sn) \toLTS{\transpri} (\stk', \sn') 
+        \\
+        \op = \func{op}[\stk, \sn, \transpri]
     }{%
-        (\stk, \sn) \toLTS{\transpri} (\stk', \sn')
-        \\ \op = \func{op}{\stk, \sn, \transpri}
-    }
-    \\\
-    \infer[\rl{TChoice}]{%
-        (\stk, \sn, \fp) , \trans_{1} \pchoice \trans_{2} \ \toTRANS \  (\stk, \sn, \fp) , \trans_{i}
-    }{
-        i \in \Set{1,2}
-    }
-    \and
-    \infer[\rl{TIter}]{%
-        (\stk, \sn, \fp),  \trans\prepeat \ \toTRANS \  (\stk, \sn, \fp), \pskip \pchoice (\trans \pseq \trans\prepeat)
-    }{ } 
-    \and
-    \infer[\rl{TSeqSkip}]{%
-        (\stk, \sn, \fp), \pskip \pseq \trans \ \toTRANS \  (\stk, \sn, \fp), \trans
-    }{ }
-    \and
-    \infer[\rl{TSeq}]{%
-        (\stk, \sn, \fp), \trans_{1} \pseq \trans_{2} \ \toTRANS \  (\stk', \sn', \fp'), \trans_{1}' \pseq \trans_{2}
+        (\stk, \sn, \fp) , \transpri  \toTRANS   (\stk', \sn', \fp \addO \op) , \pskip 
+    }%
+    \\
+     \inferrule[\rl{TChoice}]{%
+		i \in \Set{1,2}
     }{%
-        (\stk, \sn, \fp), \trans_{1} \ \toTRANS \  (\stk', \sn', \fp'), \trans_{1}'
+		(\stk, \sn, \fp) , \trans_{1} \pchoice \trans_{2}  \toTRANS  (\stk, \sn, \fp) , \trans_{i}
     }
+    \and
+    \inferrule[\rl{TIter}]{ }{%
+        (\stk, \sn, \fp),  \trans\prepeat \toTRANS  (\stk, \sn, \fp), \pskip \pchoice (\trans \pseq \trans\prepeat)
+    }%
+    \and
+    \inferrule[\rl{TSeqSkip}]{ }{%
+        (\stk, \sn, \fp), \pskip \pseq \trans \toTRANS  (\stk, \sn, \fp), \trans
+    }%
+    \and
+    \inferrule[\rl{TSeq}]{%
+		(\stk, \sn, \fp), \trans_{1} \toTRANS  (\stk', \sn', \fp'), \trans_{1}'
+    }{%
+		(\stk, \sn, \fp), \trans_{1} \pseq \trans_{2} \toTRANS  (\stk', \sn', \fp'), \trans_{1}' \pseq \trans_{2}
+    }%
 \end{mathpar}
 \hrulefill
 \begin{align*}
@@ -42,50 +43,54 @@
     \end{multlined}
 \end{align*}
 \begin{mathpar}
-    \infer[\rl{CAtomicTrans}]{%
-        \cl \vdash 
-        ( \mkvs, \vi, \stk ), \ptrans{\trans} \ 
-        \toCMD{(\cl, \vi'', \fp)}_{\ET} \ 
-        (\mkvs',\vi', \stk' ) , \pskip
+    \inferrule[\rl{CAtomicTrans}]{%
+        \vi \viewleq  \vi'' 
+        \\
+        \sn = \snapshot[\mkvs,\vi''] 
+        \\
+        (\stk, \sn, \emptyset), \trans \toTRANS^{*}   (\stk', \stub,  \fp) , \pskip
+        \\\\
+        \txid \in \nextTxid[\cl, \mkvs] 
+        \\
+        \mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid] 
+        \\
+        \ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs',\vi')
     }{%
-		\begin{array}{@{} c @{}}
-			\vi \viewleq  \vi''
-            \quad \sn = \snapshot[\mkvs,\vi'']
-			\quad \txid \in \nextTxid(\cl, \mkvs) \\
-			(\stk, \sn, \emptyset), \trans \toTRANS^{*}   (\stk', \stub,  \fp) , \pskip
-            \quad \mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid]
-            \quad \ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs',\vi')
-			%\qquad \ET \vdash (\mkvs, \vi'') \csat \fp : \vi'
-		\end{array}
-    }
+        \cl \vdash 
+        ( \mkvs, \vi, \stk ), \ptrans{\trans} 
+        \toCMD{(\cl, \vi'', \fp)}_{\ET}
+        (\mkvs',\vi', \stk' ) , \pskip
+    }%
     \and
-    \infer[\rl{CPrimitive}]{%
-    \cl \vdash ( \mkvs, \vi, \stk ) , \cmdpri \ \toCMD{(\cl,\iota)}_{\ET} \  ( \mkvs, \vi, \stk' ) , \pskip
+    \inferrule[\rl{CPrimitive}]{
+		\stk \toLTS{\cmdpri} \stk'
     }{
-        \stk \toLTS{\cmdpri} \stk'
-    }
+        \cl \vdash 
+        ( \mkvs, \vi, \stk ) , \cmdpri 
+        \toCMD{(\cl,\iota)}_{\ET} 
+        ( \mkvs, \vi, \stk' ) , \pskip
+    }%
     \and
-    \infer[\rl{CChoice}]{%
-        \cl \vdash ( \mkvs, \vi, \stk ) , \cmd_{1} \pchoice \cmd_{2} \ \toCMD{(\cl,\iota)}_{\ET} \  ( \mkvs, \vi, \stk ) , \cmd_{i}
-    }{
+    \inferrule[\rl{CChoice}]{%
         i \in \Set{1,2}
+    }{%
+        \cl \vdash ( \mkvs, \vi, \stk ) , \cmd_{1} \pchoice \cmd_{2} \ \toCMD{(\cl,\iota)}_{\ET} \  ( \mkvs, \vi, \stk ) , \cmd_{i}
     }
-    \quad
-    \infer[\rl{CIter}]{%
-        \cl \vdash ( \mkvs, \vi, \stk ) , \cmd\prepeat \ \toCMD{(\cl,\iota)}_{\ET} \  ( \mkvs, \vi, \stk ) , \pskip \pchoice (\cmd \pseq \cmd\prepeat)
-    }{ }
     \and
-    \infer[\rl{CSeqSkip}]{%
+    \inferrule[\rl{CIter}]{ }{%
+        \cl \vdash ( \mkvs, \vi, \stk ) , \cmd\prepeat \ \toCMD{(\cl,\iota)}_{\ET} \  ( \mkvs, \vi, \stk ) , \pskip \pchoice (\cmd \pseq \cmd\prepeat)
+    }
+    \and
+    \inferrule[\rl{CSeqSkip}]{ }{%
         \cl \vdash ( \mkvs, \vi, \stk ) , \pskip \pseq \cmd \ \toCMD{(\cl,\iota)}_{\ET} \  ( \mkvs, \vi, \stk ) , \cmd
-    }{ }
-    \quad
-    \infer[\rl{CSeq}]{%
-        \cl \vdash ( \mkvs, \vi, \stk ) , \cmd_{1} \pseq \cmd_{2} \ \toCMD{(\cl,\iota)}_{\ET} \ ( \mkvs, \vi', \stk' ) , {\cmd_{1}}' \pseq \cmd_{2}
-    }{% 
+    }
+    \and
+    \inferrule[\rl{CSeq}]{% 
         \cl \vdash ( \mkvs, \vi, \stk ) , \cmd_{1} \ \toCMD{(\cl,\iota)}_{\ET} \  ( \mkvs, \vi', \stk' ) , {\cmd_{1}}' 
+    }{%
+        \cl \vdash ( \mkvs, \vi, \stk ) , \cmd_{1} \pseq \cmd_{2} \ \toCMD{(\cl,\iota)}_{\ET} \ ( \mkvs, \vi', \stk' ) , {\cmd_{1}}' \pseq \cmd_{2}
     }
 \end{mathpar}
-\vspace*{5pt}
 
 \hrulefill
 
@@ -96,10 +101,10 @@
     ( \Confs \times \ThdEnv \times \Programs) 
 \]
 \begin{mathpar}
-    \infer[\rl{PProg}]{%
-    ( \mkvs, \vienv, \thdenv ) , \prog \ \toPROG{\lambda}_{\ET} \  ( \mkvs', \vienv\rmto{\cl}{\vi'}, \thdenv\rmto{\cl}{\stk'}) , \prog\rmto{\cl}{\cmd'} 
-    }{%
+    \inferrule[\rl{PProg}]{%
         \cl \vdash ( \mkvs, \vienv(\cl), \thdenv(\cl) ), \prog(\cl), \ \toCMD{\lambda}_{\ET} \  ( \mkvs', \vi', \stk' ) , \cmd'  
+    }{%
+    ( \mkvs, \vienv, \thdenv ) , \prog \ \toPROG{\lambda}_{\ET} \  ( \mkvs', \vienv\rmto{\cl}{\vi'}, \thdenv\rmto{\cl}{\stk'}) , \prog\rmto{\cl}{\cmd'} 
     }
 \end{mathpar}
 %
