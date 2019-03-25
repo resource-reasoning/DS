@@ -353,6 +353,20 @@ written $\txid_{i} \xrightarrow{\WW_{\mkvs}(\key)} \txid_{j}$, and
 $\txid \neq \txid_{j}$, written $\txid \xrightarrow{\RW_{\mkvs}(\key)} \txid_{j}$.
 \end{enumerate*}
 
+Note that, although we define dependencies between transactions in a style 
+similar to Adya's dependency graphs \cite{adya}, the way in which they are used 
+in kv-stores is fundamentally different in its intent. Specifications of consistency 
+models given in terms of dependency graphs are declarative in nature: as 
+we will see in \cref{sec:other_formalisms} they are equivalent to impose 
+constraints on the structure of a kv-store. On the other hand, the execution 
+tests that we present use dependencies between transactions to restrict 
+the view of clients before and after committing a transaction. In other words, 
+whereas Adya's dependency graphs can be used to specifying a consistency model 
+in terms of what is the structure of a permissible kv-store, in our framework we 
+specify how such kv-stores can be constructed, in a way that is agnostic 
+of the structure of their structure.
+\ac{Not sure whether this comment should be here. Maybe it should go in Section 5.}
+
 Next, we observe that a kv-store $\mkvs$ and a view $\vi$ naturally induce a 
 set of \emph{visible transactions} $\Tx(\mkvs, \vi) = \{\WTx(\mkvs(\key, i) \mid i \in \vi(\key)\}$: this 
 set contains all the transactions whose updates are known to a client with view $\vi$. 
@@ -478,7 +492,8 @@ can be expressed in terms of closure properties of the views obtained after tran
 to an execution test of the form $\ET_{\MR+\RYW}$. However, in this particular case we obtain that 
 $\ET_{\MR+\RYW} = \ET_{\MR} \cap \ET_{\RYW}$. The execution test for causal consistency is therefore 
 given by $\ET_{\MR+\RYW} \cap \ET_{\MR} \cap \ET_{\RYW}$, which is equivalent to the Definition given in 
-\ref{fig:execution.tests}.
+\ref{fig:execution.tests}: it states that views of clients before committing a transaction must be closed with respect to 
+causal dependencies of transactions.
 %$\CMs_{\CC} \defeq \CMs_{\MR} \cap \CMs_{\MW} \cap \CMs_{\RYW} \cap \CMs_{\WFR}$. 
 %Analogously, we have defined $\ET_\CC$ as the conjunction of the execution tests corresponding to the four session guarantees.
 %As we discuss before, we can do this thanks to the \emph{compositionality} of our execution tests:
@@ -510,7 +525,12 @@ fingerprint $\fp$.
 The guarantees of $\PSI$ have been defined as the conjunction of the guarantees provided by $\CC$ and $\UA$~\cite{framework-concur}. 
 As for the case of causal consistency, we cannot define $\ET_{\PSI}$ as $\ET_{\CC} \cap \ET_{\UA}$, because 
 this execution test only mandates that views before committing transactions are individually closed with respect to 
-the relations $R_{\CC}$ and $R_{\UA}(\fp)$. The definition in Figure \ref{fig:execution.tests} ensures that 
+the relations $R_{\CC}$ and $R_{\UA}(\fp)$. Furthermore, $\ET_{\UA}$ imposes that a transaction writing 
+to a key $\key$ must be able to observe all previous versions of such a key, i.e. any version of a key $\key$ 
+causally depends from the transactions writing previous versions of such a key. To capture this constraint, 
+we must include write-write dependencies in the relation with respect to which the view of a client before committing 
+a transaction must be closed.
+The definition in Figure \ref{fig:execution.tests} ensures that 
 views of committing transactions are closed simultaneously with respect to both relations.
 %Analogously, we have defined $\ET_\PSI = \ET_\CC \cap \ET_\UA$. 
 %This definition exploits the \emph{compositionality} of our execution tests (\cref{thm:compositional}).
@@ -595,11 +615,17 @@ if \( \txid_{\cl_1}^2\) is the last transaction, it sees \( \txid \) and so must
 When the total order in which transactions commit is known then 
 $\SI$ can be defined compositionally from $\CP$ and $\UA$. 
 As for the case of $\CC$ and $\PSI$, we cannot define the 
-an execution test for $\SI$ by simply composing the execution
-tests of its individual components, i.e. by taking $\ET_{\CP} \cap \ET_{\UA}$, 
-rather we need to ensure that the view of a client prior to committing a transaction 
+execution test for $\SI$ by simply composing the execution
+tests of its individual components, i.e. by taking $\ET_{\CP} \cap \ET_{\UA}$.
+Rather we need to ensure that the view of a client prior to committing a transaction 
 with fingerprint $\fp$
-is closed with respect to the relation $R_\CP \cup R_{\UA}(\fp)$. 
+is closed with respect to the relation $R_\CP \cup R_{\UA}(\fp) \cup \WW;\RW\rflx$; 
+the addend $\WW;\RW\rflx$ comes from the fact that, when the centralised implementation 
+of $\CP$ disucssed above is strengthened with write-conflict freedom (i.e. concurrent transactions 
+write to different key), then a write-write dependency between two transactions $\txid$ and $\txid'$ 
+does not only mandate that $\txid$ commits before $\txid'$ commits, but also before $\txid'$ starts. 
+As a conequence, if $\txid \xrightarrow{\WW} \_ \xrightarrow{\RW} \txid'$, then $\txid$ must commit 
+before $\txid'$ commit.
 %When we can rely only on 
 %a partial order of transaction execution, inferred from 
 %kv-stores and views, then this compositional result does not 
@@ -642,5 +668,36 @@ This requirement prevents the kv-store in  \cref{fig:ser-disallowed}: under seri
 In the former case when $\txid_1$ commits first, then its write to $\key_2$ must be included in the view of $\txid_2$, and thus $\txid_2$ should not read the outdated write to $\key_2$ by $\txid_0$. 
 The latter case is analogously prohibited. 
 This example is allowed by all the other execution tests in~\cref{fig:execution_tests}.
+
+\subsection{Execution Tests for Discovering Consistency Models}
+Kv-stores and execution tests constitute a useful tool for investigating new 
+consistency models that are potentially interesting. 
+One example of such execution tests is given by 
+$\ET_{\CP} \cap \ET_{\UA}$. By definition, this execution 
+test is stronger than both $\CP$ and $\UA$: therefore 
+it forbids any anomaly forbidden by these consistency models, 
+such as the long fork anomaly (\cref{fig:cp-disallowed}) and the lost update (\cref{fig:ua-disallowed}). 
+It is also weaker than snapshot isolation, meaning that it allows any of the anomalies 
+of SI, such as the write skew (\cref{fig:ser-disallowed}). On the other hand, the inclusion 
+$\ET_{\CP} \cap \ET_{\UA} \subseteq \ET_{\SI}$ is strict. The kv-store from  
+\cref{fig:si-disallowed} is allowed by $\ET_{\CP} \cap \ET_{\UA}$: 
+this kv-store can be obtained by executing  
+transaction $\txid_{1}$ using the initial view $[\key_1 \mapsto \{0\}, \key_2 \mapsto \{0\}]$, 
+transaction $\txid_{2}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0\}]$ 
+transaction $\txid_{3}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0,1\}]$, 
+and transaction $\txid_{4}$ using the view $[\key_1 \mapsto \{0\}, \key_2 \mapsto \{0,1,\}$. 
+However, transaction $\txid_{4}$ cannot be executed using this same view when $\ET_{\SI}$ is 
+assumed. Because $\txid_{4}$ reads the version of $\key_2$ written by $\txid_3$, 
+any valid view $\vi$ used to commit $\txid_{4}$ under $\ET_{\SI}$ must include the version written by 
+$\txid_{3}$. Since $\txid_{2} \xrightarrow{\RW_{\mkvs}} \txid_{3}$ (because $\txid_{2}$ reads a staler 
+version $\key_2$ than the one written by $\txid_{3}$) and $\txid_{1} \xrightarrow{\WW} \txid_{2}$ 
+(because $\txid_{2}$ installs a newer version of $\key_{1}$ than the one written by $\txid_{1})$, 
+then the view $\vi$ should contain the version of $\key_{1}$ written by $\txid_{1}$, contradicting 
+the fact that $\txid_{4}$ reads the initial version of $\key_1$.
+
+We refer to the consistency model induced by $\ET_{\CP} \cap \ET_{\SI}$ as \emph{Weak Snapshot Isolation} (WSI). 
+Because it is weaker than Snapshot Isolation, potential implementations of WSI could perform better than SI ones. 
+Also, because of the similarity between these two consistency models, we believe that many applications that 
+are correct under SI would still be correctly under WSI. We give an example of such an application in \cref{sec:program-analysis}.
 
 
