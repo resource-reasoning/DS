@@ -179,7 +179,7 @@ the predicate \( \closed[\mkvsCOPS,\func{viewOf}[\mkvsCOPS, ctx], \left( \SO \cu
 
 Given the encode of kv-store and view, we show that every COPS step 
 of either single-write or multiple-read transaction satisfies $\ET_\CC$,
-where $\ET_\CC$ is defined as \( \closed[\mkvsCOPS, \vi, \left( \SO \cup \WR_{\mkvsCOPS} \right)] \cap \ET_\MR \cap \ET_\RYW \) 
+where \(\ET_\CC = \closed[\mkvsCOPS, \vi, \left( \SO \cup \WR_{\mkvsCOPS} \right)] \cap \ET_\MR \cap \ET_\RYW \) 
 in \cref{fig:execution_tests}.
 When a client commits a new transaction under a context \( ctx \), 
 the versions that have been either fetched from, or committed to, will be included in the context afterwards \( ctx' \).
@@ -201,11 +201,20 @@ As with the original definition of SI, Clock-SI uses timestamps to maintain diff
 The clocks on different partitions may not agree; however, the difference is assumed to be bounded.
 Each key keeps a history of versions, where each version comprises a value and the commit timestamp.
 Each transaction $\txid$ is assigned to a designated partition, known as the $\txid$ \emph{coordinator}. 
-When $\txid$ starts, it obtains a snapshot and records the snapshot timestamp at its coordinator partition.
-Transaction $\txid$ may then read from partitions other than its coordinator, so long as the current timestamp at those partitions are greater than the recorded snapshot time. 
-Once $\txid$ completes, it may commit if  no transaction with a conflicting write has committed since the snapshot time.
-We encode the partitions collectively as a kv-store. 
+When $\txid$ starts, it records the snapshot timestamp as the time of the coordinator.
+Transaction $\txid$ may then read from partitions other than its coordinator,
+so long as the current timestamp at those partitions are greater than the recorded snapshot time. 
+Within a transaction \( \txid\), 
+the first read before any write for a key, fetches the version with the maximum timestamp before the snapshot time,
+afterwards any repeat reads are local to the transaction.
+Once $\txid$ completes, it may commit if no transaction with a conflicting write has committed since the snapshot time.
+This means there is no preceding version in the partition.
+We encode the partitions collectively as a kv-store, by collecting keys from different partitions 
+and ordering the versions for each key by the timestamps.
 Each snapshot timestamp is encoded as a view, contains all versions committed before that timestamp.
-We show that Clock-SI is sound with respect to the $\CMs(\ET_\SI)$, 
-where $\ET_\SI$ is the snapshot isolation execution test in \cref{fig:execution_tests}.
-More details and our soundness proof are given in \cref{sec:clock-si}.
+We show that Clock-SI is sound with respect to the $\ET_\SI$, 
+where $\ET_\SI = \closed(\mkvs,\vi, \rel_{\SI}(\fp)) \cap \ET_\MR \cap \ET_\RYW $ is the snapshot isolation execution test in \cref{fig:execution_tests}.
+It means given the encoded kv-store \( \mkvs \) and view \( \vi \), 
+the transaction with fingerprint \( \fp \) is allowed to commit: \( \closed[\mkvs,\vi,\rel_{\SI}(\fp)]\); and
+the new view \( \vi' \) over the new kv-store \( \mkvs' \) satisfies \( \MR \) and \( \RYW \).
+More details and our soundness proof are given in \cref{sec:clock-si}. 
