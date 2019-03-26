@@ -114,77 +114,77 @@ the dependency graph extracted from $\mkvs'$ contains no cycles prohibited by th
 }
 \end{figure*}
 
-\mypar{Relating KV-Stores and Abstract Executions}
-\emph{Abstract executions} \cite{ev_transactions,framework-concur} are an alternative formalism for defining consistency models. 
-As with dependency graphs, an abstract execution graph $\aexec$
-is a directed graph with its nodes representing transactions (with each node labelled with a transaction identifier and a set of (read/write) operations), 
-and its edges representing certain relations between transactions. 
-An example abstract execution graph is depicted in \cref{fig:abstract_execution}. 
-Each edge is labelled by either the \emph{visibility} ($\VIS$) or \emph{arbitration} ($\AR$) relation. 
-The $\VIS$ is an irreflexive order on transactions such that $\txid_1 \toEDGE{\VIS} \txid_2$ denotes that the effects (updates) of $\txid_1$ are visible to $\txid_2$. 
-The $\AR$ is a strict total order on transactions such that $\txid_1 \toEDGE{\AR} \txid_2$ denotes that the updates performed by $\txid_2$ are newer than those of $\txid_1$. 
-Moreover, $\AR$ contains $\VIS$ ($\VIS \subseteq \AR$) and agrees with the session order ($\SO \subseteq \AR$).
-Lastly, abstract executions observe the \emph{last-write-wins} policy: 
-a transaction reading $\key$ always fetches the latest visible write ($\VIS$ predecessor) on $\key$.
-We refer the reader to \cref{sec:abstract-execution} for full details.
-
-Following \cite{laws}, we can always \emph{extract} a dependency graph $\Gr_{\aexec}$ from an abstract execution $\aexec$, and thus a kv-store $\mkvs_{\aexec}$ via \cref{thm:kv_graph_isomorph}---see \cref{app:aexec2kv} for the formal details.
-We write  $\mkvs_\aexec$ for the kv-store extracted from $\aexec$ using this construction.  
-Moreover, we show that there is a \emph{Galois connection}
-between $\ET_{\top}$ traces, the weakest possible execution test and abstract executions (\cref{sec:galois-kv-aexec}).
-
-As with dependency graphs, consistency models using abstract executions are defined by constraining the shape of abstract execution graphs via a set of \emph{axioms} $\Ax$, \eg imposing certain conditions on $\VIS$. %the absence of certain cycles.
-All consistency models presented in this paper have an equivalent axiomatic definition based on abstract executions~\cite{framework-concur,laws}. 
-Proving the equivalence of execution test-based and abstract execution-based definitions is non-trivial; 
-however, we have observed that all proofs follow the same \emph{structure}, so long as certain conditions hold. 
-We develop the meta-theory to capture this proof structure.
-Our meta-theory is non-trivial; we refer the reader to \cref{sec:kv2aexec-sound-complete} for the full details. 
-We give an intuitive account of the two conditions required by our meta-theory, and then state our equivalence theorem. 
-
-Given a set of axioms $\Ax$, we define $\CMa(\Ax) \defeq \Set{ \aexec }[ \aexec \text{ sats.} \ \Ax ]$.
-Our first condition is the \emph{soundness} of an execution test against an axiomatic definition.
-An execution test $\ET$ is sound against an axiomatic definition $\Ax$ if:
-for all $n$ and for all \( \ET \)-traces \( \tau \) with \( n \) steps, 
-we can construct $\aexec_0, \cdots, \aexec_n$ and \( \mkvs_i = \mkvs_{\aexec_i} \) such that 
-for each step \( (\mkvs_i, \vi_i) \csat \fp_i : (\mkvs_{i+1}, \vi_{i+1}) \) in \( \tau \),
-the new $\VIS$ edges in \( \aexec_{i+1} \) (those not in $\aexec_i$)
-%, which links transactions included in the view \( \vi_i \) to the new transaction \( \txid_i \),
-satisfy \( \Ax \).
-The formal definition of execution test soundness is given in \cref{sec:kv2aexec-sound-complete}.
-
-Our second condition is the \emph{completeness} of an execution test against an axiomatic definition.
-Let $\txid_i$ denote the $i$\textsuperscript{th} transaction of $\aexec$ in its $\AR$ order, and $\aexec^{i}$ denote the restriction of $\aexec$ to $\txid_1 \cdots \txid_i$. 
-An execution test $\ET$ is complete against an axiomatic definition $\Ax$ if:
-for all abstract executions \( \aexec \) that satisfy \( \Ax \) containing $n$ transactions, 
-all $i \in \Set{1 \cdots n}$, views $\vi_i, \vi'_i$, transactions $\txid'$, and fingerprints $\fp_i$,
-whenever
-\begin{enumerate*}
-	\item $\txid'$ is the immediate $\SO$-successor of $\txid_i$;
-	\item \( \vi_i \) includes all visible transactions of \( \txid_i \); 
-    \item $\vi'_i$ includes all visible transactions, equal or committed before \( \txid_i \), of $\txid'$; and
-	\item $\fp_i$ is the fingerprint of $\txid_i$, 
-\end{enumerate*} 
-then $\ET \vdash (\mkvs_i, \vi_i) \csat \fp_i : (\mkvs_{i+1}, \vi_{i+1})$.
-The formal definition of execution test completeness is given in \cref{sec:kv2aexec-sound-complete}.
-
-Finally, we state our equivalence theorem below (\cref{thm:main-body-et_soundness_completeness}), with its full proof in \cref{sec:kv2aexec-sound-complete}. 
-This theorem ensures that if an execution test is sound and complete against a set of axioms $\Ax$, 
-then the consistency model induced by $\ET$ corresponds to the kv-stores extracted from abstract executions satisfying $\Ax$.
-
-\begin{theorem}
-\label{thm:main-body-et_soundness_completeness}
-For all $\ET, \Ax$, if $\ET$ is sound against $\Ax$, then:
-\(
-\CMs(\ET) \subseteq \Set{ \mkvs_\aexec }[ \aexec \in \CMs(\Ax)]
-\).
-For all $\ET, \Ax$, if $\ET$ is complete against $\Ax$, then:
-\(
-\Set{ \mkvs_\aexec }[ \aexec \in \CMs(\Ax)]  \subseteq \CMs(\ET)
-\).
-\end{theorem} 
-
-In \cref{sec:spec-proof} we apply \cref{thm:main-body-et_soundness_completeness} and show all our definitions in \cref{fig:execution_tests} 
-are sound and complete against (equivalent to) existing axiomatic definitions on abstract executions.
+%\mypar{Relating KV-Stores and Abstract Executions}
+%\emph{Abstract executions} \cite{ev_transactions,framework-concur} are an alternative formalism for defining consistency models. 
+%As with dependency graphs, an abstract execution graph $\aexec$
+%is a directed graph with its nodes representing transactions (with each node labelled with a transaction identifier and a set of (read/write) operations), 
+%and its edges representing certain relations between transactions. 
+%An example abstract execution graph is depicted in \cref{fig:abstract_execution}. 
+%Each edge is labelled by either the \emph{visibility} ($\VIS$) or \emph{arbitration} ($\AR$) relation. 
+%The $\VIS$ is an irreflexive order on transactions such that $\txid_1 \toEDGE{\VIS} \txid_2$ denotes that the effects (updates) of $\txid_1$ are visible to $\txid_2$. 
+%The $\AR$ is a strict total order on transactions such that $\txid_1 \toEDGE{\AR} \txid_2$ denotes that the updates performed by $\txid_2$ are newer than those of $\txid_1$. 
+%Moreover, $\AR$ contains $\VIS$ ($\VIS \subseteq \AR$) and agrees with the session order ($\SO \subseteq \AR$).
+%Lastly, abstract executions observe the \emph{last-write-wins} policy: 
+%a transaction reading $\key$ always fetches the latest visible write ($\VIS$ predecessor) on $\key$.
+%We refer the reader to \cref{sec:abstract-execution} for full details.
+%
+%Following \cite{laws}, we can always \emph{extract} a dependency graph $\Gr_{\aexec}$ from an abstract execution $\aexec$, and thus a kv-store $\mkvs_{\aexec}$ via \cref{thm:kv_graph_isomorph}---see \cref{app:aexec2kv} for the formal details.
+%We write  $\mkvs_\aexec$ for the kv-store extracted from $\aexec$ using this construction.  
+%Moreover, we show that there is a \emph{Galois connection}
+%between $\ET_{\top}$ traces, the weakest possible execution test and abstract executions (\cref{sec:galois-kv-aexec}).
+%
+%As with dependency graphs, consistency models using abstract executions are defined by constraining the shape of abstract execution graphs via a set of \emph{axioms} $\Ax$, \eg imposing certain conditions on $\VIS$. %the absence of certain cycles.
+%All consistency models presented in this paper have an equivalent axiomatic definition based on abstract executions~\cite{framework-concur,laws}. 
+%Proving the equivalence of execution test-based and abstract execution-based definitions is non-trivial; 
+%however, we have observed that all proofs follow the same \emph{structure}, so long as certain conditions hold. 
+%We develop the meta-theory to capture this proof structure.
+%Our meta-theory is non-trivial; we refer the reader to \cref{sec:kv2aexec-sound-complete} for the full details. 
+%We give an intuitive account of the two conditions required by our meta-theory, and then state our equivalence theorem. 
+%
+%Given a set of axioms $\Ax$, we define $\CMa(\Ax) \defeq \Set{ \aexec }[ \aexec \text{ sats.} \ \Ax ]$.
+%Our first condition is the \emph{soundness} of an execution test against an axiomatic definition.
+%An execution test $\ET$ is sound against an axiomatic definition $\Ax$ if:
+%for all $n$ and for all \( \ET \)-traces \( \tau \) with \( n \) steps, 
+%we can construct $\aexec_0, \cdots, \aexec_n$ and \( \mkvs_i = \mkvs_{\aexec_i} \) such that 
+%for each step \( (\mkvs_i, \vi_i) \csat \fp_i : (\mkvs_{i+1}, \vi_{i+1}) \) in \( \tau \),
+%the new $\VIS$ edges in \( \aexec_{i+1} \) (those not in $\aexec_i$)
+%%, which links transactions included in the view \( \vi_i \) to the new transaction \( \txid_i \),
+%satisfy \( \Ax \).
+%The formal definition of execution test soundness is given in \cref{sec:kv2aexec-sound-complete}.
+%
+%Our second condition is the \emph{completeness} of an execution test against an axiomatic definition.
+%Let $\txid_i$ denote the $i$\textsuperscript{th} transaction of $\aexec$ in its $\AR$ order, and $\aexec^{i}$ denote the restriction of $\aexec$ to $\txid_1 \cdots \txid_i$. 
+%An execution test $\ET$ is complete against an axiomatic definition $\Ax$ if:
+%for all abstract executions \( \aexec \) that satisfy \( \Ax \) containing $n$ transactions, 
+%all $i \in \Set{1 \cdots n}$, views $\vi_i, \vi'_i$, transactions $\txid'$, and fingerprints $\fp_i$,
+%whenever
+%\begin{enumerate*}
+%	\item $\txid'$ is the immediate $\SO$-successor of $\txid_i$;
+%	\item \( \vi_i \) includes all visible transactions of \( \txid_i \); 
+%    \item $\vi'_i$ includes all visible transactions, equal or committed before \( \txid_i \), of $\txid'$; and
+%	\item $\fp_i$ is the fingerprint of $\txid_i$, 
+%\end{enumerate*} 
+%then $\ET \vdash (\mkvs_i, \vi_i) \csat \fp_i : (\mkvs_{i+1}, \vi_{i+1})$.
+%The formal definition of execution test completeness is given in \cref{sec:kv2aexec-sound-complete}.
+%
+%Finally, we state our equivalence theorem below (\cref{thm:main-body-et_soundness_completeness}), with its full proof in \cref{sec:kv2aexec-sound-complete}. 
+%This theorem ensures that if an execution test is sound and complete against a set of axioms $\Ax$, 
+%then the consistency model induced by $\ET$ corresponds to the kv-stores extracted from abstract executions satisfying $\Ax$.
+%
+%\begin{theorem}
+%\label{thm:main-body-et_soundness_completeness}
+%For all $\ET, \Ax$, if $\ET$ is sound against $\Ax$, then:
+%\(
+%\CMs(\ET) \subseteq \Set{ \mkvs_\aexec }[ \aexec \in \CMs(\Ax)]
+%\).
+%For all $\ET, \Ax$, if $\ET$ is complete against $\Ax$, then:
+%\(
+%\Set{ \mkvs_\aexec }[ \aexec \in \CMs(\Ax)]  \subseteq \CMs(\ET)
+%\).
+%\end{theorem} 
+%
+%In \cref{sec:spec-proof} we apply \cref{thm:main-body-et_soundness_completeness} and show all our definitions in \cref{fig:execution_tests} 
+%are sound and complete against (equivalent to) existing axiomatic definitions on abstract executions.
 
 
 \subsection{Andrea's Version}
