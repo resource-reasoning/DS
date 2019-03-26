@@ -422,17 +422,18 @@ property of the view obtained after committing a transaction:
 let $\rel_{\MR}(\mkvs, \vi) \defeq \Set{(\wtOf[\mkvs(\key, i), \txid] }[ \key \in \Keys \wedge i \in \vi(\key) \wedge \txid \in \mkvs]$; 
 %given \(\mkvs, \vi\) before committing a transaction and $\mkvs', \vi'$ after,
 the predicate $\closed[\mkvs', \vi', R_{\MR}(\mkvs, \vi)]$ states that all the versions included in $\vi$ on $\mkvs$ 
-must also be included in $\vi'$ on $\mkvs'$ (i.e. $\vi \sqsubseteq \vi'$), hence 
+must also be included in $\vi'$ on $\mkvs'$ (\ie $\vi \sqsubseteq \vi'$), hence 
 $\ET_{\MR} \defeq \Set{(\mkvs, \vi, \opset, \mkvs', \vi') }[ \closed[\mkvs', \vi', \rel_{\MR}(\mkvs, \vi)]]$.
 
 \mypar{Monotonic Writes ($\MW$)}
-In this consistency model, whenever a transaction sees a version written by a client $\cl$,
-then it sees all previous versions written by $\cl$. 
+In this consistency model, whenever a transaction sees a version for some key \( \key \) written by a client $\cl$,
+then it sees all previous versions for the key \( \key \) written by $\cl$. 
 This prevents, for example, the kv-store of \cref{fig:mw-disallowed}, since 
-transaction $\txid'$ reads the second version of $\key_2$, 
-with value $\val_2$ written by client $\cl$, 
+transaction $\txid$ reads the third version of $\key_2$, 
+with value $\val_3$ written by client $\cl$, 
 but it does not read, hence does not see, the second version of $\key_1$
-with value $\val_1$ and previously written by the same client. 
+with value $\val_1$ and previously written by the same client via transaction \( \txid^1_{\cl} \)
+who also have written the second version of \( \key_2 \).
 We can enforce monotonic writes by requiring the view of a client, prior to committing 
 a transaction, to be closed with respect to the session relation $\SO$.
 \ac{Why the reflexive closure? \sx{New view should include the new transaction.}}
@@ -485,8 +486,9 @@ if the view already includes a write from that client.
     \cite{principle-eventual-consistency} mentions causal consistency is combination of session guarantees,
     yet they only define 3 types of session guarantees.
 }
+\sx{ Sessions to CC cite \cite{principle-eventual-consistency} }
 \mypar{Causal Consistency (\CC)}
-Causal consistency has been defined in the literature~\cite{session2causal,principle-eventual-consistency} 
+Causal consistency has been defined in the literature~\cite{session2causal} 
 as the conjunction (composition) of the four \emph{session guarantees} \(\MR\), \(\MW\), \(\RYW\) and \(\WFR\). 
 One would expect the execution test for causal consistency to be exactly 
 the intersection of the execution tests for the individual session guarantees: 
@@ -498,7 +500,10 @@ consistency guarantees it requires that the view of a client prior to executing 
 closed simultaneously with respect to $\rel_{\MW}$ and $\rel_{\WFR}$, that is, it is closed with respect to 
 $\rel_{\MW} \cup \rel_{\WFR}$. Let 
 $\ET_{\MR+\WFR} = \Set{(\mkvs, \vi, \fp, \mkvs', \vi')}[ \closed[\mkvs, \vi, \rel_{\MW} \cup \rel_{\WFR}]]$. 
-In \cref{fig:wr-wfr-allowed-but-cc} we show that $\CMs[\ET_{\MW} \cap \ET_{\RYW}] \neq \CMs(\ET_{\MW+\WFR})$. 
+\cref{fig:wr-wfr-allowed-but-cc} shows an example for $\CMs[\ET_{\MW} \cap \ET_{\RYW}] \neq \CMs(\ET_{\MW+\WFR})$,
+where the last transaction \( \txid \), by a client differs from \( \cl \) and \( \cl' \), 
+is allowed to committed under \( \MW \) and \( \WFR \) but not \( \MW + \WFR \), given that
+\( \txid_{\cl}^1 \toEDGE{\SO} \txid_{\cl}^2 \toEDGE{\WR_\mkvs} \txid_{\cl'}^1 \toEDGE{\SO} \txid_{\cl'}^2 \).
 In theory, the same argument would apply to the session guarantees $\MR$ and $\RYW$
 %, which 
 %can be expressed in terms of closure properties of the views obtained after transactions commit, leading 
@@ -508,7 +513,6 @@ The execution test for causal consistency is therefore
 given by $\ET_{\MR+\RYW} \cap \ET_{\MR} \cap \ET_{\RYW}$, which is equivalent to the one in
 \cref{fig:execution.tests}: it states that the view before committing a transaction must be closed with respect to 
 causal dependencies of transactions; and the view after committing guarantees \( \MR \) and \( \RYW \).
-\sx{I need to put an example in the appendix.}
 %$\CMs_{\CC} \defeq \CMs_{\MR} \cap \CMs_{\MW} \cap \CMs_{\RYW} \cap \CMs_{\WFR}$. 
 %Analogously, we have defined $\ET_\CC$ as the conjunction of the execution tests corresponding to the four session guarantees.
 %As we discuss before, we can do this thanks to the \emph{compositionality} of our execution tests:
@@ -535,14 +539,14 @@ to commit a transaction is \emph{suffix-closed} with respect to the relation $\W
 or equivalently is prefix-closed w.r.t $\WW^{-1}(\key)$ for any key $\key$ written in the 
 fingerprint $\fp$.
 
-\sx{NEED CHANGE}
 \mypar{Parallel Snapshot Isolation (\PSI)} 
 The guarantees of $\PSI$ have been defined as the conjunction of the guarantees provided by $\CC$ and $\UA$~\cite{framework-concur}. 
 As for the case of causal consistency, we cannot define $\ET_{\PSI}$ as $\ET_{\CC} \cap \ET_{\UA}$, because 
 this execution test only mandates that views before committing transactions are individually closed with respect to 
 the relations $R_{\CC}$ and $R_{\UA}(\fp)$. Furthermore, $\ET_{\UA}$ imposes that a transaction writing 
-to a key $\key$ must be able to observe all previous versions of such a key, i.e. any version of a key $\key$ 
-causally depends from the transactions writing previous versions of such a key. To capture this constraint, 
+to a key $\key$ must be able to observe all previous versions of such a key, \ie any version of a key $\key$ 
+causally depends from the transactions writing previous versions of such a key (an example is given in \cref{fig:cc-ua-allowed-but-psi}).
+To capture this constraint, 
 we must include write-write dependencies in the relation with respect to which the view of a client before committing 
 a transaction must be closed.
 The definition in \cref{fig:execution.tests} ensures that 
