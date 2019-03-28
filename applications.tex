@@ -1,7 +1,7 @@
 \section{Applications}
 \label{sec:applications}
 
-We showcase the applications of or formalism by showing how we can prove the robustness of transactional libraries (\cref{sec:program-analysis}), and verify database protocols
+We showcase the applications of our formalism by showing how we can prove the robustness of transactional libraries (\cref{sec:program-analysis}), and verifying database protocols
  (\cref{sec:verify-impl}).
 
 \subsection{Program Analysis}
@@ -77,44 +77,104 @@ As such, $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irrefle
 ensuring the robustness of $\Counter(\key)$ against $\ET_{\PSI}$.
 
 
-\mypar{Robustness of Multiple Counters against $\ET_{\SI}$}
+\mypar{Robustness of Multiple Counters against $\ET_{\SI}$}. 
 Recall from \cref{sec:overview} that for the library comprising two or more counters we can 
 observe the long fork anomaly disallowed under serialisability ($\ET_{\SER}$). 
 As such, multiple counters are not robust against $\ET_{\PSI}$. 
 The long fork anomaly arises because different clients can observe increments 
 over two different counters in a different order.
-As this anomaly does not arise under $\SI$, 
-we show that if we strengthen $\ET_{\PSI}$ to $\ET_{\SI}$, 
-we can analogously recover the robustness of multiple counters.
+This anomaly does not arise under $\SI$: 
+in fact, multiple counters are robust against $\ET_{\SI}$. 
+%$\ET_{\PSI}$ to $\ET_{\SI}$, 
+%we can analogously recover the robustness of multiple counters.
 For simplicity, here we assume that the library comprises only two counters: 
 $\mathsf{Counters} {=} \Counter(\key_1) \cup \Counter(\key_2)$.
-We use the following result, which is the kv-store counterpart of a well-known result for SI~\cite{fekete-tods,SIanalysis}: 
-\begin{theorem}
-\label{thm:si_cycles}
-For all $\mkvs \in \CMs(\ET_{\SI})$, any cycle in $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ has two adjacent $\RW_{\mkvs}$-edges.
-\end{theorem}
+%We use the following result, which is the kv-store counterpart of a well-known result for SI~\cite{fekete-tods,SIanalysis}: 
+%\begin{theorem}
+%\label{thm:si_cycles}
+%For all $\mkvs \in \CMs(\ET_{\SI})$, any cycle in $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ has two adjacent $\RW_{\mkvs}$-edges.
+%\end{theorem}
 
 Consider a kv-store $\mkvs \in \CMs(\ET_{\SI}, \mathsf{Counters})$. 
 As $\ET_{\SI} \subseteq \ET_{\PSI}$, the list of versions of $\mkvs(\key_1)$ and $\mkvs(\key_2)$ 
-must both follow the same structure as that described above for a single counter under $\ET_{\PSI}$. 
-Recall that this structure embeds a total order $\dashrightarrow$ over transactions in $\mkvs(\key_1)$ and $\mkvs(\key_2)$.
+must both follow the same structure as that described for a single counter under $\ET_{\PSI}$. 
+Recall that this structure embeds a total order $\dashrightarrow$ over transactions in $\mkvs(\key_1)$ and $\mkvs(\key_2)$, 
+which embeds an acyclic relation $\WR_{\mkvs} \cup \WW_{\mkvs} \cup \RF_{\mkvs}$. 
 However, since a client can perform operations over two different counters, the $\dashrightarrow$ no longer comprises $\SO_{\mkvs}$. 
 
-We thus define a second relation $\twoheadrightarrow$, where
+We define a second relation $\twoheadrightarrow$ that tracks the session order of transactions accessing different keys: 
 $\txid \twoheadrightarrow \txid'$ if $\txid \in \Set{\wtOf(\mkvs(\key_{i}, \stub)} \cup \rsOf(\mkvs(\key_{i}, \stub))$ 
 and $\txid' \in \Set{\wtOf(\mkvs(\key_{j}, \stub))} \cup \rsOf(\mkvs(\key_{j}, \stub))$ with $i,j \in \Set{1,2} \land j \neq i$,  
-and $\txid \toEDGE{\SO} \txid'$.
-Relation $\twoheadrightarrow$ tracks the session order of transactions performing operations on different keys. 
-Let $\rightarrow \defeq (\dashrightarrow \cup \twoheadrightarrow)^{+}$; 
-we then know that $\rightarrow$ embeds $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$.
-Furthermore, because $\mathsf{Counters}$ contains no operation that accesses both $\key_1$ and $\key_2$, and since $\dashrightarrow$ is acyclic, 
-any cycle in $\rightarrow$ contains at least two edges from $\twoheadrightarrow$. 
-In \cref{app:robustness} we show that the existence of such a cycle implies the 
-existence of a cycle in $\rightarrow$ of the form $\txid \dashrightarrow^{?} \txid_{a} \twoheadrightarrow 
-\txid_{b} \dashrightarrow^{?} \txid_{c} \twoheadrightarrow \txid$. 
-However, this cannot happen in $\mkvs$, as otherwise we would have a cycle in $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ with no adjacent $\RW_{\mkvs}$-edges (a $\twoheadrightarrow$ edge represents two  $\SO_{\mkvs}$-related transactions, 
-thus contradicting \cref{thm:si_cycles}). 
-It then follows that $\rightarrow$ is irreflexive, and thus so is $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$.
+and $\txid \toEDGE{\SO} \txid'$. The combined relation $(\dashrightarrow \cup \twoheadrightarrow)$ embeds 
+$(\SO_{\hh} \cup \WR_{\hh} \cup \WW_{\hh} \cup \RW_{\hh})$; next, we prove that the acyclicity of the relation $(\dashrightarrow \cup \twoheadrightarrow)$ 
+is acyclic, from which it follows that the kv-store $\hh$ is serialisable. More specifically, we prove that any $\ET_{\SI}$-trace
+%by induction on the length of a $\ET_{\SI}$-trace 
+in $\CMs(\ET_{\SI}, \mathsf{Counter}(\key_1) \cup \mathsf{Counter}(\key_2))$ terminates in a configuration of the form $(\mkvs, \_)$ 
+such that the relation $(\dashrightarrow \cup \twoheadrightarrow)$ over $\mkvs$ is irreflexive; the proof is by induction on the 
+length of the $\ET_{\SI}$-trace. Here we only show the details of the inductive step of the proof in the most interesting case, 
+that is one where a cycle in the relation $(\dashrightarrow \cup \twoheadrightarrow)$ is created because 
+client $\cl_{1}$ reads a version of some key, e.g. $\key_{1}$, after accessing the other, e.g. $\key_{2}$, and the order 
+of such operations seemingly contradicts the order of the versions of $\key_{1}, \key_{2}$ observed by another client 
+$\cl_{2}$: as we will see shortly, this case leads to a contradiction. 
+Let $\mkvs_{\mathsf{pre}}$ be a kv-store such that 
+\[
+\begin{array}{lr}
+\mkvs(\key_{1}) & = (0, \txid_{0}, \txidset^{\mathsf{r},1}_{0} \cup \Set{\txid^{\mathsf{w},1}_1}) 
+	%\lcat (1, \txid^{\mathsf{w},1}_{1}, \txidset^{\mathsf{r},1}_{1} \cup \Set{\txid^{\mathsf{w},1}_2}) 
+	\lcat \cdots \lcat (n-1, \txid^{\mathsf{w},1}_{n-1}, \txidset^{\mathsf{r},1}_{n-1} \cup \Set{\txid^{\mathsf{w},1}_n})
+	\lcat (n, \txid^{\mathsf{w},1}_n, \txidset^{\mathsf{r},1}_{n})\\
+\mkvs(\key_{2}) & = (0, \txid_{0}, \txidset^{\mathsf{r},2}_{0} \cup \Set{\txid^{\mathsf{w},2}_1}) 
+	%\lcat (1, \txid^{\mathsf{w},2}_{1}, \txidset^{\mathsf{r},2}_{1} \cup \Set{\txid^{\mathsf{w},2}_2}) 
+	\lcat \cdots \lcat (m-1, \txid^{\mathsf{w},2}_{m-1}, \txidset^{\mathsf{r},1}_{m-1} \cup \Set{\txid^{\mathsf{w},2}_m})
+	\lcat (m, \txid^{\mathsf{w},2}_m, \txidset^{\mathsf{r},2}_{m})
+\end{array}
+\]
+and suppose that $(\mkvs, \vienv) \toET[\SI]{(\cl_{1}, (\otR, \key_{1}, \_)} (\mkvs', \vienv')$, causing the relation 
+$(\dashrightarrow \cup \twoheadrightarrow)$ to contain a cycle in $\mkvs'$. Let $i = \max_{\leq}(\vienv(\cl_1)(\key_1))$: 
+it follows that $\mkvs'$ differs from $\mkvs$ only in the contents of the version $\mkvs'(\key_{1})$, 
+which must contain a new transaction $\txid$ (i.e. not appearing in $\mkvs$) of the form $\txid_{\cl_{1}}^{\_}$ in its read-set.
+Suppose that the relation $(\dashrightarrow \cup \twoheadrightarrow)$  
+is acyclic in $\mkvs$. We already know that the relation $\dashrightarrow$ is acyclic in $\mkvs'$, so that 
+any cycle in $(\dashrightarrow \cup \twoheadrightarrow)$ in $\mkvs'$ must contain at least a $\twoheadrightarrow$ 
+edge. In fact, because $\twoheadrightarrow$ edges only connect transactions accessing different keys, such 
+a cycle must contain at least two $\twoheadrightarrow$ edges. Without loss of generality, we can assume that 
+this cycle has the form $\txid \dashrightarrow\rflx \txid' \twoheadrightarrow \txid'' \dashrightarrow\rflx txid''' \twoheadrightarrow \txid$ 
+for some $\txid', \txid'' \txid'''$. It follows that $\txid' = \txid = \txid^{w,1}_{i+1}$, or $\txid' \in \{\txid^{(w,1)}_{j}\} \cup \T^{(r,1)}_{j}$ 
+for some $j > i$;  $\txid' \xrightarrow{\SO} \txid''$ and there exists an index $h$ such that either $\txid'' = \txid^{w,2}_{h}$, 
+or $\txid'' \in \{\txid^{w,2}_{h+1}\} \cup \T^{r,2}_{h}$; 
+either $\txid''' = \txid^{w,2}_{l}$, or $\txid''' \in \{\txid^{w,2}_{l+1}\} \cup \T^{r,2}_{l}$ for some $l > h$; and $\txid''' \xrightarrow{\SO} \txid$.
+Without loss of generality, we assume that $\txid \in \T^{(r,1)}_{i}$, 
+$\txid' \in \T^{(r,1)}_{j}$, $\txid'' \in \T^{r,2}_{h}$ and $\txid''' \in \T^{(r,2)}_{l}$: other cases are similar. 
+Because $\txid''' \xrightarrow{\SO} \txid$, then at the time $\txid'''$ committed it must have been the case 
+that the index $l$ was contained in the view of client $\cl_1$, and because $\ET_{\SI}$ is included in $\ET_{\MR}$, we also have 
+that $l \in \vienv(\cl_{1})(\key_{2})$. Next, we have that $\T^{(r,1)}_{j} \ni \txid' \xrightarrow{\SO} \txid'' \xrightarrow{\RW} \txid^{(w,2)}_{l}$, 
+and because $l \in \vienv(\cl_{1})(\key_{2})$,the constraints places on $\ET_{\CP}$, which includes $\ET_{\SI}$,  mandate that it must be the case that 
+$j \in \vienv(\cl_{1})(\key_{1})$. But $j > i$, which contradicts the fact that $i = \max_{\leq}(\vienv(\cl_1)(\key_1)$.
+Furthermore, one of these two edges should not 
+be present in $\mkvs$, because we are assuming that the relation $(\dashrightarrow \cup \twoheadrightarrow)$ is 
+acyclic in $\mkvs$. This implies that there exists an index $j = 0,\cdots, m$ such that either $\txid_{j}^{w, 2} 
+\xrightarrow{\SO} \txid$, $\txid_{j+1}^{w,2} \xrightarrow{\SO} \txid$, or $\txid_{j+1}(\cl)$.
+
+We remark that the argument that we used to prove that multiple counters are robust against $\ET_{\SI}$ make use 
+of the properties of the execution tests $\ET_{\CP}$ and $\ET_{\UA}$ individually, and in fact the same proof can 
+be used to prove that multiple counters are robust against the consistency model $\ET_{\WSI}$ 
+introduced in \cref{sec:new_cm}. 
+%We believe that the correctness of many applications under $\SI$ is preserved when 
+%switching to the $\WSI$ consistency model.
+
+%: as a result, 
+%the kv-store $\hh$ is serialisable, which concludes the proof that multiple counters are robust against $\ET_{\SI}$
+%Relation $\twoheadrightarrow$ tracks the session order of transactions performing operations on different keys. 
+%Let $\rightarrow \defeq (\dashrightarrow \cup \twoheadrightarrow)^{+}$; 
+%we then know that $\rightarrow$ embeds $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$.
+%Furthermore, because $\mathsf{Counters}$ contains no operation that accesses both $\key_1$ and $\key_2$, and since $\dashrightarrow$ is acyclic, 
+%any cycle in $\rightarrow$ contains at least two edges from $\twoheadrightarrow$. 
+%In \cref{app:robustness} we show that the existence of such a cycle implies the 
+%existence of a cycle in $\rightarrow$ of the form $\txid \dashrightarrow^{?} \txid_{a} \twoheadrightarrow 
+%\txid_{b} \dashrightarrow^{?} \txid_{c} \twoheadrightarrow \txid$. 
+%However, this cannot happen in $\mkvs$, as otherwise we would have a cycle in $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ with no adjacent $\RW_{\mkvs}$-edges (a $\twoheadrightarrow$ edge represents two  $\SO_{\mkvs}$-related transactions, 
+%thus contradicting \cref{thm:si_cycles}). 
+%It then follows that $\rightarrow$ is irreflexive, and thus so is $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$.
 
 \subsection{Verifying Database Protocols}
 \label{sec:verify-impl}
