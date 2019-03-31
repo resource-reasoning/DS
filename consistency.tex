@@ -382,8 +382,10 @@ who observes updates made by transactions from \( \txidset \):
 $\getView[\mkvs, \T] \defeq \lambda \key. \Set{0} \cup \Set{i }[ \wtOf[\mkvs(\key, i)] \in \T]$. 
 The reflection between views and sets of transactions allows to express concisely 
 prefix-closure of a view with respect to a relation $\rel$ between 
-transactions: given $R \subseteq \TxID \times \TxID$ the predicate
-$\closed(\mkvs, \vi, R)$ is defined by $\closed(\mkvs, \vi, R) \defeq \vi = \getView[\mkvs, (R^{-1})^{\ast}(\Tx(\mkvs, \vi))]$.
+transactions: given $R \subseteq \TxID \times \TxID$, the closure of 
+a view $\vi$ with respect to the kv-store $\mkvs$ and the relation $R$ is defined as $\mathsf{closure}(\mkvs, \vi, R)$ 
+= $\getView[\mkvs, (R^{-1})^{\ast}(\Tx(\mkvs, \vi))]$; the view $\vi$ is said to be closed with respect to $\mkvs$ and $R$, denoted 
+$\closed(\mkvs, \vi, R)$,  if $\vi = \mathsf{closure}(\mkvs,\vi,R)$.
 
 We are now ready to present the execution tests  associated with different consistency models. 
 We start by looking at session guarantees, then we move to stronger consistency models. 
@@ -490,62 +492,86 @@ if the view already includes a write from that client.
 }
 \sx{ Sessions to CC cite \cite{principle-eventual-consistency} }
 \mypar{Causal Consistency (\CC)}
-\citeN{session2causal} defined \emph{Causal Consistency} 
-as the conjunction (composition) of the four \emph{session guarantees} \(\MR\), \(\MW\), \(\RYW\) and \(\WFR\). 
-Yet it is NOT the case \( \ET_\CC = \ET_{\MR} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}\) here.
+Intuitively, causal consistency is defined by requiring that views of clients, 
+prior to executing a transactions, are closed with respect to the causal dependencies 
+of transactions; we will define causal dependencies of transactions shortly.
+\citeN{session2causal} proved that \emph{Causal Consistency} 
+is the conjunction (composition) of the four \emph{session guarantees} \(\MR\), \(\MW\), \(\RYW\) and \(\WFR\). 
+However, this result holds in a setting where replicas are not abstracted from the state of the system, and 
+causal consistency is specified in terms of the state of all replicas, rather than in terms of the views of clients. 
+If causal consistency were to be defined in terms of clients views, as it is our case, then it is necessary but not sufficient to 
+ensure that the four session guarantees are satisfied: an execution test inducing causal consistency must 
+be included in $\cap \ET_{\MR} \cap \ET_{\MW} \cap \ET_{RYW} \cap \ET_{\WFR}$.
+
+In practice, causal dependencies of transactions must include the session order ($\RYW$ requires that 
+a transaction potentially depends on previous transactions executed by the same client) and 
+write-read dependencies (a transaction reading a version for some key $\key$ potentially depends from the transaction 
+that wrote such a version); obviously, causal dependencies must also be transitively closed. 
+By requiring a view of $\vi$ that is closed with respect to the relation $(\SO \cup \WR_{\mkvs})$ in $\mkvs$, 
+before executing a transaction, we impose that a client must observe all the causal dependencies of the 
+versions it reads. The execution test $\{(\mkvs, \vi, \_, \_, \_) \mid \closed(\mkvs, \vi \SO \cup \WR_{\mkvs})\}$ is
+includes in $\ET_{\MW} \cap \ET_{\WFR}$. Furthermore, this inclusion is strict: the kv-store of 
+\cref{fig:wr-wfr-allowed-but-cc} is disallowed by the former execution test, but not by the latter. 
+We define causal consistency as $\ET_{\CC} = \{(\mkvs, \vi, \_, \_, \_) \mid \closed(\mkvs, \vi \SO \cup \WR_{\mkvs})\} 
+\cap \ET_{\MR} \cap \ET_{\RYW})$: observe that this definition of $\ET_{\CC}$ is included in the execution 
+test for the four consistency guarantees, in accordance with the result from \citeN{session2causal}.
+%
+%The correctness of this definition depends on the fact that  their model of transactions assumed the 
+%knowledge of a total order according to which transactions commit. 
+%Yet it is \textbf{not} the case \( \ET_\CC = \ET_{\MR} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}\) here.
+%%One would expect the execution test for causal consistency to be exactly 
+%%the intersection of the execution tests for the individual session guarantees: 
+%%$\ET_{\MR} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$. .
+%First, because $\ET_{\MW}$ and $\ET_{\WFR}$ have been 
+%defined in terms of closure properties over the view of a client before committing a transaction, with respect 
+%to two relations $\rel_{\MW} = \SO \cap \WW_{\mkvs}$ and $\rel_{\WFR}$ respectively, while to build an execution test that composes the two 
+%consistency guarantees it requires that the view of a client prior to executing a transaction is 
+%closed simultaneously with respect to $\rel_{\MW}$ and $\rel_{\WFR}$, that is, $\closed[\mkvs,\vi,\rel_{\MW} \cup \rel_{\WFR}]$. 
+%Second, causal consistency intuitively requires that 
+%if a view includes a version hence the writer \( \txid \) of the version, 
+%it must include any versions that were written by transactions that \( \txid \) depends on.
+%These \emph{dependencies} between transactions are given by \( \SO \) and \( \WR \) relations.
+%Note that the closure under \( \SO \cup \WR \) is stronger than under \( \rel_{\MW} \cup \rel_{\WFR} \),
+%that is, for any \( \mkvs,\vi \), \( ( \vi = \closed[\mkvs,\vi,\SO\cup\WR_\mkvs] ) \implies ( \vi = \closed[\mkvs,\vi,\rel_{\MW} \cup \rel_{\WFR}] ) \).
+%Therefore, the definition of causal consistency is given in \cref{fig:execution-tests}:
+%it states that the view before committing a transaction must be closed with respect to 
+%causal dependencies of transactions; and the view after committing guarantees \( \MR \) and \( \RYW \). 
+%%Let $\ET_{\MR+\WFR} = \Set{(\mkvs, \vi, \fp, \mkvs', \vi')}[ \closed[\mkvs, \vi, \rel_{\MW} \cup \rel_{\WFR}]]$. 
+%%\cref{fig:wr-wfr-allowed-but-cc} shows an example for $\CMs[\ET_{\MW} \cap \ET_{\RYW}] \neq \CMs(\ET_{\MW+\WFR})$,
+%%where the last transaction \( \txid \), by a client differs from \( \cl \) and \( \cl' \), 
+%%is allowed to committed under \( \MW \) and \( \WFR \) but not \( \MW + \WFR \), given that
+%%\( \txid_{\cl}^1 \toEDGE{\SO} \txid_{\cl}^2 \toEDGE{\WR_\mkvs} \txid_{\cl'}^1 \toEDGE{\SO} \txid_{\cl'}^2 \).
+%Note that the same argument of intersecting execution tests 
+%would apply to the session guarantees $\MR$ and $\RYW$,
+%however, in this particular case we obtain that $\ET_{\MR+\RYW} = \ET_{\MR} \cap \ET_{\RYW}$.
+%%The execution test for causal consistency is therefore 
+%%given by $\ET_{\MR+\RYW} \cap \ET_{\MR} \cap \ET_{\RYW}$, which is equivalent to the one in
+%%\cref{fig:execution.tests}: 
+%
+%\ac{
+%Causal consistency has been defined in the literature~\cite{session2causal} 
+%as the conjunction (composition) of the four \emph{session guarantees} \(\MR\), \(\MW\), \(\RYW\) and \(\WFR\). 
 %One would expect the execution test for causal consistency to be exactly 
 %the intersection of the execution tests for the individual session guarantees: 
-%$\ET_{\MR} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$. .
-First, because $\ET_{\MW}$ and $\ET_{\WFR}$ have been 
-defined in terms of closure properties over the view of a client before committing a transaction, with respect 
-to two relations $\rel_{\MW} = \SO \cap \WW_{\mkvs}$ and $\rel_{\WFR}$ respectively, while to build an execution test that composes the two 
-consistency guarantees it requires that the view of a client prior to executing a transaction is 
-closed simultaneously with respect to $\rel_{\MW}$ and $\rel_{\WFR}$, that is, $\closed[\mkvs,\vi,\rel_{\MW} \cup \rel_{\WFR}]$. 
-Second, causal consistency intuitively requires that 
-if a view includes a version hence the writer \( \txid \) of the version, 
-it must include any versions that were written by transactions that \( \txid \) depends on.
-These \emph{dependencies} between transactions are given by \( \SO \) and \( \WR \) relations.
-Note that the closure under \( \SO \cup \WR \) is stronger than under \( \rel_{\MW} \cup \rel_{\WFR} \),
-that is, for any \( \mkvs,\vi \), \( ( \vi = \closed[\mkvs,\vi,\SO\cup\WR_\mkvs] ) \implies ( \vi = \closed[\mkvs,\vi,\rel_{\MW} \cup \rel_{\WFR}] ) \).
-Therefore, the definition of causal consistency is given in \cref{fig:execution-tests}:
-it states that the view before committing a transaction must be closed with respect to 
-causal dependencies of transactions; and the view after committing guarantees \( \MR \) and \( \RYW \). 
-%Let $\ET_{\MR+\WFR} = \Set{(\mkvs, \vi, \fp, \mkvs', \vi')}[ \closed[\mkvs, \vi, \rel_{\MW} \cup \rel_{\WFR}]]$. 
+%$\ET_{\MR} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$. Yet it is not the case.
+%Because $\ET_{\MW}$ and $\ET_{\WFR}$ have been 
+%defined in terms of closure properties over the view of a client before committing a transaction, with respect 
+%to two relations $\rel_{\MW} = \SO$ and $\rel_{\WFR}$ respectively, while to build an execution test that composes the two 
+%consistency guarantees it requires that the view of a client prior to executing a transaction is 
+%closed simultaneously with respect to $\rel_{\MW}$ and $\rel_{\WFR}$, that is, it is closed with respect to 
+%$\rel_{\MW} \cup \rel_{\WFR}$. Let 
+%$\ET_{\MR+\WFR} = \Set{(\mkvs, \vi, \fp, \mkvs', \vi')}[ \closed[\mkvs, \vi, \rel_{\MW} \cup \rel_{\WFR}]]$. 
 %\cref{fig:wr-wfr-allowed-but-cc} shows an example for $\CMs[\ET_{\MW} \cap \ET_{\RYW}] \neq \CMs(\ET_{\MW+\WFR})$,
 %where the last transaction \( \txid \), by a client differs from \( \cl \) and \( \cl' \), 
 %is allowed to committed under \( \MW \) and \( \WFR \) but not \( \MW + \WFR \), given that
 %\( \txid_{\cl}^1 \toEDGE{\SO} \txid_{\cl}^2 \toEDGE{\WR_\mkvs} \txid_{\cl'}^1 \toEDGE{\SO} \txid_{\cl'}^2 \).
-Note that the same argument of intersecting execution tests 
-would apply to the session guarantees $\MR$ and $\RYW$,
-however, in this particular case we obtain that $\ET_{\MR+\RYW} = \ET_{\MR} \cap \ET_{\RYW}$.
+%In theory, the same argument would apply to the session guarantees $\MR$ and $\RYW$
+%however, in this particular case we obtain that $\ET_{\MR+\RYW} = \ET_{\MR} \cap \ET_{\RYW}$. 
 %The execution test for causal consistency is therefore 
 %given by $\ET_{\MR+\RYW} \cap \ET_{\MR} \cap \ET_{\RYW}$, which is equivalent to the one in
-%\cref{fig:execution.tests}: 
-
-\ac{
-Causal consistency has been defined in the literature~\cite{session2causal} 
-as the conjunction (composition) of the four \emph{session guarantees} \(\MR\), \(\MW\), \(\RYW\) and \(\WFR\). 
-One would expect the execution test for causal consistency to be exactly 
-the intersection of the execution tests for the individual session guarantees: 
-$\ET_{\MR} \cap \ET_{\MW} \cap \ET_{\RYW} \cap \ET_{\WFR}$. Yet it is not the case.
-Because $\ET_{\MW}$ and $\ET_{\WFR}$ have been 
-defined in terms of closure properties over the view of a client before committing a transaction, with respect 
-to two relations $\rel_{\MW} = \SO$ and $\rel_{\WFR}$ respectively, while to build an execution test that composes the two 
-consistency guarantees it requires that the view of a client prior to executing a transaction is 
-closed simultaneously with respect to $\rel_{\MW}$ and $\rel_{\WFR}$, that is, it is closed with respect to 
-$\rel_{\MW} \cup \rel_{\WFR}$. Let 
-$\ET_{\MR+\WFR} = \Set{(\mkvs, \vi, \fp, \mkvs', \vi')}[ \closed[\mkvs, \vi, \rel_{\MW} \cup \rel_{\WFR}]]$. 
-\cref{fig:wr-wfr-allowed-but-cc} shows an example for $\CMs[\ET_{\MW} \cap \ET_{\RYW}] \neq \CMs(\ET_{\MW+\WFR})$,
-where the last transaction \( \txid \), by a client differs from \( \cl \) and \( \cl' \), 
-is allowed to committed under \( \MW \) and \( \WFR \) but not \( \MW + \WFR \), given that
-\( \txid_{\cl}^1 \toEDGE{\SO} \txid_{\cl}^2 \toEDGE{\WR_\mkvs} \txid_{\cl'}^1 \toEDGE{\SO} \txid_{\cl'}^2 \).
-In theory, the same argument would apply to the session guarantees $\MR$ and $\RYW$
-however, in this particular case we obtain that $\ET_{\MR+\RYW} = \ET_{\MR} \cap \ET_{\RYW}$. 
-The execution test for causal consistency is therefore 
-given by $\ET_{\MR+\RYW} \cap \ET_{\MR} \cap \ET_{\RYW}$, which is equivalent to the one in
-\cref{fig:execution.tests}: it states that the view before committing a transaction must be closed with respect to 
-causal dependencies of transactions; and the view after committing guarantees \( \MR \) and \( \RYW \).
-}
+%\cref{fig:execution.tests}: it states that the view before committing a transaction must be closed with respect to 
+%causal dependencies of transactions; and the view after committing guarantees \( \MR \) and \( \RYW \).
+%}
 
 \mypar{Update Atomic ($\UA$)}
 This consistency model has been proposed in~\cite{framework-concur} 
