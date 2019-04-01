@@ -225,7 +225,7 @@ We assume a language of expressions built from values \( \val \)
 and program variables \( \var \):
 $\expr ::= \val \mid \var \mid \expr + \expr \mid \cdots$.
 The \emph{evaluation} $\evalE{\expr}$ of expression $\expr$ is parametric in
-the client-local stack \( \stk \), where:%
+the client-local stack \( \stk \):%
 %
 {%
 \begin{gather*}
@@ -532,17 +532,27 @@ states that the current view $\vi$ of the executing command maybe advanced to a 
 This corresponds to the client receiving new updates.
 Given the new view $\vi''$, the transaction obtains a snapshot $\ss$ of the kv-store $\mkvs$, 
 and executes $\trans$ locally to completion ($\pskip$), updating the stack to $\stk'$, while accumulating the fingerprint $\fp$. 
-Note that the resulting snapshot is ignored (denoted by $\stub$) as the effect of the transaction is recorded in the fingerprint $\fp$. 
+Note that the resulting snapshot is ignored 
+%(denoted by $\stub$) 
+as the effect of the transaction is recorded in the fingerprint $\fp$. 
 
-The transaction is now ready to commit. 
-The \( \rl{CAtomicTrans} \) rule
+%The transaction is now ready to commit. 
+%The \( \rl{CAtomicTrans} \) rule
+Rule \(\rl{CAtomincTrans} \) models a client $\cl$ with view $\vi$ committing a transaction 
+with fingerprint $\fp$ in $\mkvs$. This operation results 
+in an new kv-store $\mkvs'$ and a view $\vi'$ for the client $\cl$ via the following process:  
 \begin{enumerate*}
-\item picks a fresh transaction identifier $\txid \in \nextTxid[\cl, \mkvs]$, 
-\item computes the new kv-store via $\mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid]$ and 
+\item pick a fresh transaction identifier $\txid \in \nextTxid[\cl, \mkvs]$ 
+and computes the new kv-store via $\mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid]$; details of th functions $\nextTxid$ 
+and $\updateKV$ are given below, 
 \item check if the transition from \( (\mkvs, \vi'') \)  to 
     \( (\mkvs', \vi') \) via fingerprint \( \fp \) is permitted by execution test $\ET$
-    using the judgement $\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$.
+    using the judgement $\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$, and 
+\item update the view of client $\cl$ to $\vi'$, specified by the judgement 
+$\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$.
 \end{enumerate*}
+%The kv-store $\mkvs'$ is determined by two functions, $\nextTxid$ and 
+%$\updateKV$, which are defined next.
 The set $\nextTxid[\cl, \mkvs]$ provides the transactions identifiers
 associated with $\cl$ that are fresh for  $\mkvs$:
 \(
@@ -550,60 +560,76 @@ associated with $\cl$ that are fresh for  $\mkvs$:
 \Set{\txid_{\cl}^{n}}[%
 \fora{m} \txid_{\cl}^{m} \in \mkvs \implies m < n ]
 \).
-By construction, all elements of $\nextTxid[\cl, \mkvs]$ are greater (with respect to session order $\SO$) 
-than transaction identifiers previously used by $\cl$. 
-
-The new kv-store $\updateKV[\mkvs, \vi, \fp, \txid]$, defined by \cref{def:updatekv}, 
-describes how the final fingerprint $\fp$ of $\txid$ executed under view $\vi$ updates $\mkvs$:
+%By construction, all elements of $\nextTxid[\cl, \mkvs]$ are greater (with respect to session order $\SO$) 
+%than transaction identifiers previously used by $\cl$. 
+The function $\updateKV[\mkvs, \vi, \fp, \txid]$, defined below, 
+describes how the fingerprint $\fp$ of $\txid$ executed under view $\vi$ updates $\mkvs$:
 %The function $\updateKV[\mkvs, \vi, \fp, \txid]$ updates $\mkvs$ with $\fp$ as follows: 
 for each read operation $(\otR, \key, \val) \in \fp$, it adds $\txid$ 
-to the reader set of the last version of $\key$ that is included in the view $\vi$ of the client; 
+to the reader set of the last version of $\key$ that is included in the view $\vi$; 
 for each write operation $(\otW, \key, \val)$, it appends a new version $(\val, \txid, \emptyset)$ 
 to $\mkvs(\key)$. 
 Given a list of versions $\vilist = \ver_0 \lcat \cdots \lcat \ver_n$ 
-and any index $i: 0 \leq i \leq n$, 
-then $\vilist\rmto{i}{\ver}$ denotes 
-$\vilist' = \ver_0 \lcat \cdots \lcat \ver_{i-1} \lcat \ver \lcat \ver_{i+1} \cdots \ver_{n}$,
+and an index $i: 0 \leq i \leq n$, 
+then $\vilist\rmto{i}{\ver} \defeq \ver_0 \lcat \cdots \lcat \ver_{i-1} \lcat \ver \lcat \ver_{i+1} \cdots \ver_{n}$,
+%then $\vilist\rmto{i}{\ver}$ denotes 
+%$\vilist' = \ver_0 \lcat \cdots \lcat \ver_{i-1} \lcat \ver \lcat \ver_{i+1} \cdots \ver_{n}$,
 where $\lcat$ denotes list concatenation. 
 
 \begin{definition}[Transactional update]
 \label{eq:updatekv}
 \label{def:updatekv}
-The \emph{transactional update function},  $\updateKV[\mkvs, \vi, \fp, \txid]$,  is
+The function  $\updateKV[\mkvs, \vi, \fp, \txid]$,  is
 defined as follows:
 %
-{%
+%{%
+%\[%
+%\begin{aligned}
+%    \updateKV[\mkvs, \vi, \emptyset, \txid] & \defeq \mkvs 
+%    \\[3pt]
+%    \updateKV[\mkvs, \vi, \Set{(\otR, \key, \val)} \uplus \fp, \txid]
+%    & \defeq \updateKV[\mkvs\rmto{\key}{\vilist},\vi, \fp, \txid] \\
+%    \omit\rlap{where \qquad \( i {=} \max_{<}(\vi(\key)) \quad (\val, \txid', \txidset) = \mkvs(\key, i) 
+%            \quad \vilist = \mkvs(\key)\rmto{i}{(\val, \txid', \txidset \uplus \Set{ \txid })}\)} 
+%    \\[3pt]
+%%	
+%	\updateKV[\mkvs, \vi, \Set{(\otW, \key, \val)} \uplus \fp, \txid] 
+%    & \defeq \updateKV[\mkvs', \vi, \fp, \txid] \quad \text{where} \quad  \mkvs' = \mkvs\rmto{\key}{ \mkvs(\key) \lcat (\val, \txid, \emptyset) } \\
+%\end{aligned}
+%\]%
+%}%
+%
 \[%
-\begin{aligned}
-    \updateKV[\mkvs, \vi, \emptyset, \txid] & \defeq \mkvs 
-    \\[3pt]
+\begin{array}{lcl}
+    \updateKV[\mkvs, \vi, \emptyset, \txid] & \defeq & \mkvs 
+    \\
     \updateKV[\mkvs, \vi, \Set{(\otR, \key, \val)} \uplus \fp, \txid]
-    & \defeq \updateKV[\mkvs\rmto{\key}{\vilist},\vi, \fp, \txid] \\
-    \omit\rlap{where \qquad \( i {=} \max_{<}(\vi(\key)) \quad (\val, \txid', \txidset) = \mkvs(\key, i) 
-            \quad \vilist = \mkvs(\key)\rmto{i}{(\val, \txid', \txidset \uplus \Set{ \txid })}\)} 
-    \\[3pt]
+    & \defeq & \text{let } i = \max_{<}(\vi(\key)), (\val,\txid',\txidset) = \mkvs(\key,i) \text{ in } \\
+    && \;\;\;\; \updateKV[\mkvs\rmto{\key}{\mkvs(\key)\rmto{i}{(\val, \txid', \txidset \uplus \Set{\txid})}},\vi, \fp, \txid] \\
 %	
-	\updateKV[\mkvs, \vi, \Set{(\otW, \key, \val)} \uplus \fp, \txid] 
-    & \defeq \updateKV[\mkvs', \vi, \fp, \txid] \quad \text{where} \quad  \mkvs' = \mkvs\rmto{\key}{ \mkvs(\key) \lcat (\val, \txid, \emptyset) } \\
-\end{aligned}
+	\updateKV[\mkvs, \vi, \Set{(\otW, \key, \val)} \uplus \fp, \txid]
+    & \defeq & \text{let } \mkvs' = \mkvs\rmto{\key}{ \mkvs(\key) \lcat (\val, \txid, \emptyset) } \text{ in } \updateKV[\mkvs', \vi, \fp, \txid] 
+\end{array}
 \]%
-}%
+%
 \end{definition}
 
-Note that,  under the assumption that $\fp$ contains at most one read and one write 
+%Note that,  under the assumption that 
+When $\fp$ contains at most one read and one write 
 operation per key and the identifier is fresh for $\mkvs$, 
 the transaction update function and the transaction update set for
-$\cl$ are well-defined (details in \cref{sec:updatekv-well-defined}). 
+$\cl$ are well-defined. 
+%(details in \cref{sec:updatekv-well-defined}). 
 
 Finally, the client \( \cl \) can pick a new view \( \vi' \) as long as 
 the transition from \( (\mkvs, \vi'') \) to \( (\mkvs', \vi') \)  via fingerprint \( \fp \) 
 is permitted by execution test $\ET$ using the judgement $\ET \vdash (\mkvs, \vi'') \csat \fp : (\mkvs', \vi')$.
-Intuitively, the judgement states that 
-\begin{enumerate*}
-    \item the fingerprint $\fp$ is allowed to commit to kv-store $\mkvs$ under view $\vi''$, 
-    and \item the newly picked view $\vi'$ is at least the minimum view on final kv-store \( \mkvs' \) 
-    for future transactions from the same client.
-\end{enumerate*}
+%Intuitively, the judgement states that 
+%\begin{enumerate*}
+%    \item the fingerprint $\fp$ is allowed to commit to kv-store $\mkvs$ under view $\vi''$, 
+%    and \item the newly picked view $\vi'$ is at least the minimum view on final kv-store \( \mkvs' \) 
+%    for future transactions from the same client.
+%\end{enumerate*}
 In \cref{sec:cm}, we give several examples of such judgements.
 %Finally, having selected a suitable transaction identifier $\txid$,
 
