@@ -5,19 +5,20 @@ to be in a consistent state. Different consistency models of transactions have
 been proposed in the literature \cite{ev_principles,rola,cops,redblue,PSI,clocksi}, which capture different trade-offs 
 between transaction processing performance and application correctness. 
 
-For example, the consistency model known as \emph{serialisability} allows only kv-stores 
+%For example, the consistency model known as 
+\emph{Serialisability} allows only kv-stores 
 obtainable from a serial execution of transactions, where transactions read the most up-to-date 
-versions of a key. While this consistency model gives strong consistency guarantees, by ruling out scenarios 
-such as the one depicted in \cref{fig:ua-disallowed}, it has obvious performance drawbacks due to client 
-having to wait for the most up-to-date version of a key. At the other side of the spectrum, databases 
-implementing \emph{eventual consistency} impose few conditions on the structure of a kv-store 
-and achieve very fast transaction processing, at the expenses 
-of allowing a wide range of non-serialisable kv-stores, or \emph{anomalies}.
+versions of a key. Serialisability is a strong consistency model: it prevents 
+anomalous behaviours such as those 
+depicted in \cref{fig:anomalies}, discussed later in this Section. However, it has obvious performance drawbacks due to client 
+having to wait for the most up-to-date version of a key. At the other side of the spectrum, \emph{Eventual Consistency} imposes 
+few conditions on the structure of a kv-store: its implementations achieve very fast transaction processing, at the expenses 
+of allowing all the \emph{anomalies} from \cref{fig:anomalies}.
 
-Formally, we define a \emph{consistency model} to be a set of kv-stores. We introduce the notion of 
+Formally, a \emph{consistency model} is a set of kv-stores. We introduce the notion of 
 \emph{execution test}, which specifies whether a client is allowed to commit a transaction in a given 
-kv-store. Each execution test induces a consistency model as the set of kv-stores that 
-can be obtained when clients non-deterministically commit transactions that respect the constraints 
+kv-store. Each execution test induces a consistency model: this is the set of kv-stores obtained 
+by letting clients non-deterministically commit transactions, while respecting the constraints 
 imposed by the execution test. We identify several execution tests that induce well-known consistency 
 models in the literature; later in \cref{sec:other_formalisms} we demonstrate that our definitions are equivalent 
 to declarative definitions over abstract executions \cite{framework-concur} and dependency graphs \cite{adya}.
@@ -51,50 +52,59 @@ to declarative definitions over abstract executions \cite{framework-concur} and 
 \begin{definition}
 \label{def:execution.test}
 An \emph{execution test} is a set of tuples $\ET \subseteq \MKVSs \times \Views \times \Fingerprints \times \MKVSs \times \Views$ 
-such that for all $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$ and all $\key, \val$:
+such that for all $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$ and all $\key, \val$, \( (\otR, \key, \val) \in \fp \implies
+	\mkvs(\key, \max{}_{<}(\vi(\key))) = \val   \).
 %
-{%
-\begin{align}
-\small
-    & 
-	(\otR, \key, \val) \in \fp \implies
-	\mkvs(\key, \max{}_{<}(\vi(\key))) = \val  
-	\tag{Ext} \label{eq:read-external} \\
-    & 
-    \vi(\key) \neq \vi'(\key) 
-    \implies
-    \exsts{l} (l, \key, -) \in \fp
-    \tag{ValidViewUpd} \label{eq:valid-view-update}
-\end{align}%
-}%
+%{%
+%\begin{align}
+%\small
+%    & 
+%	(\otR, \key, \val) \in \fp \implies
+%	\mkvs(\key, \max{}_{<}(\vi(\key))) = \val  
+%	\tag{Ext} \label{eq:read-external} \\
+%    & 
+%    \vi(\key) \neq \vi'(\key) 
+%    \implies
+%    \exsts{l} (l, \key, -) \in \fp
+%    \tag{ValidViewUpd} \label{eq:valid-view-update}
+%    \ac{This second condition was needed for compositionality results, and is no longer needed. 
+%    I am removing it.}
+%\end{align}%
+%}%
 \end{definition}
 %
 \noindent 
 Intuitively, $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$ means that under the execution test $\ET$ 
-a client with view $\vi$ over a kv-store $\mkvs$ is allowed to commit a transaction with 
+a client with view $\vi$ over a kv-store $\mkvs$ can commit a transaction with 
 fingerprint $\fp$. The kv-store and view $\mkvs', \vi'$ reflect how $\mkvs, \vi$ change due 
-to the transaction being executed, respectively. We adopt the more suggestive notation 
-$\ET \vdash (\mkvs, \vi) \csat \fp: (\mkvs', \vi')$ in place of $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$.
-The first condition of \cref{def:execution.test} enforces the last-write-wins policy~\cite{vogels:2009:ec:1435417.1435432}: 
+to the transaction being executed, respectively\footnote{In practice, $\mkvs'$ is almost completely 
+determined by the function $\updateKV$ from \cref{def:updatekv}, with the only degree of freedom 
+being the identifier of the client committing the update.}. We adopt the 
+%more suggestive 
+notation $\ET \vdash (\mkvs, \vi) \csat \fp: (\mkvs', \vi')$ in place of $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$.
+%The condition of 
+\cref{def:execution.test} enforces the last-write-wins policy~\cite{vogels:2009:ec:1435417.1435432}: 
 a transaction always reads the most recent writes from the initial view \(\vi\).  
-The second condition states that a transaction is only allowed to update the view for those keys 
-that have been recorded in the fingerprint.  The largest execution test is denoted as $\ET_{\top}$: 
+%The second condition states that a transaction is only allowed to update the view for those keys 
+%that have been recorded in the fingerprint.  
+
+The largest execution test is denoted as $\ET_{\top}$: 
 in \cref{sec:other_formalisms} we prove that the set of kv-stores induced by $\ET_{\top}$ 
 corresponds to the \emph{Read Atomic} consistency model \cite{ramp}. Later, in this Section, 
 we define several execution tests that induce well-known consistency models.
 %Note that at this initial stage \eqref{eq:read-external} and \eqref{eq:valid-view-update} are the only required conditions and execution tests are otherwise unrestricted. 
 %Further restrictions on execution tests are determined by the underlying consistency model, thus prescribing the consistency guarantees of the model.
 
-We now explain how an execution test induces a consistency model. First, 
-we define $\ET$-reductions, which capture how a client $\cl$ may interact with $\ET$-configurations. 
+We now explain how an execution test induces a consistency model. First, given an execution test $\ET$, 
+we define $\ET$-reductions: these capture how a client $\cl$ may interact with configurations. 
 An $\ET$-reduction is a triple of the form $(\mkvs, \vienv) \toET{(\cl, \alpha)} (\mkvs', \vienv')$, 
-where given an execution test  $\ET$, either 
+where either 
 %we define the $\ET$-trace as a sequence of $\ET$-reductions on configurations that a client
 \begin{enumerate}
     \item $\alpha = \varepsilon$, $\mkvs' = \mkvs$ and $\vienv' = \vienv\rmto{\cl}{\vi}$ for some $u: \vienv(\cl) \sqsubseteq u$ - 
-	client $\cl$ advances its view to a more up-to-date one, the label $\varepsilon$ denotes that there was no interaction between the client and the kv-store; or 
-\item $\alpha = \fp$ for some $\fp$, $\ET \vdash (\mkvs, \vi ) \csat \fp : (\mkvs', \vi')$ for some $\vi'$, $\mkvs' \in \updateKV[\mkvs, \vi, \fp, \cl]$, 
-    $\vienv' = \vienv\rmto{\cl}{\vi'}$; client $\cl$ 
+	client $\cl$ shifts its view to a more up-to-date one, the label $\varepsilon$ denotes that there was no interaction between the client and the kv-store; or 
+\item $\alpha = \fp$ for some $\fp$, and $\ET \vdash (\mkvs, \vi ) \csat \fp : (\mkvs', \vi')$, where $\mkvs' \in \updateKV[\mkvs, \vi, \fp, \txid]$ 
+   for some $\txid \in \nextTxid(\cl, \mkvs)$, $\vienv' = \vienv\rmto{\cl}{\vi'}$; client $\cl$ 
 	commits a transaction with fingerprint $\fp$.
 \end{enumerate}
 \ac{Not changing due to time constraints, but I believe the best thing to do is to change the type of execution tests to have a client identifier 
@@ -173,10 +183,10 @@ where view-shifts and transaction commits are coupled together in a single trans
 The reason for this mismatch is best understood when looking at intended applications of 
 $\ET$-traces and the operational model. The former are particularly useful when proving that a distributed 
 protocol implements a given consistency model: in this case it is convenient to separate the operation of shifting a view from that of committing a transaction, 
-as these two operations often take place separately in a distributed transactional protocol. The latter is particularly useful when reasoning about transactional 
+as these two operations often take place separately in distributed transactional protocols. The latter is particularly useful when reasoning about transactional 
 programs: treating view-shifts and transaction commits as a single transition reduces the number of interleavings in programs.
 
-$\ET$-traces and the operational are equally expressive: 
+$\ET$-traces and the operational semantics are equally expressive: 
 any kv-store $\mkvs \in \CMs(\ET)$ can be obtained as a result of 
 executing some program $\prog$ under the execution test $\ET$, and vice versa.
 \ac{One may wonder whether this difference in approach leads to a difference in expressive power between $\ET$-traces 
