@@ -15,23 +15,27 @@ and write \( \mathsf r_1 ; \mathsf r_2\) for \( \Set{(a_1,a_2)}[\exsts{a} (a_1,a
 \subsection{Key-Value Stores and Views}
 \label{subsec:kvstores}
 \label{sec:mkvs-view}
-Kv-stores are defined using client and transaction identifiers.
+%Kv-stores are defined using client and transaction identifiers.
 We assume a countably infinite set of \emph{client identifiers} $\Clients \ni \cl$. 
 The set of \emph{transaction identifiers} is defined by
 $\TxID \defeq  \Set{\txid_{0}} \uplus \Set{ \txid_{\cl}^{n} \mid \cl
   \in \Clients \land n \geq 0 }$, 
 where  $\txid_0$ denotes  an \emph{initialisation transaction}, 
 and $\txid_{\cl}^{n}$ identifies a transaction committed by client $\cl$. 
+The superscript $n$ is used to determine the order in which transactions 
+are committed by a client. We assume that each client is associated with a session, 
+and we define the session order as $\SO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid =
+\txid_{\cl}^{n} \land \txid' = \txid_{\cl}^{m} \land n < m}$.
 Elements of $\TxID$ are ranged over by
 $\txid, \txid', \cdots$, and subsets by $\txidset, \txidset', \cdots$. 
-Let $\TxID_{0} \defeq \TxID \setminus \Set{\txid_0}$. 
-For each $n \in \mathbb{N}$, $\txid_{\cl}^{n}$ identifies the $n$\textsuperscript{th} transaction  committed by $\cl$.
-We assume each client is associated with a session, 
-and the order of transactions within a single session is determined by the superscript 
-$n$ in transaction identifiers of the form $\txid_{\cl}^{n}$: we define the session order 
-as 
-$\SO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid =
-\txid_{\cl}^{n} \land \txid' = \txid_{\cl}^{m} \land n < m}$.
+%Let $\TxID_{0} \defeq \TxID \setminus \Set{\txid_0}$. 
+%For each $n \in \mathbb{N}$, $\txid_{\cl}^{n}$ identifies the $n$\textsuperscript{th} transaction  committed by $\cl$.
+%We assume each client is associated with a session, 
+%and the order of transactions within a single session is determined by the superscript 
+%$n$ in transaction identifiers of the form $\txid_{\cl}^{n}$: we define the session order 
+%as 
+%$\SO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid =
+%\txid_{\cl}^{n} \land \txid' = \txid_{\cl}^{m} \land n < m}$.
 
 \begin{definition}[Kv-stores]
 \label{def:his_heap}
@@ -42,7 +46,7 @@ which includes keys \( \Keys \) and an \emph{initialisation value} $\val_0$.
 The set of \emph{versions}, $\Versions \ni \ver$, is defined by $\Versions \defeq \Val \times \TxID \times \pset{\TxID_{0}}$. 
 A \emph{kv-store} 
 is a function $\mkvs: \Keys \to \func{List}[\Versions]$, 
-where $\func{List}[\Versions] \ni \vilist$ is the set of lists of versions $\Versions$. 
+where $\func{List}[\Versions] \ni \vilist$ is the set of lists of versions. %$\Versions$. 
 \end{definition}
 
 A \emph{version} $\ver = (\val, \txid, \txidset)$ comprises  a value $\val$
@@ -93,11 +97,28 @@ We define \emph{views} to track the versions seen by clients.
 A \emph{view} of a kv-store $\mkvs$ is a function
 $\vi \in \Views(\mkvs) \defeq \Keys \to\pset{\Nat}$ such that for all $i, i', \key, \key'$:
 %
+%\noindent\begin{minipage}{0.5\linewidth}
+%\begin{equation}
+%    0 \in \vi(\key) 
+%    \land (i \in \vi(\key) \implies i < \abs{ \mkvs(\key) }) 
+%    \tag{wf}
+%    \label{eq:view.wf}
+%\end{equation}
+%\end{minipage}%
+%\begin{minipage}{0.5\linewidth}
+%\begin{equation}
+% 	i \in \vi(\key)  
+%  	\land \wtOf(\mkvs(\key, i)) {=} \wtOf(\mkvs(\key', i'))  
+%  	\implies i' \in \vi(\key')
+%	\tag{atomic}
+%	\label{eq:view.atomic}
+%\end{equation}
+%\end{minipage}\par\vspace{\belowdisplayskip}
 {
 \begin{align}
     & 
     0 \in \vi(\key) 
-    \land (i \in \vi(\key) \implies i < \abs{ \mkvs(\key) }) 
+    \land (i \in \vi(\key) \implies 0 \leq i < \abs{ \mkvs(\key) }) 
     \tag{wf}
     \label{eq:view.wf}\\
     & 
@@ -116,8 +137,8 @@ The set of views is defined by $\Views \defeq \bigcup_{\mkvs \in \MKVSs} \Views(
 %
 \noindent The \emph{initial view} is denoted by $\vi_{0}$, where $\vi_{0}(\key) = \Set{0}$ for all $\key \in \Keys$. 
 A \emph{configuration}, $\conf \in \Confs$,  is a pair $ (\mkvs, \vienv)$
-with $\mkvs \in \MKVSs$ and a partial finite function
-$\vienv : \Clients \parfinfun \Views(\mkvs)$. 
+with $\mkvs \in \MKVSs$ and a partial function
+$\vienv : \Clients \parfun \Views(\mkvs)$. 
 The set of \emph{initial configurations}, $\Confs_0 \subseteq \Confs$, contains configurations of the form $ (\mkvs_0, \vienv_0)$, where $\mkvs_0$ is the initial kv-store
 that is defined by
 $\mkvs_{0}(\key)\defeq  (\val_0, \txid_0, \emptyset)$ for
@@ -126,20 +147,24 @@ all $\key \in \Keys$ and an initial value \( \val_0 \).
 %
 \sx{split the configuration definition ?}
 %
-Given a configuration $(\mkvs, \vienv)$, when the view of client 
-$\cl$ is defined, that is, there exists $\vi = \vienv(\cl)$ such that for each key $\key \in \Keys$, 
-$\vi$ determines the sublist of versions in $\mkvs$ that client $\cl$ sees. 
+Given a configuration $(\mkvs, \vienv)$ and a client $\cl$
+%when the view of client 
+%$\cl$ is defined, that is, there exists $\vi = \vienv(\cl)$ such that for each key $\key \in \Keys$, 
+%$\vi$ determines the sublist of versions in $\mkvs$ that client $\cl$ sees. 
+if $\vi = \vienv(\cl)$ is defined, it determines the sub-list of versions in $\mkvs$ that $\cl$ sees.
 If $i,j \in \vi(\key)$ and $i < j$, then $\cl$ knows about the values 
 carried by versions $\mkvs(\key, i)$ and  $\mkvs(\key, j)$, 
-and  knows that these versions are contained in $\mkvs$ with  $\mkvs(\key, j)$ more 
+and  knows that these versions are contained in $\mkvs$ with $\mkvs(\key, j)$ more 
 up-to-date than $\mkvs(\key, i)$. 
-
-Given a configuration $(\mkvs, \vienv)$ and a client $\cl$ such that $\vienv(\cl)$ is
-defined, it is possible to define a \emph{snapshot} of the
-view $\vienv  (\cl)$, which identifies the last write of a client
-view. This definition assumes that the database satisfies the \emph{last write wins}
-resolution policy as many distributed databases adopt this policy~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}, although our theory can be 
-re-adapted to capture other resolution policies. 
+%Given a configuration $(\mkvs, \vienv)$ and a client $\cl$ such that $\vienv(\cl)$ is
+%defined, 
+It is therefore possible to associate the view $\vienv(\cl)$ with a \emph{snapshot}, 
+%of theview $\vienv(\cl)$, 
+which identifies the last write of a client view. 
+This definition assumes that the database satisfies the \emph{last write wins}
+resolution policy, employed by many distributed kv-stores,  
+%adopt this policy~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}, 
+although our theory can be re-adapted to capture other resolution policies. 
 
 \sx{Transaction state.}
 \begin{definition}[Snapshots]
@@ -264,9 +289,12 @@ A \emph{transactional state}, \( \sn \in \Snapshots \defeq \Keys \to
 To capture the effects of executing a transaction $\trans$ on a snapshot $\ss$ of kv-store $\mkvs$, 
 we identify the \emph{fingerprint} of $\trans$ on $\ss$.
 A fingerprint of $\trans$ on $\ss$ and $\mkvs$
-is a set of \emph{read} and \emph{write operations}, where
-the read operations capture the values $\trans$ reads from $\ss$ (prior to overwriting them), and
-the write operations capture the values $\trans$ writes to $\ss$ and aims to commit to $\mkvs$, so long as certain consistency conditions are met.  
+is a set of \emph{read} and \emph{write operations}, which 
+%the read operations 
+capture the values $\trans$ reads from $\ss$ (prior to overwriting them), and
+%the write operations capture 
+the values $\trans$ writes to $\ss$ and aims to commit to $\mkvs$, respectively. 
+%so long as certain consistency conditions are met.  
 Execution of a transaction in a given configuration may result in more than one fingerprint due to non-determinism. 
 
 \begin{definition}[Fingerprints]
@@ -282,21 +310,32 @@ $\fora{\key \in \Keys, l  \in \Set{\otR, \otW}}
 
 Note that the last constraint ensure that for each key, a fingerprint contains at most one read operation and at most one write operation 
 reflecting the fact that we work with transactions that are
-atomically visible~\cite{laws,sureshConcur}; 
-that is, reads are taken from a single snapshot of the kv-store, 
+atomically visible~\cite{laws,sureshConcur}: reads are taken from a single snapshot of the kv-store, 
 and since clients see either none or all the writes of a transaction, only the last write to each key is 
 committed.
 
-\Cref{fig:semantics-trans} presents the rules for transactional commands.
-Except \( \rl{TPrimitive} \) rule that updates transactional state and accumulates fingerprint,
-the rules for compound commands are standard.
+\Cref{fig:semantics-trans} presents the rules for transactional commands. 
+The only non-standard rule in the Figure is \( \rl{TPrimitive} \), which updates 
+the transactional state and the fingerprint of a transaction. The premise 
+$(\stk, \ss) \toLTS{\transpri} (\stk', \sn')$ identifies how the 
+execution of the primitive transactional command $\transpri$ affects the local state 
+of a transaction; the premise $o =\op(\stk, \sn, \transpri)$ identifies the operation on the 
+kv-store associated with the primitive transactional command $\transpri$. The definition 
+of $\toLTS{\transpri}$ and $\op$ is given below; 
+for any function \( \mathsf f \), \( \mathsf f \rmto{\mathsf d}{\mathsf r}\) denotes the 
+function \( {\mathsf f}'\) such that  \( {\mathsf f}'( {\mathsf d}) = {\mathsf r}$, and \( {\mathsf f}'({\mathsf d}') = {\mathsf f}({\mathsf d}')$ whenever \( 
+{\mathsf d}' \neq {\mathsf d}\). 
+%let \( \mathsf f\rmto{\mathsf d}{\mathsf r} \) denotes a new function 
+%where \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = {\mathsf r} \) if \( \mathsf d = \mathsf d' \), 
+%otherwise \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = \mathsf f(\mathsf d') \).
+%, used in the second premise of the rule  identifies 
+%the action 
+%Except for Rule \( \rl{TPrimitive} \) rule that updates transactional state and accumulates fingerprint,
+%the rules for compound commands are standard.
 %We provide an operational description of the behaviour of a transactional command, $\trans$,
 %starting from an initial client stack, a transactional state and the empty fingerprint $\emptyset$. 
-For \( \rl{TPrimitive} \) rule, first, we define a transition system describing 
-how client stack and transactional state are updated via primitive transactional commands.
-For any function \( \mathsf f \), let \( \mathsf f\rmto{\mathsf d}{\mathsf r} \) denotes a new function 
-where \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = {\mathsf r} \) if \( \mathsf d = \mathsf d' \), 
-otherwise \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = \mathsf f(\mathsf d') \).
+%For \( \rl{TPrimitive} \) rule, first, we define a transition system describing 
+%how client stack and transactional state are updated via primitive transactional commands.
 
 \begin{definition}
 \label{def:primitive_semantics}
@@ -321,9 +360,9 @@ is defined by:
 \]%
 }%
 %
-\end{definition}
-
-Second, we define a \emph{fingerprint function}, $\mathsf{op}$, computing the fingerprint of primitive transactional commands:
+%
+%Second, we define 
+The function  $\mathsf{op}$, computing the fingerprint of primitive transactional commands is defined by:
 \[
 \begin{aligned}
     \func{op}[\stk, \sn, \passign{\var}{\expr}] & \defeq  \emptyop 
@@ -337,12 +376,51 @@ Second, we define a \emph{fingerprint function}, $\mathsf{op}$, computing the fi
 \]
 The  empty operation $\emptyop$ is used for those primitive commands that do not
 contribute to the fingerprint.
+\end{definition}
+The conclusion of Rule \( \rl{TPrimitive}\) includes the operation 
+$o$ obtained by executing the command $\transpri$ into the fingerprint $\fp$
+of transactions. It does so via a \emph{combination operator} $\addO: 
+\pset{\Ops} \times \Ops \uplus \Set{\emptyop} \to \pset{\Ops}$, defined formally 
+in \cref{fig:semantics-trans}. The operation $\fp \addO \_$ adds to the fingerprint $\fp$ 
+ a read from $\key$  only if $\fp$ does not contain an entry for $\key$ 
+(i.e. the key was not accessed yet by the transaction), and a write to $\key$ by removing existing writes to $\fp$.
+%Third, we define a \emph{combination} operator,
+%$\addO  : \pset{\Ops} \times \Ops \uplus \Set{\emptyop} \to \pset{\Ops}$ which
+%adds a read/write operation to a fingerprint and ignores the empty operation $\emptyop$:%
+%\[
+%\begin{aligned}
+%    \fp \addO (\otR, \key, \val)  
+%    & \defeq
+%    \begin{cases}
+%        \fp \cup \Set{(\otR, \key, \val)} & \text{if } \fora{l, v'} (l, \key, v') \! \notin \! \fp \\
+%        \fp &  \text{otherwise} \\
+%    \end{cases}  \\
+%    \fp \addO (\otW, \key, \val) 
+%    & \defeq 
+%    \left( \fp \! \setminus \! \Set{(\otW, \key, v')}[v' \in \Val] \right)  \!
+%    \cup \! \Set{(\otW, \key, \val)} \\
+%    \fp \addO \emptyop  & \defeq \fp 
+%\end{aligned}
+%\]
+%Note that a read from $\key$ is added to a fingerprint $\fp$ only if $\fp$ does not contain an entry for $\key$, thus only recording the first value read for $\key$ (before a subsequent write). 
+%In contrast, a write to $\key$ is always added to $\fp$ by removing the existing writes, thus only recording the last write to $\key$. 
 
-Third, we define a \emph{combination} operator,
-$\addO  : \pset{\Ops} \times \Ops \uplus \Set{\emptyop} \to \pset{\Ops}$ which
-adds a read/write operation to a fingerprint and ignores the empty operation $\emptyop$:%
-\[
-\begin{aligned}
+\begin{figure*}[!t]
+\begin{center}
+\resizebox{0.95\columnwidth}{!}{%
+\begin{tabular}{@{}c@{\hspace{10pt}}c@{}}
+    $
+    \inferrule[\rl{TPrimitive}]{%
+        (\stk, \sn) \toLTS{\transpri} (\stk', \sn') 
+        \\
+        \op = \func{op}[\stk, \sn, \transpri]
+    }{%
+        (\stk, \sn, \fp) , \transpri  \toTRANS   (\stk', \sn', \fp \addO \op) , \pskip 
+    }%
+    $
+    &
+    $
+ \begin{array}{ll}
     \fp \addO (\otR, \key, \val)  
     & \defeq
     \begin{cases}
@@ -354,47 +432,94 @@ adds a read/write operation to a fingerprint and ignores the empty operation $\e
     \left( \fp \! \setminus \! \Set{(\otW, \key, v')}[v' \in \Val] \right)  \!
     \cup \! \Set{(\otW, \key, \val)} \\
     \fp \addO \emptyop  & \defeq \fp 
-\end{aligned}
-\]
-Note that a read from $\key$ is added to a fingerprint $\fp$ only if $\fp$ does not contain an entry for $\key$, thus only recording the first value read for $\key$ (before a subsequent write). 
-In contrast, a write to $\key$ is always added to $\fp$ by removing the existing writes, thus only recording the last write to $\key$. 
-
-%
-\begin{figure*}[!t]
-\begin{mathpar}
-    \inferrule[\rl{TPrimitive}]{%
-        (\stk, \sn) \toLTS{\transpri} (\stk', \sn') 
-        \\
-        \op = \func{op}[\stk, \sn, \transpri]
-    }{%
-        (\stk, \sn, \fp) , \transpri  \toTRANS   (\stk', \sn', \fp \addO \op) , \pskip 
-    }%
+\end{array}
+$
     \\
+    $
      \inferrule[\rl{TChoice}]{%
 		i \in \Set{1,2}
     }{%
 		(\stk, \sn, \fp) , \trans_{1} \pchoice \trans_{2}  \toTRANS  (\stk, \sn, \fp) , \trans_{i}
     }
-    \and
+    $
+    &
+    $
     \inferrule[\rl{TIter}]{ }{%
         (\stk, \sn, \fp),  \trans\prepeat \toTRANS  (\stk, \sn, \fp), \pskip \pchoice (\trans \pseq \trans\prepeat)
     }%
-    \and
+    $
+    \\[20pt]
+    $
     \inferrule[\rl{TSeqSkip}]{ }{%
         (\stk, \sn, \fp), \pskip \pseq \trans \toTRANS  (\stk, \sn, \fp), \trans
     }%
-    \and
+    $
+    &
+    $
     \inferrule[\rl{TSeq}]{%
 		(\stk, \sn, \fp), \trans_{1} \toTRANS  (\stk', \sn', \fp'), \trans_{1}'
     }{%
 		(\stk, \sn, \fp), \trans_{1} \pseq \trans_{2} \toTRANS  (\stk', \sn', \fp'), \trans_{1}' \pseq \trans_{2}
     }%
-\end{mathpar}
-\hrulefill
+    $\\[10pt]
+    \hline
+\end{tabular}
+}
+\end{center}
 %\captionsetup{belowskip=-5pt}
 \caption{Semantics rules for transactional commands}
 \label{fig:semantics-trans}
 \end{figure*}
+%
+%\begin{figure*}[!t]
+%\begin{mathpar}
+%    \inferrule[\rl{TPrimitive}]{%
+%        (\stk, \sn) \toLTS{\transpri} (\stk', \sn') 
+%        \\
+%        \op = \func{op}[\stk, \sn, \transpri]
+%    }{%
+%        (\stk, \sn, \fp) , \transpri  \toTRANS   (\stk', \sn', \fp \addO \op) , \pskip 
+%    }%
+%    \and
+% \begin{array}{ll}
+%    \fp \addO (\otR, \key, \val)  
+%    & \defeq
+%    \begin{cases}
+%        \fp \cup \Set{(\otR, \key, \val)} & \text{if } \fora{l, v'} (l, \key, v') \! \notin \! \fp \\
+%        \fp &  \text{otherwise} \\
+%    \end{cases}  \\
+%    \fp \addO (\otW, \key, \val) 
+%    & \defeq 
+%    \left( \fp \! \setminus \! \Set{(\otW, \key, v')}[v' \in \Val] \right)  \!
+%    \cup \! \Set{(\otW, \key, \val)} \\
+%    \fp \addO \emptyop  & \defeq \fp 
+%\end{array}
+%    \\
+%     \inferrule[\rl{TChoice}]{%
+%		i \in \Set{1,2}
+%    }{%
+%		(\stk, \sn, \fp) , \trans_{1} \pchoice \trans_{2}  \toTRANS  (\stk, \sn, \fp) , \trans_{i}
+%    }
+%    \and
+%    \inferrule[\rl{TIter}]{ }{%
+%        (\stk, \sn, \fp),  \trans\prepeat \toTRANS  (\stk, \sn, \fp), \pskip \pchoice (\trans \pseq \trans\prepeat)
+%    }%
+%    \and
+%    \inferrule[\rl{TSeqSkip}]{ }{%
+%        (\stk, \sn, \fp), \pskip \pseq \trans \toTRANS  (\stk, \sn, \fp), \trans
+%    }%
+%    \and
+%    \inferrule[\rl{TSeq}]{%
+%		(\stk, \sn, \fp), \trans_{1} \toTRANS  (\stk', \sn', \fp'), \trans_{1}'
+%    }{%
+%		(\stk, \sn, \fp), \trans_{1} \pseq \trans_{2} \toTRANS  (\stk', \sn', \fp'), \trans_{1}' \pseq \trans_{2}
+%    }%
+%\end{mathpar}
+%\hrulefill
+%%\captionsetup{belowskip=-5pt}
+%\caption{Semantics rules for transactional commands}
+%\label{fig:semantics-trans}
+%\end{figure*}
 
 Finally, we have all the ingredients to describe the behaviour of a transactional command.  \Cref{fig:semantics-trans} provides the one-step transactional semantics; 
 the interesting rule is the \rl{TPrimitive} rule which describes how a primitive transactional command updates the client stack, the snapshot and the fingerprint; 
