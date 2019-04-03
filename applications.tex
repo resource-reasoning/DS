@@ -233,16 +233,18 @@ a set of keys atomically. Each instance of these operations is processed by a si
 Each client maintains a \emph{context}, the set of dependencies corresponding to versions it observed.  
 %future operations that the client performs depend from such versions.
 
-When a client $\cl$ requests to write key $\key$ to replica $r$, it sends a message containing the value to be written and its context to $r$; then  
+When client $\cl$ requests to write key $\key$ to replica $r$, it sends a message containing the value $\val$ to be written and its context $ctx$ to $r$; then  
 it waits for a reply from the replica. 
-Upon receiving the  message, replica $r$ produces a monotonically increasing time-stamp $t$, which it uses to install a new version for the key $\key$. 
-The version carries the value received, and the context received as its set of dependencies: 
-the version being written depends on any other version previously observed by the client $\cl$. 
-The time-stamp $t$ is sent back to the client, which will incorporate the pair $(\key, t)$ in its local context: 
+Upon receiving the message, $r$ produces a monotonically increasing time-stamp $t$, which it uses to install a new version $\ver = (\val, t, ctx)$ for the key $\key$. 
+Note that the dependency set of $\ver$ is the context $cxt$ of the client: 
+%The version carries the value received, and the context received as its set of dependencies: 
+it depends on other versions previously observed by the client $\cl$. 
+Replica $r$ then sends the time-stamp $t$ back to the client, which will incorporate the pair $(\key, t)$ in its local context: 
 the client observes the write it performed. Finally, replica $r$ propagates the version written to other replicas asynchronously, 
 using \emph{causal delivery}: when replica $r'$ receives a version $\ver$ from some replica $\ver$, it 
-will wait to commit all its depencies to its local state, before committing $\ver$ itself. This property ensures that the set of versions 
-contained in the local state of a replica $r$ is closed with respect to causal dependencies.
+will wait to commit all its dependencies to its local state, before committing $\ver$ itself: 
+%This property ensures that 
+the set of versions contained in the local state of each replica is closed with respect to causal dependencies.
 %A COPS client interacts with a single replica at a time via COPS API,
 %either single-write or multiple-read transactions.
 %Replicas \( \repl \) store all versions that has been received from clients, or other replicas via synchronisation.
@@ -324,20 +326,23 @@ are re-fetched, but only those that are really needed to recover a causally cons
 %\]
 
 To prove that COPS satisfies causal consistency, we encode the state of the system 
-(comprising the state of each replica and client) into a configuration in the kv-store framework.
+(comprising the state of all replicas and clients) into a configuration in the kv-store framework.
 Each replica stores a set of versions for each key in COPS, as well as the dependencies of 
-such replicas, thus we can project the state of all replicas in COPS into a kv-store. 
-A (COPS) version stored in some replica corresponds to a version of the kv-store: 
-the transaction identifier of such a version is uniquely determined by the time-stamp of the corresponding COPS version, and 
-by the identifier of the client that wrote such a version. The set of reading transactions  of the kv-store version 
+such replicas. We can project the state of all replicas in COPS into a kv-store, 
+by mapping  (COPS) versions stored in replicas into versions of the kv-store: 
+the transaction identifier of a mapped version is uniquely determined by the time-stamp of the corresponding COPS version, and 
+by the identifier of the client that wrote the version. The set of reading transactions of the mapped version 
 can be recovered from the time-stamps in the dependency set of the corresponding COPS version. 
 % Furthermore, the 
-The local context of a (COPS) client identifies a set of dependencies, which are mapped into a set of (kv-store) versions 
-in the kv-store built from the state of COPS replicas: the local context of a client determines a view over the kv-store.
+The local context of a (COPS) client identifies the set of (COPS) versions that the client sees: 
+their mapping into kv-store versions determines a view of the client over the 
+kv-store encoded from the state of COPS replicas.
+%a set of dependencies, which are mapped into a set of (kv-store) versions 
+%in the kv-store built from the state of COPS replicas: the local context of a client determines a view over the kv-store.
 
-Having encoded client-replica states in COPS into configurations, we map  
-the execution of a transaction in COPS into an $\ET_{\CC}$ reduction between the encodings of the 
-COPS states before and after executing the transaction.
+%Having encoded client-replica states in COPS into configurations, 
+Next, we map  the execution of a transaction in COPS into an $\ET_{\CC}$ reduction between the configurations 
+obtained by encoding the COPS system states before and after executing the transaction, respectively.
 In contrast with other verification techniques \cite{framework-concur,seebelieve} that require examining the whole sequence of operations 
 of a protocol to that it implements a consistency model, we only need to look at how the system evolves 
 when a single transaction is executed. As for the COPS protocol, we observe 
