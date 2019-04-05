@@ -1027,35 +1027,45 @@ Kv-stores and execution tests seem to be useful for  investigating new
 consistency models.  
 One example is the consistency model induced by 
 $\ET_{\CP} \cap \ET_{\UA}$, which we call \emph{Weak Snapshot Isolation} ($\WSI$). 
-To justify this consistency model in full, it would be useful to look at its implementations.
+To justify this consistency model in full, it would be useful to look at its implementations. 
+In this paper we focus on what would be the benefits of implementing $\WSI$.
 %Here I stoP!
 Because $\WSI$ is stronger than $\CP$ and $\UA$ by definition, 
-it forbids all the  anomalies forbidden by these consistency models,  
-such as the long fork (\cref{fig:cp-disallowed}) and the lost update (\cref{fig:ua-disallowed}). 
-However, $\WSI$ is weaker than SI, meaning that it allows any of the anomalies 
+it forbids all the  anomalies forbidden by these consistency models, e.g. 
+the long fork (\cref{fig:cp-disallowed}) and the lost update (\cref{fig:ua-disallowed}). 
+$\WSI$ is also weaker than SI: it allows any of the anomalies 
 of $\SI$ such as the write skew (\cref{fig:ser-disallowed}). The inclusion between $\WSI$ 
 and $\SI$ is strict, with the kv-store from \cref{fig:si-disallowed}  allowed 
-in $\WSI$ but  not in  SI. If we use the execution test $\ET_{\CP} \cap \ET_{\UA}$, then 
-%On the other hand, the inclusion 
-%$\ET_{\CP} \cap \ET_{\UA} \subseteq \ET_{\SI}$ is strict. The kv-store from  
-%\cref{fig:si-disallowed} is allowed by $\ET_{\CP} \cap \ET_{\UA}$: 
-this kv-store can be obtained by executing  
-transaction $\txid_{1}$ using the initial view $[\key_1 \mapsto \{0\}, \key_2 \mapsto \{0\}]$, 
-transaction $\txid_{2}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0\}]$ 
-transaction $\txid_{3}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0,1\}]$, 
-and transaction $\txid_{4}$ using the view $[\key_1 \mapsto \{0\}, \key_2 \mapsto \{0,1\}]$. 
-However, transaction $\txid_{4}$ cannot be executed using this same view when we use $\ET_{\SI}$. 
-Because $\txid_{4}$ reads the version of $\key_2$ written by $\txid_3$, 
-any valid view $\vi$ used to commit $\txid_{4}$ under $\ET_{\SI}$ must include the version written by 
-$\txid_{3}$. Since $\txid_{2} \xrightarrow{\RW_{\mkvs}} \txid_{3}$ (because $\txid_{2}$ reads a staler 
-version $\key_2$ than the one written by $\txid_{3}$) and $\txid_{1} \xrightarrow{\WW} \txid_{2}$ 
-(because $\txid_{2}$ installs a newer version of $\key_{1}$ than the one written by $\txid_{1})$, 
-then the view $\vi$ should contain the version of $\key_{1}$ written by $\txid_{1}$, contradicting 
-the fact that $\txid_{4}$ reads the initial version of $\key_1$.
+in $\WSI$ but  not in  SI. 
+Consider the kv-store in $\mkvs$ \cref{fig:si-disallowed}. We can 
+construct a $(\ET_{\CP} \cap \ET_{\UA})$-trace terminating in $(\mkvs, \_)$ by 
+executing transactions $\txid_{1}, \txid_{2}, \txid_{3}$ and $\txid_{4}$ in this order. 
+In particular, $\txid_{4}$ is executed using the view $\vi = [\key_{1} \mapsto \{0\}, \key_{2} \mapsto \{0,1\}]$. 
+However, the same trace is not a valid $\ET_{\SI}$-trace. 
+terminating in such a kv-store. 
+%If we use the execution test $\ET_{\CP} \cap \ET_{\UA}$, then 
+%%On the other hand, the inclusion 
+%%$\ET_{\CP} \cap \ET_{\UA} \subseteq \ET_{\SI}$ is strict. The kv-store from  
+%%\cref{fig:si-disallowed} is allowed by $\ET_{\CP} \cap \ET_{\UA}$: 
+%this kv-store can be obtained by executing  
+%transaction $\txid_{1}$ using the initial view $[\key_1 \mapsto \{0\}, \key_2 \mapsto \{0\}]$, 
+%transaction $\txid_{2}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0\}]$ 
+%transaction $\txid_{3}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0,1\}]$, 
+%and transaction $\txid_{4}$ using the view $[\key_1 \mapsto \{0\}, \key_2 \mapsto \{0,1\}]$. 
+Under $\ET_{\SI}$, transaction $\txid_{4}$ cannot be executed using the view $\vi$: 
+$\txid_{4}$ reads the version of $\key_2$ written by $\txid_3$, 
+meaning that $\vi$ must include the version written by 
+$\txid_{3}$. Since $\txid_{2} \xrightarrow{\RW_{\mkvs}} \txid_{3}$
+%(because $\txid_{2}$ reads a staler version $\key_2$ than the one written by $\txid_{3}$) 
+and $\txid_{1} \xrightarrow{\WW} \txid_{2}$ 
+%(because $\txid_{2}$ installs a newer version of $\key_{1}$ than the one written by $\txid_{1})$, 
+then the view $\vi$ should contain the version of $\key_{1}$ written by $\txid_{1}$, 
+contradicting the fact that $\txid_{4}$ reads the initial version of $\key_1$.
 %We refer to the consistency model induced by $\ET_{\CP} \cap \ET_{\SI}$ as \emph{Weak Snapshot Isolation} ($\WSI$). 
-Because WSI is  weaker than SI, potential implementations of WSI might perform
-better than those  of \(\SI\). 
-Because of the similarity between these two consistency models, we believe that many applications that 
+We have shown that $\WSI$ is a weaker consistency model than $\SI$, which leads us to believe that $WSI$ would 
+outperform known implementations of $\SI$. The two consistency models are also very similar, 
+%Because of the similarity between these two consistency models, we believe that 
+many applications that 
 are correct under \(\SI\) would still be correctly under $\WSI$. We give an example of such an application in \cref{sec:program-analysis}.
 
 
