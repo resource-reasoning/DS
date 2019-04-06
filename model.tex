@@ -95,7 +95,7 @@ with different clients seeing
 different versions of the same key.
 We define \emph{views} to track the versions seen by clients. 
 
-\begin{definition}[Views and Configurations]
+\begin{definition}[Views]
 \label{def:view}
 \label{def:cuts}
 \label{def:views}
@@ -140,6 +140,8 @@ $\vi \in \Views(\mkvs) \defeq \Keys \to\pset{\Nat}$ such that for all $i, i', \k
 	\label{eq:view.atomic}
 \end{align*}
 }%
+The constraint \eqref{eq:view.atomic} in \eqref{def:views} models 
+the fact that clients can see either all or none of the updates of a transaction.
 Given two views $\vi, \vi' \in \Views(\mkvs)$, 
 The order between them is defined by $\vi \viewleq \vi' \defiff \fora{\key \in \dom(\mkvs)} \vi(k) \subseteq \vi'(\key)$.
 The set of views is defined by $\Views \defeq \bigcup_{\mkvs \in \MKVSs} \Views(\mkvs)$.
@@ -156,20 +158,22 @@ all $\key \in \Keys$ and an initial value \( \val_0 \).
 %
 \sx{split the configuration definition ?}
 %
-Given a configuration $(\mkvs, \vienv)$ and a client $\cl$
+Given a configuration $(\mkvs, \vienv)$ and a client $\cl$, 
 %when the view of client 
 %$\cl$ is defined, that is, there exists $\vi = \vienv(\cl)$ such that for each key $\key \in \Keys$, 
 %$\vi$ determines the sublist of versions in $\mkvs$ that client $\cl$ sees. 
 if $\vi = \vienv(\cl)$ is defined, it determines the sub-list of versions in $\mkvs$ that $\cl$ sees.
-If $i,j \in \vi(\key)$ and $i < j$, then $\cl$ knows about the values 
+If $i,j \in \vi(\key)$ and $i < j$, then $\cl$ sees the values 
 carried by versions $\mkvs(\key, i)$ and  $\mkvs(\key, j)$, 
-and  knows that these versions are contained in $\mkvs$ with $\mkvs(\key, j)$ more 
+and it also see that in $\mkvs$ the version 
+%these versions are contained in $\mkvs$ with 
+$\mkvs(\key, j)$ is more 
 up-to-date than $\mkvs(\key, i)$. 
 %Given a configuration $(\mkvs, \vienv)$ and a client $\cl$ such that $\vienv(\cl)$ is
 %defined, 
 It is therefore possible to associate the view $\vienv(\cl)$ with a \emph{snapshot}, 
 %of theview $\vienv(\cl)$, 
-which identifies the last write of a client view. 
+which identifies, for each key $\key$, the last write of a client view. 
 This definition assumes that the database satisfies the \emph{last write wins}
 resolution policy, employed by many distributed kv-stores,  
 %adopt this policy~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}, 
@@ -237,7 +241,7 @@ Sequential commands comprise $\pskip$, primitive commands $\cmdpri
 $, atomic transactions
 $\ptrans{\trans}$, and the standard
 compound commands:
-sequential composition \( ; \), non-deterministic choice \( + \) and iteration \( * \).
+sequential composition \( ;  \)\;, non-deterministic choice \( + \) and iteration \( * \).
 Primitive commands (the variable assignment
 $\passign{\var}{\expr}$ and the assume statement $\passume{\expr}$
 used to encode conditionals) are used for computations based on 
@@ -305,7 +309,7 @@ A \emph{transactional state}, \( \sn \in \Snapshots \defeq \Keys \to
 
 
 To capture the effects of executing a transaction $\trans$ on a snapshot $\ss$ of kv-store $\mkvs$, 
-we identify the \emph{fingerprint} of $\trans$ on $\ss$.
+we identify the \emph{fingerprint} of $\trans$ on $\sn$.
 A fingerprint of $\trans$ on $\ss$ and $\mkvs$
 is a set of \emph{read} and \emph{write operations}, which 
 %the read operations 
@@ -329,10 +333,10 @@ $\fora{\key \in \Keys, l  \in \Set{\otR, \otW}}
 %The last constraint ensure that for each key, 
 According to \cref{def:fingerprint}, a fingerprint contains at most one read operation and at most one write operation. 
 This reflects the fact that we work with transactions with 
-atomic visibility~\cite{framework-concur}: reads are taken from a single snapshot of the kv-store, 
+atomic visibility: reads are taken from a single snapshot of the kv-store, 
 and 
 %since clients see either none or all the writes of a transaction, only the last write to each key is 
-and only the last write of a transaction to each key is committed to the kv-store.
+only the last write of a transaction to each key is committed to the kv-store.
 \begin{figure*}[!t]
 \begin{center}
 \scalebox{.9}{%
@@ -469,7 +473,7 @@ The  empty operation $\emptyop$ is used for those primitive commands that do not
 contribute to the fingerprint.
 \end{definition}
 The conclusion of Rule \( \rl{TPrimitive}\) includes the operation 
-$o$ obtained by executing the command $\transpri$ into the fingerprint $\fp$
+$o$, obtained by executing the command $\transpri$, into the fingerprint $\fp$
 of transactions. It does so via a \emph{combination operator} $\addO: 
 \pset{\Ops} \times \Ops \uplus \Set{\emptyop} \to \pset{\Ops}$, defined formally 
 in \cref{fig:semantics-trans}. The operation $\fp \addO \_$ adds to the fingerprint $\fp$ 
@@ -764,7 +768,7 @@ states that the current view $\vi$ of the executing command may be advanced to a
 %This corresponds to the client receiving new updates.
 Given the new view $\vi''$, the transaction obtains a snapshot $\ss$ of the kv-store $\mkvs$, 
 and executes $\trans$ locally to completion ($\pskip$), updating the stack to $\stk'$, while accumulating the fingerprint $\fp$; 
-this is modelled in the second and third premises of Rule \rl{CAtomicTrans}
+this is modelled in the second and third premises of Rule \rl{CAtomicTrans}.
 Note that the resulting snapshot is ignored 
 %(denoted by $\stub$) 
 as the effect of the transaction is recorded in the fingerprint $\fp$. 
@@ -773,13 +777,13 @@ as the effect of the transaction is recorded in the fingerprint $\fp$.
 %%The \( \rl{CAtomicTrans} \) rule
 %Rule \(\rl{CAtomincTrans} \) models a client $\cl$ with view $\vi$ committing a transaction 
 %with fingerprint $\fp$ in $\mkvs$. 
-The effect of client $\cl$ committing a transaction with final fingerprint $\fp$ result 
+The effect of client $\cl$ committing a transaction with final fingerprint $\fp$ results 
 in the kv-store $\mkvs'$ and a new view $\vi'$ for the client $\cl$, which are determined via 
 the following process: 
 %in an new kv-store $\mkvs'$ and a view $\vi'$ for the client $\cl$ via the following process:  
 \begin{enumerate*}
 \item pick a fresh transaction identifier $\txid \in \nextTxid[\cl, \mkvs]$ 
-and computes the new kv-store via $\mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid]$; these 
+and compute the new kv-store via $\mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid]$; these 
 two steps are modelled in the fourth and fifth premises of Rule \rl{CAtomicTrans};  the definitions of the functions $\nextTxid$ 
 and $\updateKV$ are given below, 
 \item check if the transition from \( (\mkvs, \vi'') \)  to 
