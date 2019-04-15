@@ -5,73 +5,166 @@ often use weak transactional consistency guarantees.
 Much work has been done to formalise the semantics of such consistency guarantees, both
 declaratively and operationally.
 On the declarative side, several \emph{general} formalisms have been proposed, 
-such as dependency graphs~\cite{adya} and abstract executions~\cite{framework-concur}, to provide a unified
+such as dependency graphs~\cite{adya} and abstract executions~\cite{ev_transactions}, to provide a unified
 semantics for formulating different consistency models.  
 On the operational side, the semantics of \emph{specific} consistency models have
 been captured using reference implementations~\cite{si,PSI,PSI-RA}. 
 However, unlike declarative approaches, there has been
 little work on \emph{general} operational semantics for describing a range
-of consistency models, and no work on a general operational semantics
-in which to both verify protocols of distributed databases and 
-enable program analysis for clients.
+of consistency models.
 
-As discussed in \cref{sec:conclusions}, there are several formalisms for a general operational semantics~\cite{sureshConcur,alonetogether,seebelieve}. 
-\citeauthor{alonetogether} \cite{alonetogether} propose an operational
-semantics over a global, centralised store  for reasoning about clients using a program logic. 
-However, although they can model several isolation levels, they cannot
-capture the well-known consistency model called 
-parallel snapshot isolation (\PSI). 
-Moreover, they do not establish the equivalence of their definitions
-of consistency model
-with existing declarative definitions in the literature. 
-\citeauthor{sureshConcur} \cite{sureshConcur} propose an operational semantics over declarative abstract executions, rather than a concrete centralised store. This semantics captures weaker consistency models
-such as \(\PSI\) and has been used to prove robustness results against
-a given consistency model.  
-However, this semantics cannot model client sessions.
-Finally, \citeauthor{seebelieve} \cite{seebelieve} provide a trace semantics over a global
-centralised store,  not an operational semantics. 
-They focus on proving implementations correct. They do not consider program analysis for clients;
-indeed we believe it would be difficult  given their choice to
-keep track of the entire system.
+%There has been some work on general operational semantics, summarised
+Let us summarise briefly the existing work on general operational semantics, 
+which we  
+%here and 
+discuss further in \cref{sec:conclusions}.
+%~\cite{sureshConcur,alonetogether,seebelieve}. 
+%\citeauthor{alonetogether} 
+\cite{alonetogether} propose an operational
+semantics for describing the behaviour of  atomic transactions
+accessing a global, centralised store 
+in order to develop 
+a program logic  for reasoning about client programs. They capture 
+ several consistency models, although not some of the  weaker ones
+ such as parallel snapshot isolation (\PSI)  \cite{PSI}
+ which are important 
+for distributed data-stores.
+%Moreover, they do not establish the equivalence of their definitions
+%of consistency model
+%with existing declarative definitions in the literature. 
+%\citeauthor{sureshConcur} 
+\cite{sureshConcur} propose an operational semantics over abstract
+execution graphs, rather than   a concrete centralised store, in order to
+prove the robustness of applications against
+a given consistency model. They are able to 
+capture weaker consistency models
+such as \(\PSI\). However, although they focus on consistency models with atomic 
+visibility\footnote{\emph{Atomic visibility} means that a transaction 
+reads from an atomic snapshot of the database, and commits atomically.},
+%\footnote{\emph{Atomic visibility} means that a transaction 
+%observes either all or none the updates of another transaction.},
+their semantics allows for the fine-grained interleaving of operations in different
+transactions. We believe that this results  in an unnecessarily complicated semantics.
+%However, this semantics cannot model client sessions.
+\cite{seebelieve} provide a trace semantics over a global
+centralised store, where the behaviour of clients is formalised by the   
+observations they make on the totally-ordered history of states. 
+They 
+%show  that implementations are correct  with respect to the
+%appropriate 
+%consistency model, and 
+demonstrate  the equivalence of several
+implementation-specific definitions of
+consistency model  in the literature. 
+%but it does little towards proving the correctness of protocols employed by distributed databases. 
+However, the usefulness  of their approach for analysing client programs is not clear, 
+%program analysis for clients; in particular, we believe that in their framework the latter task would be 
+%difficult,
+since observations made by their clients  involve information that is not generally 
+available to real-world clients,  such as the total order in which transactions commit.
+%or to p
+%They focus on proving implementations correct. They do not consider program analysis for clients;
+%indeed we believe it would be difficult  given their choice to
+%keep track of the entire system.
+In summary, there has been no work on a general operational semantics 
+for both verifying protocols of distributed databases and 
+analysing  client programs. 
 
-We introduce a general operational semantics for describing the
-user-observable behaviour of distributed {atomic} transactions
-(\cref{sec:overview}, \cref{sec:model}). 
-Our model comprises a global, centralised
-key-value store (kv-store) with {\em multi-versioning},  and
-{\em client views}
-inspired by the C11 operational semantics
-in~\cite{promises}; 
-using these mechanisms,
-we record all the versions written for each key, and  let clients see only a subset 
-of such versions.
-Our  operational semantics  is parametric in the notion of {\em
-  execution test},  determining if a client with a given view is
-allowed to commit a transaction. Different execution tests give rise
-to different consistency models in our semantics. 
-  We  are able to capture  most of the  well-known consistency models in a uniform way (\cref{sec:cm}): e.g.,  causal consistency (\CC), \PSI, snapshot isolation (\SI) and serialisability (\SER). 
-We define these models using kv-stores and views, 
-provide a correspondence between our kv-stores and dependency graphs, 
-and introduce novel proof techniques for demonstrating that our
-definitions of consistency models 
-are equivalent to existing declarative definitions (\cref{sec:other_formalisms}).
+
+In this paper, we introduce a general operational semantics for describing the
+client-observable behaviour of distributed {atomic} transactions
+(\cref{sec:overview}, \cref{sec:model}), while successfully abstracting from the 
+internal details of protocols of geo-replicated and partitioned
+databases. In our semantics, 
+transactions execute atomically, preventing  fine-grained interleaving of the  
+operations they perform. This makes it feasible 
+both to verify that a distributed protocol correctly
+implements a consistency model and 
+to  analyse client applications.
+Our semantics comprises a global, centralised key-value store (kv-store)
+with {\em multi-versioning}, which records all the versions of a key,
+and partial {\em client views}, which let clients see only a subset of
+the versions,  and is inspired by the views in the  C11 operational semantics
+in~\cite{promises}. 
+Like \cite{seebelieve}, our operational semantics is parametric in the notion of execution test, which determines if a client with a given view is allowed to commit a transaction. Just as with standard operational semantics, our  next transaction step is determined by the current kv-store and client view. This is contrast with Crook's trace semantics, where the next step requires an analysis of the whole trace.
+%   if a client with a given view is
+%allowed to commit a transaction. Unlike \cite{seebelieve},
+%our execution tests rely on a partial client view rather than the
+%client requiring complete 
+%knowledge of the state history. 
+%Different execution tests give rise
+%to different consistency models in our semantics. In contrast with \cite{seebelieve}, 
+%we restrict observations of clients  to the current state of the system: this leads to 
+%execution tests being a more faithful abstraction of the behaviour of real distributed databases protocols.
+We  capture  most of the well-known consistency models in
+a uniform way (\cref{sec:cm}): e.g,  causal consistency (\CC) \cite{cops}, \PSI,
+snapshot isolation (\SI) \cite{fekete-tods} and serialisability (\SER), and also identify 
+a new one that sits in-between \PSI\; and \SI\; and retains good properties of both. Since we focus on
+atomic visibility,  we are not able to capture popular 
+  consistency models such as \emph{read committed}. 
+Because our focus is on protocols and applications employed  by distributed databases, 
+  most of which  guarantee atomic visibility, we do not find this constraint to be a severe
+  limitation.
+%We define these models using kv-stores and views, 
+%provide a correspondence between our kv-stores and dependency graphs, 
+%We introduce novel proof techniques for demonstrating that our
+%definitions of consistency models 
+%are equivalent to existing declarative definitions (\cref{sec:other_formalisms}).
 %
 
-We showcase  our semantics by verifying database protocols and
-analysing client programs  (\cref{sec:applications}). 
-For the former, we show that the COPS protocol of a 
-replicated database satisfies our definition of $\CC$ and that the Clock-SI protocol of a partitioned database satisfies our definition of $\SI$.  
-For the later, we show the robustness of applications against our consistency models: 
-we prove that a transactional library comprising a single counter is robust against $\PSI$; 
-and  that the library with multiple counters is robust against $\SI$, but not $\PSI$.  
-To our knowledge, our robustness results are the first to take into account client sessions.
-Without sessions, multiple counters can be proved to be robust against \(\PSI\) using 
-the static analysis check from \cite{giovanni_concur16}. 
-We verify protocols and analyse clients in the \emph{same} operational
-semantics. 
-By contrast, in existing declarative literature these two tasks are carried out in \emph{different} semantics: protocols are verified using abstract executions;
-clients are analysed using dependency graphs; and equivalence results are used to move between the two.
+We believe it is crucial to link our definitions of consistency model for
+kv-stores to definitions of consistency model given in the
+literature. 
+This has not been done in \cite{alonetogether} but has been done in
+\cite{seebelieve}. 
+We  provide (Section \ref{sec:other_formalisms} and appendix) a general proof technique for proving the correspondence between 
+our  execution tests and the axiomatic specifications of consistency
+models using abstract executions.  Using
+this technique, we 
+%are able to 
+demonstrate 
+that our consistency models are equivalent to the  declarative definitions of
+consistency model  for
+abstract executions~\cite{framework-concur}, and hence for  dependency
+graphs~\cite{adya,laws}. 
 
+
+
+
+
+
+
+With our operational semantics, we are able to verify protocols of
+distributed databases and analyse client programs. By contrast, in
+existing literature,  these two tasks are carried out in
+\emph{different} semantics: for example, protocols are verified using
+abstract execution graphs~\cite{repldatatypes,framework-concur}; clients are analysed using dependency
+graphs~\cite{fekete-tods,SIanalysis,giovanni_concur16,psi-chopping,sureshConcur}; and equivalence results are used to move between
+the two~\cite{laws}. Using our semantics, we establish the correctness of two database protocols: 
+the COPS protocol for the fully replicated kv-stores~\cite{cops}  
+which 
+satisfies CC;  and the Clock-SI   protocol for
+partitioned kv-stores~\cite{clocksi}  which satisfies SI.  We are also
+able to  
+establish the robustness of simple client applications: in 
+particular, we prove the robustness of a single counter against \PSI,
+and the robustness of multiple counters against  \SI\;
+(\cref{sec:applications}). 
+%
+%For the former, we show that the COPS protocol of a 
+%replicated database satisfies our definition of $\CC$ and that the Clock-SI protocol of a partitioned database satisfies our definition of $\SI$.  
+%For the latter, we show the robustness of applications against our consistency models: 
+%we prove that a transactional library comprising a single counter is robust against $\PSI$; 
+%and  that the library with multiple counters is robust against $\SI$,
+%but not $\PSI$. 
+To our knowledge, our robustness results are the first to take into account client sessions.
+Interestingly, with sessions we show that  
+multiple counters are not
+robust against \(\PSI\),
+whereas without sessions it can be shown that 
+multiple counters are  robust against \(\PSI\) using 
+static-analysis techniques from \cite{giovanni_concur16}. 
+%
 %\mypar{Outline}
 %The remainder of this article is organised as follows.
 %In \cref{sec:overview} we give an intuitive overview of our ideas. 
@@ -80,4 +173,4 @@ clients are analysed using dependency graphs; and equivalence results are used t
 %In \cref{sec:other_formalisms} we relate our formalism to existing declarative formalisms.
 %In \cref{sec:applications} we showcase the applications of our semantics.  
 %In \cref{sec:conclusions} we discuss related work and conclude. 
-
+%
