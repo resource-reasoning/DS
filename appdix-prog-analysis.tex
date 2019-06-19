@@ -708,3 +708,73 @@ This contradicts Proposition \ref{prop:si_cycles}.
 %\txid'' \toEDGE{PO} \txid' \land i < j \implies p \leq q \label{eq:si_counter_crossRD}
 %\end{align}
 %\end{proposition}
+
+\section{Robust against \WSI}
+\begin{definition}
+    \label{def:wsi-safe}
+    A key-value store \( \mkvs \) is \WSI safe if \( \mkvs \) is 
+    reachable from executing an program \( \prog \) from an initial configuration \( \conf_0 \),
+    and \( \mkvs \) satisfies the following:
+    \begin{itemize}
+        \item \( \fora{\key, \key',i,j} \txid \neq \wtOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key',j)] \)
+        \item \( \fora{\key,i} \exists{j} \txid = \wtOf[\mkvs(\key,i)] \implies \txid \in \rsOf[\mkvs(\key,j)] \)
+        \item \( \fora{\key,\key',i, j} \exists{k} \txid = \wtOf[\mkvs(\key,i)] \land \txid \in \rsOf[\mkvs(\key',j)] 
+            \implies \txid = \rsOf[\mkvs(\key',k)] \)
+    \end{itemize}
+\end{definition}
+
+
+\begin{theorem}
+    If a key-value store \( \mkvs \) is \WSI safe, it is robust against \WSI.
+\end{theorem}
+\begin{proof}
+    Assume a kv-store \( \mkvs \) that is \WSI safe.
+    Given \cref{def:wsi-safe} that \( \mkvs \) must satisfy \WSI, we can easily derive the following properties:
+    \begin{align}
+        & \fora{\txid, \txid'} \txid \toEDGE{\WR \cup \SO \cup \WW}  \txid' \implies \txid \neq \txid' \label{equ:acyclic-wsi}\\
+        & \fora{\key,i,j} \txid = \wtOf[\mkvs(\key,i)] \land \txid \in \rsOf[\mkvs(\key,j)] \implies i = j + 1 \label{equ:wsi-sat-ua} 
+    \end{align}
+    We now prove that for any transactions \( \txid, \txid'\)
+    \[
+        \txid \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)^*} \txid' \implies \txid \neq \txid'
+    \]
+    We prove that by contradiction.
+    Let assume \( \txid = \txid' \).
+    This means there exists \( \txid_1 \) to \( \txid_n \)  such that
+    \[
+        \txid = \txid_1 \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)} \txid_2 
+        \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)} \cdots \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)} \txid_n  = \txid'
+    \]
+    Without losing generality, we assume all the intermediate transactions are distinct, \( \txid_i \neq \txid_{i+1}\) for \( 2 \leq i \leq n-2 \).
+\end{proof}
+
+\begin{lemma}
+    If a key-value store \( \mkvs \) is \WSI safe, then for any transactions \( \txid, \txid' \)
+    \[
+        \txid \toEDGE{\WW} \txid' \implies \txid \toEDGE{(\WR)^*} \txid' 
+    \]
+\end{lemma}
+\begin{proof}
+    Assume a kv-store \( \mkvs \).
+    Assume a key \( \key \) and two versions of it, \( i \) and \( j \) respectively with \( i< j\).
+    Assume \(\txid = \wtOf[\mkvs(\key, i)] \) and \( \txid' = \wtOf[\mkvs(\key, j)] \).
+    We prove\( \txid \toEDGE{(\WR)^*} \txid' \) by induction on the distance of the two versions.
+    \caseB{ \(j - i = 1\) }
+    By the \cref{def:wsi-safe}, \( \txid' \) must also read the key \( \key \),
+    that is, \( \txid' \in \rsOf[\mkvs(\key,z)]\) for some \( z \).
+    Because the \( \mkvs \) is reachable under \( \WSI \) and therefore \( \UA \),
+    this means if \( \txid' \) read and writes key \( \key \), 
+    it must read the immediate previous version with respect to the version it wrote.
+    This means \( z = i\) and then \( \txid \toEDGE{\WR} \txid' \).
+    \caseI{\(j - i > 1\)}
+    By the \cref{def:wsi-safe}, \( \txid' \) must also read the key \( \key \),
+    that is, \( \txid' \in \rsOf[\mkvs(\key,z)]\) for some \( z \).
+    Because the \( \mkvs \) is reachable under \( \WSI \) and therefore \( \UA \),
+    this means if \( \txid' \) read and writes key \( \key \), 
+    it must read the immediate previous version with respect to the version it wrote.
+    This means \( z = j - 1\).
+    Assume the writer of the \(z\)-th version is \( \txid'' = \wtOf[\mkvs(\key, j-1)]\).
+    We have \( \txid'' \toEDGE{\WR} \txid' \).
+    Applying \ih,  we get \( \txid \toEDGE{(\WR)^*} \txid'' \).
+    Thus we have \( \txid \toEDGE{(\WR)^*} \txid' \).
+\end{proof}
