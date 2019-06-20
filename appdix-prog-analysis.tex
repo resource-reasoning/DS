@@ -716,7 +716,7 @@ This contradicts Proposition \ref{prop:si_cycles}.
     reachable from executing an program \( \prog \) from an initial configuration \( \conf_0 \),
     and \( \mkvs \) satisfies the following:
     \begin{itemize}
-        \item \( \fora{\key, \key',i,j} \txid \neq \wtOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key',j)] \)
+        \item \( \fora{\key, \key',i,j,k} ( \txid \in \rsOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key,i)] ) \implies \txid \neq \wtOf[\mkvs(\key',k)] \)
         \item \( \fora{\key,i} \exists{j} \txid = \wtOf[\mkvs(\key,i)] \implies \txid \in \rsOf[\mkvs(\key,j)] \)
         \item \( \fora{\key,\key',i, j} \exists{k} \txid = \wtOf[\mkvs(\key,i)] \land \txid \in \rsOf[\mkvs(\key',j)] 
             \implies \txid = \rsOf[\mkvs(\key',k)] \)
@@ -734,21 +734,72 @@ This contradicts Proposition \ref{prop:si_cycles}.
         & \fora{\txid, \txid'} \txid \toEDGE{\WR \cup \SO \cup \WW}  \txid' \implies \txid \neq \txid' \label{equ:acyclic-wsi}\\
         & \fora{\key,i,j} \txid = \wtOf[\mkvs(\key,i)] \land \txid \in \rsOf[\mkvs(\key,j)] \implies i = j + 1 \label{equ:wsi-sat-ua} 
     \end{align}
-    We now prove that for any transactions \( \txid, \txid'\)
+    We now prove that for any transactions \( \txid, \txid'\), the relation \( (\WW \cup \WR \cup \RW \cup \SO)^+ \) is irreflexive:
     \[
-        \txid \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)^*} \txid' \implies \txid \neq \txid'
+        \txid \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)^+} \txid' \implies \txid \neq \txid'
     \]
     We prove that by contradiction.
     Let assume \( \txid = \txid' \).
-    This means there exists \( \txid_1 \) to \( \txid_n \)  such that
+    By \cref{equ:acyclic-wsi}, it must be the case that the cycle contains \( \RW \), 
+    which means there exists \( \txid_1 \) to \( \txid_n \)  such that
     \[
-        \txid = \txid_1 \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)} \txid_2 
-        \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)} \cdots \toEDGE{(\WW \cup \WR \cup \RW \cup \SO)} \txid_n  = \txid'
+        \txid = \txid_1 \toEDGE{\rel^*} \txid_2 \toEDGE{\RW} \txid_3 \toEDGE{\rel^*} \cdot \toEDGE{\rel^*} \txid_{n-2} \toEDGE{\RW} \txid_{n-1} \toEDGE{\rel^*}  \txid_n = \txid' 
     \]
-    Without losing generality, we assume all the intermediate transactions are distinct, \( \txid_i \neq \txid_{i+1}\) for \( 2 \leq i \leq n-2 \).
+    where \( \rel  = \WR \cup \SO \cup \WW \).
+    We replace some edges from the cycle.
+    \begin{itemize}
+        \item First, let consider transactions \( \txid_i \) such that \( \txid_i \toEDGE{\RW} \txid_{i+1}\).
+    This means \( \txid_i \in \rsOf[ \mkvs(\key, x ) ]\) 
+    and \( \txid_{i+1} = \wtOf[ \mkvs(\key, y ) ] \) for some key \( \key \) and two indexes \( x,y \) such that \( x < y \).
+    There are two possible cases depending on if \( \txid_i\) wrote the key \( \key \).
+        \begin{itemize}
+            \item if \( \txid_i \) also wrote any key \( \key' \), 
+                by \cref{lem:wsi-rw-to-ww}, it also wrote the key \( \key \) 
+                and we can replace the edge with a \( \WW \) edge, that is \( \txid_i \toEDGE{\WW} \txid_{i+1}\).
+            \item if \( \txid_i \) did not wrote any key, we leave the edge the same as before.
+        \end{itemize}
+        After the first step, any \( \RW \) edge in the cycle must start from a read only transaction.
+        \begin{centermultline}[equ:wsi-rw-start-read-only]
+            \txid_i \toEDGE{\RW} \txid_{i+1} \implies \fora{\key,i} \txid \neq \wtOf[\mkvs(\key,i)]
+        \end{centermultline}
+    \item Second, let now consider transactions \( \txid_i \) such that \( \cdots \toEDGE{\RW} \txid_i \toEDGE{\rel^*} \txid_{i+1} \toEDGE{\RW} \cdots \).  
+        Transaction \( \txid_i \) at least wrote a key but \( \txid_{i+1}\) is a read-only transaction,
+        thus \( \txid_i \neq \txid_{i+1}\).
+        This means \( \cdots \toEDGE{\RW} \txid_i \toEDGE{\rel^+} \txid_{i+1} \toEDGE{\RW} \cdots \).
+    \item Last, by \cref{lem:wsi-ww-to-wr} we replace all the \( \WW \) with \( \WR^* \).
+    \end{itemize}
+    Let \( \rel' = \WR \cup \SO\).
+    Now we have cycle in the following form:
+    \[
+        \txid = \txid'_1 \toEDGE{{\rel'}^*} \txid'_2 \toEDGE{\RW} \txid'_3 \toEDGE{{\rel'}^+} \cdot \toEDGE{{\rel'}^+} \txid'_{m-2} \toEDGE{\RW} \txid_{m-1} \toEDGE{{\rel'}^*}  \txid'_m = \txid' 
+    \]
+    for some transactions \( \txid'_1 \) to \( \txid'_m \) and \( m < n \).
+    This means \( \txid \toEDGE{((\WR \cup \SO ); \RW^?)^*} \txid' \).
+    Because \( \mkvs \) is reachable under \( \WSI \), it must the case that \( \txid \neq \txid' \),
+    which contradicts with the assumption.
+    Therefore, the relation \( (\WW \cup \WR \cup \RW \cup \SO)^+ \) is irreflexive.
 \end{proof}
 
 \begin{lemma}
+    \label{lem:wsi-rw-to-ww}
+    If a key-value store \( \mkvs \) is \WSI safe, then for any transactions \( \txid, \txid' \)
+    \[
+        \txid \toEDGE{\RW} \txid' \land \exsts{\key,i} \txid = \wtOf[\mkvs(\key,i)] \implies \txid \toEDGE{(\WW)} \txid' 
+    \]
+\end{lemma}
+\begin{proof}
+    Assume \( \txid \toEDGE{\RW} \txid' \), which means \( \txid  \in \rsOf[\mkvs(\key,i)]\)and \( \txid' = \wtOf[\mkvs(\key,j)]\)
+    for a key \( \key \) and two indexes \(i,j \) such that \( i < j \).
+    Assume the transactions \( \txid \) also wrote some key \( \key' \).
+    Since that \( \mkvs \) is \( \WSI \) safe, \( \txid \) also wrote key \( \key \),
+    \ie \( \txid  = \wtOf[\mkvs(\key,z)] \) for some index \(z \).
+    Because the \( \mkvs \) is reachable under \( \WSI \) and therefore \( \UA \), this means \( z = i + 1\).
+    Since that each version can only have one writer,
+    we have \( i < z = i + 1 < j\), therefore \( \txid \toEDGE{(\WW)} \txid' \).
+\end{proof}
+
+\begin{lemma}
+    \label{lem:wsi-ww-to-wr}
     If a key-value store \( \mkvs \) is \WSI safe, then for any transactions \( \txid, \txid' \)
     \[
         \txid \toEDGE{\WW} \txid' \implies \txid \toEDGE{(\WR)^*} \txid' 
