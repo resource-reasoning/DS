@@ -715,12 +715,11 @@ This contradicts Proposition \ref{prop:si_cycles}.
     A key-value store \( \mkvs \) is \WSI safe if \( \mkvs \) is 
     reachable from executing an program \( \prog \) from an initial configuration \( \conf_0 \),
     and \( \mkvs \) satisfies the following:
-    \begin{itemize}
-        \item \( \fora{\key, \key',i,j,k} ( \txid \in \rsOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key,i)] ) \implies \txid \neq \wtOf[\mkvs(\key',k)] \)
-        \item \( \fora{\key,i} \exists{j} \txid = \wtOf[\mkvs(\key,i)] \implies \txid \in \rsOf[\mkvs(\key,j)] \)
-        \item \( \fora{\key,\key',i, j} \exists{k} \txid = \wtOf[\mkvs(\key,i)] \land \txid \in \rsOf[\mkvs(\key',j)] 
-            \implies \txid = \rsOf[\mkvs(\key',k)] \)
-    \end{itemize}
+    \begin{align}
+         \fora{\key, \key',i,j,k} ( \txid \in \rsOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key,i)] ) \implies \txid \neq \wtOf[\mkvs(\key',k)] \label{equ:wsi-safe-read-only} \\
+         \fora{\key,i} \exists{j} \txid = \wtOf[\mkvs(\key,i)] \implies \txid \in \rsOf[\mkvs(\key,j)] \label{equ:wsi-safe-write-must-read} \\
+         \fora{\key,\key',i, j} \exists{k} \txid = \wtOf[\mkvs(\key,i)] \land \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',k)] \label{equ:wsi-safe-all-write}
+    \end{align}
 \end{definition}
 
 
@@ -829,3 +828,92 @@ This contradicts Proposition \ref{prop:si_cycles}.
     Applying \ih,  we get \( \txid \toEDGE{(\WR)^*} \txid'' \).
     Thus we have \( \txid \toEDGE{(\WR)^*} \txid' \).
 \end{proof}
+
+\subsection{Multi-counter}
+We define a multi-counter library on a set of keys \( \codeFont{\keyset} \) as the following:
+\[
+    \mathsf{Counters(\keyset)} \defeq \bigcup_{\codeFont{\key} \in \codeFont{\keyset} } \Counter(\key)
+\]
+It is easy to see a multi-counter libraries is \( \WSI \) safe, therefore robust under \( \WSI \).
+\begin{theorem}
+    Mulit-counter libraries \( \mathsf{Counters(\keyset)}  \) are \( \WSI \) safe.
+\end{theorem}
+\begin{proof}
+    Assume an initial configuration \( \conf_0 = (\mkvs_0, \vienv_0 \) 
+    and some \( \prog_0 \) where \( \dom[prog] = \dom[\vienv_0] \).
+    Under \( \WSI \), we prove any reachable kv-store \( \mkvs_i \) satisfies \cref{equ:wsi-safe-read-only,equ:wsi-safe-write-must-read,equ:wsi-safe-all-write} by induction on the length of trace.
+    \begin{itemize}
+        \item \caseB{\( i = 0\) } 
+            The formulae \cref{equ:wsi-safe-read-only,equ:wsi-safe-write-must-read,equ:wsi-safe-all-write} trivially hold given \( \mkvs_0 \) contains only the initial transaction \( \txid_0 \).
+        \item \caseI{\( i > 0 \)}
+            Let \( \conf_i = (\mkvs_i, \vienv_i)\) be the result of running \( \prog_0 \) for \( i \) steps.
+            We perform case analysis the for the next transaction \( \txid_{i+1} \).
+            \begin{itemize}
+                \item if \( \txid_{i+1}\) reads a key \( \pv{\key} \), \ie \ctrread(\pv{\key}),
+                    it must start from a view that is closed to the relation \( (  (\WW \cup \WR \cup \SO) \cup \WR;\RW \cup \SO;\RW )^* \).
+                    Let \( \mkvs_i(\pv{\key},j) = (\val, \txid', \txidset') \) be the latest version included in the view.
+                    Thus the new kv-store \( \mkvs_{i+1} = \mkvs_{i}\rmto{\pv{\key}}{\mkvs_i(\pv{\key})\rmto{j}{(\val, \txid', \txidset' \uplus \Set{\txid_{i+1}})}} \).
+                    Given \( \txid_{i+1} \) only read the key \( \pv{\key} \) without writing, \cref{equ:wsi-safe-read-only,equ:wsi-safe-all-write,equ:wsi-safe-write-must-read} trivially holds.
+                    For other transactions \( \txid \) that are different from \( \txid_{i+1} \), they must exist in \( \mkvs_i \).
+                    By \ih, then we prove that \( mkvs_{i+1} \) is \( \WSI \) safe.
+                \item if \( \txid_{i+1}\) increments a key \( \pv{\key} \), \ie \ctrinc(\pv{\key}),
+                    it means that all versions of \( \key \) must be included in the view.
+                    Let \( \mkvs_i(\pv{\key},j) = (\val, \txid', \txidset') \) be the latest version of key \( \pv{\key} \).
+                    Thus the new kv-store \( \mkvs_{i+1} = \mkvs_{i}\rmto{\pv{\key}}{( \mkvs_i(\pv{\key})\rmto{j}{(\val, \txid', \txidset' \uplus \Set{\txid_{i+1}})} ) \lcat (\val+1, \txid_{i+1}, \emptyset) } \).
+                    Given \( \txid_{i+1} \) only read and then rewrites the key \( \pv{\key} \), \cref{equ:wsi-safe-read-only,equ:wsi-safe-all-write,equ:wsi-safe-write-must-read} trivially holds.
+                    For other transactions \( \txid \) that are different from \( \txid_{i+1} \), they must exist in \( \mkvs_i \).
+                    By \ih, then we prove that \( mkvs_{i+1} \) is \( \WSI \) safe.
+            \end{itemize}
+    \end{itemize}
+\end{proof}
+
+\subsection{Bank}
+The bench program from \cite{}.
+\begin{align*}
+    n_c &\defeq 2 \times n \\
+    n_s &\defeq 2 \times n + 1  \\
+    \Keys &\defeq \bigcup_{n \in \Nat} \Set{n_c, n_s}
+\end{align*}
+\begin{align*}
+    \codeFont{balance(n)} & \defeq
+    \begin{transaction}
+    \plookup{\pv{x}}{\pv{n}_c}; \ 
+    \plookup{\pv{y}}{\pv{n}_s}; \ 
+    \passign{\ret}{\pv{x}+\pv{y}}
+    \end{transaction} \\
+    \codeFont{depositChecking(n,v)} & \defeq
+    \begin{transaction}
+    \pifs{\pv{v} \geq 0} \ 
+    \plookup{\pv{x}}{\pv{n}_c}; \ 
+    \pmutate{\pv{n}_c}{\pv{x} + \pv{v}}; \ 
+    \pife
+    \end{transaction}  \\
+    \codeFont{transactSaving(n,v)} & \defeq
+    \begin{transaction}
+    \plookup{\pv{x}}{\pv{n}_s}; \ 
+    \pifs{\pv{v} + \pv{x} \geq 0} \ 
+    \pmutate{\pv{n}_s}{\pv{x} + \pv{v}}; \ 
+    \pife
+    \end{transaction}  \\
+    \codeFont{amalgamate(n,n')} & \defeq
+    \begin{transaction}
+    \plookup{\pv{x}}{\pv{n}_s}; \ 
+    \plookup{\pv{y}}{\pv{n}_c}; \ 
+    \plookup{\pv{z}}{\pv{n'}_c}; \\
+    \pmutate{\pv{n}_s}{0}; \ 
+    \pmutate{\pv{n}_c}{0}; \ 
+    \pmutate{\pv{n'}_c}{\pv{x} + \pv{y} + \pv{z}}; 
+    \end{transaction} \\
+    \codeFont{writeCheck(n,v)} & \defeq
+    \begin{transaction}
+    \plookup{\pv{x}}{\pv{n}_s}; \ 
+    \plookup{\pv{y}}{\pv{n}_c}; \\
+    \pifs{\pv{x} + \pv{y} < \pv{v} } \
+        \pmutate{\pv{n}_c}{\pv{y} - \pv{v} - 1 }; \\
+    \pifm \
+        \pmutate{\pv{n}_c}{\pv{y} - \pv{v} }; \ 
+    \pife \\
+    \pmutate{\pv{n}_s}{\pv{x}}; 
+    \end{transaction} 
+\end{align*}
+
