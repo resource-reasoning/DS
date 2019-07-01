@@ -3,6 +3,15 @@
 
 We define an interleaving operational semantics for atomic transactions over
 global, centralised kv-stores and partial client views. 
+We proceed with a summary of our notational conventions.
+
+\mypar{Notation}
+Given a set $\sort A$, we write $\sort A \ni a$ to denote that elements of $\sort A$ are ranged over by $a$ and its variants (\eg $a', a_1, \cdots$). 
+Given relations $\mathsf r, \mathsf r' \subseteq \sort A \times \sort A$,
+we write $\mathsf r\rflx$, $\mathsf r^+$ and $\mathsf r^*$ for its reflexive, transitive and reflexive-transitive closures of $\mathsf r$, respectively;
+write $a_1 \toEDGE{\mathsf r} a_2$ for $(a_1, a_2) \in \mathsf r$;
+and write \( \mathsf r; \mathsf r'\) for \( \Set{(a_1,a_2)}[\exsts{a} (a_1,a) \in \mathsf r\land (a,a_2) \in \mathsf r']\).
+
 
 \subsection{Key-Value Stores and Client Views}
 \label{subsec:kvstores}
@@ -54,14 +63,14 @@ is a function $\mkvs: \Keys \to \func{List}[\Versions]$,
 where $\func{List}[\Versions] \ni \vilist$ is the set of lists of versions. %$\Versions$. 
 \end{definition}
 
-In summary, each version has the form 
-$\ver = (\val, \txid, \txidset)$, where $\val$ is
+Each version has the form 
+$\ver {=} (\val, \txid, \txidset)$, where $\val$ is
 a value, the \emph{writer} $\txid$ identifies the transaction that
-wrote the value,  and the set of \emph{readers} $\txidset$ identifies the
-transactions that read the value. We use the notation 
+wrote $\val$,  and the set of \emph{readers} $\txidset$ identifies the
+transactions that read $\val$. We use the notation 
 $\valueOf(\ver)$,
-$\wtOf(\ver)$ and $\rsOf(\ver)$ to denote
-the individual components of the version $\ver$.
+$\wtOf(\ver)$ and $\rsOf(\ver)$ to project
+the individual components of $\ver$.
 %Lists of versions (elements of $\Versions^{\ast}$) are ranged over by $\vilist, \vilist',\cdots$.
 Given a kv-store $\mkvs$ and a transaction $\txid$, we write 
 $\txid \in \mkvs$ if $\txid$ 
@@ -69,25 +78,24 @@ $\txid \in \mkvs$ if $\txid$
 is either the writer or 
 %amongst 
 one of the readers of a version included in $\mkvs$, 
-write $\lvert \mkvs(\key) \rvert$ for the length of the version
-list $\mkvs(\key)$
+$\lvert \mkvs(\key) \rvert$ for the length of the version
+list $\mkvs(\key)$,
 and write $\mkvs(\key, i)$ for the $i$\textsuperscript{th} version of $\key$, 
 %when defined, 
 with $0 \leq i < \lvert \mkvs(\key) \rvert$.
 
 
-We focus on kv-stores whose consistency model enforces the
-\emph{atomic visibility} of transactions. This is a normal assumption for 
-distributed databases: for example in~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}.
-It  ensures that
+We focus on kv-stores whose consistency model satisfies the
+\emph{snapshot property}, ensuring that
 a transaction reads and writes at most one version for each key.
+This is a normal assumption for distributed databases, \eg in~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}.
 We also assume that 
-the list of versions for each key has an initial version 
+the version list for each key has an initial version 
 carrying the initialisation value $\val_0$,  written by the 
 %designated 
-initialisation transaction $\txid_0$ with an initial empty set of
-readers.  Finally, we assume that the state of a kv-store is
-consistent with the session order of clients: a client cannot read a
+initialisation transaction $\txid_0$ with an initial empty readers set.
+Finally, we assume that the kv-store agrees with the session order of clients: 
+a client cannot read a
 version of a key that has been written by a future transaction within
 the same session; and the order in which versions are written by a
 client must agree with its session order.  A kv-store is
@@ -97,14 +105,13 @@ are well-formed, and write $\MKVSs$ to denote the set of well-formed
 kv-stores.
 
 A global kv-store provides an abstract centralised description of
-updates associated with distributed ks-stores that is complete in the
-sense that no update has been lost in the description. In contrast, in
-both replicated and partitioned distributed databases, a client will
+updates associated with distributed kv-stores that is \emph{complete} in 
+that no update has been lost in the description. By contrast, in
+both replicated and partitioned distributed databases, a client may
 have incomplete information about updates distributed between
-machines.  We capture this incomplete information of the client by
-defining the a {\em view} of the kv-store which provides a {\em
-  partial} record of the updates observed by a client. We build in a
-natural constraint that a client view is {atomic} in the sense that it can
+machines.  We model this incomplete information by
+defining a {\em view} of the kv-store which provides a {\em
+  partial} record of the updates observed by a client. We require that a client view be {\em atomic} in that it can
 see either all or none of the updates of a transaction.
 
 
@@ -170,8 +177,8 @@ views of a finite set of clients.
 
 \begin{definition}
 A \emph{configuration}, $\conf \in \Confs $,  is a pair $ (\mkvs, \vienv)$
-with $\mkvs \in \MKVSs$ and a finite partial  function
-$\vienv : \Clients \parfun \Views(\mkvs)$. 
+with $\mkvs \in \MKVSs$ and
+$\vienv : \Clients \parfinfun \Views(\mkvs)$. 
 The set of \emph{initial configurations}, $\Confs_0 \subseteq \Confs$,
 contains configurations of the form $ (\mkvs_0, \vienv_0)$, where
 $\mkvs_0$ is the { initial kv-store}
@@ -201,9 +208,9 @@ the view $\vienv(\cl)$,
 %of theview $\vienv(\cl)$, 
 which identifies, for each key $\key$, the last write of a client view. 
 This definition assumes that the database satisfies the \emph{last-write-wins}
-resolution policy, employed by many distributed kv-stores,  
+resolution policy, employed by many distributed kv-stores.
 %adopt this policy~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}, 
-although our theory can be adapted to capture other resolution policies. 
+However, our formalism can be adapted straightforwardly  to capture other resolution policies. 
 
 \sx{Transaction state.}
 \begin{definition}[Snapshots]
@@ -270,17 +277,16 @@ and executes a sequential \emph{command} $\cmd$, given by the following grammar:
 }%
 %
 %
-Sequential commands, $\cmd$, comprise $\pskip$, primitive commands
-$\cmdpri $, atomic transactions $\ptrans{\trans}$, and the standard
-compound commands: sequential composition \( ; \)\;, non-deterministic
-choice \( + \) and iteration \( * \).  Primitive commands (the
-variable assignment $\passign{\var}{\expr}$ and the assume statement
-$\passume{\expr}$ used to encode conditionals) are used for
-computations based on client-local variables and can hence be invoked
-without restriction.  Transactional commands, $\trans$, comprise
-$\pskip$, primitive transactional commands $\transpri$, and the
-standard compound commands.  Primitive transactional commands comprise
-primitive commands, and lookup ($\plookup{\var}{\expr}$) and mutation
+Sequential commands ($\cmd$) comprise $\pskip$, primitive commands
+($\cmdpri $), atomic transactions $\ptrans{\trans}$, and standard
+compound constructs: sequential composition (\( ; \)), non-deterministic
+choice (\( + \)) and iteration (\( * \)). 
+Primitive commands include variable assignment ($\passign{\var}{\expr}$) and assume statements ($\passume{\expr}$) which can be used to encode conditionals; 
+they  are used for computations based on client-local variables and can hence be invoked
+without restriction.  Transactional commands ($\trans$) comprise
+$\pskip$, primitive transactional commands ($\transpri$), and the
+standard compound constructs.  Primitive transactional commands comprise
+primitive commands, lookup ($\plookup{\var}{\expr}$) and mutation
 ($\pmutate{\expr}{\expr}$) used for reading and writing to kv-stores
 respectively, which can only be invoked as part of an atomic
 transaction $\ptrans{\trans}$.
@@ -327,10 +333,10 @@ the client-local stack \( \stk \):%
   atomically. I am not so sure about partitioned databases. It seems
   odd.}  In our operational semantics, transactions are executed
 \emph{atomically}. It is still possible for an underlying
-implementation, such as COPS, to update the distributed kv-store as
+implementation, such as COPS, to update the distributed kv-store while
 the transaction is in progress. It just means that, given the
 abstractions captured by our global kv-stores and partial views, 
-such an update is modelled as  an instantaneaous  atomic
+such an update is modelled as  an instantaneous  atomic
 update.
 \pg{I find myself still  very confused by this point. If we look at
   the CAtomicTrans rule, I can see that the view can be arbitrarily
@@ -341,15 +347,15 @@ Intuitively, given a configuration $\conf = (\mkvs, \vienv)$,
 when a client $\cl$ executes a transaction $\ptrans{\trans}$, 
 it performs the following steps: 
 \begin{enumerate*}
-	\item it constructs an initial transactional state that is a snapshot of $\mkvs$ using its view $\vienv(\cl)$ as defined in \cref{def:snapshot};  
-	\item it executes $\trans$ in isolation over the transactional state $\sn$
+	\item it constructs an initial \emph{snapshot} $\sn$ of $\mkvs$ using its view $\vienv(\cl)$ as defined in \cref{def:snapshot};  
+	\item it executes $\trans$ in isolation over $\sn$
         accumulating the effects (the reads and writes) of executing $\trans$; and
 	\item it commits $\trans$ by incorporating these effects into $\mkvs$.
 \end{enumerate*}
 
-\begin{definition}[Transactional States]
+\begin{definition}[Snapshots]
 \label{def:heaps}
-A \emph{transactional state}, \( \sn \in \Snapshots \defeq \Keys \to
+A \emph{snapshot}, \( \sn \in \Snapshots \defeq \Keys \to
 \Val\),  is a function from keys to values.
 \end{definition}
 
@@ -358,7 +364,7 @@ To capture the effects of executing a transaction $\trans$ on a snapshot $\sn$ o
 we identify a \emph{fingerprint}  of $\trans$ on $\sn$ which captures
  the values $\trans$ reads from $\sn$, and
 %the write operations capture 
-the values $\trans$ writes to $\sn$ and wants to commit to $\mkvs$. 
+the values $\trans$ writes to $\sn$ and intends to commit to $\mkvs$. 
 %so long as certain consistency conditions are met.  
 Execution of a transaction in a given configuration may result in more than one fingerprint due to non-determinism. 
 
@@ -375,8 +381,7 @@ $\fora{\key \in \Keys, l  \in \Set{\otR, \otW}}
 \noindent 
 %The last constraint ensure that for each key, 
 According to \cref{def:fingerprint}, a fingerprint contains at most one read operation and at most one write operation. 
-This reflects the fact that we work with transactions with 
-atomic visibility: reads are taken from a single snapshot of the kv-store;
+This reflects our assumption regarding transactions that satisfy the snapshot property: reads are taken from a single snapshot of the kv-store;
 and 
 %since clients see either none or all the writes of a transaction, only the last write to each key is 
 only the last write of a transaction to each key is committed to the kv-store.
@@ -450,13 +455,11 @@ $
 
 \Cref{fig:semantics-trans} presents the rules for transactional commands. 
 The only non-standard rule is \( \rl{TPrimitive} \), which updates 
-the transactional state and the fingerprint of a transaction: the premise 
-$(\stk, \sn) \toLTS{\transpri} (\stk', \sn')$ describes how the
-execution of  the primitive transactional command $\transpri$ affects the local state 
+the snapshot and the fingerprint of a transaction: the premise 
+$(\stk, \sn) \toLTS{\transpri} (\stk', \sn')$ describes how executing
+$\transpri$ affects the local state (the client stack and the snapshot)
 of a transaction; and the premise $o =\op(\stk, \sn, \transpri)$ identifies the operation on the 
-kv-store associated with 
-the primitive transactional command 
-$\transpri$. 
+kv-store associated with $\transpri$. 
 %let \( \mathsf f\rmto{\mathsf d}{\mathsf r} \) denotes a new function 
 %where \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = {\mathsf r} \) if \( \mathsf d = \mathsf d' \), 
 %otherwise \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = \mathsf f(\mathsf d') \).
@@ -525,13 +528,13 @@ commands,  is defined by:
 The  empty operation $\emptyop$ is used for those primitive commands that do not
 contribute to the fingerprint.
 \end{definition}
-The conclusion of Rule \( \rl{TPrimitive}\)  uses the \emph{combination operator} $\addO: 
+The conclusion of the \( \rl{TPrimitive}\)  rule uses the \emph{combination operator} $\addO: 
 \pset{\Ops} \times (\Ops \uplus \Set{\emptyop}) \to \pset{\Ops}$, defined formally 
-in \cref{fig:semantics-trans}, to increase the fingerprint with the
-operation associated with the primitive transaction command, as
+in \cref{fig:semantics-trans}, to extend the fingerprint $\fp$ accumulated thus far with
+operation $o$ associated with $\transpri$, as
 appropriate: it adds  a read from $\key$  if $\fp$ does not already
 contain an entry for $\key$; and it always updates the  write for 
-$\key$ to $\fp$, removing any previously writes to $\key$.
+$\key$ to $\fp$, removing previous writes to $\key$.
 
 
 %Third, we define a \emph{combination} operator,
@@ -610,11 +613,11 @@ $\key$ to $\fp$, removing any previously writes to $\key$.
 %the remaining rules are standard.
 
 \begin{definition}[Fingerprint Set]
-Given a client stack $\stk$ and a transactional state $\sn$, the \emph{fingerprint set} of a transaction $\trans$ is:
+Given a client stack $\stk$ and a snapshot $\sn$, the \emph{fingerprint set} of a transaction $\trans$ is:
 \(
 \Fingerprints \defeq \Set{\fp \mid (\stk, \sn, \emptyset), \trans \toTRANS^* (\stk', \sn', \fp), \pskip }
 \)
-where $\toTRANS^*$ is the reflexive, transitive closure of $\toTRANS$ given in \cref{fig:semantics-trans}.  
+where $\toTRANS^*$ denotes the reflexive, transitive closure of $\toTRANS$ given in \cref{fig:semantics-trans}.  
 A set $\fp \in \Fingerprints$ is called a \emph{final fingerprint} of $\trans$. 
 \end{definition}
 \noindent 
@@ -722,10 +725,9 @@ $\ET$ for kv-stores, which is used to generate
 the \emph{consistency model} on kv-stores
 under which a 
 transaction can execute.
-In \cref{sec:cm}, we give many examples of  execution tests and, in
-\cref{sec:5} and the Appendix, we prove that they generate consistency
-models for kv-stores that are equivalent to the 
-well-known consistency models for  execution graphs. 
+In \cref{sec:cm}, we give many examples of execution tests for well-known consistency models; 
+in \cref{sec:other_formalisms} and the technical appendix we prove that our execution tests (using kv-stores) generate consistency models that are equivalent to existing definitions of
+consistency models (using execution graphs). 
 
 %\begin{figure*}[t]
 %\begin{mathpar}
@@ -790,7 +792,7 @@ well-known consistency models for  execution graphs.
 
 %\cref{fig:semantics} contains the rules for primitive commands and
 
-The rules for the compound commands are straightforward and given in \cref{sec:full-semantics}.
+The rules for the compound constructs are straightforward and given in \cref{sec:full-semantics}.
 The rule for primitive commands, $\rl{CPrimitive}$, 
 depends on the 
 transition system $\toLTS{\cmdpri} \subseteq \Stacks \times \Stacks$ 
@@ -838,11 +840,11 @@ transaction under the execution test $\ET$.
 
 We describe the \rl{CAtomicTrans} rule in detail. 
 The first premise in the rule
-states that the current view $\vi$ of the executing command may be advanced to a newer atomic view $\vi''$ (see \cref{def:views}). 
+states that the current view $\vi$ of the executing command may be advanced to a newer  view $\vi''$ (see \cref{def:views}). 
 %This corresponds to the client receiving new updates.
 Given the new view $\vi''$, the transaction obtains a snapshot $\sn$ of the kv-store $\mkvs$, 
 and executes $\trans$ locally to completion ($\pskip$), updating the stack to $\stk'$, while accumulating the fingerprint $\fp$; 
-this is modelled in the second and third premises of Rule \rl{CAtomicTrans}.
+this is modelled in the second and third premises of \rl{CAtomicTrans}.
 Note that the resulting snapshot is ignored 
 %(denoted by $\stub$) 
 as the effect of the transaction is recorded in the fingerprint $\fp$. 
@@ -851,10 +853,9 @@ as the effect of the transaction is recorded in the fingerprint $\fp$.
 %%The \( \rl{CAtomicTrans} \) rule
 %Rule \(\rl{CAtomincTrans} \) models a client $\cl$ with view $\vi$ committing a transaction 
 %with fingerprint $\fp$ in $\mkvs$. 
-The execution test $\ET \vdash (\mkvs, \vi'') : \fp$ captures when the
-final fingerprint of the transaction is compatible with the kv-store
-$\mkvs$ and the client view $u''$. In \cref{sec:4}, we give many
-examples of such execution tests. 
+The execution test $\ET \vdash (\mkvs, \vi'') : \fp$ ensures that the
+final fingerprint $\fp$ of the transaction is compatible with the (original) kv-store
+$\mkvs$ and the client view $u''$. We give many examples of such execution tests in \cref{sec:cm}. 
 
 
 Now we are ready for client $\cl$ to commit the transaction with final
@@ -877,11 +878,11 @@ The set $\nextTxid[\cl, \mkvs]$ is defined by
 %By construction, all elements of $\nextTxid[\cl, \mkvs]$ are greater (with respect to session order $\SO$) 
 %than transaction identifiers previously used by $\cl$. 
 The function $\updateKV[\mkvs, \vi, \fp, \txid]$
-describes how the fingerprint $\fp$ of $\txid$ executed under view $\vi$ updates $\mkvs$:
+describes how the fingerprint $\fp$ of $\txid$ executed under $\vi$ updates $\mkvs$:
 %The function $\updateKV[\mkvs, \vi, \fp, \txid]$ updates $\mkvs$ with $\fp$ as follows: 
-for each read operation $(\otR, \key, \val) \in \fp$, it adds $\txid$ 
-to the reader set of the last version of $\key$ that is included in the view $\vi$; 
-for each write operation $(\otW, \key, \val)$, it appends a new version $(\val, \txid, \emptyset)$ 
+for each read $(\otR, \key, \val) \in \fp$, it adds $\txid$ 
+to the reader set of the last version of $\key$ in $\vi$; 
+for each write $(\otW, \key, \val)$, it appends a new version $(\val, \txid, \emptyset)$ 
 to $\mkvs(\key)$. 
 
 
@@ -945,17 +946,17 @@ I've started but not finished.....
 \item $\mathsf{OKAny}\vdash (\mkvs, \vi) 
 \csat (\mkvs', \vi') $ if and only if $\vi'$ is a view compatible with
 $\mkvs'$. In the Appendix, we describe  execution tests that capture the 
- monotonic writes (MW)  and write your reads (WFR) session guarantees 
-where $\OK_{MR}$ and $\OK_{RYW}$ are both $\mathsf{OKAny}$. 
-\item $\OK_{MR} \vdash (\mkvs, \vi) 
+ monotonic writes (\MW)  and write your reads (\WFR) session guarantees 
+where $\OK_{\MR}$ and $\OK_{\RYW}$ are both $\mathsf{OKAny}$. 
+\item $\OK_{\MR} \vdash (\mkvs, \vi) 
 \csat (\mkvs', \vi') $ if and only if $    \vi \viewleq  \vi'\vi $
-(see definition~3.2).
+(see \cref{def:views}).
 This test states that a client cannot loose information from a view by
 committing a transaction. We shall see that it gives rise to the
-monotonic reads (MR) session guarantee. 
-\item $\OK_{RYW}  \vdash (\mkvs, \vi) 
+monotonic reads (\MR) session guarantee. 
+\item $\OK_{\RYW}  \vdash (\mkvs, \vi) 
 \csat (\mkvs', \vi') $ if and only if ......We shall see that this
-gives rise to the read your writes (RYW) session guarantee. 
+gives rise to the read your writes (\RYW) session guarantee. 
 \end{enumerate}
 ........
 
