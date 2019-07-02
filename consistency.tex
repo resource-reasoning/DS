@@ -508,7 +508,7 @@ a complete view (one with all versions), then K is in SER.}
 }
 %
 {\color{blue} 
-\textbf{Azalea: }I don't think this is the right place for the following:\\
+\textbf{Azalea: }I don't think here is the right place for the following and I think this should go in \cref{sec:other_formalisms}:\\
 As we will see shortly, we use dependencies in a way fundamentally 
 different from Adya's dependency graphs \cite{adya}, 
 a well-known mathematical structure used for specifying consistency models that is introduced 
@@ -587,7 +587,7 @@ I agree, but there is no time for that.
 %This consistency model states that a client
 %cannot lose information from the view. It  
 %can only see increasingly more up-to-date versions from a kv-store. 
-This consistency model states that when committing a client
+This consistency model states that when committing, a client
 cannot lose information in that it can only see increasingly more up-to-date versions from a kv-store.
 This prevents, for example, the kv-store of \cref{fig:mr-disallowed},
 since client $\cl$ first reads the latest version of $\key$ in $\txid_{\cl}^{1}$, 
@@ -742,60 +742,66 @@ can be simplified.
 %\sx{ Sessions to CC cite \cite{principle-eventual-consistency} }
 
 
-{\color{blue} 
-\textbf{Azalea: } This is where I got to}
+%{\color{blue} 
+%\textbf{Azalea: } This is where I got to}
 
 \subsubsection{Causal Consistency $(\CC)$}
-Causal consistency strengthens the four session guarantees above by requiring 
-that if a client sees a version 
-$\ver$ prior to committing a transaction, then it must also see the versions 
-from which $\ver$ depends.
+Causal consistency subsumes the  four session guarantees discussed above. 
+As such, the $\vshiftname_\CC$ predicate is defined as the \emph{conjunction} of their associated \vshiftname predicates.
+However, as shown in  \cref{fig:execution_tests}, it is sufficient to define $\vshiftname_\CC$
+as the conjunction of the $\MR$ and $\RYW$ session guarantees alone, where for brevity we 
+write $\vshiftname_{\MR \cap \RYW}$ for  $\vshiftname_{\MR} \land \vshiftname_{\RYW}$.
+This is because as we demonstrate in the technical appendix, the $\cancommitname_{\CC}$ predicate (described shortly below) implies $\vshiftname_{\MW \cap \WFR}$, allowing us to remove them from $\vshiftname_{\CC}$.
+
+Additionally, $\CC$ strengthens the session guarantees by requiring that if a client sees a version $\ver$ prior to committing a transaction, then it must also see the versions 
+on which $\ver$ depends.
 If $\txid$ is the writer of $\ver$, then 
-$\ver$ clearly depends from any version that $\txid$ reads. 
-As for sessions, if $\ver$ is, or it depends from, a version $\ver'$ accessed by 
-some client $\cl$, then it also depends from any version that was previously 
-either read or written by $\cl$. The condition $\closed(\mkvs, u, \SO \cup \WR_{\mkvs})$ 
-in Figure \ref{fig:execution_tests} captures exactly this constraint. 
-Note that this condition implies both monotonic writes and write follows reads: 
-given a kv-store $\mkvs$ and view $\vi$ such that 
-$\closed(\mkvs, \vi, \SO \cup \WR_{\mathsf{k}})$,
-then it is immediate to observe that $\closed(\mkvs, \vi, \SO \cap \WW_\mkvs)$, 
-and $\closed(\mkvs, \vi, \WR_{\mkvs};\SO\rflx)$. We let $\ET_{\CC} = 
-\{(\mkvs, \vi, \fp, \_, \_) \mid \closed(\mkvs, \vi, \SO \cup \WR_{\mkvs})\} \cap \ET_{\MR} 
-\cap \ET_{\RYW}$, and we observe that $\ET_{\CC} \subseteq \ET_{\MR} \cap \ET_{\MW} 
-\cap \ET_{\RYW} \cap \ET_{\WFR}$. This is in accordance with the result from 
-\citeN{session2causal}, which states that the four session guarantees are a necessary, but 
-not sufficient, condition for achieving causal consistency.
-%Causal consistency is defined by requiring that views of clients, 
-%prior to executing a transaction, are closed with respect to the causal dependencies 
-%of transactions; we will define causal dependencies of transactions shortly.
-%\citeN{session2causal} proved that causal consistency for  dependency graphs
-%is the intersection of the four \emph{session guarantees} \(\MR\), \(\MW\), \(\RYW\) and \(\WFR\). 
-%However, this result holds in a setting where replicas are not abstracted from the state of the system, and 
-%causal consistency is specified in terms of the state of all replicas
-%rather than in terms of the client views.
-%If causal consistency were to be defined in terms of clients views, as
-%in our case, then it is necessary but not sufficient to 
-%ensure that the four session guarantees are satisfied: an execution test inducing causal consistency must 
-%be included in $\ET_{\MR} \cap \ET_{\MW} \cap \ET_{RYW} \cap
-%\ET_{\WFR}$.
-%
-%-----not touched this para, out of time---------
-%
-%In practice, causal dependencies of transactions must include the session order ($\RYW$ requires that 
-%a transaction potentially depends on previous transactions executed by the same client) and 
-%write-read dependencies (a transaction reading a version for some key $\key$ potentially depends from the transaction 
-%that wrote such a version); obviously, causal dependencies must also be transitively closed. 
-%
-%By requiring a view of $\vi$ that is closed with respect to the relation $(\SO \cup \WR_{\mkvs})$ in $\mkvs$, 
-%before executing a transaction, we impose that a client must observe all the causal dependencies of the 
-%versions it reads. The execution test $\{(\mkvs, \vi, \_, \_, \_) \mid \closed(\mkvs, \vi, \SO \cup \WR_{\mkvs})\}$ is
-%included in $\ET_{\MW} \cap \ET_{\WFR}$. 
+$\ver$ clearly depends on all versions that $\txid$ reads. 
+Moreover, if $\ver$ is, or it depends on, a version $\ver'$ accessed by 
+a client $\cl$, then it also depends on all versions that were previously 
+read or written by $\cl$. 
+This is captured by the $\cancommitname_{\CC}$ predicate in \cref{fig:execution_tests}, 
+defined as $\closed(\mkvs, u, \rel_{\CC})$ with $\rel_\CC \defeq \SO \cup \WR_{\mkvs}$.
+\azalea{without the definitions of $\MW$ and $\WFR$ we no longer can explain why this implies $\MW$ and $\WFR$.}
+%Note that this condition implies both monotonic writes and write follows reads: 
+%given a kv-store $\mkvs$ and view $\vi$ such that 
+%$\closed(\mkvs, \vi, \SO \cup \WR_{\mathsf{k}})$,
+%then it is immediate to observe that $\closed(\mkvs, \vi, \SO \cap \WW_\mkvs)$, 
+%and $\closed(\mkvs, \vi, \WR_{\mkvs};\SO\rflx)$. We let $\ET_{\CC} = 
+%\{(\mkvs, \vi, \fp, \_, \_) \mid \closed(\mkvs, \vi, \SO \cup \WR_{\mkvs})\} \cap \ET_{\MR} 
+%\cap \ET_{\RYW}$, and we observe that $\ET_{\CC} \subseteq \ET_{\MR} \cap \ET_{\MW} 
+%\cap \ET_{\RYW} \cap \ET_{\WFR}$. This is in accordance with the result from 
+%\citeN{session2causal}, which states that the four session guarantees are a necessary, but 
+%not sufficient, condition for achieving causal consistency.
+%%Causal consistency is defined by requiring that views of clients, 
+%%prior to executing a transaction, are closed with respect to the causal dependencies 
+%%of transactions; we will define causal dependencies of transactions shortly.
+%%\citeN{session2causal} proved that causal consistency for  dependency graphs
+%%is the intersection of the four \emph{session guarantees} \(\MR\), \(\MW\), \(\RYW\) and \(\WFR\). 
+%%However, this result holds in a setting where replicas are not abstracted from the state of the system, and 
+%%causal consistency is specified in terms of the state of all replicas
+%%rather than in terms of the client views.
+%%If causal consistency were to be defined in terms of clients views, as
+%%in our case, then it is necessary but not sufficient to 
+%%ensure that the four session guarantees are satisfied: an execution test inducing causal consistency must 
+%%be included in $\ET_{\MR} \cap \ET_{\MW} \cap \ET_{RYW} \cap
+%%\ET_{\WFR}$.
+%%
+%%-----not touched this para, out of time---------
+%%
+%%In practice, causal dependencies of transactions must include the session order ($\RYW$ requires that 
+%%a transaction potentially depends on previous transactions executed by the same client) and 
+%%write-read dependencies (a transaction reading a version for some key $\key$ potentially depends from the transaction 
+%%that wrote such a version); obviously, causal dependencies must also be transitively closed. 
+%%
+%%By requiring a view of $\vi$ that is closed with respect to the relation $(\SO \cup \WR_{\mkvs})$ in $\mkvs$, 
+%%before executing a transaction, we impose that a client must observe all the causal dependencies of the 
+%%versions it reads. The execution test $\{(\mkvs, \vi, \_, \_, \_) \mid \closed(\mkvs, \vi, \SO \cup \WR_{\mkvs})\}$ is
+%%included in $\ET_{\MW} \cap \ET_{\WFR}$. 
 For example, the kv-store of 
-\cref{fig:wr-wfr-allowed-but-cc} is allowed by the four session guarantees, but it is disallowed by 
-causal consistency: in there, the version of key $\key_3$ carrying value $\val_3$ depends from the version 
-of key $\key_1$ carrying value $\val_1$. However, transaction $\txid$ must have been committed from 
-a client whose view included $\val_3$, but not $\val_1$.
+\cref{fig:wr-wfr-allowed-but-cc} 
+%is allowed by the four session guarantees, but it 
+is disallowed by $\CC$: the version of key $\key_3$ carrying value $\val_3$ depends on the version of key $\key_1$ carrying value $\val_1$. However, transaction $\txid$ must have been committed by a client whose view included $\val_3$, but not $\val_1$.
 %We define causal consistency as $\ET_{\CC} = \{(\mkvs, \vi, \_, \_, \_) \mid \closed(\mkvs, \vi \SO \cup \WR_{\mkvs})\} 
 %\cap \ET_{\MR} \cap \ET_{\RYW})$: observe that this definition of $\ET_{\CC}$ is included in the execution 
 %test for the four consistency guarantees, in accordance with the
@@ -872,39 +878,36 @@ dependency graphs.
 %}
 
 \subsubsection{Update Atomic $(\UA)$}
-This consistency model has been proposed in~\cite{framework-concur} 
-and implemented in \cite{rola}.
+This consistency model has been proposed by \citet{framework-concur} 
+and implemented by \citet{rola}.
 $\UA$ disallows concurrent transactions writing to the same key,
-a property known as \emph{Write-Conflict Freedom}:  
-when two transactions want to write to the same key, one must see the version 
+a property known as \emph{write-conflict freedom}:  
+when two transactions write to the same key, one must see the version 
 written by the other.
+Write-conflict freedom is enforced by $\cancommitname_{\UA}$ which allows a client to write to key $\key$ only if its view includes all versions of $\key$; 
+\ie its view is closed with respect to the $\WW^{-1}(\key)$ relation for all keys $\key$ written in the fingerprint $\fp$.
 This prevents the kv-store of \cref{fig:ua-disallowed},
-as $\txid, \txid'$ concurrently increment the initial version of $\key$ by $1$.
-%Note that $\UA$ generalises $\RYW$: unlike $\RYW$, $\UA$ does not require $\txid, \txid'$ to be executed by the same client.
-$\ET_\UA$ ensures write-conflict freedom by allowing a client to write to key $\key$
-only if its view includes all versions of $\key$. Because a view always includes the 
-initial version of a key, this is equivalent to require that the view of a client wanting 
-to commit a transaction is \emph{suffix-closed} with respect to the relation $\WW(\key)$, 
-or equivalently it is prefix-closed with respect to $\WW^{-1}(\key)$, for any key $\key$ written in the 
-fingerprint $\fp$.
-\pg{
---------not done from here----------------------
-}
+as $\txid$ and $\txid'$ concurrently increment the initial version of $\key$ by $1$.
+As client views must include the initial versions, once $\txid$ commits a new version $\ver$ with value $\val_1$ to $\key$, then $\txid'$ must include $\ver$ in its view as there is a $\WW$ edge from the initial version to $\ver$. 
+As such, when $\txid'$ subsequently increments $\key$, it must read from $\ver$, and not the initial version as depicted in \cref{fig:ua-disallowed}.
+
+
 
 \subsubsection{Parallel Snapshot Isolation $(\PSI)$} 
-This consistency model has been defined as the conjunction of the guarantees provided by $\CC$ and $\UA$~\cite{framework-concur}. 
-%As for the case of causal consistency, we cannot define 
-Unfortunately, in our framework it is not the case that $\ET_{\PSI}$ as $\ET_{\CC} \cap \ET_{\UA}$. First,  
-this execution test only mandates that views before committing transactions are individually closed with respect to 
-the relations $R_{\CC}$ and $R_{\UA}(\fp)$, although we should require that views are closed with respect to 
-$R_{\CC} \cup R_{\UA}$. Second, $\ET_{\UA}$ imposes that a transaction writing 
-to a key $\key$ must be able to see all previous versions of such a key, \ie any version of a key $\key$. 
-That is, when write-conflict detection is enforced, a version $\ver$ for $\key$ depends from all 
-previous versions of the same key: this observation leads us to include write-write dependencies 
-in the closure relation that defines $\ET_{\PSI}$. The kv-store from Figure
-%causally depends from the transactions writing previous versions of such a key (an example is given in 
-\cref{fig:cc-ua-allowed-but-psi}) shows an example of kv-store included in $\ET_{\CC} \cap \ET_{\UA}$, 
-but not in $\ET_{\PSI}$.
+This consistency model is defined as the conjunction of the guarantees provided by $\CC$ and $\UA$~\cite{framework-concur}. 
+As such, the $\vshiftname_{\PSI}$ predicate is defined as the conjunction of the $\vshiftname$ predicates for $\CC$ and $\UA$.
+However, we cannot simply define $\cancommitname_{\PSI}$ as the conjunction of the $\cancommitname$ predicates for $\CC$ and $\UA$. 
+This is for two reasons. 
+First, their conjunction would only mandate that $\vi$ be closed with respect to 
+$\rel_{\CC}$ and $\rel_{\UA}$ \emph{individually}, but \emph{not} with respect to their \emph{union} (recall that closure is defined in terms of the transitive closure of a given relation and thus the closure of $\rel_{\CC}$ and $\rel_{\UA}$ is smaller than the closure of $\rel_{\CC} \cup \rel_{\UA}$).
+As such, we define $\cancommitname_{\PSI}$ as closure with respect to $\rel_{\PSI}$ which must include $\rel_{\CC} \cup \rel_{\UA}$.
+Second, recall that $\cancommitname_{\UA}$ requires that a transaction writing 
+to a key $\key$ must be able to see all previous versions of $\key$, \ie all versions of $\key$. 
+That is, when write-conflict freedom is enforced, a version $\ver$ of $\key$ depends on all 
+previous versions of $\key$. 
+This observation leads us to include write-write dependencies ($\WW_{\mkvs}$) in $\rel_{\PSI}$. 
+Observe that the kv-store in \cref{fig:cc-ua-allowed-but-psi} shows an example kv-store that satisfies $\cancommitname_{\CC} \land \cancommitname_{\UA}$, 
+but not $\cancommitname_{\PSI}$.
 %To capture this constraint, 
 %we must include write-write dependencies in the relation with respect to which the view of a client before committing 
 %a transaction must be closed.
@@ -914,110 +917,102 @@ but not in $\ET_{\PSI}$.
 %This definition exploits the \emph{compositionality} of our execution tests (\cref{thm:compositional}).
 %as discussed in \cref{sec:other_formalisms}.
 
-%\subsubsection{Consistent Prefix $(\CP)$}
-%\label{para:cp}
-%If the total order in which transactions commit is known, this consistency model 
-%can be described as a strengthening of causal consistency: 
-%if a client sees the versions written by a transaction $\txid$,
-%then it must also see any version written by any transaction that commits before $\txid$. 
-%Kv-stores only provide {\em partial} information about the order in which transactions commit, 
-%given by the dependency relations between transactions; however, 
-%this information is sufficient to formalise \emph{Consistent Prefix} \cite{laws}.
+\subsubsection{Consistent Prefix $(\CP)$}
+\label{para:cp}
+If the total order in which transactions commit is known, $\CP$
+can be described as a strengthening of $\CC$: 
+if a client sees the versions written by a transaction $\txid$,
+then it must also see all versions written by transactions that commit before $\txid$. 
+Although kv-stores only provide {\em partial} information about the transaction commit order via the dependency relations,
+this is sufficient to formalise \emph{Consistent Prefix} \cite{laws}.
+
+In practice, we approximate the order in which transactions 
+commit in an $\ET$-trace that terminates in a configuration $(\mkvs, \_)$ via the $\WR_{\mkvs}, \WW_{\mkvs}, \RW_{\mkvs}$ and $\SO$  relations. 
+This approximation is best understood in terms of an idealised implementation of $\CP$ on a centralised system,
+%fine-grained model 
+%where transactions are equipped with start and commit points, and operations 
+%between transactions in different sessions may interleave with each other. 
+where the snapshot of a transaction is determined at its start point and its effects are made visible to future transactions at its commit point.
+With respect to this implementation, if $(\txid,\txid') \in \WR$, then 
+%$\txid$ reads the version of some key $\key$ 
+%written by $\txid'$, therefore  it {must} be
+%the case that 
+$\txid$ must commit before $\txid'$ starts, and hence before $\txid'$ commits.
+Similarly, if $(\txid,\txid') \in \SO$, then $\txid$ commits before $\txid'$ starts, 
+and thus before $\txid'$ commits.
+% 
+%Consider the transaction relations $\WR_{\mkvs}$, $\WW_{\mkvs}$ and
+%$\RW_{\mkvs}$ defined in \ref{fig:execution.tests}, adapted from well-known
+%transaction relations associated with dependency graphs~\cite{adya-icde,adya}.
+%In \cite{laws} an alternative definition of $\CP$ is given: if a client sees a transaction $\txid$, 
+%then it must also see the subset of transactions that committed before $\txid$, that can 
+%be computed from $\SO, \WR_{\mkvs}, \WW_{\mkvs}, \RW_{\mkvs}$. This property is captured 
+%by $\dagger$ in \cref{fig:execution.tests}.
+Recall that $(\txid'', \txid') \in \RW$
+%The pair $(\txid,\txid') \in \WR_\mkvs$ means that $\txid$ reads the version of some key $\key$ 
+%written by $\txid'$, therefore  it {must} be
+%the case that $\txid$ commits before $\txid'$ starts, and therefore before $\txid'$ commits,
+%and similarly for $\SO$.
+%The pair $(\txid, \txid') \in \RW_{\mkvs}$ 
+denotes that $\txid''$ reads a version that is later overwritten by $\txid'$.
+That is, $\txid''$ cannot see the write of $\txid'$, and thus $\txid''$ must starts before 
+$\txid'$ commits. 
+As such, if $\txid$ commits before $\txid''$ starts 
+($(\txid, \txid'') \in \WR$ or $(\txid,\txid'') \in \SO$), 
+%the two are 
+%related by a write-read dependency \(\WR\) or by a session order \(\SO\)), 
+and $(\txid'', \txid') \in \RW$, then $\txid$ must commit before 
+$\txid'$ commits. 
+In other words, if $(\txid,\txid') \in \WR;\RW$ or $(\txid,\txid') \in \SO;\RW$, then $\txid$ commits before $\txid'$.
+Finally, if $(\txid,\txid') \in\WW$, then $\txid$ must commit before $\txid'$. 
+We therefore define $\rel_{\CP} \defeq (\WR_{\mkvs}; \RW_{\mkvs}\rflx \cup \SO;  \RW_{\mkvs}\rflx \cup \WW)$, approximating the order in which transactions commit. 
 %
-%In practice, we approximate the order in which transactions 
-%commit in a $\ET$-trace that terminates in a configuration $(\mkvs, \_)$ from the relations $\WR_{\mkvs}, \WW_{\mkvs}, 
-%RW_{\mkvs}$ and $\SO$. This approximation is best understood in terms of an idealised implementation of 
-%$\CP$ on a centralised system,
-%%fine-grained model 
-%%where transactions are equipped with start and commit points, and operations 
-%%between transactions in different sessions may interleave with each other. 
-%where the snapshot of a transaction is determined at its start point and its effects are made visible 
-%to all future transactions at the moment it commits. 
-%With respect to this implementation, a write-read dependency \(\WR\) from transaction $\txid$ to transaction $\txid'$, 
-%$(\txid,\txid') \in \WR$, means that 
-%%$\txid$ reads the version of some key $\key$ 
-%%written by $\txid'$, therefore  it {must} be
-%%the case that 
-%$\txid$ {must} commit before $\txid'$ starts, and therefore before $\txid'$ commits; 
-%similarly, if $(\txid,\txid') \in \SO$ then $\txid$ commits before $\txid'$ starts, 
-%and therefore before $\txid'$ commits.
-%% 
-%%Consider the transaction relations $\WR_{\mkvs}$, $\WW_{\mkvs}$ and
-%%$\RW_{\mkvs}$ defined in \ref{fig:execution.tests}, adapted from well-known
-%%transaction relations associated with dependency graphs~\cite{adya-icde,adya}.
-%%In \cite{laws} an alternative definition of $\CP$ is given: if a client sees a transaction $\txid$, 
-%%then it must also see the subset of transactions that committed before $\txid$, that can 
-%%be computed from $\SO, \WR_{\mkvs}, \WW_{\mkvs}, \RW_{\mkvs}$. This property is captured 
-%%by $\dagger$ in \cref{fig:execution.tests}.
-%A read-write anti-dependency \(\RW\) from $\txid''$ to $\txid'$ 
-%%The pair $(\txid,\txid') \in \WR_\mkvs$ means that $\txid$ reads the version of some key $\key$ 
-%%written by $\txid'$, therefore  it {must} be
-%%the case that $\txid$ commits before $\txid'$ starts, and therefore before $\txid'$ commits,
-%%and similarly for $\SO$.
-%%The pair $(\txid, \txid') \in \RW_{\mkvs}$ 
-%means that $\txid''$ reads one version for some key that 
-%is later overwritten by $\txid'$; then $\txid''$ is prevented from seeing the write of $\txid'$, 
-%hence it {must} be the case that $\txid''$ starts before 
-%$\txid'$ commits. 
-%As a consequence, if $\txid$ commits before $\txid''$ starts 
-%(either $(\txid, \txid'') \in \WR$ or $(\txid,\txid'') \in \SO$), 
-%%the two are 
-%%related by a write-read dependency \(\WR\) or by a session order \(\SO\)), 
-%and there is an anti-dependency 
-%from $\txid''$ to $\txid'$, then in {must} also be the case that $\txid$ commits before 
-%the commit of $\txid'$. In particular, if $(\txid,\txid') \in \WR;\RW$, 
-%or $(\txid,\txid') \in \SO;\RW$, then $\txid$ commits before $\txid'$.
-%Finally, a write-write dependency from $\txid$ to $\txid'$, $(\txid,\txid') \in\WW$, means that $\txid$ {must} commit before $\txid'$. 
-%In conclusion, the relation $\rel_{\CP} \equiv (\WR_{\mkvs}; \RW_{\mkvs}\rflx \cup \SO;  \RW_{\mkvs}\rflx \cup \WW)$ 
-%approximates the order in which transactions are executed. 
-%
-%It has been shown in \cite{laws} 
-%that the set $(\rel_{\CP}^{-1})^{+}(\txid)$ contains all the transactions that {must} be observed by $\txid$ under 
-%$\CP$. We define $\ET_{\CP}$ by requiring that the view of a client prior to committing a transaction is 
-%closed with respect to $R_{\CP}$, and by enforcing the session guarantees $\MR$ and $\RYW$,
-%%$(\txid,\txid'') \in \WR_{\mkvs}$ (resp. \SO) and $(\txid'',\txid') \in \RW_\mkvs$, then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, 
-%%Last, if $(\txid,\txid') \in \WW_\mkvs$ means that $\txid'$ overwrites a version written by $\txid$ for some 
-%%key, then it {must} be
-%%the case that $\txid$ commits before the commit of $\txid'$.
-%%The relation $((\SO ; \RW_{\mkvs}\rflx) \cup (\WR_{\mkvs} ; \RW_{\mkvs\rflx}) \cup \WW_\mkvs )^{+} \ni (\txid, \txid')$
-%%captures that, {\em all} the transactions $\txid$ that {must} have already committed to the kv-store before commit of \( \txid' \).
-%%The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MR \cap \ET_\RYW$,
-%%where the latter enforces a client sees its own commits.
-%Consistent prefix disallows the \emph{long fork anomaly} shown in \cref{fig:cp-disallowed}: 
-%in this anomaly, two clients $\cl_1$ and $\cl_2$ observe the updates to $\key_1$ and $\key_2$ 
-%in different order. Assuming without loss of generality that \( \txid_{\cl_2}^{2} \) commits 
-%after \( \txid_{\cl_1}^{2} \), then prior to committing the transaction $\cl_2$ sees 
-%the version of $\key_1$ with value $\val_0$. However, we have that $\txid \xrightarrow{\WR_{\mkvs}} \txid_{\cl_{1}}^{1} 
-%\xrightarrow{\SO} \txid_{\cl_{1}}^{2} \xrightarrow{\RW} \txid' \xrightarrow{\WR} \txid_{\cl_{2}}^{1} \xrightarrow{\SO} 
-%\txid_{\cl_2}^{2}$, from which it follows that $\cl_2$ should also see the version of $\key_1$ with 
-%value $\val_2$, causing a contradiction.
-%%\txid_{\cl_1}^{2}
-%%if \( \txid_{\cl_2}^2\) is the last transaction, it reads and thus sees \( \txid' \).
-%%Given the kv-store we have:
-%%\(
-%%\txid \toEDGE{\WR_\mkvs} \txid^1_{\cl_1} \toEDGE{\SO} \txid^2_{\cl_1} \toEDGE{\RW_\mkvs} \txid'
-%%\),
-%%which means, transaction \( \txid_{\cl_2}^2 \) must see \( \txid \).
-%%However, in \cref{fig:cp-disallowed} \( \txid_{\cl_2}^2 \) reads a older version of \( \key_1 \) than the one written by \( \txid \).
-%%Symmetrically,
-%%if \( \txid_{\cl_1}^2\) is the last transaction, it sees \( \txid \) and so must see \( \txid' \).
-%%\sx{A reviewer suggests to show the visibility edges for long fork}
+\citet{laws} show that the set $(\rel_{\CP}^{-1})^{+}(\txid)$ contains all transactions that must be observed by $\txid$ under $\CP$. 
+We define $\cancommitname_{\CP}$ by requiring that the client view be 
+closed with respect to $\rel_{\CP}$.
+
+%$(\txid,\txid'') \in \WR_{\mkvs}$ (resp. \SO) and $(\txid'',\txid') \in \RW_\mkvs$, then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, 
+%Last, if $(\txid,\txid') \in \WW_\mkvs$ means that $\txid'$ overwrites a version written by $\txid$ for some 
+%key, then it {must} be
+%the case that $\txid$ commits before the commit of $\txid'$.
+%The relation $((\SO ; \RW_{\mkvs}\rflx) \cup (\WR_{\mkvs} ; \RW_{\mkvs\rflx}) \cup \WW_\mkvs )^{+} \ni (\txid, \txid')$
+%captures that, {\em all} the transactions $\txid$ that {must} have already committed to the kv-store before commit of \( \txid' \).
+%The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MR \cap \ET_\RYW$,
+%where the latter enforces a client sees its own commits.
+Consistent prefix disallows the \emph{long fork anomaly} shown in \cref{fig:cp-disallowed}, where clients $\cl_1$ and $\cl_2$ observe the updates to $\key_1$ and $\key_2$ 
+in different orders. 
+Assuming without loss of generality that \( \txid_{\cl_1}^{2} \) commits 
+before \( \txid_{\cl_2}^{2} \), then prior to committing its transaction $\cl_2$ sees 
+the version of $\key_1$ with value $\val_0$. 
+However, since $\txid \xrightarrow{\WR_{\mkvs}} \txid_{\cl_{1}}^{1} 
+\xrightarrow{\SO} \txid_{\cl_{1}}^{2} \xrightarrow{\RW} \txid' \xrightarrow{\WR} \txid_{\cl_{2}}^{1} \xrightarrow{\SO} 
+\txid_{\cl_2}^{2}$, then $\cl_2$ should also see the version of $\key_1$ with 
+value $\val_2$, leading to a contradiction.
+%\txid_{\cl_1}^{2}
+%if \( \txid_{\cl_2}^2\) is the last transaction, it reads and thus sees \( \txid' \).
+%Given the kv-store we have:
+%\(
+%\txid \toEDGE{\WR_\mkvs} \txid^1_{\cl_1} \toEDGE{\SO} \txid^2_{\cl_1} \toEDGE{\RW_\mkvs} \txid'
+%\),
+%which means, transaction \( \txid_{\cl_2}^2 \) must see \( \txid \).
+%However, in \cref{fig:cp-disallowed} \( \txid_{\cl_2}^2 \) reads a older version of \( \key_1 \) than the one written by \( \txid \).
+%Symmetrically,
+%if \( \txid_{\cl_1}^2\) is the last transaction, it sees \( \txid \) and so must see \( \txid' \).
+%\sx{A reviewer suggests to show the visibility edges for long fork}
 
 
 \subsubsection{Snapshot Isolation $(\SI)$}
-If the total order in which transactions commit is known,  
-this consistency model can be defined compositionally from $\CP$ and $\UA$. 
-As for the case of $\PSI$, we cannot define the 
-execution test for $\SI$ by simply composing the execution
-tests of its individual components, this is, $\ET_{\CP} \cap \ET_{\UA}$.
-Rather we need to ensure that the view of a client prior to committing a transaction 
-with fingerprint $\fp$
-is closed with respect to the relation $\rel_\CP \cup \rel_{\UA}(\fp) \cup \WW;\RW\rflx$. 
-The addend $\WW;\RW\rflx$ comes from the fact that, when the centralised implementation 
-of $\CP$ (discussed above) is strengthened with write-conflict freedom (concurrent transactions 
-write to different keys), then a write-write dependency between two transactions $\txid$ and $\txid'$ 
+When the total order in which transactions commit is known,  
+$\SI$ can be defined compositionally from $\CP$ and $\UA$. 
+As such, $\vshiftname_{\SI}$ is defined as the conjunction of their associated $\vshiftname$ predicates. 
+However, as with $\PSI$, we cannot define $\cancommitname_{\SI}$ as the conjunction of their associated $\cancommitname$ predicates. 
+Rather, we define $\cancommitname_{\SI}$ as closure with respect to $\rel_{\SI}$, which includes $\rel_\CP \cup \rel_{\UA}$.
+Observe that the kv-store in \cref{fig:si-disallowed} shows an example kv-store that satisfies $\cancommitname_{\UA} \land \cancommitname_{\CP}$, 
+but not $\cancommitname_{\SI}$.
+Additionally, we include $\WW;\RW$ in $\rel_{\SI}$. 
+This is because when the centralised $\CP$ implementation (discussed above) is strengthened with write-conflict freedom, then a write-write dependency between two transactions $\txid$ and $\txid'$ 
 does not only mandate that $\txid$ commits before $\txid'$ commits but also before $\txid'$ starts. 
-As a consequence, if $(\txid,\txid') \in \WW ;\RW$, $\txid$ must commit 
+Consequently, if $(\txid, \txid') \in \WW ;\RW$, then $\txid$ must commit 
 before $\txid'$ commit.
 %When we can rely only on 
 %a partial order of transaction execution, inferred from 
@@ -1053,41 +1048,37 @@ before $\txid'$ commit.
 %the Clock-SI protocol~\cite{clocksi} satisfies $\ET_{\SI}$. 
 
 \subsubsection{(Strict) serialisability $(\SER)$}
-Serialisability is the strongest consistency model, requiring that there exists a sequential schedule of transactions. 
-The execution test $\ET_{\SER}$ thus allows clients to execute transactions only when 
-their view of the kv-store store is complete; this can be enforced by requiring that the view 
-of a client is closed with respect to the relation $\WW^{-1}$.
+Serialisability is the strongest consistency model in the literature, requiring that transactions execute in a  total sequential order. 
+The $\cancommitname_{\SER}$ thus allows clients to commit transactions only when 
+their view of the kv-store store is complete, \ie the client view is closed with respect to $\WW^{-1}$.
 This requirement prevents the kv-store in  \cref{fig:ser-disallowed}: 
 %under serialisability either $\txid_1$ or $\txid_2$ commits first. 
-Without loss of generality, suppose that $\txid_2$ commits after $\txid_1$. Then the  client that commits $\txid_2$ must see the version of $\key_1$ written by $\txid_1$, 
-and thus cannot read the outdated value $\val_0$ for such a key. 
+without loss of generality, suppose that $\txid_1$ commits before $\txid_2$. Then the client committing $\txid_2$ must see the version of $\key_1$ written by $\txid_1$, 
+and thus cannot read the outdated value $\val_0$ for $\key_1$. 
 %(the other case is analogous), then the write of $\key_2$ 
 %must be included in the view of $\txid_2$, and thus $\txid_2$ should not read the outdated write to $\key_2$ by $\txid_0$. 
 %The latter case is analogously prohibited. 
-This example is allowed by all the other execution tests in~\cref{fig:execution_tests}.
+This example is allowed by all other execution tests in~\cref{fig:execution_tests}.
 
 \subsubsection{Weak Snapshot Isolation $(\WSI)$: A New Consistency Model} 
 \label{sec:new_cm}
-Kv-stores and execution tests seem to be useful for  investigating new 
+Kv-stores and execution tests are useful for investigating new 
 consistency models.  
-One example is the consistency model induced by 
-$\ET_{\CP} \cap \ET_{\UA}$, which we call \emph{Weak Snapshot Isolation} ($\WSI$). 
-To justify this consistency model in full, it would be useful to look at its implementations. 
-In this paper we focus on what would be the benefits of implementing $\WSI$.
+One example is the consistency model induced by combining 
+$\CP$ and $\UA$, which we refer to as \emph{Weak Snapshot Isolation} ($\WSI$). 
+To justify this consistency model in full, it would be useful to explore its implementations. 
+Here we focus on the benefits of implementing $\WSI$.
 %Here I stoP!
 Because $\WSI$ is stronger than $\CP$ and $\UA$ by definition, 
-it forbids all the  anomalies forbidden by these consistency models, e.g. 
+it forbids all the  anomalies forbidden by these consistency models, \eg
 the long fork (\cref{fig:cp-disallowed}) and the lost update (\cref{fig:ua-disallowed}). 
-$\WSI$ is also weaker than SI: it allows any of the anomalies 
-of $\SI$ such as the write skew (\cref{fig:ser-disallowed}). The inclusion between $\WSI$ 
-and $\SI$ is strict, with the kv-store from \cref{fig:si-disallowed}  allowed 
-in $\WSI$ but  not in  SI. 
-Consider the kv-store in $\mkvs$ \cref{fig:si-disallowed}. We can 
-construct a $(\ET_{\CP} \cap \ET_{\UA})$-trace terminating in $(\mkvs, \_)$ by 
+Moreover, $\WSI$ is strictly weaker than $\SI$. 
+As such, $\WSI$ allows all $\SI$ anomalies, \eg the write skew (\cref{fig:ser-disallowed}), 
+and allows behaviour not allowed under $\SI$ such as that in \cref{fig:si-disallowed}.
+We can construct a $(\ET_{\CP} \cap \ET_{\UA})$-trace terminating in $(\mkvs, \_)$ by 
 executing transactions $\txid_{1}, \txid_{2}, \txid_{3}$ and $\txid_{4}$ in this order. 
-In particular, $\txid_{4}$ is executed using the view $\vi = [\key_{1} \mapsto \{0\}, \key_{2} \mapsto \{0,1\}]$. 
-However, the same trace is not a valid $\ET_{\SI}$-trace. 
-terminating in such a kv-store. 
+In particular, $\txid_{4}$ is executed using $\vi {=} [\key_{1} \mapsto \{0\}, \key_{2} \mapsto \{0,1\}]$. 
+However, the same trace is not a valid $\ET_{\SI}$-trace. % terminating in such a kv-store. 
 %If we use the execution test $\ET_{\CP} \cap \ET_{\UA}$, then 
 %%On the other hand, the inclusion 
 %%$\ET_{\CP} \cap \ET_{\UA} \subseteq \ET_{\SI}$ is strict. The kv-store from  
@@ -1097,20 +1088,21 @@ terminating in such a kv-store.
 %transaction $\txid_{2}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0\}]$ 
 %transaction $\txid_{3}$ using the view $[\key_1 \mapsto \{0,1\}, \key_2 \mapsto \{0,1\}]$, 
 %and transaction $\txid_{4}$ using the view $[\key_1 \mapsto \{0\}, \key_2 \mapsto \{0,1\}]$. 
-Under $\ET_{\SI}$, transaction $\txid_{4}$ cannot be executed using the view $\vi$: 
+Under $\SI$ transaction $\txid_{4}$ cannot be executed using $\vi$: 
 $\txid_{4}$ reads the version of $\key_2$ written by $\txid_3$, 
 meaning that $\vi$ must include the version written by 
 $\txid_{3}$. Since $(\txid_{2},\txid_{3}) \in \RW $
 %(because $\txid_{2}$ reads a staler version $\key_2$ than the one written by $\txid_{3}$) 
-and $(\txid_{1} ,\txid_2 ) \in \WW$ 
+and $(\txid_{1} ,\txid_2) \in \WW$, 
 %(because $\txid_{2}$ installs a newer version of $\key_{1}$ than the one written by $\txid_{1})$, 
-then the view $\vi$ should contain the version of $\key_{1}$ written by $\txid_{1}$, 
+then $\vi$ should contain the version of $\key_{1}$ written by $\txid_{1}$, 
 contradicting the fact that $\txid_{4}$ reads the initial version of $\key_1$.
 %We refer to the consistency model induced by $\ET_{\CP} \cap \ET_{\SI}$ as \emph{Weak Snapshot Isolation} ($\WSI$). 
-We have shown that $\WSI$ is a weaker consistency model than $\SI$, which leads us to believe that $\WSI$ would 
-outperform known implementations of $\SI$. The two consistency models are also very similar, 
+
+As $\WSI$ is a weaker consistency model than $\SI$, we believe that $\WSI$ implementations would outperform known $\SI$ implementations.
+Nevertheless, the two consistency models are very similar in that 
 %Because of the similarity between these two consistency models, we believe that 
 many applications that 
-are correct under \(\SI\) would still be correctly under $\WSI$. We give an example of such an application in \cref{sec:program-analysis}.
+are correct under$\SI$ are also correct under $\WSI$. We give an example of such an application in \cref{sec:program-analysis}.
 
 
