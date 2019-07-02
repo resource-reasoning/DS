@@ -1,12 +1,13 @@
-\emph{Dependency graphs} are introduced by Adya to define consistency models of transactional databases \cite{adya}. 
+\emph{Dependency graphs} were introduced by Adya to define consistency models of transactional databases \cite{adya}. 
 They are directed graphs consisting of transactions as nodes, 
 each of which is labelled with transaction identifier and a set of read and write operations,
 and labelled edges between transactions for describing how information flows between nodes. 
 Specifically, a transaction $\txid$ reads a version for a key $\key$ that has been written by another transaction $\txid'$ 
 (\emph{write-read dependency} \( \WR\)), overwrites a version of $\key$ written by $\txid'$ (\emph{write-write dependency} \( \WW \)),
-or reads a version of $\key$ that is later overwritten by $\txid'$ (\emph{read-write anti-dependency} \( \RW \)).
-Note that here we purposely use the same names \( \WR, \WW, \RW \) as those used in kv-store,
-since there is one-to-one map between kv-stores and dependency graphs.
+or reads a version of $\key$ that is later overwritten by $\txid'$ (\emph{read-write anti-dependency} \( \RW \)). 
+Note that we have named dependencies in kv-stores after the labelled edges of dependency graph. 
+The main result of this Section shows that kv-stores are in fact isomorphic to dependency graphs, 
+and dependencies in a kv-store naturally translates into a labelled edge in the associated dependency graph.
 
 \begin{definition}
 \label{def:dgraph}
@@ -15,7 +16,8 @@ A \emph{dependency graph} is a quadruple $\Gr = (\TtoOp{T}, \WR, \WW, \RW)$, whe
 \item 
     $\TtoOp{T}: \TxID \parfun \pset{\Ops}$ is a partial mapping from transaction identifiers 
     to the set of operations, where there are at most one read operation and one write operation per key, 
-    and such that $\TtoOp{T}(\txid_{0}) = \{(\otW, \key, \val_{0} \mid \key \in \Keys \}$, 
+    and such that $\TtoOp{T}(\txid_{0}) = \{(\otW, \key, \val_{0} \mid \key \in \Keys \}$; furthermore, 
+    $\txid_{0} \in \dom(\TtoOp{T}$, and $\TtoOp{T}(\txid_{0}) = \{(\otW, \key, \val_{0}) \mid \key \in \Keys\}$, 
 \item
     $\WR : \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function that 
 maps each key $\key$ into a relation between transactions, such that for any $\txid, \txid_1, \txid_2, 
@@ -25,9 +27,9 @@ maps each key $\key$ into a relation between transactions, such that for any $\t
 %either $\val = \val_0$ 
 %and there exists no $\txid'$ such that $\txid' \toEDGE{\WR(\key)} \txid$,  
 %or 
-there exists $\txid'$ such that $(\otW, \key, \val) \in \TtoOp{T}(\txid')$, and $\txid' \toEDGE{\WR(\key)} \txid$, 
+there exists $\txid' \neq \txid$ such that $(\otW, \key, \val) \in \TtoOp{T}(\txid')$, and $\txid' \toEDGE{\WR(\key)} \txid$, 
 \item if $\txid_1 \toEDGE{\WR(\key)} \txid$ and $\txid_2 \toEDGE{\WR(\key)} \txid$, then 
-$\txid_2 = \txid_1$.
+$\txid_1 = \txid_2$.
 \item if $\txid_{\cl}^{m} \toEDGE{\WR(\key)} \txid_{\cl}^{n}$, then $m < n$.
 \end{itemize}
 \item $\VO: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is a function 
@@ -50,29 +52,71 @@ $\txid'' \toEDGE{\WW(\key)} \txid'$ for some $\txid''$.
 Let $\Dgraphs$ be the set of all dependency graphs.
 \end{definition}
 
-Given a dependency graph $\Gr = (\TtoOp{T}, \WR, \WW, \RW)$, we often 
+Given a dependency graph $\Gr = (\TtoOp{T}, \WR, \WW, \RW)$, we 
+let $\WR_{\Gr} = \WR$, and similarly for $\WW$ and $\RW$. We also let $
+\T_{\Gr} = \dom(\TtoOp{T})$, and write $(l, \key, \val) \in_{\Gr} \txid$ if 
+$(;, \key, \val) \in \TtoOp{\Gr}(\txid)$. We
+often 
 commit an abuse of notation and use $\WR$ to denote the relation 
 $\bigcup_{\key \in \Keys} \WR(\key)$; a similar notation is adopted for $\WW, \RW$. 
 It will always be clear from the context whether the symbol $\WR$ refers to a function 
 from keys to relations, or to a relation between transactions. 
 
+To convert a kv-store $\mkvs$ into a dependency graph, we first define how 
+to extract a fingerprint of a transaction identifier $\txid$ appearing in $\mkvs$:
+\begin{definition}
+\label{def:mkvs_fingerprint}
+Let $\mkvs$ be a kv-store. For any transaction identifier $\txid$, we define 
+$\fp_{\mkvs}(\txid)$ to be the smallest set such that whenever 
+$\mkvs(\key, \_) = (\val, \txid, \_)$ then $(\otW, \key, \val) \in \txid$, and 
+whenever $\mkvs(\key, \_) = (\val, \_, \{\txid\} \cup \_)$, then $(\otR, \key, \val) \in \txid$. 
+\end{definition}
+\begin{proposition}
+\label{prop:mkvs_fp_welldefined}
+For any $\mkvs, \txid$, the fingerprint $\fp_{\mkvs}(\txid)$ is well defined. 
+That is, whenever $(\otW,\key,\val_1), (\otW,\key,\val_2) \in \fp_{\mkvs}(\txid)$, 
+then $\val_1 = \val_2$, and whenever $(\otR, \key, \val_1), (\otR,\key, \val_2) \in \fp_{\mkvs}(\txid)$, 
+then $\val_1 = \val_2$.
+\end{proposition}
+
+\begin{proof}
+Suppose that $(\otW, \key, \val_1), (\otW,\key,\val_2) \in \fp_{\mkvs}(\txid)$ for some $key, 
+\val_1, \val_2$. That is, there exist two indexes $i_1, i_2$ such that 
+$\mkvs(\key, i_1) = (\val_1, \txid, \_)$, and $\mkvs(\key, i_2) = (\val_2, \txid, \_)$. 
+That is, $\wtOf(\mkvs(\key, i_1)) = \wtOf(\mkvs(\key, i_2))$, and it follows 
+from \cref{def:mkvs-appendix} that $i_1 = i_2$. In particular, this implies that $\val_1 = \val_2$. 
+
+A similar argument can be used to prove that if $(\otR, \key, \val_1), (\otR,\key, \val_2) \in \fp_{\mkvs}(\txid)$, 
+then $\val_1 = \val_2$. In this case, in fact, we have that there exist two indexes $i_1, i_2$ such that 
+$\mkvs(\key, i_1) = (\val_1, \_,\{\txid\} \cup \_)$, and $\mkvs(\key, i_2) = (\val_2, \_, \{\txid\} \cup \_)$. 
+Equivalently, $\txid \in \rsOf(\mkvs(\txid, i_1)) \cap \rsOf(\mkvs(\txid, i_2))$, and from 
+\cref{def:mkvs-appendix} it must be the case that $i_1 = i_2$, hence $\val_1 = \val_2$.
+\end{proof}
+
+Using \cref{def:mkvs_fingerprint}, conerting a kv-store $\mkvs$  into a dependency graph is immediate, as the following 
+definition shows: 
+
 \begin{definition}
 \label{def:kv2graph}
 Given a kv-store $\mkvs$, the \emph{dependency graph} $\Gr_{\mkvs} = (\TtoOp{T}_{\mkvs}, \WR_{\mkvs}, 
-\WW_{\mkvs}, \RW_{\mkvs})$ is defined as follows: 
-\begin{itemize}
-\item for any $\txid$, $\TtoOp{T}_{\mkvs}(\txid)$ is defined if and only if there exists an index $i$ and a key 
-$\key$ such that either $\txid = \wtOf(\mkvs(\key, i))$, or $\txid \in \rsOf(\mkvs(\key,i))$; furthermore, 
-$(\otW, \key, \val) \in \TtoOp{T}(\txid)$ if and only 
-if $\txid = \wtOf(\mkvs(\key, i))$ for some $i$, and 
-$(\otR, \key, \val) \in \TtoOp{T}(\txid)$ if and only if $\txid \in \rsOf(\mkvs(\key, i))$ for some $i$, 
-\item $\txid \toEDGE{\WR(\key)} \txid'$ if and only if there exists an index $i: 0 \leq i < \lvert \mkvs(\key) \rvert$ 
-such that $\txid = \wtOf(\mkvs(\key, i))$, and $\txid' \in \rsOf(\mkvs(\key, i))$, 
-\item $\txid \toEDGE{\WW(\key)} \txid'$ if and only if there exist two indexes $i,j$: $0 \leq i < j < \lvert \mkvs(\key) \rvert$ 
-such that $\txid = \wtOf(\key, i)$, $\txid' = \wtOf(\key, j)$, 
-\item $\txid \toEDGE{\RW(\key)} \txid'$ if and only if there exist two indexes $i,j$: $0 \leq i < j < \lvert \mkvs(\key) \rvert$ 
-such that $\txid \in \rsOf(\key, i)$ and $\txid' = \wtOf(\key, j)$.
-\end{itemize}
+\WW_{\mkvs}, \RW_{\mkvs})$ is defined by letting  $\TtoOp{T}_{\mkvs}(\txid)$ be defined if and only if
+$\fp_{\mkvs}(\txid) \neq \emptyset$, in which case we let $\TtoOp{T}_{\mkvs}(\txid) = \fp_{\mkvs}(\txid)$. 
+The relations $\WR_{\mkvs}, \WW_{\mkvs}, \RW_{\mkvs}$ are inherited directly from the transactional 
+dependencies defined for $\mkvs$.
+%here exists an index $i$ and a key 
+%$\key$ such that either $\txid = \wtOf(\mkvs(\key, i))$, or $\txid \in \rsOf(\mkvs(\key,i))$; furthermore, 
+%$(\otW, \key, \val) \in \TtoOp{T}(\txid)$ if and only 
+%if $\txid = \wtOf(\mkvs(\key, i))$ for some $i$, and 
+%$(\otR, \key, \val) \in \TtoOp{T}(\txid)$ if and only if $\txid \in \rsOf(\mkvs(\key, i))$ for some $i$, 
+%\item $ if and only if $\txid \toEDGE{\WR_{\mkvs}(\key)} \txid'$: 
+%recall that this means that there exists an index $i: 0 \leq i < \lvert \mkvs(\key) \rvert$ 
+%such that $\txid = \wtOf(\mkvs(\key, i))$, and $\txid' \in \rsOf(\mkvs(\key, i))$, 
+%\item $\txid \toEDGE{\WW(\key)} \txid'$ if and only if $\txid \toEDGE{
+%there exist two indexes $i,j$: $0 \leq i < j < \lvert \mkvs(\key) \rvert$ 
+%such that $\txid = \wtOf(\key, i)$, $\txid' = \wtOf(\key, j)$, 
+%\item $\txid \toEDGE{\RW(\key)} \txid'$ if and only if there exist two indexes $i,j$: $0 \leq i < j < \lvert \mkvs(\key) \rvert$ 
+%such that $\txid \in \rsOf(\key, i)$ and $\txid' = \wtOf(\key, j)$.
+%\end{itemize}
 \end{definition}
 
 \begin{definition}
@@ -89,6 +133,84 @@ and such that for any $i, j: 1 \leq i < j \leq n$, $\wtOf(\ver_{\key}^{i}) \toED
 Then we let $\mkvs_{\Gr}= \lambda \key. \prod_{i=0}^{n} \ver_{\key}^{i}$.
 \end{enumerate}
 \end{definition}
+
+\begin{proposition}
+\label{prop:well-formed-kv-store-to-dependency}
+Let $\mkvs$ be a well-formed kv-store. Then $\Gr_{\mkvs}$ is a well-formed dependency graph.
+\end{proposition}
+
+\begin{proof}
+Let $\mkvs$ be a (well-formed) kv-store. We need to show that 
+$\Gr_{\mkvs} = (\TtoOp{T}_{\mkvs}, \WR_{\mkvs}, \WW_{\mkvs}, \RW_{\mkvs})$ is a dependency graph. 
+As a first step, we show that $\Gr_{\mkvs}$ is a dependency graph, 
+i.e. it satisfies all the constraints placed by \cref{def:dgraph}.
+
+\begin{itemize}
+\item Let $\txid \in \dom(\TtoOp{T}_{\mkvs})$, and suppose that $(\otR, \key, \val) \in \TtoOp{T}_{\mkvs}(\txid)$. 
+We need to prove that there exists a transaction $\txid' \in \dom(\TtoOp{T}_{\mkvs})$ such
+%either $\val = \val_{0}$, and there exists no $\txid' \in \dom(\TtoOp{T}_{\mkvs})$ such that 
+%$\txid' \toEDGE{\WR_{\mkvs}(\key)} \txid$, or $\txid' \toEDGE{\WR_{\mkvs}(\key)} \txid$ for some 
+%$\txid' \in \dom(\TtoOp{T}_{\mkvs})$ such 
+%that $(\otW, \key, \val) \in \TtoOp{T}_{\mkvs}(\txid')$. 
+%Because $\txid \in \dom(\TtoOp{T}_{\mkvs})$, the definition of $\Gr_{\mkvs}$ (and in particular the 
+%fact that $\TtoOp{T}_{\mkvs} : \TxID \rightharpoonup \pset{\Ops}$) ensures that 
+%$\txid \neq \txid_0$. Furthermore, 
+Because $(\otR, \key, \val) \in \TtoOp{T}_{\mkvs}(\txid)$, there 
+must exist an index $i: 0 \leq i < \lvert \mkvs(\key) \rvert$ such that $\mkvs(\key, i) = (\val, \txid', \Set{\txid } \cup \_ )$ 
+for some $\txid' \in \TxID$.  In this case we have that $\txid' \toEDGE{\WR_{\mkvs}(\key)} \txid$, 
+and by \cref{def:mkvs_fingerprint} we have that $(\otW, \key, \val) \in_{\Gr_{\mkvs}} \txid'$.
+%We have two possibilities: 
+%\begin{enumerate}
+%\item $i = 0$, in which case the hypothesis that $\mkvs$ is well-formed ensures that $\txid' = \txid_0$, 
+%and $\val = \val_0$. We also have that there exists no transaction $\txid''$ such that $\txid'' \toEDGE{\WR_{\mkvs}(\key)} \txid$: 
+%in fact, by \cref{def:kv2graph}, we have that $\txid'' \toEDGE{\WR(\key)} \txid$ if and only if there exists an index 
+%$j: 0 < j < \lvert \mkvs(\key) \rvert$ such that $\mkvs(\key, j) = (\_, \txid'', \Set{\txid} \cup \_)$. However, in this case we would 
+%have that $0 < j$, and $\txid \in \rsOf(\mkvs(\key, j)) \cap \rsOf(\mkvs(\key, 0))$, contradicting the constraint placed 
+%over well-formed kv-stores that a transaction never reads multiple versions for a key. Therefore, there exists 
+%no transaction $\txid''$ such that $\txid'' \toEDGE{\WR_{\mkvs}(\key)} \txid$, 
+%\item $i > 0$; in this case \cref{def:kv2graph} ensures that $\txid' \toEDGE{\WR_{\mkvs}(\key)} \txid$; also, 
+%because $\mkvs(\key, i) = (\val, \txid', \_)$, it must be the case that $(\otW, \key, \val) \in \TtoOp{T}_{\mkvs}(\txid')$.
+%\end{enumerate}
+\item Let $\txid \in \dom(\TtoOp{T}_{\mkvs})$, and suppose that there exist $\txid_1, \txid_2$ such that 
+$\txid_{1} \toEDGE{\WR_{\key}(\mkvs)} \txid$, $\txid_{2} \toEDGE{\WR_{\key}(\mkvs)} \txid$. 
+By \cref{def:kv2graph}, there exist two indexes $i, j: 0 \leq i, j < \lvert \mkvs(\key) \rvert$, such that 
+$\mkvs(\key, i) = (\_, \txid_1, \Set{\txid} \cup \_)$, $\mkvs(\key, j) = (\_, \txid_2, \Set{\txid} \cup \_)$. 
+We have that $\txid \in \rsOf(\mkvs(\key, i)) \cap \rsOf(\mkvs(\key, j))$, i.e. 
+$\rsOf(\mkvs(\key,i)) \cap \rsOf(\mkvs(\key, j)) \neq \emptyset$. Because we are assuming 
+that $\mkvs$ is well-formed, then it must be the case that $i = j$. This implies that $\txid_1 = \txid_2$.
+\item Let $\cl \in \Clients$, $m, n \in \Nat$ and $\key \in \Keys$ be such that 
+$\txid_{\cl}^{n} \toEDGE{\WR_{\mkvs}(\key)} \txid_{\cl}^{m}$.  We prove that 
+$n < m$. By \cref{def:kv2graph}, it must be the case that 
+there exists an index $i : 0 \leq i < \lvert \mkvs(\key) \rvert$ such that $\mkvs(\key, i) = 
+(\_, \txid_{\cl}^{n}, \Set{\txid_{\cl}^{m}} \cup \_)$. Because $\mkvs$ is well-formed, 
+it must be the case that $n < m$.
+\item Let $\txid \in \dom(\TtoOp{T}_{\mkvs})$. We show that $\neg (\txid \toEDGE{\WW_{\mkvs}} \txid)$. 
+We prove this fact by contradiction: suppose that $\txid \toEDGE{\WW_{\mkvs}(\key)} \txid$ for some key $\key$. By \cref{def:kv2graph}, 
+there must exist two indexes $i,j: 0 \leq i < j < \lvert \mkvs(\key) \rvert$ such that $\txid = \wtOf(\mkvs(\key,i))$ and 
+$\txid = \wtOf(\mkvs(\key, j))$. Because we are assuming that $\mkvs$ is well-formed, then it must be the 
+case that $i = j$, contradicting the statement that $i < j$. 
+\item Let $\txid, \txid'$ be such that $\txid' \toEDGE{\WW_{\key}(\mkvs)} \txid$. 
+We must show that  $(\otW, \key, \_) \in \TtoOp{T}_{\mkvs}(\txid')$, and $(\otW, \key, \_) \in \TtoOp{T}_{\mkvs}(\txid)$.
+By \cref{def:kv2graph}, there exist $i, j: 0 \leq i,j < \lvert \mkvs(\key) \rvert$ such that 
+$\mkvs(\key, i) = (\val', \txid', \_)$ and $\mkvs(\key, j) = (\val, \txid, \_)$, for some 
+$\val, \val' \in \Val$. \cref{def:kv2graph} also ensures that $(\otW, \key, \val') \in 
+\TtoOp{T}_{\mkvs}(\txid')$, and $(\otW, \key, \val) \in \TtoOp{T}_{\mkvs}(\txid)$.
+\item Let $\txid, \txid'$ be such that $(\otW, \key, \_) \in \TtoOp{T}_{\mkvs}(\txid)$ 
+and $(\otW, \key, \_) \in \TtoOp{T}_{\mkvs}(\txid')$. We need to prove that 
+either $\txid = \txid', \txid \toEDGE{\WW_{\mkvs}(\key)} \txid'$, or $\txid' \toEDGE{\WW_{\mkvs}(\key)} \txid$. 
+By \cref{def:kv2graph} there exist two indexes $i, j: 0 < i,j< \lvert \mkvs(\key) \rvert$ such that 
+$\mkvs(\key, i) = (\_, \txid, \_)$ and $\mkvs(\key, j) = (\_, \txid', \_)$. If $i = j$, then $\txid = \txid'$ 
+and there is nothing left to prove. Otherwise, suppose without loss of generality that 
+$i < j$. Then \cref{def:kv2graph} ensures that $\txid \toEDGE{\WW_{\mkvs}(\key)} \txid'$. 
+\item Suppose that $\txid_{\cl}^{m} \toEDGE{\WW_{\mkvs}(\key)} \txid_{\cl}^{n}$ for 
+some $\cl \in \Clients$ and $m, n \in \Nat$. We need to show that $m < n$. 
+By \cref{def:kv2graph}, because  $\txid_{\cl}^{m} \toEDGE{\WW_{\mkvs}(\key)} \txid_{\cl}^{n}$ 
+there exist two indexes $i,j: 0 < i,j < \lvert \mkvs(\key) \rvert$ such that $\wtOf(\mkvs(\key,i)) = \txid_{\cl}^{m}$ 
+and $\wtOf(\mkvs(\key, j)) = \txid_{\cl}^{n}$. From the assumption that $\mkvs$ is well-formed, it 
+follows that $n < m$.
+\end{itemize}
+\end{proof}
+
 
 \begin{theorem}
 \label{thm:kv2graph}
