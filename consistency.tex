@@ -9,22 +9,19 @@ capturing different trade-offs
 between  performance and application
 correctness: examples range from  \emph{serialisability}, a strong
 consistency model which only allows kv-stores 
-obtained  from a serial execution of transactions reading the most
-up-to-date versions of a key with inevitable performance
-drawbacks, to  \emph{eventual consistency},  a weak consistency model
+obtained  from a serial execution of transactions
+% reading the most up-to-date versions of a key 
+with inevitable performance drawbacks, to  \emph{eventual consistency},  a weak consistency model
 which imposes few conditions on the structure of a kv-store leading to
 good performance but anomalous behaviour.
 We define consistency models for our kv-stores,
 by introducing the notion of 
-\emph{execution test} which specifies whether a client is allowed to commit a transaction in a given 
-kv-store. Each execution test induces a consistency model which is  the set of kv-stores obtained 
-by letting clients non-deterministically commit transactions as long
-as  the constraints 
-imposed by the execution test are respected.
-We explore a range of execution tests  and, in
-\cref{sec:other_formalisms}, 
-demonstrate that they are 
- equivalent to the established declarative definitions over abstract executions \cite{framework-concur} and dependency graphs \cite{adya}.
+\emph{execution tests} which specify whether a client is allowed to commit a transaction in a given 
+kv-store. Each execution test induces a consistency model as the set of kv-stores obtained 
+by having clients non-deterministically commit transactions so long as  the constraints 
+imposed by the execution test are satisfied.
+In what follows we explore a range of execution tests  associated with well-known consistency models in the literature. 
+Later in \cref{sec:other_formalisms} we demonstrate that our execution test formulation of these consistency models are  equivalent to their established declarative definitions over abstract executions \cite{framework-concur} and dependency graphs \cite{adya}.
 
 
 %
@@ -78,52 +75,51 @@ demonstrate that they are
 
 \begin{definition}
 \label{def:execution.test}
+%An \emph{execution test} is a set of tuples $\ET \subseteq \MKVSs \times \Views \times \Fingerprints \times \MKVSs \times \Views$ 
+%such that for all $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$, 
+%$\vi \in \Views(\mkvs)$, $\vi' \in \Views(\mkvs')$, and  
+%for any $\key \in
+%\mkvs$ and $\val \in \Val$, if $(\otR, \key, \val) \in \fp $ then $	\mkvs(\key, \max{}_{<}(\vi(\key))) = \val   $.
 An \emph{execution test} is a set of tuples $\ET \subseteq \MKVSs \times \Views \times \Fingerprints \times \MKVSs \times \Views$ 
-such that for all $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$, 
-$\vi \in \Views(\mkvs)$, $\vi' \in \Views(\mkvs')$, and  
-for any $\key \in
-\mkvs$ and $\val \in \Val$, if $(\otR, \key, \val) \in \fp $ then $	\mkvs(\key, \max{}_{<}(\vi(\key))) = \val   $.
-%
-%{%
-%\begin{align}
-%\small
-%    & 
-%	(\otR, \key, \val) \in \fp \implies
-%	\mkvs(\key, \max{}_{<}(\vi(\key))) = \val  
-%	\tag{Ext} \label{eq:read-external} \\
-%    & 
-%    \vi(\key) \neq \vi'(\key) 
-%    \implies
-%    \exsts{l} (l, \key, -) \in \fp
-%    \tag{ValidViewUpd} \label{eq:valid-view-update}
-%    \ac{This second condition was needed for compositionality results, and is no longer needed. 
-%    I am removing it.}
-%\end{align}%
-%}%
+such that for all $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$: 
+\begin{enumerate*}
+	\item $\vi \in \Views(\mkvs)$ and $\vi' \in \Views(\mkvs')$; 
+	\item $\cancommit \mkvs \vi \fp$; 
+	\item $\vshift \mkvs \vi {\mkvs'} {\vi'}$; and 
+	\item for all $\key \!\in\! \mkvs$ and $\val \!\in\! \Val$, if $(\otR, \key, \val) \!\in\! \fp $ then $	\mkvs(\key, \max{}_{<}(\vi(\key))) {=} \val   $.
+\end{enumerate*}
+
+
+
 \end{definition}
 %
 \noindent 
 Intuitively, $(\mkvs, \vi, \fp, \mkvs', \vi') \in \ET$ means that, under the execution test $\ET$,
 a client with initial view $\vi$ over a kv-store $\mkvs$ can commit a transaction with 
-fingerprint $\fp$ to obtain the resulting kv-store $\mkvs'$ (\cref{def:updatekv} ) with  view
-$\vi'$. We adopt the 
+fingerprint $\fp$ to obtain the resulting kv-store $\mkvs'$ (\cref{def:updatekv} ) while shifting its view
+to $\vi'$. We adopt the 
 %more suggestive 
 notation $\ET \vdash (\mkvs, \vi) \csat \fp: (\mkvs', \vi')$  to
 capture this intuition. 
 %The condition of 
-\cref{def:execution.test} enforces the last-write-wins
-policy~\cite{vogels:2009:ec:1435417.1435432} that 
+Note that the last condition in \cref{def:execution.test} enforces the last-write-wins
+policy~\cite{vogels:2009:ec:1435417.1435432}: 
 a transaction always reads the most recent writes from the initial view \(\vi\).  
 %The second condition states that a transaction is only allowed to update the view for those keys 
 %that have been recorded in the fingerprint.  
 
-The largest execution test is denoted as $\ET_{\top}$: 
-in \cref{sec:other_formalisms} we prove that the set of kv-stores induced by $\ET_{\top}$ 
+The largest execution test is denoted by $\ET_{\top}$, where for all $\mkvs, \mkvs', \vi, \vi, \fp$: 
+\[
+	\cancommit[\ET_{\top}] \mkvs \vi \fp \defiff \mathsf{true}
+	\qquad  \text{and} \qquad 
+	\vshift[\ET_{\top}] \mkvs \vi {\mkvs'} {\vi'} \defiff \mathsf{true}
+\] 
+In \cref{sec:other_formalisms} we show that the consistency model induced by $\ET_{\top}$ 
 corresponds to the \emph{Read Atomic} consistency model \cite{ramp}, a variant of \emph{Eventual 
-Consistency} \cite{ev_transactions} for atomic transactions. Later, in this Section, 
-we define several execution tests that induce well-known consistency models.
-%Note that at this initial stage \eqref{eq:read-external} and \eqref{eq:valid-view-update} are the only required conditions and execution tests are otherwise unrestricted. 
-%Further restrictions on execution tests are determined by the underlying consistency model, thus prescribing the consistency guarantees of the model.
+Consistency} \cite{ev_transactions} for atomic transactions. 
+%Later in this section we define several execution tests that induce well-known consistency models.
+%%Note that at this initial stage \eqref{eq:read-external} and \eqref{eq:valid-view-update} are the only required conditions and execution tests are otherwise unrestricted. 
+%%Further restrictions on execution tests are determined by the underlying consistency model, thus prescribing the consistency guarantees of the model.
 
 We now explain how an execution test induces a consistency model. Given an execution test $\ET$, 
 we define $\ET$-reductions which capture how a client $\cl$ may
@@ -378,16 +374,12 @@ this is not the case.}
 
 \subsection{Example Execution Tests}
 \label{subsec:cm_examples}
-We give examples of execution tests to define 
-consistency models on kv-stores. In Section~\ref{sec:other_formalisms}
-we show that these definitions  are 
-equivalent to 
-those based on abstract executions given in the literature~\cite{principle-eventual-consistency,framework-concur,surech-session-guarantee}.
-Recall that atomic visibility is hard-wired into our model. Consistency models that we can capture using 
-execution tests ensure that transactions execute atomically, and that they read versions from an atomic 
-snapshot of the kv-store, determined using the last write wins policy. Although this limitation forbids us to 
-express interesting consistency models such as \emph{Read Committed}, we are able to express 
-a large variety of consistency models employed by distributed kv-stores.
+We give several examples of execution tests to define well-known consistency models.
+Later in \cref{sec:other_formalisms} we show that our definitions  are  equivalent to existing definitions in the literature defined using abstract executions \citep{principle-eventual-consistency,framework-concur,surech-session-guarantee}.
+Recall that the snapshot property and the last write wins are hard-wired into our model. 
+%Consistency models that we can capture using execution tests ensure that transactions execute atomically, and that they read versions from an atomic  snapshot of the kv-store, determined using the last write wins policy. 
+As such, we can only model consistency models that satisfy these two constraints. 
+Although this forbids us to express interesting consistency models such as \emph{Read Committed}, we are able to express a large variety of consistency models employed by distributed kv-stores.
 %
 %
 %We now need to say something about
@@ -403,24 +395,25 @@ a large variety of consistency models employed by distributed kv-stores.
 %
 %---------------
 
-Recall from Definition~\ref{def:execution.test} that an execution test is a relation
-given by a set of tuples written in the form
-$\ET \vdash (\mkvs,\vi) \csat \fp: (\mkvs', \vi')$. 
-For each such tuple, the views $\vi$ and $\vi'$ identify the set 
-of versions that a client must see before and after committing a transaction 
-with fingerprint $\fp$, respectively.
-%The purpose of
-%such execution tests is  to constrain the views $\vi$ and $\vi'$ to
-%those that make sense for a particular consistency model. 
-We study 
-two styles of execution test: those that constrain the resulting view
-$\vi'$ relative to the initial view $\vi$ which are comparatively straightforward; and those that constrain the initial view $\vi$ which
-are less straightforward as they require closure properties on the
-so-called visible transactions of a view. 
-Given a kv-store $\mkvs$ and view $\vi$, the {\em set of visible
-transactions} is the set
+Recall from \cref{def:execution.test} that an execution test $\ET$ includes tuples of the form $(\mkvs,\vi, \fp, \mkvs', \vi')$ such that $\vshift \mkvs \vi {\mkvs'} {\vi'}$ and $\cancommit \mkvs \vi \fp$ hold. 
+%For each such tuple, the views $\vi$ and $\vi'$ identify the set 
+%of versions that a client must see before and after committing a transaction 
+%with fingerprint $\fp$, respectively.
+%%%The purpose of
+%%%such execution tests is  to constrain the views $\vi$ and $\vi'$ to
+%%%those that make sense for a particular consistency model. 
+%We study 
+%two styles of execution test: those that constrain the resulting view
+%$\vi'$ relative to the initial view $\vi$ which are comparatively straightforward; and those that constrain the initial view $\vi$ which
+%are less straightforward as they require closure properties on the
+%so-called visible transactions of a view. 
+%
+In what follows we define $\vshiftname$ and $\cancommitname$ for several consistency models. To do this, we first need several auxiliary definitions. 
 
-\vspace{-7pt}
+\mypar{Prefix Closure}
+Given a kv-store $\mkvs$ and a view $\vi$, the {\em set of visible
+transactions} is defined as follows, containing those transactions whose updates are known to a
+client with view $\vi$:
 {%
 \displaymathfont
 \begin{align*}
@@ -428,56 +421,68 @@ transactions} is the set
 \Set{\wtOf[\mkvs(\key, i] }[ i \in \vi(\key)]
 \end{align*}
 }%
-which contains all the transactions whose updates are known to a
-client with view $\vi$.  Conversely, given a kv-store $\mkvs$ and set
-of visible transactions $\txidset$, it is possible to recover a view
-of the client by%
-
-\vspace{-7pt}
+%
+%Conversely, given a kv-store $\mkvs$ and set
+%of visible transactions $\txidset$, it is possible to recover a view
+%of the client by%
+%
+%\vspace{-7pt}
+%{%
+%\displaymathfont
+%\begin{align*}
+%    \getView[\mkvs, \T] & \defeq \lambda \key. \Set{i }[
+%\wtOf[\mkvs(\key, i)] \in \T]
+%\end{align*}
+%}%
+%This connection between views and sets of transactions enables us to express concisely 
+%the prefix-closure of a view with respect to a dependency relation $\rel$ between 
+%transactions: given $R \subseteq \TxID \times \TxID$, the closure of 
+%a view $\vi$ with respect to the kv-store $\mkvs$ and the relation $R$
+%is defined as%
+%
+%\vspace{-7pt}
+%{%
+%\displaymathfont
+%\begin{align*}
+%\func{closure}[\mkvs, \vi, R] & \defeq \getView[\mkvs, (R^{-1})^{\ast}(\Tx(\mkvs, \vi))]
+%\end{align*}
+%}%
+%If $\vi = \mathsf{closure}(\mkvs, \vi, R)$, then we say that $\vi$ is \emph{closed} with 
+%respect to $\mkvs$ and $R$, written \( \closed[\mkvs,\vi,\rel]\).
+%%The view $\vi$ is said to be closed with respect to $\mkvs$ and $R$, denoted 
+%%$\closed(\mkvs, \vi, R)$, if and only  if $\vi = \mathsf{closure}(\mkvs,\vi,R)$.
+%
+%
+Given relation on transactions, $\rel \subseteq \TxID \times \TxID$, we say that a view $\vi$ is closed with respect to a kv-store $\mkvs$ and $\rel$, written $\closed[\mkvs,\vi,\rel]$, iff:  
 {%
 \displaymathfont
 \begin{align*}
-    \getView[\mkvs, \T] & \defeq \lambda \key. \Set{i }[
-\wtOf[\mkvs(\key, i)] \in \T]
+	\closed[\mkvs,\vi,\rel]
+	\defiff
+	\Tx(\mkvs, \vi) {=} 
+	(\rel^*)^{-1} \Tx(\mkvs, \vi)
 \end{align*}
 }%
-This connection between views and sets of transactions enables us to express concisely 
-the prefix-closure of a view with respect to a dependency relation $\rel$ between 
-transactions: given $R \subseteq \TxID \times \TxID$, the closure of 
-a view $\vi$ with respect to the kv-store $\mkvs$ and the relation $R$
-is defined as%
+That is, if transaction $\txid$ is visible in $\vi$, then all transactions that are $\rel^*$-before $\txid$ are also visible in $\vi$.
 
-\vspace{-7pt}
-{%
-\displaymathfont
-\begin{align*}
-\func{closure}[\mkvs, \vi, R] & \defeq \getView[\mkvs, (R^{-1})^{\ast}(\Tx(\mkvs, \vi))]
-\end{align*}
-}%
-If $\vi = \mathsf{closure}(\mkvs, \vi, R)$, then we say that $\vi$ is \emph{closed} with 
-respect to $\mkvs$ and $R$, written \( \closed[\mkvs,\vi,\rel]\).
-%The view $\vi$ is said to be closed with respect to $\mkvs$ and $R$, denoted 
-%$\closed(\mkvs, \vi, R)$, if and only  if $\vi = \mathsf{closure}(\mkvs,\vi,R)$.
-
-
-We define transaction dependency
-relations for kv-stores inspired by dependency graphs due to Adya \cite{adya}, and 
-introduced in \ref{sec:other_formalisms}.
-Let $\mkvs$ be a kv-store. For an arbitrary key $\key$ and 
-indexes $i,j$ with  $0 \leq i < j < \abs{ \mkvs(\key) }$, let 
-$\mkvs(\key, i)  = (\stub, \txid_{i}, \T_{i})$, $\mkvs(\key,j)  =
-(\stub, \txid_{j}, \stub) $
-and $\txid \in \T_{i}$. We say that there is:
-\begin{enumerate*} 
+\mypar{Dependency Relations}
+We define transaction dependency relations for kv-stores inspired by dependency graphs due to Adya \cite{adya}, and  introduced in \ref{sec:other_formalisms}.
+Given a kv-store $\mkvs$, a key $\key$ and 
+indexes $i,j$ such that  $0 \leq i < j < \abs{ \mkvs(\key) }$, 
+if there exists $\txid_i, \T_i, \txid$ such that 
+$\mkvs(\key, i)  {=} (\stub, \txid_{i}, \T_{i})$, $\mkvs(\key,j) {=} (\stub, \txid_{j}, \stub)$
+and $\txid \in \T_{i}$, 
+then we say that there is:
+\begin{enumerate} 
 \item a \emph{Write-Read} dependency over 
 $\key$ from $\txid_{i}$ to $\txid$, written $(\txid_{i},\txid) \in \WR_{\mkvs}(\key)$;
 \item a \emph{Write-Write} dependency over $\key$ from $\txid_{i}$ to $\txid_{j}$, 
     written $(\txid_{i},\txid_{j}) \in \WW_{\mkvs}(\key) $; and 
 \item a \emph{Read-Write} anti-dependency from $\txid$ to $\txid_{j}$, provided that 
 $\txid \neq \txid_{j}$, written $(\txid,\txid_j) \in \RW_{\mkvs}(\key)$.
-\end{enumerate*}
-\noindent \cref{fig:dependencies} graphically illustrates dependencies for kv-stores.
-
+\end{enumerate}
+\noindent \cref{fig:dependencies} illustrates an example kv-store and its dependencies.
+%
 \pg{----------
 
 can we squeeze in a diagram showing one ke with WW, WR and RW
@@ -487,7 +492,7 @@ these
 ------------
 \ac{There is one in Section 5}
 }
-
+%
 \pg{
 ------I realise I now don't understand this next bit fully , we need to
 discuss-------
@@ -501,7 +506,9 @@ K' is in SER and K can be obtained by committing a transaction in K' using
 a complete view (one with all versions), then K is in SER.}
 
 }
-
+%
+{\color{blue} 
+\textbf{Azalea: }I don't think this is the right place for the following:\\
 As we will see shortly, we use dependencies in a way fundamentally 
 different from Adya's dependency graphs \cite{adya}, 
 a well-known mathematical structure used for specifying consistency models that is introduced 
@@ -532,30 +539,33 @@ of kv-stores contained in $\CMs(\ET)$.
 %to define how such kv-stores can be constructed, in a way that is agnostic of their structure.
 %
 %-------------
-We give example execution tests in
-~\cref{fig:execution.tests}. 
-We start by looking at  execution tests for defining  session
-guarantees, then we move to execution tests which capture stronger
-consistency models. 
-%In that table we 
-%commit an abuse of notation and let $\closed(\mkvs, \vi, R)$ be the execution test 
-%$\{(\mkvs, \vi, \fp, \mkvs', \vi') \mid \closed(\mkvs, \vi, R)\}$.
+}
 
-%Following \cite{distrprinciples}, we distinguish between
-%client- and data-centric consistency models.
-%Many of the execution tests we present
-%We now give examples of execution tests in~\cref{fig:execution.tests},
-%where the associated consistency models for kv-stores correspond to
-%widely adopted consistency guaranteees for distributed databases.
-%Following \cite{distrprinciples}, we distinguish between
-%client- and data-centric consistency models: 
-%the former constrain the client views; 
-%the latter impose conditions on the structure of the kv-store.  
-%In \cref{fig:anomalies} we give illustrative
-%examples of kv-stores allowed/disallowed by our
-%consistency models.
-
-%\sx{Explain functions used in the table}
+We now proceed by defining \vshiftname and \cancommitname for several well-known consistency models.
+%We give example execution tests in
+%~\cref{fig:execution.tests}. 
+%We start by looking at  execution tests for defining  session
+%guarantees, then we move to execution tests which capture stronger
+%consistency models. 
+%%%%In that table we 
+%%%%commit an abuse of notation and let $\closed(\mkvs, \vi, R)$ be the execution test 
+%%%%$\{(\mkvs, \vi, \fp, \mkvs', \vi') \mid \closed(\mkvs, \vi, R)\}$.
+%%%
+%%%%Following \cite{distrprinciples}, we distinguish between
+%%%%client- and data-centric consistency models.
+%%%%Many of the execution tests we present
+%%%%We now give examples of execution tests in~\cref{fig:execution.tests},
+%%%%where the associated consistency models for kv-stores correspond to
+%%%%widely adopted consistency guaranteees for distributed databases.
+%%%%Following \cite{distrprinciples}, we distinguish between
+%%%%client- and data-centric consistency models: 
+%%%%the former constrain the client views; 
+%%%%the latter impose conditions on the structure of the kv-store.  
+%%%%In \cref{fig:anomalies} we give illustrative
+%%%%examples of kv-stores allowed/disallowed by our
+%%%%consistency models.
+%%%
+%%%%\sx{Explain functions used in the table}
 
 \ac{
 \pg{
@@ -569,25 +579,32 @@ should be indexed by clients.
 I agree, but there is no time for that.
 }
 
-\mypar{Monotonic Reads ($\MR$)}
-This consistency model states that a client
-cannot lose information from the view. It  
-can only see increasingly more up-to-date versions from a kv-store. 
+
+
+
+
+\subsubsection{Monotonic Reads $(\MR)$}
+%This consistency model states that a client
+%cannot lose information from the view. It  
+%can only see increasingly more up-to-date versions from a kv-store. 
+This consistency model states that when committing a client
+cannot lose information in that it can only see increasingly more up-to-date versions from a kv-store.
 This prevents, for example, the kv-store of \cref{fig:mr-disallowed},
 since client $\cl$ first reads the latest version of $\key$ in $\txid_{\cl}^{1}$, 
 and then reads the older, initial version of $\key$ in $\txid_{\cl}^{2}$.  
-The execution test $\ET_{\MR}$ ensures that clients  can only extend their views. 
-Note that the execution test $\ET_{\MR}$ can also be expressed as a closure 
-property of the resulting view. 
-Let $\rel_{\MR}(\mkvs, \vi) \defeq \Set{(\wtOf[\mkvs(\key, i), \txid] }[ \key \in \Keys \wedge i \in \vi(\key) \wedge \txid \in \mkvs]$; 
-%given \(\mkvs, \vi\) before committing a transaction and $\mkvs',
-%\vi'$ after.
-The predicate $\closed[\mkvs', \vi', R_{\MR}(\mkvs, \vi)]$ states that all the versions included in $\vi$ on $\mkvs$ 
-must also be included in $\vi'$ on $\mkvs'$: that is,  $\vi
-\sqsubseteq \vi'$ and  hence 
-$\ET_{\MR} \defeq \Set{(\mkvs, \vi, \opset, \mkvs', \vi') }[
-\closed[\mkvs', \vi', \rel_{\MR}(\mkvs, \vi)]]$.
-
+As such, the $\vshiftname_{\MR}$ predicate in \cref{fig:execution_tests} ensures that clients  can only extend their views. 
+When this is the case, clients can then \emph{always} commit their transactions, and thus $\cancommitname_{\MR}$ is simply defined as $\true$. 
+%Note that the execution test $\ET_{\MR}$ can also be expressed as a closure 
+%property of the resulting view. 
+%Let $\rel_{\MR}(\mkvs, \vi) \defeq \Set{(\wtOf[\mkvs(\key, i), \txid] }[ \key \in \Keys \wedge i \in \vi(\key) \wedge \txid \in \mkvs]$; 
+%%given \(\mkvs, \vi\) before committing a transaction and $\mkvs',
+%%\vi'$ after.
+%The predicate $\closed[\mkvs', \vi', R_{\MR}(\mkvs, \vi)]$ states that all the versions included in $\vi$ on $\mkvs$ 
+%must also be included in $\vi'$ on $\mkvs'$: that is,  $\vi
+%\sqsubseteq \vi'$ and  hence 
+%$\ET_{\MR} \defeq \Set{(\mkvs, \vi, \opset, \mkvs', \vi') }[
+%\closed[\mkvs', \vi', \rel_{\MR}(\mkvs, \vi)]]$.
+%
 \pg{------------------
 
 In above, has  $t \in K$ been defined anywhere? Is it just the writes in K or
@@ -597,71 +614,78 @@ is it the reads and writes in K? I think both reads and writes.
 ------------------
 \ac{It's defined right after the definition of kv-store, Def 3.1}
 }
-
-\mypar{Monotonic Writes ($\MW$)}
-This consistency model states that if a client $\cl$ sees 
-a version \( \key \) that was written by another client $\cl'$, 
-then it must see all versions of \( \key \) that were 
-previously written by $\cl'$: in other words, 
-the view of the client $\cl$  in a kv-store $\mkvs$ must be closed 
-with respect to the relation $\SO \cap \WW_{\mkvs}$, 
-before $\cl$ can commit a transaction.
 %
-%whenever a view includes a version for a key \( \key \) 
-%that was written by a client $\cl$,
-%then the view must include all versions for the key \( \key \) that were previously written by $\cl$. 
-This prevents, for example, the kv-store of \cref{fig:mw-disallowed}, as
-transaction $\txid$ reads the third version of $\key_2$ 
-with value $\val_3$ written by client $\cl$, 
-but it does not read, hence does not see, the second version of $\key_1$
-with value $\val_1$ and previously written by the same client via transaction \( \txid^1_{\cl} \)
-who also have written the second version of \( \key_2 \).
-%We can enforce monotonic writes by requiring the view of a client, prior to committing 
-%a transaction, to be closed with respect to the session relation $\SO \cap \WW_{\mkvs}$.
-%\ac{Why the reflexive closure? \sx{New view should include the new transaction.}}
-%The execution test $\ET_{\MW}$  ensures that, prior to executing a transaction,
-%the set of versions included in the view of the client are write 
-%prefix-closed with respect to the relation $\SO\rflx$.
 
-\mypar{Read Your Writes (\RYW)}
+%\subsubsection{Monotonic Writes $(\MW)$}
+%This consistency model states that if a client $\cl$ sees 
+%a version \( \key \) that was written by another client $\cl'$, 
+%then it must see all versions of \( \key \) that were 
+%previously written by $\cl'$: in other words, 
+%the view of the client $\cl$  in a kv-store $\mkvs$ must be closed 
+%with respect to the relation $\SO \cap \WW_{\mkvs}$, 
+%before $\cl$ can commit a transaction.
+%%
+%%whenever a view includes a version for a key \( \key \) 
+%%that was written by a client $\cl$,
+%%then the view must include all versions for the key \( \key \) that were previously written by $\cl$. 
+%This prevents, for example, the kv-store of \cref{fig:mw-disallowed}, as
+%transaction $\txid$ reads the third version of $\key_2$ 
+%with value $\val_3$ written by client $\cl$, 
+%but it does not read, hence does not see, the second version of $\key_1$
+%with value $\val_1$ and previously written by the same client via transaction \( \txid^1_{\cl} \)
+%who also have written the second version of \( \key_2 \).
+%%We can enforce monotonic writes by requiring the view of a client, prior to committing 
+%%a transaction, to be closed with respect to the session relation $\SO \cap \WW_{\mkvs}$.
+%%\ac{Why the reflexive closure? \sx{New view should include the new transaction.}}
+%%The execution test $\ET_{\MW}$  ensures that, prior to executing a transaction,
+%%the set of versions included in the view of the client are write 
+%%prefix-closed with respect to the relation $\SO\rflx$.
+
+\subsubsection{Read Your Writes $(\RYW)$}
 This consistency model states that a client must always see all the versions written by the client itself. 
-The execution test $\ET_{\RYW}$ states that after executing a transaction, a client 
+The $\vshiftname_{\RYW}$ predicate thus states that after executing a transaction, a client 
 %the resulting view 
 contains all the versions it wrote in its view. This ensures that such versions will be included in the view of the client 
 when committing future transactions.
-The execution test $\ET_{\RYW}$ prevents the kv-store in \cref{fig:ryw-disallowed}, 
-as the initial version of $\key$ holds value $\val_0$ 
+Note that under $\RYW$ the kv-store in \cref{fig:ryw-disallowed} is prohibited as
+the initial version of $\key$ holds value $\val_0$ 
 and client $\cl$ tries to increment the value of $\key$ twice.  
 For its first transaction \( \txid_{\cl}^1\), it reads the initial value $\val_0$ and then writes a new version with value $\val_1$. 
 For its second transaction \( \txid_{\cl}^2\), it reads the initial value $\val_0$ again and write a new version with value $\val_1$.
-The execution test $\RYW$ rules out the example by requiring that
+The $\vshiftname_{\RYW}$ predicate rules out this example by requiring that
 the client view, after it commits the transaction  \(\txid_{\cl}^{1}\), includes the version it wrote.  
+When this is the case, clients can always commit their transactions, and thus $\cancommitname_{\RYW}$ is simply $\true$.
 
-The execution test $\ET_{\RYW}$ can also be expressed 
-as a closure property of the resulting view.
-%%%don't say this, it's not in the concepts of the ET:  after the
-%%%transaction commit: 
-Given $\mkvs, \mkvs'$, let $\txid_{\mkvs}^{\mkvs'}$ be a transaction included in $\mkvs'$ 
-but not in $\mkvs$. For our purposes, $\txid_{\mkvs}^{\mkvs'}$ is uniquely determined: 
-in fact, we have that $\mkvs' = \updateKV(\mkvs, \vi, \fp, \txid_{\mkvs}^{\mkvs'})$ for some $\vi$ and $\fp$
-and it represents the last transaction that committed in $\mkvs'$.
-%$\mkvs' \setminus \mkvs$ be the set of transactions appearing 
-%in $\mkvs'$ but not in $\mkvs$; note that 
-%%in tuples of the form 
-%%$(\mkvs, \vi, \fp, \mkvs', \vi')$ taken from execution tests, $\mkvs' \setminus \mkvs$ 
-%in our operational model this set is a singleton set $\Set{\txid}$ where $\txid$ is the 
-%%newly committed transaction.
-%that committed when updating the kv-store from $\mkvs$ to $\mkvs'$; 
-%For a given set of transactions $\txidset$, let 
-Let $\rel_{\RYW}(\txid) \defeq \Set{(\txid', \txid) }[ \txid \in \T \land (\txid', \txid) \in \SO\rflx ]$. 
-Then the predicate $\closed[\mkvs', \vi', \rel_{\RYW}(\txid_{\mkvs}^{\mkvs'})]$ states that a 
-view $\vi'$ includes all the writes performed by the same client that committed the transaction $\txid$ in $\mkvs'$: 
-$\ET_{\RYW} \defeq \Set{(\mkvs, \vi, \fp, \mkvs', \vi') }[ \closed[\mkvs', \vi', R_{\RYW}(\txid_{\mkvs}^{\mkvs'})]]$.
-%The definition for \( \ET_{\RYW} \) given in \cref{fig:execution-tests} is equivalent.
-%Note that if \( \MR \) is assumed \( \RYW \) can be simplified to 
-%\( \fora{\txid \in \mkvs' \setminus \mkvs, \key,i} \wtOf[\mkvs'(\key,i)] \implies i \in \vi'(\key)\):
-%that is, the view \( \vi' \) after \( \txid \) commits should include
-%the new versions written by \( \txid \).
+The $\MR$ and $\RYW$ models together with \emph{monotonic writes} (\MW) and \emph{write follows reads} (\WFR) models  are collectively known as \emph{session guarantees}. 
+Due to space constraints, we omit the definitions associated with $\MW$ and $\WFR$, and refer the reader to the accompanying technical appendix. 
+
+
+
+%The execution test $\ET_{\RYW}$ can also be expressed 
+%as a closure property of the resulting view.
+%%%%don't say this, it's not in the concepts of the ET:  after the
+%%%%transaction commit: 
+%Given $\mkvs, \mkvs'$, let $\txid_{\mkvs}^{\mkvs'}$ be a transaction included in $\mkvs'$ 
+%but not in $\mkvs$. For our purposes, $\txid_{\mkvs}^{\mkvs'}$ is uniquely determined: 
+%in fact, we have that $\mkvs' = \updateKV(\mkvs, \vi, \fp, \txid_{\mkvs}^{\mkvs'})$ for some $\vi$ and $\fp$
+%and it represents the last transaction that committed in $\mkvs'$.
+%%$\mkvs' \setminus \mkvs$ be the set of transactions appearing 
+%%in $\mkvs'$ but not in $\mkvs$; note that 
+%%%in tuples of the form 
+%%%$(\mkvs, \vi, \fp, \mkvs', \vi')$ taken from execution tests, $\mkvs' \setminus \mkvs$ 
+%%in our operational model this set is a singleton set $\Set{\txid}$ where $\txid$ is the 
+%%%newly committed transaction.
+%%that committed when updating the kv-store from $\mkvs$ to $\mkvs'$; 
+%%For a given set of transactions $\txidset$, let 
+%Let $\rel_{\RYW}(\txid) \defeq \Set{(\txid', \txid) }[ \txid \in \T \land (\txid', \txid) \in \SO\rflx ]$. 
+%Then the predicate $\closed[\mkvs', \vi', \rel_{\RYW}(\txid_{\mkvs}^{\mkvs'})]$ states that a 
+%view $\vi'$ includes all the writes performed by the same client that committed the transaction $\txid$ in $\mkvs'$: 
+%$\ET_{\RYW} \defeq \Set{(\mkvs, \vi, \fp, \mkvs', \vi') }[ \closed[\mkvs', \vi', R_{\RYW}(\txid_{\mkvs}^{\mkvs'})]]$.
+%%The definition for \( \ET_{\RYW} \) given in \cref{fig:execution-tests} is equivalent.
+%%Note that if \( \MR \) is assumed \( \RYW \) can be simplified to 
+%%\( \fora{\txid \in \mkvs' \setminus \mkvs, \key,i} \wtOf[\mkvs'(\key,i)] \implies i \in \vi'(\key)\):
+%%that is, the view \( \vi' \) after \( \txid \) commits should include
+%%the new versions written by \( \txid \).
 
 \pg{------------------------RYW----------
 
@@ -699,24 +723,29 @@ can be simplified.
 
 \input{\RootPath/anomalies-fig.tex}
 
-\mypar{Write Follows Reads (\WFR)}
-This consistency model states that, prior to committing a transaction, 
-if a client $\cl$ sees a version on a key $\key$ written by some
-client $\cl'$ (possibly equal to $\cl$), then it must also see the versions of $\key$ previously read by $\cl'$ (in $\SO\rflx$ relation). 
-The execution test $\ET_{\WFR}$ models exactly this condition.
-The kv-store of \cref{fig:wfr-disallowed} is disallowed by $\ET_{\WFR}$,
-since transaction $\txid$ reads a version written by $\cl$ but
-not a version previously read by $\cl$.
-%The execution test $\ET_{\WFR}$ ensures
-%that a view includes all versions previously read by a client 
-%if the view already includes a write from that client. 
+%\subsubsection{Write Follows Reads $(\WFR)$}
+%This consistency model states that, prior to committing a transaction, 
+%if a client $\cl$ sees a version on a key $\key$ written by some
+%client $\cl'$ (possibly equal to $\cl$), then it must also see the versions of $\key$ previously read by $\cl'$ (in $\SO\rflx$ relation). 
+%The execution test $\ET_{\WFR}$ models exactly this condition.
+%The kv-store of \cref{fig:wfr-disallowed} is disallowed by $\ET_{\WFR}$,
+%since transaction $\txid$ reads a version written by $\cl$ but
+%not a version previously read by $\cl$.
+%%The execution test $\ET_{\WFR}$ ensures
+%%that a view includes all versions previously read by a client 
+%%if the view already includes a write from that client. 
+%
+%\sx{A cite here \cite{surech-session-guarantee} who mentions composition of 4 session guarantees. 
+%    \cite{principle-eventual-consistency} mentions causal consistency is combination of session guarantees,
+%    yet they only define 3 types of session guarantees.
+%}
+%\sx{ Sessions to CC cite \cite{principle-eventual-consistency} }
 
-\sx{A cite here \cite{surech-session-guarantee} who mentions composition of 4 session guarantees. 
-    \cite{principle-eventual-consistency} mentions causal consistency is combination of session guarantees,
-    yet they only define 3 types of session guarantees.
-}
-\sx{ Sessions to CC cite \cite{principle-eventual-consistency} }
-\mypar{Causal Consistency (\CC)}
+
+{\color{blue} 
+\textbf{Azalea: } This is where I got to}
+
+\subsubsection{Causal Consistency $(\CC)$}
 Causal consistency strengthens the four session guarantees above by requiring 
 that if a client sees a version 
 $\ver$ prior to committing a transaction, then it must also see the versions 
@@ -842,7 +871,7 @@ dependency graphs.
 %causal dependencies of transactions; and the view after committing guarantees \( \MR \) and \( \RYW \).
 %}
 
-\mypar{Update Atomic ($\UA$)}
+\subsubsection{Update Atomic $(\UA)$}
 This consistency model has been proposed in~\cite{framework-concur} 
 and implemented in \cite{rola}.
 $\UA$ disallows concurrent transactions writing to the same key,
@@ -862,7 +891,7 @@ fingerprint $\fp$.
 --------not done from here----------------------
 }
 
-\mypar{Parallel Snapshot Isolation (\PSI)} 
+\subsubsection{Parallel Snapshot Isolation $(\PSI)$} 
 This consistency model has been defined as the conjunction of the guarantees provided by $\CC$ and $\UA$~\cite{framework-concur}. 
 %As for the case of causal consistency, we cannot define 
 Unfortunately, in our framework it is not the case that $\ET_{\PSI}$ as $\ET_{\CC} \cap \ET_{\UA}$. First,  
@@ -885,97 +914,97 @@ but not in $\ET_{\PSI}$.
 %This definition exploits the \emph{compositionality} of our execution tests (\cref{thm:compositional}).
 %as discussed in \cref{sec:other_formalisms}.
 
-\mypar{Consistent Prefix ($\CP$)}
-\label{para:cp}
-If the total order in which transactions commit is known, this consistency model 
-can be described as a strengthening of causal consistency: 
-if a client sees the versions written by a transaction $\txid$,
-then it must also see any version written by any transaction that commits before $\txid$. 
-Kv-stores only provide {\em partial} information about the order in which transactions commit, 
-given by the dependency relations between transactions; however, 
-this information is sufficient to formalise \emph{Consistent Prefix} \cite{laws}.
+%\subsubsection{Consistent Prefix $(\CP)$}
+%\label{para:cp}
+%If the total order in which transactions commit is known, this consistency model 
+%can be described as a strengthening of causal consistency: 
+%if a client sees the versions written by a transaction $\txid$,
+%then it must also see any version written by any transaction that commits before $\txid$. 
+%Kv-stores only provide {\em partial} information about the order in which transactions commit, 
+%given by the dependency relations between transactions; however, 
+%this information is sufficient to formalise \emph{Consistent Prefix} \cite{laws}.
+%
+%In practice, we approximate the order in which transactions 
+%commit in a $\ET$-trace that terminates in a configuration $(\mkvs, \_)$ from the relations $\WR_{\mkvs}, \WW_{\mkvs}, 
+%RW_{\mkvs}$ and $\SO$. This approximation is best understood in terms of an idealised implementation of 
+%$\CP$ on a centralised system,
+%%fine-grained model 
+%%where transactions are equipped with start and commit points, and operations 
+%%between transactions in different sessions may interleave with each other. 
+%where the snapshot of a transaction is determined at its start point and its effects are made visible 
+%to all future transactions at the moment it commits. 
+%With respect to this implementation, a write-read dependency \(\WR\) from transaction $\txid$ to transaction $\txid'$, 
+%$(\txid,\txid') \in \WR$, means that 
+%%$\txid$ reads the version of some key $\key$ 
+%%written by $\txid'$, therefore  it {must} be
+%%the case that 
+%$\txid$ {must} commit before $\txid'$ starts, and therefore before $\txid'$ commits; 
+%similarly, if $(\txid,\txid') \in \SO$ then $\txid$ commits before $\txid'$ starts, 
+%and therefore before $\txid'$ commits.
+%% 
+%%Consider the transaction relations $\WR_{\mkvs}$, $\WW_{\mkvs}$ and
+%%$\RW_{\mkvs}$ defined in \ref{fig:execution.tests}, adapted from well-known
+%%transaction relations associated with dependency graphs~\cite{adya-icde,adya}.
+%%In \cite{laws} an alternative definition of $\CP$ is given: if a client sees a transaction $\txid$, 
+%%then it must also see the subset of transactions that committed before $\txid$, that can 
+%%be computed from $\SO, \WR_{\mkvs}, \WW_{\mkvs}, \RW_{\mkvs}$. This property is captured 
+%%by $\dagger$ in \cref{fig:execution.tests}.
+%A read-write anti-dependency \(\RW\) from $\txid''$ to $\txid'$ 
+%%The pair $(\txid,\txid') \in \WR_\mkvs$ means that $\txid$ reads the version of some key $\key$ 
+%%written by $\txid'$, therefore  it {must} be
+%%the case that $\txid$ commits before $\txid'$ starts, and therefore before $\txid'$ commits,
+%%and similarly for $\SO$.
+%%The pair $(\txid, \txid') \in \RW_{\mkvs}$ 
+%means that $\txid''$ reads one version for some key that 
+%is later overwritten by $\txid'$; then $\txid''$ is prevented from seeing the write of $\txid'$, 
+%hence it {must} be the case that $\txid''$ starts before 
+%$\txid'$ commits. 
+%As a consequence, if $\txid$ commits before $\txid''$ starts 
+%(either $(\txid, \txid'') \in \WR$ or $(\txid,\txid'') \in \SO$), 
+%%the two are 
+%%related by a write-read dependency \(\WR\) or by a session order \(\SO\)), 
+%and there is an anti-dependency 
+%from $\txid''$ to $\txid'$, then in {must} also be the case that $\txid$ commits before 
+%the commit of $\txid'$. In particular, if $(\txid,\txid') \in \WR;\RW$, 
+%or $(\txid,\txid') \in \SO;\RW$, then $\txid$ commits before $\txid'$.
+%Finally, a write-write dependency from $\txid$ to $\txid'$, $(\txid,\txid') \in\WW$, means that $\txid$ {must} commit before $\txid'$. 
+%In conclusion, the relation $\rel_{\CP} \equiv (\WR_{\mkvs}; \RW_{\mkvs}\rflx \cup \SO;  \RW_{\mkvs}\rflx \cup \WW)$ 
+%approximates the order in which transactions are executed. 
+%
+%It has been shown in \cite{laws} 
+%that the set $(\rel_{\CP}^{-1})^{+}(\txid)$ contains all the transactions that {must} be observed by $\txid$ under 
+%$\CP$. We define $\ET_{\CP}$ by requiring that the view of a client prior to committing a transaction is 
+%closed with respect to $R_{\CP}$, and by enforcing the session guarantees $\MR$ and $\RYW$,
+%%$(\txid,\txid'') \in \WR_{\mkvs}$ (resp. \SO) and $(\txid'',\txid') \in \RW_\mkvs$, then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, 
+%%Last, if $(\txid,\txid') \in \WW_\mkvs$ means that $\txid'$ overwrites a version written by $\txid$ for some 
+%%key, then it {must} be
+%%the case that $\txid$ commits before the commit of $\txid'$.
+%%The relation $((\SO ; \RW_{\mkvs}\rflx) \cup (\WR_{\mkvs} ; \RW_{\mkvs\rflx}) \cup \WW_\mkvs )^{+} \ni (\txid, \txid')$
+%%captures that, {\em all} the transactions $\txid$ that {must} have already committed to the kv-store before commit of \( \txid' \).
+%%The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MR \cap \ET_\RYW$,
+%%where the latter enforces a client sees its own commits.
+%Consistent prefix disallows the \emph{long fork anomaly} shown in \cref{fig:cp-disallowed}: 
+%in this anomaly, two clients $\cl_1$ and $\cl_2$ observe the updates to $\key_1$ and $\key_2$ 
+%in different order. Assuming without loss of generality that \( \txid_{\cl_2}^{2} \) commits 
+%after \( \txid_{\cl_1}^{2} \), then prior to committing the transaction $\cl_2$ sees 
+%the version of $\key_1$ with value $\val_0$. However, we have that $\txid \xrightarrow{\WR_{\mkvs}} \txid_{\cl_{1}}^{1} 
+%\xrightarrow{\SO} \txid_{\cl_{1}}^{2} \xrightarrow{\RW} \txid' \xrightarrow{\WR} \txid_{\cl_{2}}^{1} \xrightarrow{\SO} 
+%\txid_{\cl_2}^{2}$, from which it follows that $\cl_2$ should also see the version of $\key_1$ with 
+%value $\val_2$, causing a contradiction.
+%%\txid_{\cl_1}^{2}
+%%if \( \txid_{\cl_2}^2\) is the last transaction, it reads and thus sees \( \txid' \).
+%%Given the kv-store we have:
+%%\(
+%%\txid \toEDGE{\WR_\mkvs} \txid^1_{\cl_1} \toEDGE{\SO} \txid^2_{\cl_1} \toEDGE{\RW_\mkvs} \txid'
+%%\),
+%%which means, transaction \( \txid_{\cl_2}^2 \) must see \( \txid \).
+%%However, in \cref{fig:cp-disallowed} \( \txid_{\cl_2}^2 \) reads a older version of \( \key_1 \) than the one written by \( \txid \).
+%%Symmetrically,
+%%if \( \txid_{\cl_1}^2\) is the last transaction, it sees \( \txid \) and so must see \( \txid' \).
+%%\sx{A reviewer suggests to show the visibility edges for long fork}
 
-In practice, we approximate the order in which transactions 
-commit in a $\ET$-trace that terminates in a configuration $(\mkvs, \_)$ from the relations $\WR_{\mkvs}, \WW_{\mkvs}, 
-RW_{\mkvs}$ and $\SO$. This approximation is best understood in terms of an idealised implementation of 
-$\CP$ on a centralised system,
-%fine-grained model 
-%where transactions are equipped with start and commit points, and operations 
-%between transactions in different sessions may interleave with each other. 
-where the snapshot of a transaction is determined at its start point and its effects are made visible 
-to all future transactions at the moment it commits. 
-With respect to this implementation, a write-read dependency \(\WR\) from transaction $\txid$ to transaction $\txid'$, 
-$(\txid,\txid') \in \WR$, means that 
-%$\txid$ reads the version of some key $\key$ 
-%written by $\txid'$, therefore  it {must} be
-%the case that 
-$\txid$ {must} commit before $\txid'$ starts, and therefore before $\txid'$ commits; 
-similarly, if $(\txid,\txid') \in \SO$ then $\txid$ commits before $\txid'$ starts, 
-and therefore before $\txid'$ commits.
-% 
-%Consider the transaction relations $\WR_{\mkvs}$, $\WW_{\mkvs}$ and
-%$\RW_{\mkvs}$ defined in \ref{fig:execution.tests}, adapted from well-known
-%transaction relations associated with dependency graphs~\cite{adya-icde,adya}.
-%In \cite{laws} an alternative definition of $\CP$ is given: if a client sees a transaction $\txid$, 
-%then it must also see the subset of transactions that committed before $\txid$, that can 
-%be computed from $\SO, \WR_{\mkvs}, \WW_{\mkvs}, \RW_{\mkvs}$. This property is captured 
-%by $\dagger$ in \cref{fig:execution.tests}.
-A read-write anti-dependency \(\RW\) from $\txid''$ to $\txid'$ 
-%The pair $(\txid,\txid') \in \WR_\mkvs$ means that $\txid$ reads the version of some key $\key$ 
-%written by $\txid'$, therefore  it {must} be
-%the case that $\txid$ commits before $\txid'$ starts, and therefore before $\txid'$ commits,
-%and similarly for $\SO$.
-%The pair $(\txid, \txid') \in \RW_{\mkvs}$ 
-means that $\txid''$ reads one version for some key that 
-is later overwritten by $\txid'$; then $\txid''$ is prevented from seeing the write of $\txid'$, 
-hence it {must} be the case that $\txid''$ starts before 
-$\txid'$ commits. 
-As a consequence, if $\txid$ commits before $\txid''$ starts 
-(either $(\txid, \txid'') \in \WR$ or $(\txid,\txid'') \in \SO$), 
-%the two are 
-%related by a write-read dependency \(\WR\) or by a session order \(\SO\)), 
-and there is an anti-dependency 
-from $\txid''$ to $\txid'$, then in {must} also be the case that $\txid$ commits before 
-the commit of $\txid'$. In particular, if $(\txid,\txid') \in \WR;\RW$, 
-or $(\txid,\txid') \in \SO;\RW$, then $\txid$ commits before $\txid'$.
-Finally, a write-write dependency from $\txid$ to $\txid'$, $(\txid,\txid') \in\WW$, means that $\txid$ {must} commit before $\txid'$. 
-In conclusion, the relation $\rel_{\CP} \equiv (\WR_{\mkvs}; \RW_{\mkvs}\rflx \cup \SO;  \RW_{\mkvs}\rflx \cup \WW)$ 
-approximates the order in which transactions are executed. 
 
-It has been shown in \cite{laws} 
-that the set $(\rel_{\CP}^{-1})^{+}(\txid)$ contains all the transactions that {must} be observed by $\txid$ under 
-$\CP$. We define $\ET_{\CP}$ by requiring that the view of a client prior to committing a transaction is 
-closed with respect to $R_{\CP}$, and by enforcing the session guarantees $\MR$ and $\RYW$,
-%$(\txid,\txid'') \in \WR_{\mkvs}$ (resp. \SO) and $(\txid'',\txid') \in \RW_\mkvs$, then it {must} also be the case that $\txid$ commits before the commit  of $\txid'$, 
-%Last, if $(\txid,\txid') \in \WW_\mkvs$ means that $\txid'$ overwrites a version written by $\txid$ for some 
-%key, then it {must} be
-%the case that $\txid$ commits before the commit of $\txid'$.
-%The relation $((\SO ; \RW_{\mkvs}\rflx) \cup (\WR_{\mkvs} ; \RW_{\mkvs\rflx}) \cup \WW_\mkvs )^{+} \ni (\txid, \txid')$
-%captures that, {\em all} the transactions $\txid$ that {must} have already committed to the kv-store before commit of \( \txid' \).
-%The execution test $\ET_{\CP}$ is the intersection of $\dagger$ with $\ET_\MR \cap \ET_\RYW$,
-%where the latter enforces a client sees its own commits.
-Consistent prefix disallows the \emph{long fork anomaly} shown in \cref{fig:cp-disallowed}: 
-in this anomaly, two clients $\cl_1$ and $\cl_2$ observe the updates to $\key_1$ and $\key_2$ 
-in different order. Assuming without loss of generality that \( \txid_{\cl_2}^{2} \) commits 
-after \( \txid_{\cl_1}^{2} \), then prior to committing the transaction $\cl_2$ sees 
-the version of $\key_1$ with value $\val_0$. However, we have that $\txid \xrightarrow{\WR_{\mkvs}} \txid_{\cl_{1}}^{1} 
-\xrightarrow{\SO} \txid_{\cl_{1}}^{2} \xrightarrow{\RW} \txid' \xrightarrow{\WR} \txid_{\cl_{2}}^{1} \xrightarrow{\SO} 
-\txid_{\cl_2}^{2}$, from which it follows that $\cl_2$ should also see the version of $\key_1$ with 
-value $\val_2$, causing a contradiction.
-%\txid_{\cl_1}^{2}
-%if \( \txid_{\cl_2}^2\) is the last transaction, it reads and thus sees \( \txid' \).
-%Given the kv-store we have:
-%\(
-%\txid \toEDGE{\WR_\mkvs} \txid^1_{\cl_1} \toEDGE{\SO} \txid^2_{\cl_1} \toEDGE{\RW_\mkvs} \txid'
-%\),
-%which means, transaction \( \txid_{\cl_2}^2 \) must see \( \txid \).
-%However, in \cref{fig:cp-disallowed} \( \txid_{\cl_2}^2 \) reads a older version of \( \key_1 \) than the one written by \( \txid \).
-%Symmetrically,
-%if \( \txid_{\cl_1}^2\) is the last transaction, it sees \( \txid \) and so must see \( \txid' \).
-%\sx{A reviewer suggests to show the visibility edges for long fork}
-
-
-\mypar{Snapshot Isolation (\SI)}
+\subsubsection{Snapshot Isolation $(\SI)$}
 If the total order in which transactions commit is known,  
 this consistency model can be defined compositionally from $\CP$ and $\UA$. 
 As for the case of $\PSI$, we cannot define the 
@@ -1023,7 +1052,7 @@ before $\txid'$ commit.
 %As we discuss in \cref{sec:applications} and prove in the \ref{sec:clock-si}, 
 %the Clock-SI protocol~\cite{clocksi} satisfies $\ET_{\SI}$. 
 
-\mypar{(Strict) serialisability (\SER)}
+\subsubsection{(Strict) serialisability $(\SER)$}
 Serialisability is the strongest consistency model, requiring that there exists a sequential schedule of transactions. 
 The execution test $\ET_{\SER}$ thus allows clients to execute transactions only when 
 their view of the kv-store store is complete; this can be enforced by requiring that the view 
@@ -1037,7 +1066,7 @@ and thus cannot read the outdated value $\val_0$ for such a key.
 %The latter case is analogously prohibited. 
 This example is allowed by all the other execution tests in~\cref{fig:execution_tests}.
 
-\mypar{Weak Snapshot Isolation: a new consistency model} 
+\subsubsection{Weak Snapshot Isolation $(\WSI)$: A New Consistency Model} 
 \label{sec:new_cm}
 Kv-stores and execution tests seem to be useful for  investigating new 
 consistency models.  
