@@ -37,8 +37,9 @@ that maps each key into an irreflexive relation between transactions, such that 
 \begin{itemize}
 \item if $\txid \toEDGE{\WW(\key)} \txid'$, then $(\otW, \key, \_) \in \TtoOp{T}(\txid), (\otW, \key, \_) \in \TtoOp{T}(\txid')$, 
 \item if $(\otW, \key, \_) \in \TtoOp{T}(\txid), (\otW, \key, \_) \in \TtoOp{T}(\txid')$, then either $\txid = \txid'$, 
-$\txid \toEDGE{\WW(\key)} \txid'$, or $\txid' \toEDGE{\WW(\key)} \txid$.
-\item if $\txid_{\cl}^{m} \toEDGE{\WW(\key)} \txid_{\cl}^{n}$, then $m < n$.
+$\txid \toEDGE{\WW(\key)} \txid'$, or $\txid' \toEDGE{\WW(\key)} \txid$; furthermore, if $\txid = \txid_{0}$, 
+then it must be the case that $\txid \toEDGE{(\WW(\key))} \txid'$,
+\item if $\txid_{\cl}^{m} \toEDGE{\WW(\key)} \txid_{\cl}^{n}$, then $m < n$, 
 \end{itemize}
 \item $\AD: \Keys \to \pset{\dom(\TtoOp{T}) \times \dom(\TtoOp{T})}$ is defined 
 by letting $\txid \toEDGE{\RW(\key)} \txid'$ if and only if $\txid'' \toEDGE{\WR(\key)} \txid$, 
@@ -61,6 +62,20 @@ commit an abuse of notation and use $\WR$ to denote the relation
 $\bigcup_{\key \in \Keys} \WR(\key)$; a similar notation is adopted for $\WW, \RW$. 
 It will always be clear from the context whether the symbol $\WR$ refers to a function 
 from keys to relations, or to a relation between transactions. 
+
+As stated above, kv-stores are isomorphic to dependency graphs. The proof 
+of this result is the topic of this Section. 
+
+\begin{theorem}
+\label{thm:kv2graph}
+There is a one-to-one map between kv-stores and dependency graphs.
+\end{theorem}
+The proof structure of \cref{thm:kv2graph} is standard in its nature. 
+We first how to encode a kv-store into a dependency graph. Then we 
+show how to encode a dependency graph into a kv-store. Finally, 
+we prove that the two constructions are one the inverse of the other: 
+if we convert a kv-store $\mkvs$ into a dependency graph $\Gr_{\mkvs}$, 
+then back to a kv-store $\mkvs_{\Gr_{\mkvs}}$, we obtain the initial kv-store.
 
 To convert a kv-store $\mkvs$ into a dependency graph, we first define how 
 to extract a fingerprint of a transaction identifier $\txid$ appearing in $\mkvs$:
@@ -111,7 +126,7 @@ dependencies defined for $\mkvs$.
 %\item $ if and only if $\txid \toEDGE{\WR_{\mkvs}(\key)} \txid'$: 
 %recall that this means that there exists an index $i: 0 \leq i < \lvert \mkvs(\key) \rvert$ 
 %such that $\txid = \wtOf(\mkvs(\key, i))$, and $\txid' \in \rsOf(\mkvs(\key, i))$, 
-%\item $\txid \toEDGE{\WW(\key)} \txid'$ if and only if $\txid \toEDGE{
+%\item $\txid \toEDGE{\WW(\key)} \txid'$ if and only if $\txid \toEDGE{}
 %there exist two indexes $i,j$: $0 \leq i < j < \lvert \mkvs(\key) \rvert$ 
 %such that $\txid = \wtOf(\key, i)$, $\txid' = \wtOf(\key, j)$, 
 %\item $\txid \toEDGE{\RW(\key)} \txid'$ if and only if there exist two indexes $i,j$: $0 \leq i < j < \lvert \mkvs(\key) \rvert$ 
@@ -211,11 +226,64 @@ follows that $n < m$.
 \end{itemize}
 \end{proof}
 
+Next, we show how to convert a dependency graph $\Gr$ into a kv-store $\mkvs$. 
+The main idea is that any transaction $\txid \in \T_{\Gr}$ induces a set of versions, and 
+for each key $\key$, the write-write-dependency order $\WW_{\Gr}(\key)$ determines 
+the order of these versions in $\mkvs_{\Gr}$. 
 
-\begin{theorem}
-\label{thm:kv2graph}
-There is a one-to-one map between kv-stores and dependency graphs.
-\end{theorem}
+\begin{definition}
+\label{def:kv-store-to-dependency-graph}
+Let $\Gr$ be a dependency graph. Given a key $\key$, let $n_{\key}$, 
+$\{\val_{i}^{\key}\}_{i=0}^{n_{\key}}$
+$\{\txid^{\key}_{i}\}_{i=0}^{n_{\key}}$ be such that 
+$\{\txid^{\key}_{i}\}_{i=0}^{n_{\key}}= \{ \txid \mid (\otW, \key, \val_{i}^{\key}) \in_{\Gr} \txid \}$, 
+where the index set $\{1,\cdots,n_{\key}\}$  is chosen to be consistent
+with $\WW_{\Gr}(\key)$: that is, $\txid_{i} \xrightarrow{\WW(\key)} \txid_{j}$ if 
+and only if $i < j$. Given a key $\key$ and an index $i=1,\cdots, n_{\key}$, we also 
+let $\T_{i}^{\key} = \{ \txid \mid \txid_{i}^{\key} \xrightarrow{\WR(\key)}\} \txid$. Note that 
+this set is possibly empty. Finally, we let $\mkvs_{\Gr}$ be such that, for any $\key \in \Keys$, 
+$\lvert \mkvs_{\Gr}(\key) \rvert = n_{\key}$, and for any $i=0,\cdots,n$, $\mkvs_{\Gr}(\key,i) = 
+(\val_{i}^{\key}, \txid_{i}^{\key}, \T_{i}^{\key})$.
+\end{definition}
+
+\begin{proposition}
+\label{prop:dependency-to-kv-store}
+For any dependency graph $\Gr$, $\mkvs_{\Gr}$ is a (well-formed) kv-store.
+\end{proposition}
+
+\begin{proof}
+We show that $\mkvs_{\Gr}$ satisfies all the constraints fromf \cref{def:mkvs-appendix}. Throughout 
+the proof, we adopt the same notation of \cref{def:kv-store-to-dependency-graph}.
+
+Let $\key \in \Keys$, and let $i,j$ be such that $\rsOf(\mkvs_{\Gr}(\key,i)) \cap \rsOf(\mkvs_{\Gr}(\key,j)) \neq \emptyset$, 
+that is there exists a transaction $\txid \in \rsOf(\mkvs_{\Gr}(\key, i)) \cap \rsOf(\mkvs_{\Gr}(\key,j))$. We show that $i = j$. 
+By definition, $\rsOf(\mkvs_{\Gr}(\key, i)) = \T_{\key}^{i}$, and $\rsOf(\mkvs_{\Gr}(\key, j)) = \T_{\key}^{j}$. 
+\cref{def:kv-store-to-dependency-graph} ensures that $\txid^{\key}_{i} \xrightarrow{\WR_{\Gr}(\key)} \txid$, 
+and $\txid^{\key}_{j} \xrightarrow{\WR_{\Gr}(\key)} \txid$. By definition of dependency graph, it must be the 
+case that $\txid^{\key}_{i} = \txid^{\key}_{j}$, and because the order of writers 
+transactions in versions in $\mkvs_{\Gr}(\key)$ 
+is defined to be consistent with $\WW_{\Gr}(\key)$, then it must also be the case that $i = j$. 
+
+Suppose no that $\key, i, j$ are such that $\wtOf(\mkvs_{\Gr}(\key, i)) = \wtOf(\mkvs_{\Gr}(\key, j))$. By 
+definition $\wtOf(\mkvs_{\Gr}(\key, i)) = \txid_{i}^{\key}$, and $\wtOf(\mkvs_{\Gr}(\key, j) = \txid^{\key}_{j}$. 
+That is, $\txid_{i}^{\key} = \txid_{j}^{\key}$. Because the order of writer transactions in $\mkvs_{\Gr}(\key)$ 
+is consistent with $\WW_{\Gr}(\key)$, we also have that $i = j$.
+
+Next, note that for any key $\key$, $\txid^{\key}_{0} = \txid_{0}$. In fact, because $\txid_{0} \in_{\Gr} 
+(\otW, \key, \val_{0})$, we have that $\txid_{0} = \txid^{\key}_{i}$ for some $i=0,\cdots, n_{\key}$.
+Also, because whenever $\txid$ is such that $(\otW, \key, \_) \in_{\Gr} \txid$, then 
+it must be the case that $\txid_{0} \xrightarrow{\WW(\key)} \txid$, then it must be 
+the case that $i = 0$. It follows that, for any $\key \in \Keys$, $\mkvs_{\Gr}(\key, 0) = (\val_{0}, \txid_{0}, \_)$.
+
+Finally, suppose that $\txid_{\cl}^{n} = \wtOf(\mkvs_{\Gr}(\key, i))$, $\txid_{\cl}^{m}  = \wtOf(\mkvs_{\Gr}(\key, j))$ 
+for some $i, j$ such that $i < j$. In this case we have that $\txid_{\cl}^{n} = \txid_{i}^{\key}$, $\txid_{\cl}^{m} = 
+\txid_{j}^{\key}$, and because $i < j$ it must be the case that $\txid_{\cl}^{n} \xrightarrow{\WW_{\Gr}(\key)} 
+\txid_{\cl}^{m}$. The definition of dependency graph ensures then that it must $n < m$. A similar 
+argument shows that, if $\txid_{\cl}^{n} \in \wtOf(\mkvs_{\Gr}(\key, i)), \txid_{cl}^{m} \in \rsOf(\mkvs_{\Gr}(\key, i))$, 
+then it must be the case that $\txid_{\cl}^{n} \xrightarrow{\WR_{\Gr}(\key)} \txid_{\cl}^{m}$, and therefore 
+$n < m$.
+\end{proof}
+
 %\begin{proof}
 %    We prove that given any a well-formed kv-store \( \mkvs \), then $\Gr_{\mkvs}$ is a well-formed dependency graph in \cref{prop:well-formed-kv-store-to-dependency},
 %    and given any \( \Gr \), then  $\mkvs_{\Gr}$ is a well-formed kv-store in \cref{prop:well-formed-dependency-to-kv-store}.
