@@ -65,7 +65,9 @@ sessions.
 We believe that we give the first robustness proofs
 that take sessions into account.
 
-\mypar{Robustness of a Single Counter against $\ET_{\PSI}$}
+
+
+\subsubsection{Robustness of a Single Counter against $\ET_{\PSI}$}
 \input{prog_analysis_kv_store}
 Pick an arbitrary key $\key$ and a kv-store $\mkvs \in \CMs(\ET_{\PSI}, \mathsf{Counter}(\key))$
 with $\Counter(\key) {=} \Set{\ctrinc(\key), \ctrread(\key)}$.
@@ -133,7 +135,61 @@ The long fork cannot be replicated by $\ET_{\SI}$.
 %of different counters in a different order.
 %This anomaly does not arise under $\SI$. 
 
-\mypar{Robustness of Multiple Counters against $\ET_{\SI}$} 
+\sx{check the following}
+\subsubsection{Robustness against $\ET_{\WSI}$}
+Many applications \cite{.......} in the literatures that are robust against Snapshot Isolation \( \SI \),
+turn out also robust against Weak Snapshot Isolation \( \WSI \).
+Those applications usually interact with databases via transactions that 
+are either read-only, or read and update any keys they touch.
+Such patterns, captured by \( \WSI\)-safe, guarantee robustness against \( \WSI \).
+
+\begin{definition}[\(\WSI\)-safe]
+    \label{def:main-body-wsi-safe}
+    A key-value store \( \mkvs \) is \(\WSI\) safe if it is 
+    reachable from executing an program \( \prog \) from an initial configuration \( \conf_0 \),
+    that is, \( \conf_0, \prog \toPROG{}_{\ET_\WSI} (\mkvs, \vienv), \prog' \),
+    and satisfies the following properties:
+    \begin{align}
+         & \fora{\txid,\key, \key',i,j,k} ( \txid \in \rsOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key,i)] ) \implies \txid \neq \wtOf[\mkvs(\key',k)] \label{equ:main-wsi-safe-read-only} \\
+         & \fora{\txid,\key,i} \exsts{j} \txid = \wtOf[\mkvs(\key,i)] \implies \txid \in \rsOf[\mkvs(\key,j)] \label{equ:main-wsi-safe-write-must-read} \\
+         & \fora{\txid,\key,\key',i, j} \exsts{k} \txid = \wtOf[\mkvs(\key,i)] \land \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',k)] \label{equ:main-wsi-safe-all-write}
+    \end{align}
+\end{definition}
+
+\Cref{def:main-body-wsi-safe} captures that:
+\begin{enumerate*} 
+    \item a transaction \( \txid \) is either a read-only transaction (\cref{equ:main-wsi-safe-read-only}); or
+    \item \( \txid \) must read before write to any key (\cref{equ:main-wsi-safe-write-must-read}) and 
+        in this case the transaction \( \txid \) must read and write any keys it touch. (\cref{equ:main-wsi-safe-all-write}).
+\end{enumerate*}
+It is easy to see in \cref{equ:main-wsi-safe-write-must-read} that 
+the version read by \( \txid \) must be the immediate predecessor of the one written by \( \txid \),
+that is, \( i = j + 1 \).
+
+\begin{theorem}[\( \WSI \) robustness]
+    If a key-value store \( \mkvs \) is \(\WSI\)-safe, it is robust against \(\WSI\).
+\end{theorem}
+
+By \cref{thm:serialisable_nocycle}, 
+it suffices to prove $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ is irreflexive.
+It can be proven by contradiction.
+Because \( \mkvs \) is reachable under \( \WSI \) henceforth \( \CC \),
+any cycle must be in the form
+\[
+    \txid_1 \toEDGE{\rel^*} \txid_2 \toEDGE{\RW} \txid_3 \toEDGE{\rel^*} \cdots \toEDGE{\rel^*} \txid_{n-2} \toEDGE{\RW} \txid_{n-1} \toEDGE{\rel^*} \txid_n = \txid_1
+\]
+\noindent where \( \rel = \WR \cup \SO \cup \WW \).
+By \cref{equ:main-wsi-safe-write-must-read,equ:main-wsi-safe-all-write}, 
+any \( \RW \)-edge that starts from a transaction that wrote a key, can be replaced by a \( \WW \)-edge.
+Moreover, \( \WW \)-edges can be replaced by \( \WR^* \)-edges, since \( \mkvs \) is reachable under \( \UA \).
+Now we have a cycle,
+\[
+    \txid_1 \toEDGE{{\rel'}^*} \txid'_2 \toEDGE{\RW} \txid'_3 \toEDGE{{\rel'}^+} \cdots \toEDGE{{\rel'}^+} \txid'_{m-2} \toEDGE{\RW} \txid'_{m-1} \toEDGE{{\rel'}^*} \txid'_m = \txid_n = \txid_1
+\]
+\noindent where \( \rel' = \WR \cup \SO \), in other words, \( \txid_1 \toEDGE{( (\WR \cup \SO); \RW^? )^* } \txid_n \).
+Yet it cannot be a cycle because \( \WSI \) requires views must be closed under \( \rel_\CP \), given that \( (\WR \cup \SO); \RW^? \subseteq \rel_\CP \).
+
+\subsubsection{Robustness of Multiple Counters against $\ET_{\SI}$} 
 %$\ET_{\PSI}$ to $\ET_{\SI}$, 
 %we can analogously recover the robustness of multiple counters.
 For simplicity, here we assume that the library comprises only two counters: 
@@ -233,6 +289,7 @@ introduced in \cref{sec:new_cm}.
 %thus contradicting \cref{thm:si_cycles}). 
 %It then follows that $\rightarrow$ is irreflexive, and thus so is $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$.
 
+\sx{THE FOLLOWING SECTION WILL BE CUT OUT. Keep it for now, merge some part into sec 1-2. }
 \subsection{Verifying Database Protocols}
 \label{sec:verify-impl}
 Kv-stores and views provide a 

@@ -94,8 +94,8 @@ and therefore $\mkvs' \in \CMs(\ET)$.
 Then \cref{prop:sem2ettraces} follows immediately by considering the 
 special case when $\prog'$ is such that $\forall \cl \in \dom(\prog').\; \prog'(\cl) = \pskip$.
 
-Suppose that $(\mkvs,_{0} \vienv_{0}, \thdenv_{0}) \prog \toCMD{\stub}^{\ast} (\mkvs', \vienv', \thdenv'), prog'$. 
-By definition, then $(\mkvs, \vienv, \thdenv_{0}) \prog \toCMD{\stub}^{n} (\mkvs', \vienv', \thdenv'), prog'$ 
+Suppose that $(\mkvs,_{0} \vienv_{0}, \thdenv_{0}) \prog \toCMD{\stub}^{\ast} (\mkvs', \vienv', \thdenv'), \prog'$. 
+By definition, then $(\mkvs, \vienv, \thdenv_{0}) \prog \toCMD{\stub}^{n} (\mkvs', \vienv', \thdenv'), \prog'$ 
 for some $n \geq 0$. We prove that there exists a $\ET$-trace $\tau$ terminating in $(\mkvs\, \vienv')$ 
 by induction on $n$. 
 \begin{itemize}
@@ -274,16 +274,33 @@ To this end, we first map fingerprints into transactional code, and then we lift
 this mapping to $\ET$-traces and programs. 
 
 \begin{definition}
+\label{def:fp2prog}
 \ac{This mapping assumes that fingerprints are finite. This assumption was lifted when we 
 decided to admit the initial transaction into abstract executions, which leads to such a transaction 
 having an infinite fingerprint. It may be useful to state that $\txid_{0}$ is the only transaction that is 
 allowed to have an infinite fingerprint.}
 
-Let $\fp = \{(\otR, \key_1, \val_1), \cdots, (\otR, \key_{n}, \val_{n}), (\otW, \key'_{1}, \val'_{1}), \cdots, (\otW, \key'_{m}, \val'_{m})\}$ be an 
-arbitrary fingerprint. We define the transactional code $\ptrans{\trans_{\fp}}$ as 
-\[
-\ptrans{\plookup{\_}{\key_1}; \cdots ; \plookup{\_}{\key_{n}}; \pmutate{\key'_1}{\val'_1}; \cdots ; \pmutate{\key'_{m}}{\val'_{m}}}
-\]
+Note that any fingerprint set 
+$\fp$ is either the empty set $\fp$; or it has the form $\{(\otR, \key, \val)\} \uplus \fp'$ for 
+some $\fp'$ such that $(\otR, \key, \val') \notin \fp'$ for any $\val' \in \Val$; 
+or it has the form $\{(\otW, \key, \val)\} \uplus \fp'$ for some $\key, \val$ such that 
+$(\otW, \key', \val') \notin \fp'$ for any $\key' \in \Keys, \val' \in \Val$, and 
+$(\otR, \key, \val') \notin \fp'$, for any $\val' \in \Val$.  
+
+Given a (finite) fingerprint $\fp$, we define the transactional code $\trans_{\fp}$ by induction 
+on $\fp$, via an induction schema based on the characterisation of finite fingerprints given above.
+\begin{itemize}
+\item if $\fp = \emptyset$, then $\trans_{\fp} = \pskip$, 
+\item if $\fp = \{(\otR, \key, \val)\} \uplus \fp'$ for some $\key, \val, \fp'$, and $(\otR,\key,\val') \notin \fp'$ for any 
+$\val' \in \Val$, then $\trans_{\fp'} = \plookup{\_}{\key} ; \trans_{\fp'}$, 
+\item if $\fp = \{(\otW, \key, \val)\} \uplus \fp'$ for some $\key, \val, \fp'$, $(\otR,\key', \val') \notin \fp'$ for all 
+$\val' \in \Val$ and $\key \in \Keys$, $(\otW, \key, \val') \notin \fp'$ for all $\val' \in \Val$, 
+then $\trans_{\fp} = \pmutate{\key}{\val} ; \trans_{\fp'}$.
+\end{itemize}
+\ac{To be pedantic, the definition above is ill-formed, as the same fingerprint can lead to multiple 
+definitions of $\fp$. This should be fixed by defining a set of transactional commands for 
+fingerprints, and prove the necessary properties for all the transactional commands induced 
+by a fingerprint.}
 
 Consider an $\ET$-trace $\tau$ that is in normal form and that terminates in the configuration $(\mkvs, \vienv)$. Let $C = \dom(\vienv)$. 
 We define the program $\prog_{\tau}$ by induction on the structure of $\tau$. 
@@ -293,6 +310,67 @@ We define the program $\prog_{\tau}$ by induction on the structure of $\tau$.
 $\prog_{\tau} = \prog_{\tau'}\rmto{\cl}{\prog_{\tau'}(\cl)}; \ptrans{\trans_{\fp}}$.
 \end{itemize}
 \end{definition}
+
+Clearly, the command $\trans_{\fp}$  is defined in a way that its 
+execution from a client whose local state agrees with the read operations 
+of $\fp$,  leads to the fingerprint $\fp$ itself. More formally, we have the 
+following result: 
+\begin{lemma}
+\label{lem:fp2trans}
+Let $\fp$ be an arbitrary, finite fingerprint, and let $\sn$ be such that, whenever 
+$(\otR, \key, \val) \in \fp$, then $\sn(\key) = \val$. Then, for any $\stk \in \Vars \rightarrow \Val$,
+\[
+(\stk, \sn, \emptyset), \trans_{\fp} \trans_{\fp} \toTRANS^{\ast} (\stub, \stub, \fp), \pskip
+\]
+\end{lemma}
+
+\begin{proof}
+The proof of \cref{lem:fp2trans} is by induction on the structure $\fp$, via an 
+induction schema that follows the characterisation of fingerprints from \cref{def:fp2prog}.
+
+If $\fp = \emptyset$ then $\trans_{\fp} = \pskip$, and $(\stk, \sn, \emptyset), 
+\pskip \toTRANS^{\ast} (\stk, \sn, \emptyset)$. 
+Suppose then that $\fp = \{(\otR, \key, \val)\} \uplus \fp'$, and that 
+$(\otR, \key, \val') \notin \fp'$ for any $\val' \in \Val$. 
+Suppose also that $\sn$ is such that whenever $(\otR, \key', \val') \in \fp$ then $\sn(\key') = \val'$. 
+In particular, because $(\otR,\ ke, \val) \in \fp$, then $\sn(\key) = \val$; and for any $(\otR,\ ke', \val') \in \fp'$, 
+then $\sn(\key') = \val'$. 
+By definition, $\trans_{\fp} = \plookup{\_}{\key} ; \trans_{\fp'}$. By applying Rule \rl{Tprimitive} 
+we obtain the derivation 
+\[
+(\_, \sn, \emptyset), \plookup{\_}{\key} ; \trans_{\fp'} \toTRANS (\_, \sn, \{(\otR, \key, \val)\}) \trans_{\fp'}
+\]
+Also,because whenever $(\otR,\ ke', \val') \in \fp'$, 
+then $\sn(\key') = \val'$,  we can apply the inductive hypothesis and infer that $(\_, \sn, \emptyset), \trans_{\fp'} \toTRANS^{\ast} (\stub, \stub, \fp'), \pskip$. 
+\ac{To be pedantic the result below should be proved: it requires first a rule induction on 
+transitions of the form $(\stk, \sn, \fp), \trans \toTRANS (\stk', \sn', \fp'), \trans'$, followed by an induction on the 
+number of transitions in a judgement of the form $(\_, \sn, \fp), \trans^{\ast} \toTRANS (\_, \_, \fp'), \trans' $.}
+An immediate consequence of this fact is that 
+$(\_, \sn, \{(\otR,\key, \val)\}) \trans_{\fp'} \toTRANS^{\ast} (\stub \stub, \{(\otR,\ ke, \val)\} \uplus \fp'), \pskip$. 
+That is, we have that 
+\[
+(\_, \sn, \emptyset), \plookup{\_}{\key} ; \trans_{\fp'} \toTRANS (\_, \_, \{(\otR, \key, \val)\}) \trans_{\fp'} \toTRANS^{\ast} (\_, \_, \fp'), \pskip.
+\]
+
+Finally, suppose that $\fp = \{(\otW, \key, \val)\} \uplus \fp'$, and 
+for no  $\key', \val'$ $(\otR,\key', \val') \in \fp'$, and for no $\val'$ 
+$(\otW, \key, \val') \in \fp'$. In this case we have that $\trans_{\fp} = 
+\pmutate{\key}{\val} \uplus \fp'$. Let $\sn$ be an arbitrary snapshot. 
+By applying Rule \rl{Tprimitive} we obtain that $(\_, \sn, \emptyset) \pmutate{\key}{\val} ; \trans_{\fp'} 
+\toTRANS (\_, \sn\rmto{\key}{\val}, \{(\otW, \key, \val)\}), \trans_{\fp'}$. Because $\fp'$ does not contain 
+any operation of the form $(\otR, \key', \val')$, the statement \emph{if $(\otR,\key',\val') \in \fp'$ then 
+$\sn\rmto{\key}{\val}(\key') = \val'$} is trivially satisfied. By the inductive hypothesis, we have that 
+$(\_, \sn\rmto{\key}{\val}, \emptyset), \trans_{\fp'} \toTRANS^{\ast} (\_, \_, \fp'), \pskip$, 
+from which it is immediate to infer that 
+\[
+(\_, \sn\rmto{\key}{\val}, \{(\otW, \key, \val)\}), \trans_{\fp'} \toTRANS^{\ast} (\_, \_, \{(\otW, \key, \val)\} \uplus \fp'), \pskip. 
+\]
+Finally, we have that 
+\[
+(\_, \sn, \emptyset), \pmutate{\key}{\val} ; \trans_{\fp'} \toTRANS (\_, \_, \{(\otW, \key, \val)\}), \trans_{\fp'} \toTRANS^{\ast} (\_, \_, \fp), \pskip
+\]
+as we wanted to prove.
+\end{proof}
 
 We now have everything we need to prove \cref{prop:ettraces2sem}.
 \paragraph{Proof of \cref{prop:ettraces2sem}.}
@@ -309,24 +387,57 @@ and $\vienv'_{i} = \vienv_{i}\rmto{\cl_{i}}{\vi_{i}}$ for some $\vi_{i}. \vienv_
 Let $\mathsf{Cl}_{\tau} = \dom(\vienv_{0})$, and $\thdenv_{0} = \lambda \cl \in \mathsf{Cl}_{\tau}. \lambda x \in \Vars. \val_{0}$. 
 For $i=0,\cdots, n$, let $\tau_{i}$ be the prefix of $\tau$ terminating in the configuration $(\mkvs_{i}, \vienv_{i})$.
 We prove that, for any $i=0,\cdots, n-1$, 
-then $(\mkvs_{0}, \vienv_{0}), \thdenv_{0}), \prog_{\tau'} \toCMD{\stub}^{\ast}_{\ET} (\mkvs_{i}, \vienv_{i}, \thdenv_{i}), (\lambda \cl \in \mathsf{Cl}_{\tau}.\pskip)$, 
+then $(\mkvs_{0}, \vienv_{0}), \thdenv_{0}), \prog_{\tau_{i}} \toCMD{\stub}^{\ast}_{\ET} (\mkvs_{i}, \vienv_{i}, \thdenv_{i}), (\lambda \cl \in \mathsf{Cl}_{\tau}.\pskip)$, 
 for some $\thdenv_{i}$. By definition $\mkvs = \mkvs_{n} \in \interpr{\prog_{\tau}}_{\ET}$. 
 The proof of this claim is by induction on $n$.
 
 \begin{itemize}
-\item The base case where  $n = 0$, as $\tau$ consists of the initial configuration $(\mkvs_{0}, \_)$. 
-By definition $\prog_{\tau}(\cl) = \lambda \cl \in \mathsf{Cl}_{\tau}.\pskip$, and there is nothing to prove.
+\item The base case where  $n = 0$, as $\tau_{0}$ consists of the initial configuration $(\mkvs_{0}, \_)$. 
+By definition $\prog_{\tau_{0}}(\cl) = \lambda \cl \in \mathsf{Cl}_{\tau}.\pskip$, and there is nothing to prove.
 
 \item Next let $i: 0 < i < n$, and suppose that the claim holds for $\tau_{i-1}$: specifically, there exists 
 $\thdenv_{i}$ such that $(\mkvs_{0}, \vienv_{0}, \thdenv_{0}), \prog_{\tau_{i-1}} \toCMD{-}^{\ast}_{\ET} 
 (\mkvs_{i}, \vienv_{i}, \thdenv_{i}), \lambda \cl \in \dom(\mathsf{Cl}_{\tau}).\pskip$. Note that 
-$\prog_{\tau_{i}} = \prog_{\tau_{i-1}}\rmto{\cl_{i}}{\prog_{\tau_{i-1}}(\cl_{i}) ; \ptrans{\trans_{\fp_{i}}}}$, 
+$\prog_{\tau_{i}} = \prog_{\tau_{i-1}}\rmto{\cl_{i-1}}{\prog_{\tau_{i-1}}(\cl_{i-1}) ; \ptrans{\trans_{\fp_{i-1}}}}$, 
 from which it follows that 
 \[
 (\mkvs_{0}, \vienv_{0}, \thdenv_{0}), \prog_{\tau_{i}} \toCMD{-}^{\ast}_{\ET} 
-(\mkvs_{i}, \vienv_{i}, \thdenv_{i}), (\lambda \cl \in \dom(\mathsf{Cl}_{\tau}).\pskip)\rmto{\cl_{i}}{\ptrans{\tau_{\fp_{i}}}}.
+(\mkvs_{i}, \vienv_{i}, \thdenv_{i}), (\lambda \cl \in \dom(\mathsf{Cl}_{\tau}).\pskip)\rmto{\cl_{i-1}}{\ptrans{\trans_{\fp_{i-1}}}}.
 \]
+Next, we prove that $\cl_{i} \vdash (\mkvs_i, \vienv_{i}(\cl_{i}), \thdenv_{i}(\cl_{i}), \ptrans{\fp_{i}} 
+\toCMD{(\cl_{i-1}, \_, \fp_{i-1})} (\mkvs_{i}, \vienv_{i}(\cl_{i-1}), \_), \pskip$, 
+from which we can infer 
+\[
+(\mkvs_{i}, \vienv_{i}, \thdenv_{i}), (\lambda \cl \in \dom(\mathsf{Cl}_{\tau}).\pskip)\rmto{\cl_{i}}{\ptrans{\trans_{\fp_{i}}}} 
+\toPROG{(\cl_{i-1}, \_, \fp_{i-1})} (\mkvs_{i+1}, \vienv_{i+1}, \_), \lambda \cl \in \dom(\mathsf{Cl}_{\tau}.\pskip),
+\]
+which is what we want to prove. 
 
+To prove that $\cl_{i} \vdash (\mkvs_i, \vienv_{i}(\cl_{i}), \thdenv_{i}(\cl_{i}), \ptrans{\fp_{i}} 
+\toCMD{(\cl_{i-1}, \_, \fp_{i-1})} (\mkvs_{i}, \vienv_{i}(\cl_{i-1}), \_), \pskip$, 
+we consider the sequence of $\ET$-reductions $(\mkvs_{i-1}, \vienv_{i-1}) \toET{(\cl_{i-1}, \varepsilon} (\mkvs_{i-1}', \vienv_{i-1}') 
+\toET{(\cl_{i-1}, \fp_{i-1})} (\mkvs_{i}, \fp_{i})$. The $\ET$-reduction ensures the following: 
+\begin{itemize}
+\item let $\vi_{i-1} = \vienv_{i-1}(\cl_{i-1})$. Then there exists $\vi_{i-1}'$ such that $\vi_{i-1} \sqsubseteq \vi_{i-1}'$ and
+$\vienv_{i-1}'('cl_{i-1}) = \vienv_{i-1}\rmto{\cl_{i-1}}(\vi_{i-1}')$, 
+\item $\mkvs_{i-1}' = \mkvs_{i-1}$.
+\end{itemize}
+The $\ET$-reduction $(\mkvs_{i-1}', \vienv_{i-1}') 
+\toET{(\cl_{i-1}, \fp_{i-1})} (\mkvs_{i}, \fp_{i})$ ensures the following: 
+\begin{itemize}
+\item $\mkvs_i = \updateKV(\mkvs_{i-1}, \vi_{i-1}', \fp_{i-1}, \txid)$ for some $\txid \in \nextTxid(\cl_{i-1}, \mkvs_{i-1}$, 
+\item $\ET \vdash (\mkvs_{i-1}, \vi_{i-1}') \triangleright \fp_{i-1} (\mkvs_{i}, \vi_{i}$, where $\vi_{i} = \vienv_{i}(\cl_{i-1})$; 
+by the definition of execution test, this also ensures that 
+\item whenever $(\otR, \key, \val) \in \fp_{i-1}$, then $\snapshot(\mkvs_{i-1}, \vi_{i-1}')(\key) = \val$.
+\end{itemize}
+The latter statement, together with \cref{lem:fp2trans}, leads to the following: let $\stk_{i-1} = \thdenv_{i-1}(\cl_{i-1}$, 
+$\sn_{i-1} = \snapshot(\mkvs_{i-1}, \vi_{i-1}')$; then 
+$(\stk_{i-1}, \sn_{i-1}, \emptyset), \trans_{\fp_{i-1}} \toTRANS^{\ast} (\_, \_, \fp_{i-1}) \pskip$. 
+By putting all the statements together, we infer the transition 
+\[\cl_{i} \vdash (\mkvs_i, \vienv_{i}(\cl_{i}), \thdenv_{i}(\cl_{i}), \ptrans{\fp_{i}} 
+\toCMD{(\cl_{i-1}, \_, \fp_{i-1})} (\mkvs_{i}, \vienv_{i}(\cl_{i-1}), \_), \pskip,\]
+which is exactly 
+what we wanted to prove.
 \end{itemize}
 %
 %\ac{Old Appendix starts here}
