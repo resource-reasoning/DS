@@ -95,7 +95,7 @@ We also assume that
 the version list for each key has an initial version 
 carrying the initialisation value $\val_0$,  written by the 
 %designated 
-initialisation transaction $\txid_0$ with an initial empty readers set.
+initialisation transaction $\txid_0$ with an initial empty reader set.
 Finally, we assume that the kv-store agrees with the session order of clients: 
 a client cannot read a
 version of a key that has been written by a future transaction within
@@ -153,7 +153,7 @@ $\vi \in \Views(\mkvs) \defeq \Keys \to\pset{\Nat}$ such that, for all $i, i', \
     & 
     0 \in \vi(\key) 
     \land (i \in \vi(\key) \implies 0 \leq i < \abs{ \mkvs(\key) }) 
-    \tag{wf}
+    \tag{well-formed}
     \label{eq:view.wf}\\
     & 
     \begin{array}{@{}l@{}}
@@ -173,7 +173,7 @@ The set of views is $\Views \defeq \bigcup_{\mkvs \in \MKVSs} \Views(\mkvs)$.
 $\vi_{0}(\key) = \Set{0}$ for every $\key \in \Keys$. 
 \end{definition}
 
-Our operational sematnics updates {\em configurations},  which are pairs
+Our operational semantics updates {\em configurations},  which are pairs
 comprising a kv-store and a function describing the
 views of a finite set of clients. 
 
@@ -214,10 +214,11 @@ resolution policy, employed by many distributed kv-stores.
 %adopt this policy~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}, 
 However, our formalism can be adapted straightforwardly  to capture other resolution policies. 
 
-\begin{definition}[Snapshots]
+\begin{definition}[View Snapshots]
 \label{def:snapshot}
 Given $\mkvs \in \MKVSs$ and $\vi \in \Views(\mkvs)$, the \emph{snapshot} of $\vi$ in 
-$\mkvs$ is $\snapshot[\mkvs, \vi] \defeq \lambda \key \ldotp \valueOf(\mkvs(\key, \max_{<}(\vi(\key)))$, 
+$\mkvs$ is afunction, $\snapshot[\mkvs, \vi] : \Keys \to
+\Val$,   defined by $\snapshot[\mkvs, \vi] \defeq \lambda \key \ldotp \valueOf(\mkvs(\key, \max_{<}(\vi(\key)))$, 
 where $\max_{<}(\vi(\key))$ is the maximum element in $\vi(\key)$ with respect to the natural 
 order $<$ over $\mathbb{N}$.
 \end{definition}
@@ -282,15 +283,16 @@ Sequential commands ($\cmd$) comprise $\pskip$, primitive commands
 ($\cmdpri $), atomic transactions $\ptrans{\trans}$, and standard
 compound constructs: sequential composition (\( ; \)), non-deterministic
 choice (\( + \)) and iteration (\( * \)). 
-Primitive commands include variable assignment ($\passign{\var}{\expr}$) and assume statements ($\passume{\expr}$) which can be used to encode conditionals; 
-they  are used for computations based on client-local variables and can hence be invoked
+Primitive commands include variable assignment
+($\passign{\var}{\expr}$) and assume statements ($\passume{\expr}$)
+which can be used to encode conditionals. They  are used for computations based on client-local variables and can hence be invoked
 without restriction.  Transactional commands ($\trans$) comprise
 $\pskip$, primitive transactional commands ($\transpri$), and the
 standard compound constructs.  Primitive transactional commands comprise
 primitive commands, lookup ($\plookup{\var}{\expr}$) and mutation
 ($\pmutate{\expr}{\expr}$) used for reading and writing to kv-stores
 respectively, which can only be invoked as part of an atomic
-transaction $\ptrans{\trans}$.
+transaction.
 
 
 
@@ -356,13 +358,17 @@ it performs the following steps:
 	\item it commits $\trans$ by incorporating these effects into $\mkvs$.
 \end{enumerate*}
 
-\begin{definition}[Snapshots]
+\begin{definition}[Transactional Snapshots]
 \label{def:heaps}
-A \emph{snapshot}, \( \sn \in \Snapshots \defeq \Keys \to
-\Val\),  is a function from keys to values.
+A \emph{transactional snapshot}, \( \sn \in \Snapshots \defeq \Keys \to
+\Val\),  is a function from keys to values. When the meaning is clear,
+it is just called a {\em snapshot}. 
 \end{definition}
 
-
+The rules for transactional commands will be defined  using an arbitrary 
+transactional snapshot. The rules for sequential
+commands and programs will be defined  using a transactional
+snapshot given by a view snapshot. 
 To capture the effects of executing a transaction $\trans$ on a snapshot $\sn$ of kv-store $\mkvs$, 
 we identify a \emph{fingerprint}  of $\trans$ on $\sn$ which captures
  the values $\trans$ reads from $\sn$, and
@@ -461,7 +467,7 @@ The only non-standard rule is \( \rl{TPrimitive} \), which updates
 the snapshot and the fingerprint of a transaction: the premise 
 $(\stk, \sn) \toLTS{\transpri} (\stk', \sn')$ describes how executing
 $\transpri$ affects the local state (the client stack and the snapshot)
-of a transaction; and the premise $o =\op(\stk, \sn, \transpri)$ identifies the operation on the 
+of a transaction; and the premise $o =\func{op}(\stk, \sn, \transpri)$ identifies the operation on the 
 kv-store associated with $\transpri$. 
 %let \( \mathsf f\rmto{\mathsf d}{\mathsf r} \) denotes a new function 
 %where \( \mathsf f\rmto{\mathsf d}{\mathsf r}(\mathsf d') = {\mathsf r} \) if \( \mathsf d = \mathsf d' \), 
@@ -532,7 +538,7 @@ The  empty operation $\emptyop$ is used for those primitive commands that do not
 contribute to the fingerprint.
 \end{definition}
 The conclusion of the \( \rl{TPrimitive}\)  rule uses the \emph{combination operator} $\addO: 
-\pset{\Ops} \times (\Ops \uplus \Set{\emptyop}) \to \pset{\Ops}$, defined formally 
+\pset{\Ops} \times (\Ops \uplus \Set{\emptyop}) \to \pset{\Ops}$, defined 
 in \cref{fig:semantics-trans}, to extend the fingerprint $\fp$ accumulated thus far with
 operation $o$ associated with $\transpri$, as
 appropriate: it adds  a read from $\key$  if $\fp$ does not already
@@ -727,8 +733,9 @@ $\ET$ for kv-stores, which is used to generate
 the \emph{consistency model} on kv-stores
 under which a 
 transaction can execute.
-In \cref{sec:cm}, we give many examples of execution tests for well-known consistency models; 
-in \cref{sec:other_formalisms} and the technical appendix we prove that our execution tests (using kv-stores) generate consistency models that are equivalent to existing definitions of
+In \cref{sec:cm}, we give many examples of execution tests for
+well-known consistency models.
+In \cref{sec:other_formalisms} and the technical appendix, we prove that our execution tests (using kv-stores) generate consistency models that are equivalent to existing definitions of
 consistency models (using execution graphs). 
 
 %\begin{figure*}[t]
@@ -841,12 +848,12 @@ transaction under the execution test $\ET$.
 
 
 We describe the \rl{CAtomicTrans} rule in detail. 
-The first premise in the rule
+The first premise 
 states that the current view $\vi$ of the executing command may be advanced to a newer  view $\vi''$ (see \cref{def:views}). 
 %This corresponds to the client receiving new updates.
 Given the new view $\vi''$, the transaction obtains a snapshot $\sn$ of the kv-store $\mkvs$, 
 and executes $\trans$ locally to completion ($\pskip$), updating the stack to $\stk'$, while accumulating the fingerprint $\fp$; 
-this is modelled in the second and third premises of \rl{CAtomicTrans}.
+this behaviour  is modelled in the second and third premises of \rl{CAtomicTrans}.
 Note that the resulting snapshot is ignored 
 %(denoted by $\stub$) 
 as the effect of the transaction is recorded in the fingerprint $\fp$. 
@@ -860,10 +867,10 @@ the final fingerprint $\fp$ of the transaction is compatible with the (original)
 $\mkvs$ and the client view $u''$, and thus the transaction \emph{can commit}. 
 Note that the \cancommitname check is parametric in the execution test $\ET$.
 This is because the conditions checked upon committing depend on the consistency model under which the transaction is to commit. 
-In \cref{sec:cm} we define \cancommitname for several execution tests associated with well-known consistency models.
+In \cref{sec:cm}, we define \cancommitname for several execution tests associated with well-known consistency models.
 
 
-Now we are ready for client $\cl$ to commit the transaction with final resulting 
+Now we are ready for client $\cl$ to commit the transaction resulting 
 in the kv-store $\mkvs'$ with the client view $\vi''$ \emph{shifting} to a new view $\vi'$: 
 %in an new kv-store $\mkvs'$ and a view $\vi'$ for the client $\cl$ via the following process:  
 pick a fresh transaction identifier $\txid \in \nextTxid[\cl,
