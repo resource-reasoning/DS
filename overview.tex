@@ -6,6 +6,104 @@
 \label{sec:overview}
 
 
+%synchronisation among replicas ensures that they are in a consistent (albeit out-of-date) state.
+\mypar{COPS}
+COPS is a fully replicated database where  each replica stores multiple versions of each key. 
+%contains all keys.
+In COPS, a version \( \ver \) on a replica contains a key, a value, a
+time-stamp identifying the time when a client first requested the
+replica to write the version, and a set of dependencies
+$\depOf[\ver]$.  Each dependency consists of a key and a time-stamp of
+the version of that key on which $\ver$ directly depends.  This
+ time-stamp consists of the local, real time when a replica
+first committed the version plus the replica identifier. COPS assumes
+a total order among replica identifiers. Thus,  time-stamps can be
+totally ordered lexicographically over pairs of real-time of
+operations and replica identifiers.
+
+The COPS API provides two operations for  clients: writing a single
+key; and reading 
+a set of keys atomically. Each instance of these operations is processed by a single replica. 
+Each client maintains a \emph{context}, which is a set of dependencies
+corresponding to the versions it observes.  
+%future operations that the client performs depend from such versions.
+
+When client $\cl$ requests to write key $\key$ to replica $r$, it
+sends a message containing the value $\val$ to be written and its
+context $ctx$ to $r$. It then waits for a reply from the replica. 
+Upon receiving the message, $r$ produces a monotonically increasing time-stamp $t$, which it uses to install a new version $\ver = (\val, t, ctx)$ for the key $\key$. 
+Note that the dependency set of $\ver$ is the context $ctx$ of the client.
+%The version carries the value received, and the context received as its set of dependencies: 
+It thus  depends on other versions previously observed by the client $\cl$. 
+Replica $r$ then sends the time-stamp $t$ back to the client, which will incorporate the pair $(\key, t)$ in its local context: 
+the client observes the write it performed. Finally, replica $r$ propagates the version written to other replicas asynchronously, 
+using \emph{causal delivery}: when replica $r'$ receives a version $\ver$ from some replica $\ver$, it 
+will wait to commit all its dependencies to its local state, before committing $\ver$ itself.
+%This property ensures that 
+The set of versions contained in the local state of each replica is closed with respect to causal dependencies.
+%A COPS client interacts with a single replica at a time via COPS API,
+%either single-write or multiple-read transactions.
+%Replicas \( \repl \) store all versions that has been received from clients, or other replicas via synchronisation.
+%Each version \( \ver \) includes a key, a value, a unique timestamp 
+%assigned by the replica who initially received this version from a client,
+%and a \emph{dependency set}, written by \( \depOf[\ver]\).
+%This dependency set traces the versions on which $\ver$ causally depends.
+%A synchronisation message with a version \( \ver \) will be received only 
+%when all the versions in the dependency set have been received.
+%This guarantees that for any version \( \ver \) in a replica \( \repl \), written by \( \ver \in \repl \),
+%the versions on which \( \ver \) depends also are in the replica, \( \depOf[\ver] \subseteq \repl \).
+%COPS assumes that all versions eventually deliver to all replicas.
+%Replicas themselves are assigned with unique identifiers that are totally ordered.
+%As such, all versions on all keys are totally ordered,
+%which, together with eventual delivery, guarantees eventual consistency among all replicas.
+%The COPS API follows the multiple-readers-single-writer paradigm: 
+%at any given time, the database can be accessed by either multiple read-only concurrent transactions, or single writing transactions. 
+%Each version $\ver$ records a value and a \emph{dependency set}, written $\depOf[\ver]$,
+%tracking the versions on which $\ver$ causally depends.
+%This causal dependency contains previous reads and writes from the same client, and their dependencies,
+%that is, 
+%\( \left( \left( \SO \cup \WR \right) ^{-1}\right)^{*}(\wtOf[\ver]) \subseteq \depOf[\ver] \).
+%
+%For a client to commit a single-write transaction, hence a new value \( \val \) of a key \( \key \),
+%it sends the new value \( \val \) and more importantly the dependency set \( D \), to a replica
+%in which the \( \key, \val, D \) together with a newly assigned timestamp \( \txid \), turn into a new version \( \ver \);
+%then the new timestamp returns to the client.
+%To construct the dependency set for the new version,
+%each client maintains a \emph{client context} that tracks the versions that have been either fetched from, or committed to any replicas. 
+%For a single-write transaction, the client context becomes the dependency set \( D \) of the new version \( \ver \) which ensures \( D \) contains all versions that \( \ver \) causally depends on.
+
+When a client requests to read a set of keys \( \{\key_1, \dots,
+\key_n\} \) from a  replica $r$, it sends a message 
+containing the set of keys to the replica and  waits for a reply from $r$. Upon receiving the message, replica $r$ builds a causally consistent snapshot, i.e. 
+a mapping from the set $\{\key_{1},\cdots, \key_{n}\}$ to values, in two rounds. 
+First, $r$ fetches from its state 
+%A client can read some keys \( \key_1, \dots, \key_n \) in a multiple-read transaction through requesting a replica; 
+%the replica fetches 
+the most recent version \( \ver_{\key_i} \) for each $i
+=0,\cdots,n$. Each of these operations happens atomically. However, 
+new versions may be committed at $r$ in-between the times the replica fetches the versions for the keys 
+$\key_{i}$, for $0 < i < n$,  and $\key_{n}$. In particular, it may be the case that the version $\ver_{\key_{n}}$ causally depends 
+on a version $\ver'_{\key_{i}}$ that is newer than $\ver_{\key_{i}}$,  where $0 < i < n$, but commits at replica $r$ 
+after the version $\ver_{\key_{i}}$ is read. The set of versions read by $r$ is not causally consistent. 
+To overcome this problem, the replica $r$ uses the time-stamp $t_{n}$ of the version $\ver_{\key_{n}}$ as an upper-bound, 
+and it proceeds to fetch the most up-to-date version of each key $\key_{1}, \cdots, \key_{n}$ with time-stamp 
+at most $t_{n}$. At the time $\ver_{\key_{n}}$ is read,  all its causal dependencies must be included in the local 
+state of $r$, hence the new snapshot built by $r$ is causally consistent. The snapshot is sent  from $r$ 
+to the client, together with the set of dependencies of each version
+read which are 
+included into the local context of the client.
+% Future operations of
+%the client depend frthe versions 
+%the client has read.
+\ac{I will leave this to myself for future reference: why the hell does COPS do this in two rounds? It looks like you can do 
+this in a single round, by simply taking the time-stamp of the first version you read as an upper bound for future reads.
+Update: Went to check directly on the COPS protocol, and indeed COPS really does something more - but not much more - complicated. 
+The main aspect from which COPS differs from Shale's idealisation of it is that (1) reads happen concurrently, and the 
+one with highest time-stamp is used to fix the bound on versions in the first round, and (2) in the second round not all keys 
+are re-fetched, but only those that are really needed to recover a causally consistent snapshot.}
+
+
+
 Consider a simple counter object, $\mathsf{Counter}(\key)$, 
 defined over a distributed kv-store.
 Clients can manipulate the value of key $\key$ via two operations, 
