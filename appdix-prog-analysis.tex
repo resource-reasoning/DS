@@ -820,7 +820,7 @@ This contradicts Proposition \ref{prop:si_cycles}.
     By \( \WSI \) safe (\cref{def:wsi-safe}), \( \txid' \) must also read the key \( \key \),
     that is, \( \txid' \in \rsOf[\mkvs(\key,z)]\) for some \( z \).
     Because the \( \mkvs \) is reachable under \( \WSI \) and therefore \( \UA \),
-    this means if \( \txid' \) read and writes key \( \key \), 
+    this means that if \( \txid' \) read and writes key \( \key \), 
     it must read the immediate predecessor.
     This means \( z = i\) and then \( \txid \toEDGE{\WR} \txid' \).
     \item \caseI{\(j - i > 1\)}
@@ -879,18 +879,27 @@ It is easy to see a multi-counter libraries is \( \WSI \) safe, therefore robust
 \citet{bank-example-wsi} presented a bank example
 and claimed that this example is robust against  \( \SI \).
 We find out that the bank example is also robust against \( \WSI \).
-The example bases on relational database with three tables, account,  saving and checking.
-The account table maps customer names to customer IDs 
-and saving and checking map customer IDs to saving balances and checking balances respectively.
-We ignore the account table since it is a immutable lookup table.
+The example bases on relational database with three tables, account, saving and checking.
+The account table maps customer names to customer IDs (\( \codeFont{Account(\underline{Name}, CustomerID )} \))
+and saving and checking map customer IDs to saving balances (\( \codeFont{Saving(\underline{CustomerID}, Balance )} \)) 
+and checking balances (\( \codeFont{Checking(\underline{CustomerID}, Balance )} \)) respectively.
+We ignore the account table since it is an immutable lookup table.
 We encode the saving and checking tables together as a kv-store.
-Each customer is represent as an integer \( n \), its checking balance is associated with 
+Each customer is represent as an integer \( n \), that is,
+\( (\stub, n) \in \codeFont{Account(\underline{Name}, CustomerID )} \),
+its checking balance is associated with 
 key \( n_s = 2 \times n \) and saving with \( n_c = 2 \times n + 1 \).
 \begin{align*}
-    n_c &\defeq 2 \times n \\
-    n_s &\defeq 2 \times n + 1  \\
+    n_c &\defeq 2 \times n &
+    n_s &\defeq 2 \times n + 1 &
     \Keys &\defeq \bigcup_{n \in \Nat} \Set{n_c, n_s}
 \end{align*}
+If \( n \) is a customer, then 
+\[ (n, \valueOf[\mkvs(n_s, \abs{\mkvs(n_s)})]) \in \codeFont{Saving(\underline{CustomerID}, Balance )} \]
+\noindent and 
+\[ (n, \valueOf[\mkvs(n_s, \abs{\mkvs(n_c)})]) \in \codeFont{Checking(\underline{CustomerID}, Balance )} \]
+To interact with tables, there are five types of transactions.
+For brevity we assume balances are integers.
 \begin{align*}
     \codeFont{balance(n)} & \defeq
     \begin{transaction}
@@ -911,7 +920,14 @@ key \( n_s = 2 \times n \) and saving with \( n_c = 2 \times n + 1 \).
     \pifs{\pv{v} + \pv{x} \geq 0} \ 
     \pmutate{\pv{n}_s}{\pv{x} + \pv{v}}; \ 
     \pife
-    \end{transaction}  \\
+    \end{transaction}
+\end{align*}
+\( \codeFont{balance(n)} \) returns customer \( n \) total balance.
+\( \codeFont{depositChecking(n,v)} \) deposits \( v \) to the checking account of customer \( n \),
+if \( v  \) is non-negative, otherwise the transaction does nothing.
+While \( \codeFont{transactSaving(n,v)} \) allows a consumer \( n \) to deposit or withdraw money
+from the saving account as long as the saving account afterwards is non-negative.
+\begin{align*}
     \codeFont{amalgamate(n,n')} & \defeq
     \begin{transaction}
     \plookup{\pv{x}}{\pv{n}_s}; \ 
@@ -933,12 +949,6 @@ key \( n_s = 2 \times n \) and saving with \( n_c = 2 \times n + 1 \).
     \pmutate{\pv{n}_s}{\pv{x}}; 
     \end{transaction} 
 \end{align*}
-There are five types of transactions.
-\( \codeFont{balance(n)} \) returns customer \( n \) total balance.
-\( \codeFont{depositChecking(n,v)} \) deposits \( v \) to the checking account of customer \( n \),
-if \( v  \) is non-negative, otherwise the transaction does nothing.
-While \( \codeFont{transactSaving(n,v)} \) allows a consumer \( n \) to deposit or withdraw money
-from the saving account as long as the saving account afterwards is non-negative.
 \( \codeFont{amalgamate(n,n')} \) represents moving all funds from consumer \( n \) to
 the checking account of customer \( n'\).
 Last, \( \codeFont{writeCheck(n,v)} \) updates the checking account of \( n \).
@@ -946,9 +956,10 @@ If funds, both saving and checking, from \( n \) is greater than the \( v \),
 the transaction deduct \( v \) from the checking account of \( n \).
 If funds are not enough, the transaction further deducts one pounds as penalty.
 \citet{bank-example-wsi} argued that, to make this example robust against \( \SI \),
-\( \codeFont{writeCheck(n,v)} \) must be strengthened by writing back the balance to the saving account,
-even thought it is unchanged.
-The bank \( \codeFont{bank} \) libraries are defined as the following
+\( \codeFont{writeCheck(n,v)} \) must be strengthened by writing back the balance to the saving account 
+(the last line, \(\pmutate{\pv{n}_s}{\pv{x}} \)),
+even thought the saving balance is unchanged.
+The bank \( \codeFont{bank} \) libraries are defined by
 \[ 
     \codeFont{Bank} \defeq \Set{\codeFont{balance(n)}, \codeFont{depositChecking(n,v)}, 
     \codeFont{amalgamate(n,n')}, \\ \codeFont{writeCheck(n,v)}, \codeFont{writeCheck(n,v)} }
