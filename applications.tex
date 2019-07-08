@@ -65,7 +65,6 @@ that take sessions into account.
 
 
 \subsubsection{Robustness of a Single Counter against $\ET_{\PSI}$}
-\input{prog_analysis_kv_store}
 Pick an arbitrary key $\key$ and a kv-store $\mkvs \in \CMs(\ET_{\PSI}, \mathsf{Counter}(\key))$
 with $\Counter(\key) {=} \Set{\ctrinc(\key), \ctrread(\key)}$.
 Clients write to  $\key$ by calling $\ctrinc(\key)$ which first
@@ -78,6 +77,8 @@ the order in which clients observe the versions of $\key$ by calling $\ctrread(\
 is consistent with the order of the index of such versions in
 $\mkvs(\key)$: this yields to kv-stores in $\CMs(\ET_{\PSI}, \mathsf{Counter}(\key)$ 
 to have the canonical structure of \cref{fig:prog_analysis}, defined below: 
+
+\input{prog_analysis_kv_store}
 
 \vspace{-7pt}
 {%
@@ -225,26 +226,24 @@ thus the new kv-store \( \mkvs_{i+1} \) still satisfies \cref{equ:main-wsi-safe-
 
 \citet{bank-example-wsi} presented a banking example
 and claimed that it is robust against  \( \SI \).
-We find out that the banking example is also robust against \( \WSI \).
-The example bases on relational database with three tables, account, saving and checking.
+We find that the banking example is also robust against weak snapshot isolation \( \WSI \).
+The example based on relational database has three tables, account, saving and checking.
 The account table maps customer names to customer IDs (\( \codeFont{Account(\underline{Name}, CustomerID )} \))
-and saving and checking map customer IDs to saving balances (\( \codeFont{Saving(\underline{CustomerID}, Balance )} \)) 
+and saving and checking table map customer IDs to saving balances (\( \codeFont{Saving(\underline{CustomerID}, Balance )} \)) 
 and checking balances (\( \codeFont{Checking(\underline{CustomerID}, Balance )} \)) respectively.
 For simplicity, we encode the saving and checking tables together as a kv-store,
 but ignore the account table given that it is effectively an immutable lookup table.
-In the encoding, each customer is represent as an integer \( n \)
+In the encoding, each customer is encoded as an integer \( n \),
 its checking balance is associated with 
-key \( n_s = 2 \times n \) and saving with \( n_c = 2 \times n + 1 \).
-Assume keys are from natural numbers.
-We use notation \( n_c \) for checking account of \( n \), defined by \( n_c \defeq 2 \times n \),
-and \( n_s \) for saving account of \( n \) defined by \( n_s \defeq 2 \times n + 1 \).
+key \( n_c \) defined by \( n_c \defeq 2 \times n \) and 
+saving balance with \( n_s \) defined by \( n_s \defeq 2 \times n + 1 \).
 Thus \( \Keys \defeq \bigcup_{n \in \Nat} \Set{n_c, n_s} \).
 Given this encoding, If \( n \) is a customer, that is, \( (\stub, n) \in \codeFont{Account(\underline{Name}, CustomerID )} \),
 then
 \[ (n, \valueOf[\mkvs(n_s, \abs{\mkvs(n_s)})]) \in \codeFont{Saving(\underline{CustomerID}, Balance )} \]
 \noindent and 
 \[ (n, \valueOf[\mkvs(n_s, \abs{\mkvs(n_c)})]) \in \codeFont{Checking(\underline{CustomerID}, Balance )} \]
-There are five types of transactions for interacting with the database.
+This banking example consists of five types of transactions for interacting with the database.
 For brevity we assume balances are integers, that is, \( \mathbb{Z} \subseteq \Val \).
 \begin{align*}
     \codeFont{balance(n)} & \defeq
@@ -268,8 +267,8 @@ For brevity we assume balances are integers, that is, \( \mathbb{Z} \subseteq \V
     \pife
     \end{transaction}
 \end{align*}
-\( \codeFont{balance(n)} \) returns customer \( n \) total balance.
-\( \codeFont{depositChecking(n,v)} \) deposits \( v \) to the checking account of customer \( n \),
+\( \codeFont{balance(n)} \) returns, through the spatial variable \( \ret \), total balance of customer \( n \).
+\( \codeFont{depositChecking(n,v)} \) deposits \( v \) to the checking account of customer \( n \)
 if \( v  \) is non-negative, otherwise the transaction does nothing.
 While \( \codeFont{transactSaving(n,v)} \) allows a consumer \( n \) to deposit or withdraw money
 from the saving account as long as the saving account afterwards is non-negative.
@@ -305,7 +304,7 @@ If funds are not enough, the transaction further deducts one pound as penalty.
 \( \codeFont{writeCheck(n,v)} \) must be strengthened by writing back the balance to the saving account 
 (the last line, \(\pmutate{\pv{n}_s}{\pv{x}} \)),
 even thought the saving balance is unchanged.
-The bank \( \codeFont{bank} \) libraries are defined by
+The banking library, \( \codeFont{Bank} \), is defined by
 \[ 
     \codeFont{Bank} \defeq \Set{\codeFont{balance(n)}, \codeFont{depositChecking(n,v)}, 
     \codeFont{amalgamate(n,n')}, \\ \codeFont{writeCheck(n,v)}, \codeFont{writeCheck(n,v)} }
@@ -321,11 +320,16 @@ satisfy strict no blind write.
 \end{theorem}
 
 We prove it in a similar way to the previous multiple counter example: given a kv-store \( \mkvs_i \) that is \( \WSI \) safe,
-we check if the next transaction preserves \( \WSI \) safe.
-\(\codeFont{balance(n)} \) reads \( n_c \) and \( n_s \).
-\(\codeFont{depositChecking(n,v)} \) reads and upadtes \( n_c \) if \( v \) is greater or equal than 0, and does nothing otherwise.
-For the rest three possible transactions, \( \codeFont{transactSaving(n,v)}, \codeFont{amalgamate(n,n')} \) and \( \codeFont{writeCheck(n,v)}\),
-they all ensures strict no blind write.
+we check if the next transaction preserves \( \WSI \) safe, 
+specifically \cref{equ:main-wsi-safe-all-write,equ:main-wsi-safe-read-only,equ:main-wsi-safe-write-must-read}.
+\(\codeFont{balance(n)} \) reads \( n_c \) and \( n_s \) therefore satisfies \cref{equ:main-wsi-safe-all-write,equ:main-wsi-safe-read-only,equ:main-wsi-safe-write-must-read}.
+\(\codeFont{depositChecking(n,v)} \) reads and updates \( n_c \) if \( v \) is greater or equal than 0, and does nothing otherwise.
+In the case that \( v \) greater or equal than 0,  \(\codeFont{depositChecking(n,v)} \) preserves  
+\cref{equ:main-wsi-safe-all-write,equ:main-wsi-safe-read-only,equ:main-wsi-safe-write-must-read} since
+the transaction only touch \( n_c \).
+While in the case that \( v \) less than 0, there is nothing to prove.
+\( \codeFont{transactSaving(n,v)}, \codeFont{amalgamate(n,n')} \) and \( \codeFont{writeCheck(n,v)}\)
+read and write to any keys they touch, thus ensures strict no blind write.
 
 \ac{
 \subsubsection{Robustness of Multiple Counters against $\ET_{\SI}$} 
@@ -454,7 +458,7 @@ database Clock-SI~\cite{clocksi} satisfies snapshot isolation; the
 proofs are  in~\cref{sec:implementation-verification}. 
 
 %synchronisation among replicas ensures that they are in a consistent (albeit out-of-date) state.
-\mypar{COPS}
+\subsubsection{COPS}
 COPS is a fully replicated database where  each replica stores multiple versions of each key. 
 %contains all keys.
 In COPS, a version \( \ver \) on a replica contains a key, a value, a
@@ -661,7 +665,7 @@ w.r.t the relation $\SO \cup \WR_{\mkvs}$ ($\closed[\mkvs, \vi, R_{\CC}])$.
 Further details  and  the  proof of soundness with
 respect to $\ET_\CC$  are given in \cref{sec:cops}.
 
-\mypar{Clock-SI}
+\subsubsection{Clock-SI}
 Clock-SI is a distributed protocol for partitioned key-value
 stores. The set of keys  and 
 their respective versions are partitioned across different machines; versions of keys are time-stamped. 
