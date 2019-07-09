@@ -59,8 +59,15 @@ Command \( \plookup{\pv{x}}{\key} \) reads the value of key \( \key \) to
 local variable \( \vx \); command \( \pmutate{\key}{\pv{x}+1} \)
 writes the value of \( \pv{x}+1 \) to key \( \key \).  The code of each
 operation is wrapped in square brackets, denoting that 
-%the enclosed code 
 it must be executed \emph{atomically} as a transaction.  
+
+... shale begin....
+To motivate, let consider a replicated database where
+a client only interacts with one replica.
+For such database,
+correctness of atomic transactions is subtle, depending heavily on the
+particular consistency model under consideration.  
+... shale end.....
 
 Correctness of atomic transactions is subtle, depending heavily on the
 particular consistency model under consideration.  
@@ -68,16 +75,12 @@ Consider the client program
 $\prog_{\mathsf{LU}} = \left(\cl_1 : \ctrinc(\key) \;|| \; \cl_2:
   \ctrinc(\key) \right)$, where clients $\cl_1$ and $\cl_2$ run
 $\ctrinc(\key)$ concurrently.
-% below 
-%%
-%\begin{align}
-%	\cl_1: \ctrinc(\key)
-%	\;\; || \;\;
-%	\cl_2: \ctrinc(\key)
-%	\tag{\textsc{LU}}
-%	\label{prog:inc2}
-%\end{align}%
-%
+
+... shale begin....
+Let us assume that \( \cl_1 \) and \( \cl_2 \) work with different replicas and
+the $\key$ initially holds value $0$ in all replicas.
+... shale end.....
+
 Let us assume that  $\key$ initially holds value $0$.
 Intuitively, since transactions are executed atomically, after both
 calls to $\ctrinc(\key)$ have terminated, the counter should hold 
@@ -93,11 +96,23 @@ significant performance cost. Therefore, implementers are content with
 %that have been implemented both in
 %replicated and partitioned databases
 %\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}.
+
+... shale begin....
+In contrast, if the replicas provide no synchronisation mechanism for transactions,
+then it is possible for both clients to read the same initial value $0$ for $\key$ at their
+distinct replicas, update them to $1$, and eventually propagate their updates to other replicas. 
+Consequently, both
+sites  are unchanged with value  $1$ for $\key$.
+This weak behaviour is known as the \emph{lost update} anomaly, which
+is  allowed under the consistency model called {\em causal consistency} \cite{cops,wren,redblue}.
+... shale end.....
+
 When clients can execute $\ctrinc(\key)$ at different distributed
 sites,
 if the kv-store provides no synchronisation mechanism for transactions,
 then it is possible for both clients to read the same initial value $0$ for $\key$ at their
-distinct replicas, update them to $1$, and eventually propagate their updates to other replicas. Consequently, both
+distinct replicas, update them to $1$, and eventually propagate their updates to other replicas.
+Consequently, both
 sites  are unchanged with value  $1$ for $\key$.
 This weak behaviour is known as the \emph{lost update} anomaly, which
 is  allowed under the consistency model called {\em causal consistency} \cite{cops,wren,redblue}.
@@ -209,10 +224,35 @@ execution graphs.
 
 %This property is known as \emph{write conflict freedom}. 
 
+\mypar{Generael Robustness Results} 
+The first application of our operational semantics is to prove
+general robustness results for clients with respect to specific
+consistency models. 
+
+..... shale .....
+We show that any program that only interacts with  
+a single ey \( \key \) via \( \ctrinc(\key)\) and \( \ctrread(\key)\),
+is robust against \( \PSI \) but not \( \CC \).
+A multi-counter program that allows client to access with different keys, is not robust against 
+\( \PSI \) but \emph{weak snapshot isolation} \( \WSI \), 
+a new consistency model we found.
+\( \WSI \) is sightly weaker than snapshot isolation but maintains many good properties.
+Any program with transactions that are either read-only or satisfy \emph{strict no blind write},
+is robust against \( \WSI \).
+Using this general result, 
+we prove a banking example \cite{bank-example-wsi} is robust against \( \WSI \).
+Our robustness result is independent from specific implementations of consistency models.
+..... shale .....
+
+
+.........probably note here...........In \cref{sec:program-analysis}, we prove that if the kv-store 
+ensures write-conflict freedom as well as few other properties, then clients can increment 
+and read from a single counter as if the kv-store were (strictly) serialisable.
 
 
 
-\mypar{COPS Protocol} The first application of our operational
+\mypar{Verifying COPS Protocol} 
+The second application of our operational
 semantics is to determine that implementations of distributed
 kv-stores satisfy certain consistency models. We have shown that the
 COPS protocol \citep{cops} for implementing a replicated database satisfies {\em
@@ -220,7 +260,25 @@ COPS protocol \citep{cops} for implementing a replicated database satisfies {\em
 partitioned database satisfies the consistency model called {\em
   snapshot isolation}. We discuss the  COPS protocol  in this section. 
 
+... shale ....
+COPS is a fully replicated database where each replica stores multiple versions of each key. 
+The COPS synchronisation mechanism ensures that an version eventually reaches in all replicas.
+The COPS provides restricted API, two operations for clients: 
+writing a single key; and reading a set of keys. 
+Each instance of these operations is processed by a single replica and does not require any synchronisation.
+These operations appear atomically to clients, but replicas process them in a fine-grained way,
+and in between non-deterministic synchronisation may happen.
+A COPS client maintains a context containing any versions it observed.
 
+We project COPS replicas into our global centralised kv-store.
+The client contexts are encoded as views.
+The implementation mechanism ensures that the encoded views always satisfy
+our definition of causal consistency using execution test.
+... shale ....
+
+The following can go
+
+... shale ....
 
 \pg{Now below needs to be summarised and made to fit the above.}
 \azalea{I like the next bit titled ``General Robustness Results''. It actually says intuitively what we are doing. But the paragraph below titled ``COPS protocol'' is just a description of COPS and says nothing about our contribution.}
@@ -258,44 +316,12 @@ using \emph{causal delivery}: when replica $r'$ receives a version $\ver$ from r
 waits for dependencies of $\ver$ to be committed to its local state, and only then commits $\ver$ itself.
 %This property ensures that 
 As such, the set of versions contained in the local state of each replica is closed with respect to causal dependencies.
-%A COPS client interacts with a single replica at a time via COPS API,
-%either single-write or multiple-read transactions.
-%Replicas \( \repl \) store all versions that has been received from clients, or other replicas via synchronisation.
-%Each version \( \ver \) includes a key, a value, a unique timestamp 
-%assigned by the replica who initially received this version from a client,
-%and a \emph{dependency set}, written by \( \depOf[\ver]\).
-%This dependency set traces the versions on which $\ver$ causally depends.
-%A synchronisation message with a version \( \ver \) will be received only 
-%when all the versions in the dependency set have been received.
-%This guarantees that for any version \( \ver \) in a replica \( \repl \), written by \( \ver \in \repl \),
-%the versions on which \( \ver \) depends also are in the replica, \( \depOf[\ver] \subseteq \repl \).
-%COPS assumes that all versions eventually deliver to all replicas.
-%Replicas themselves are assigned with unique identifiers that are totally ordered.
-%As such, all versions on all keys are totally ordered,
-%which, together with eventual delivery, guarantees eventual consistency among all replicas.
-%The COPS API follows the multiple-readers-single-writer paradigm: 
-%at any given time, the database can be accessed by either multiple read-only concurrent transactions, or single writing transactions. 
-%Each version $\ver$ records a value and a \emph{dependency set}, written $\depOf[\ver]$,
-%tracking the versions on which $\ver$ causally depends.
-%This causal dependency contains previous reads and writes from the same client, and their dependencies,
-%that is, 
-%\( \left( \left( \SO \cup \WR \right) ^{-1}\right)^{*}(\wtOf[\ver]) \subseteq \depOf[\ver] \).
-%
-%For a client to commit a single-write transaction, hence a new value \( \val \) of a key \( \key \),
-%it sends the new value \( \val \) and more importantly the dependency set \( D \), to a replica
-%in which the \( \key, \val, D \) together with a newly assigned timestamp \( \txid \), turn into a new version \( \ver \);
-%then the new timestamp returns to the client.
-%To construct the dependency set for the new version,
-%each client maintains a \emph{client context} that tracks the versions that have been either fetched from, or committed to any replicas. 
-%For a single-write transaction, the client context becomes the dependency set \( D \) of the new version \( \ver \) which ensures \( D \) contains all versions that \( \ver \) causally depends on.
 
 When a client requests to read a set of keys \( \{\key_1, \dots,
 \key_n\} \) from a  replica $r$, it sends a message 
 containing the set of keys to $r$ and waits for a reply from $r$. Upon receiving the message, $r$ builds a causally consistent snapshot, \ie
 a mapping from $\{\key_{1},\cdots, \key_{n}\}$ to values, in two rounds. 
 First, $r$ fetches from its state 
-%A client can read some keys \( \key_1, \dots, \key_n \) in a multiple-read transaction through requesting a replica; 
-%the replica fetches 
 the most recent version \( \ver_{\key_i} \) for each $i
 {=} 0,\cdots,n$. Each of these operations happens atomically. However, 
 new versions may be committed at $r$ in between the times $r$ fetches the versions for the keys 
@@ -309,34 +335,11 @@ state of $r$, hence the new snapshot built by $r$ is causally consistent. The sn
 to the client, together with the set of dependencies of each version
 read which are 
 included into the local context of the client.
-% Future operations of
-%the client depend frthe versions 
-%the client has read.
-\ac{I will leave this to myself for future reference: why the hell does COPS do this in two rounds? It looks like you can do 
-this in a single round, by simply taking the time-stamp of the first version you read as an upper bound for future reads.
-Update: Went to check directly on the COPS protocol, and indeed COPS really does something more - but not much more - complicated. 
-The main aspect from which COPS differs from Shale's idealisation of it is that (1) reads happen concurrently, and the 
-one with highest time-stamp is used to fix the bound on versions in the first round, and (2) in the second round not all keys 
-are re-fetched, but only those that are really needed to recover a causally consistent snapshot.}
 
 
-\mypar{Generael Robustness Results} 
-The second application of our operational semantics is to prove
-general robustness results for clients with respect to specific
-consistency models. ....
+..... SHALE: I think this should put after example section, or simply cut out.
+It does not provide anything new but a more complex example of our semantics .....
 
-\pg{now what are we going to say here,
-I suggest a summary of results.........}
-
-
-
-\pg{*******don't know where to put all this, if anywhere. Ithink this
-  is for a later section not section 2.} 
-
-
-.........probably note here...........In \cref{sec:program-analysis}, we prove that if the kv-store 
-ensures write-conflict freedom as well as few other properties, then clients can increment 
-and read from a single counter as if the kv-store were (strictly) serialisable.
 
 However, the situation becomes more complicated when the kv-store contains multiple counters:  
 since each client has its own view on the kv-store, and views of clients are independent from each other, it is possible for two 
@@ -357,24 +360,6 @@ For instance, consider the following program:
 	\label{prog:LF}
 \end{align}	 
 }%
-%
-%\begin{align}
-%	\begin{array}[t]{@{} r @{\hspace{2pt}} l || r @{\hspace{2pt}} l || r @{\hspace{2pt}} l @{}}
-%		\cl_0: 
-%		& \ctrinc(\key_1) ; \ctrinc(\key_2)
-%		& \;\; || \;\; & \cl_1: 
-%		& \ctrread(\key_1) ; \ctrread(\key_2)
-%		&  \;\; || \;\; & \cl_2: 
-%		& \ctrread(\key_1); \ctrread(\key_2)\\
-%%
-%%		& \ctrinc(\key_2) 
-%%		&& \ctrread(\key_2)
-%%		&& \ctrread(\key_2)
-%	\end{array}
-%	\tag{\textsc{LF}}
-%	\label{prog:LF}
-%\end{align}
-%   
 Suppose that $\cl_0$ executes first by incrementing $\key_1$, $\key_2$.
 This results in $\key_1$ and $\key_2$ having two versions with values $0$ and $1$ each. 
 Client $\cl_1$ executes its transactions next, using a view that 
