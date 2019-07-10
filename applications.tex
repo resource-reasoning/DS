@@ -480,22 +480,19 @@ the partitioned database Clock-SI~\cite{clocksi} satisfies snapshot isolation (\
 
 \input{cops-graph.tex}
 
-COPS is a fully replicated database where 
-each replica stores multiple versions of each key (\cref{fig:initial-cops,fig:cops-after-write-transaction}). 
-In COPS, a version \( \ver \) on a replica,
-for example \( (\key_1,\val_1,(\txid_1,\repl_1), \emptyset) \) in \cref{fig:cops-after-write-transaction},
-contains a key, a value, a time-stamp identifying the time when a client first requested the
-replica to write the version, and a set of dependencies $\depOf[\ver]$. 
-Each dependency consists of a key and a time-stamp of
-the version of that key on which $\ver$ directly depends.  This
- time-stamp consists of the local, real time when a replica
-first committed the version plus the replica identifier. COPS assumes
-a total order among replica identifiers. Thus,  time-stamps can be
+COPS is a fully replicated database, with each replica storing multiple versions of each key as illustrated in \cref{fig:initial-cops,fig:cops-after-write-transaction}. 
+Each COPS version \( \ver \),
+\eg \( (\key_1,\val_1,(\txid_1,\repl_1), \emptyset) \) in \cref{fig:cops-after-write-transaction},
+contains a key (\eg $\key_1$), a value (\eg $\val_1$), a time-stamp denoting when a client first requested the
+replica to write the version (\eg $(\txid_1, \repl_1)$), and a set of dependencies, written $\depOf[\ver]$ (\eg $\emptyset$). 
+A time-stamp associated with a version $\ver$ is of the form $(\txid, \repl)$, where $\repl$ identifies the replica that committed $\ver$, and $\txid$ denotes the local, real time when $\repl$ committed $\ver$. 
+Each dependency in $\depOf[\ver]$ comprises a key and the time-stamp of the version of that key on which $\ver$ directly depends.  
+COPS assumes a total order among replica identifiers. Thus,  time-stamps can be
 totally ordered lexicographically over pairs of real-time of
 operations and replica identifiers.
 
-The COPS API provides two operations for  clients: writing a single
-key; and reading 
+The COPS API provides two operations for  clients: one for writing to a single
+key; and another for reading from 
 a set of keys atomically. Each instance of these operations is processed by a single replica. 
 Each client maintains a \emph{context}, which is a set of dependencies
 corresponding to the versions it observes.  
@@ -506,23 +503,26 @@ We demonstrate how a client \( \cl \) interacts with a replica through the follo
     \label{equ:client-repl-1}
     \cl: \begin{transaction} \pmutate{\key_1}{\val_1}; \end{transaction} ; \ 
     \begin{transaction} \pderef{\vx}{\key_1}; \ \pderef{\vy}{\key_2}; \end{transaction}
+    \tag{\textsc{cops-cl}}
 \end{align}
-For brevity, we assume that there are two replicas and two keys as shown in \cref{fig:initial-cops}.
-Initially, the client \( \cl \) connects to replica \( \repl_1 \) and set its local context \( ctx \) as an empty set.
-For the first single-write transaction (\cref{equ:client-repl-1}), client $\cl$ requests to write key $\key_1$ to the connected replica $r_1$.
-It sends a message containing the key \( \key_1 \) and value $\val_1$ to be written, and its context $ctx$ to $r_1$. 
-It then waits for a reply from the replica. 
-Upon receiving the message, $r_1$ produces a monotonically increasing local time $t_1$, which it uses to install 
-a new version $\ver = (\key_1,\val_1, (t_1,\repl_1), ctx)$ shown in \cref{fig:cops-after-write-transaction}.
-Note that the dependency set of $\ver$ is the context $ctx$ (an empty set here) of the client.
+For brevity, we assume that there are two keys ($\key_1$ and $\key_2$) and two replicas ($\repl_1$ and $\repl_2$) 
+as shown in \cref{fig:initial-cops}, where $\repl_1 < \repl_2$.
+Initially, client \( \cl \) connects to replica \( \repl_1 \) and initialises its local context \( ctx \) as $\emptyset$.
+To execute its first single-write transaction, client $\cl$ requests to write $\val_1$ to $\key_1$ at its associated replica $\repl_1$, by sending the message $(\key_1, \val_1, ctx)$ to $\repl_1$. 
+It then awaits a reply from $\repl_1$.
+Upon receiving the message, $\repl_1$ produces a monotonically increasing local time $\txid_1$, and uses it to install  a new version $\ver {=} (\key_1,\val_1, (\txid_1,\repl_1), ctx)$ as shown in \cref{fig:cops-after-write-transaction}.
+Note that the dependency set of $\ver$ is the $\cl$ context ($ctx {=} \emptyset$).
 %The version carries the value received, and the context received as its set of dependencies: 
-It thus depends on other versions previously observed by the client $\cl_1$. 
-Replica $r_1$ then sends the time-stamp $(t_1,r_1)$ back to the client, which will incorporate the pair $(\key, t_1,\repl_1)$ in its local context: 
-the client observes the write it performed. Finally, replica $r$ propagates the version written to other replicas asynchronously, 
-using \emph{causal delivery}: when replica $r'$ receives a version $\ver$ from some replica $\ver$, it 
-will wait to commit all its dependencies to its local state, before committing $\ver$ itself.
-The set of versions contained in the local state of each replica is closed with respect to causal dependencies.
-Notice that other replicas may accept new versions from different clients in parallel, depicted in \cref{fig:cops-after-write-transaction}.
+%It thus depends on other versions previously observed by the client $\cl_1$. 
+Replica $\repl_1$ then sends the time-stamp $(\txid_1,\repl_1)$ back to client $\cl_1$, and $\cl_1$ in turn  incorporates $(\key_1, \txid_1,\repl_1)$ in its local context; \ie 
+$\cl$ observes its own write. 
+Finally, replica $\repl_1$ propagates the written version to other replicas asynchronously, by sending a \emph{synchronisation message} 
+using \emph{causal delivery} as follows. 
+In the general case, when a replica $\repl'$ receives a version $\ver'$ from another replica $\repl$, it 
+first waits for all dependencies of $\ver$ to be committed to $\repl'$, and then commits $\ver$.
+As such, the set of versions contained in each replica is closed with respect to causal dependencies.
+In the example above, when other replicas receive version $\ver$ from $\repl_1$, they can immediately commit $\ver$ as its dependency set is empty. 
+Note that replicas may accept new versions from different clients in parallel (see \cref{fig:cops-after-write-transaction}).
 %This property ensures that 
 %A COPS client interacts with a single replica at a time via COPS API,
 %either single-write or multiple-read transactions.
@@ -554,30 +554,35 @@ Notice that other replicas may accept new versions from different clients in par
 %To construct the dependency set for the new version,
 %each client maintains a \emph{client context} that tracks the versions that have been either fetched from, or committed to any replicas. 
 %For a single-write transaction, the client context becomes the dependency set \( D \) of the new version \( \ver \) which ensures \( D \) contains all versions that \( \ver \) causally depends on.
-For the second multiple-read transaction,
-client  \( cl \) requests to read keys \( \Set{\key_1, \key_2} \), it sends a message 
-containing the set of keys to the replica $r_1$ and waits for a reply from $r_1$. 
-Upon receiving the message, replica $r_1$ builds a causally consistent snapshot, i.e. 
-a mapping from the set $\Set{\key_1, \key_2}$ to values, in two rounds. 
-First, $r_1$ fetches the most recent versions for \( \Set{\key_1,\key_2}\)
-one by one, between which other writes and synchronisation messages might arrive, for example \cref{fig:cops-request-values}.
-\Cref{fig:cops-request-values} shows a scenario that \( \repl_1 \) fetched \( (\key_1,\val_1,(t_1,r_1), \emptyset) \) (highlighted in \cref{fig:cops-request-values}).
-Then it was interleaved by two synchronisation messages from \( r_2 \), 
-containing versions \( ( \key_1, \val'_1, (t_1,r_2),\emptyset ) \) and \( ( \key_2, \val'_2, (t_2,r_2),\Set{(\key_1,t_1,r_2)} ) \) respectively.
-Replica \( r_1 \) therefore fetched the \( ( \key_2, \val'_2, (t_2,r_2),\Set{(\key_1,t_1,r_2)} ) \) (highlighted in \cref{fig:cops-request-values}).
-The versions for \( \Set{\key_1,\key_2}\) are not causally consistency, that is, 
-\( ( \key_2, \val'_2, (t_2,r_2),\Set{(\key_1,t_1,r_2)} ) \) depends on a version of \( \key_1 \) with a bigger time-stamp.
+%
+%
+
+To execute its second multi-read transaction ,
+client  \( cl \) requests to read keys \( \Set{\key_1, \key_2} \) by sending a message containing 
+\( \Set{\key_1, \key_2} \) to replica $\repl_1$ and awaits a reply.
+Upon receiving this message, replica $\repl_1$ builds a causally consistent snapshot, \ie
+a mapping from $\Set{\key_1, \key_2}$ to values, in two rounds as follows. 
+First, $\repl_1$ optimistically fetches the most recent versions for \( \Set{\key_1,\key_2}\)
+one at a time. 
+This process may be interleaved with other writes and synchronisation messages (propagated from other replicas). 
+For instance, \cref{fig:cops-request-values} depicts a scenario where \( \repl_1 \)
+\begin{enumerate*}
+	\item first fetches \( (\key_1,\val_1,(\txid_1,\repl_1), \emptyset) \) for $\key_1$ (highlighted) ; %(highlighted in \cref{fig:cops-request-values})
+	\item then receives two synchronisation messages from \( \repl_2 \), 
+containing versions \( ( \key_1, \val'_1, (\txid_1,\repl_2),\emptyset ) \) and \( ( \key_2, \val'_2, (t_2,\repl_2),\Set{(\key_1,\txid_1,\repl_2)} ) \); and
+	\item finally fetches \( ( \key_2, \val'_2, (t_2,\repl_2),\Set{(\key_1,\txid_1,\repl_2)} ) \) for $\key_2$ (highlighted).
+\end{enumerate*}
+As such, the versions fetched for \( \Set{\key_1,\key_2}\) are not causally consistency,: 
+\( ( \key_2, \val'_2, (t_2,\repl_2),\Set{(\key_1,\txid_1,\repl_2)} ) \) depends on a version of \( \key_1 \) with time-stamp $(\txid_1, \repl_2)$ which is bigger than that fetched for $\key_1$: $(\txid_1, \repl_1)$.
 %In particular, it may be the case that the version $\ver_{\key_{n}}$ causally depends 
 %on a version $\ver'_{\key_{i}}$ that is newer than $\ver_{\key_{i}}$,  where $0 < i < n$, but commits at replica $r$ 
 %after the version $\ver_{\key_{i}}$ is read. The set of versions read by $r$ is not causally consistent. 
-To tackle the problem, after the first round of optimistic reads,
-the replica $r_1$ collects all dependency sets and uses them as an upper-bound.
-It proceeds to fetch the most up-to-date version (with the biggest time-stamp) of each key from dependency sets.
-In the case of \cref{fig:cops-request-values}, it means re-fetches a newer version for \( \key_1 \), that is, \( ( \key_1, \val'_1, (t_1,r_2),\emptyset ) \).
-The result is shown in \cref{fig:cops-re-read-values}.
-After the second round, we have a snapshot for keys that is causally consistent. 
-The snapshot is sent to the client, 
-together with the set of dependencies of each version read which are 
+To remedy this, after the first round of optimistic reads,
+$\repl_1$ collects all dependency sets and uses them as an upper-bound in the second round.
+to re-fetch the most recent version (with the biggest time-stamp) of each key from the dependency sets.
+For instance, in \cref{fig:cops-request-values} re-fetches the newer version \( ( \key_1, \val'_1, (\txid_1,\repl_2),\emptyset ) \) for \( \key_1 \), as depicted in \cref{fig:cops-re-read-values}.
+The snapshot obtained after the second round is thus causally consistent. 
+The snapshot is then sent to the client, together with the set of dependencies of each version read which are 
 included into the local context of the client.
 % Future operations of
 %the client depend frthe versions 
@@ -616,43 +621,40 @@ are re-fetched, but only those that are really needed to recover a causally cons
 
 To prove that COPS satisfies causal consistency,
 we encode the state of the system 
-(comprising the state of all replicas and clients) into a
+(comprising the state of all replicas and clients) as a
 configuration in  our operational semantics. 
-Each replica stores a set of versions for each key in COPS, as well as the dependencies of 
-such replicas. We can project the state of all replicas in COPS into a kv-store, 
-by mapping  COPS versions stored in replicas into versions of the
-kv-store. The writer of a mapped version is uniquely
+As each replica stores a set of versions (for each key in COPS) and their dependencies, 
+we can project the state of  COPS replicas into a kv-store 
+by mapping  COPS versions into our kv-store versions.
+The writer of a mapped version is uniquely
 determined by the time-stamp of the corresponding COPS version.
 The reader set of the mapped version 
-can be recovered via annotating read-only transactions.
+can be recovered by annotating read-only transactions.
 %from the time-stamps in the dependency set of the corresponding COPS version. 
-For example, \cref{fig:cops-after-write-transaction} is encoded into the kv-store depicted in \cref{fig:encode-mkvs}.
-The local context of a COPS client identifies the set of COPS versions that the client sees.
-This determines a view over the kv-store encoded from the state of COPS replicas.
-For example, the context of \( \cl \) after committing the first write transaction (\cref{equ:client-repl-1}) is converted to a view depicted in \cref{fig:encode-view}.
+For example, the COPS state in \cref{fig:cops-after-write-transaction} can be encoded as the kv-store depicted in \cref{fig:encode-mkvs}.
+Similarly, as the context of a client $\cl$ identifies the set of COPS versions that $\cl$ sees, 
+we can project COPS client contexts to our client views over kv-stores. 
+For example, the context of \( \cl \) after committing its single-write transaction in \eqref{equ:client-repl-1} is encoded as the client view depicted in \cref{fig:encode-view}.
 %a set of dependencies, which are mapped into a set of (kv-store) versions 
 %in the kv-store built from the state of COPS replicas: the local context of a client determines a view over the kv-store.
 
 %Having encoded client-replica states in COPS into configurations, 
-Next, we map the execution of a transaction in COPS into an $\ET_{\CC}$ reduction between the configurations 
-obtained by encoding the COPS system states before and after executing the transaction, respectively.
-In contrast with other verification techniques \cite{framework-concur,seebelieve} that require examining the whole sequence of operations 
-of a protocol to that it implements a consistency model, we only need to look at how the system evolves 
-when a single transaction is executed.
-The key is to check the views encoded from client contexts.
-As for the COPS protocol, we observe 
-than when a transaction is executed then 
+We next map the execution of a COPS transaction into an $\ET_{\CC}$ reduction between the configurations 
+obtained from encoding the COPS states before and after executing the transaction.
+Note that existing verification techniques \cite{framework-concur,seebelieve} require examining the \emph{entire} sequence of operations of a protocol to show that it implements a consistency model.
+By contrast, we only need to look at how the system evolves after a \emph{single} transaction is executed.
+In particular, we check the client views (obtained from COPS client contexts) over kv-stores after executing a transaction as follows.
+Intuitively, we observe that when a COPS client $\cl$ executes a transaction then:
 \begin{enumerate*} 
-\item the COPS client context increases, i.e. a more up-to-date view of the system is obtained for the corresponding client in the 
-kv-store semantics ($\ET_{\MR}$), 
-\item a COPS client always includes the time-stamp of versions it writes in its context, meaning that the 
-corresponding client view in the kv-store semantics always includes the versions it has written ($\ET_{\RYW}$), 
-\item the COPS client context always contains the dependencies corresponding to versions it has 
-either written or read from other transactions, that is in the corresponding kv-store semantics the view of the client is always closed-down 
-w.r.t the relation $\SO \cup \WR_{\mkvs}$ ($\closed[\mkvs, \vi, R_{\CC}])$.
+\item the $\cl$ context grows, and thus we obtain a more up-to-date view of the associated kv-store; \ie $\vshiftname_{\MR}$ holds;
+\item the $\cl$ context always includes the time-stamp of the versions written by itself, and thus the 
+corresponding client view always includes the versions $\cl$ has written; \ie $\vshiftname_{\RYW}$ holds; 
+\item the $\cl$ context always contains the dependencies corresponding to versions it has 
+either written or read from other transactions, and thus the corresponding client view is always closed-down 
+with respect to the relation $\SO \cup \WR_{\mkvs}$; \ie $\closed[\mkvs, \vi, R_{\CC}])$ holds.
 \end{enumerate*}
-Further details  and  the  proof of soundness with
-respect to $\ET_\CC$  are given in \cref{sec:cops}.
+As such, from the definition of $\CC$ in \cref{fig:execution_tests} we know that COPS satisfies causal consistency ($\CC$).
+We refer the reader to  \cref{sec:cops} for further details and the full soundness proof.
 
 %\subsubsection{Clock-SI}
 %Clock-SI is a distributed protocol for partitioned key-value
