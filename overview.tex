@@ -8,10 +8,13 @@
 \section{Overview}
 \label{sec:overview}
 
-
-...minor intro....
-
-
+We motivate our key ideas, centralised kv-store, partial client views and execution tests,
+through a $\mathsf{Counter}(\key)$ example.
+We argue that our interleaving semantics is a good middle point to
+\begin{enumerate*}
+    \item prove invariant properties such as robustness, and 
+    \item verify distributed protocols.
+\end{enumerate*}
 
 \mypar{Example} We use a simple $\mathsf{Counter}(\key)$ example to
  introduce our operational semantics.  Clients can manipulate the
@@ -61,9 +64,9 @@ Intuitively, since transactions are executed atomically, after both
 calls to $\ctrinc(\key)$ have terminated, the counter should hold 
 the value $2$.
 Indeed, this is the only outcome allowed under 
-\SI\, where transactions
+\SER\, where transactions
 appear to execute in a sequential (serial) order, one after another.
-The implementation of  \SI\ in distributed kv-stores comes at a
+The implementation of  \SER\ in distributed kv-stores comes at a
 significant performance cost. Therefore, implementers are content with
 {weaker} consistency models~\cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}. 
 %that have been implemented both in
@@ -76,16 +79,6 @@ Consequently, both
 sites  are unchanged with value  $1$ for $\key$.
 This weak behaviour is known as the \emph{lost update} anomaly, which
 is  allowed under the consistency model called {\em causal consistency} \cite{cops,wren,redblue}.
-... shale end.....
-
-
-
-%synchronisation among replicas ensures that they are in a consistent
-%(albeit out-of-date) state.
-
-
-----better link with below, I'm not sure we need the bit at the beginning
-although it would be nice if this message was somewhere.......
 
 \input{lu-kvstores.tex}
 \mypar{Centralised Operational Semantics}
@@ -112,17 +105,17 @@ the associated  consistency model.
 
 Let us introduce  our global kv-stores and partial client views by
 showing that we can reproduce the lost update anomaly given by 
-$\prog_{\mathsf{LU}}$. 
+$\prog_{\mathsf{LU}}$.
 Our kv-stores are functions mapping keys to lists of versions, where
 the versions  record all the values written to each key together with the
 meta-data of the transactions that access it. 
-In the $\prog_{\mathsf{LU}}$.  example, the initial kv-store comprises a single key $\key$, with only one possible 
+In the $\prog_{\mathsf{LU}}$ example, the initial kv-store comprises a single key $\key$, with only one possible 
 version $(0, \txid_{0}, \emptyset)$,  stating that $\key$ holds value $0$, 
 that the version \emph{writer} is the initialising transaction
 $\txid_0$ (this version was written by $\txid_0$), 
 and that the version \emph{reader set} is empty (no transaction has read this version as of yet). 
 \Cref{fig:counter_kv_initial} depicts this initial kv-store, with the version
-represented as a box sub-divided in three sections: the version value $0$;
+represented as a box sub-divided in three sections: the value $0$;
 the writer $t_0$; and the reader set $\emptyset$. 
 
 
@@ -166,7 +159,7 @@ transaction identifier $t'$, reads the initial value $0$ and writes a
 new version with value $1$, as depicted in
 \cref{fig:counter_kv_final}.  Such a kv-store does not contain a
 version with value $2$, despite two increments on $\key$, producing
-the lost update anomaly.  For (2), client $cl_2$ reads the latest
+the lost update anomaly.  For (2), client $cl_2$ reads the newest
 value $1$ and writes a new version with value $2$.
 
 To avoid undesirable behaviour, such as the lost update anomaly, we
@@ -187,78 +180,88 @@ show that our operational definitions of consistency models are
 equivalent to the declarative definitions of consistency models for 
 execution graphs. 
 
-NOT DONE FROM HERE
-
-
-%This property is known as \emph{write conflict freedom}. 
-
 \mypar{Generael Robustness Results} 
 The first application of our operational semantics is to prove
 general robustness results for clients with respect to specific
 consistency models. 
+Using our operational semantics, we can derive invariant of programs 
+under a weak consistency model and
+then prove invariant properties such as robustness, that is, the invariant has no weaker behaviours
+than invariant obtained by executing the same programs under serialisability.
+We prove the robustness of a single
+counter against \PSI; and the robustness of multiple counters and banking example \cite{bank-example-wsi}
+against our new model \WSI\ (\cref{sec:applications}).
+The latter is done through general conditions on invariant which guarantees robustness against \( \WSI \).
 
-..... shale begin.....
-Our operational semantics are useful in term of deriving invariants of programs executing 
-under a consistency model and
-then proving invariant properties such as robustness, that is, the invariants have no weaker behaviours
-than invariants obtained by running the same programs under serialisability.
-We show that any programs that only interacts with  
-a single key \( \key \) via \( \ctrinc(\key)\) and \( \ctrread(\key)\),
-is robust against \emph{parallel snapshot isolation} \( \PSI \) but not \emph{causal consistency}.
-A multi-counter program that allows client to access with different keys, is not robust against 
-\( \PSI \) but \emph{weak snapshot isolation} \( \WSI \), 
-a new consistency model we found.
-\( \WSI \) is sightly weaker than snapshot isolation but maintains many good properties.
-One of them is that 
-any program with transactions that are either read-only or satisfy \emph{strict no blind write},
-is robust against \( \WSI \).
-A transaction satisfies \emph{strict no blind write} if 
-\begin{enumerate*}
-    \item it always read before write to any key and,
-    \item if it writes to at least a key, then it must write to any key it read.
-\end{enumerate*}
-Using this general result, 
-we prove a banking example \cite{bank-example-wsi} is robust against \( \WSI \) but not \( \PSI \).
-Our robustness result is independent from specific implementations of consistency models.
-..... shale end .....
-
-
-.........probably note here...........In \cref{sec:program-analysis}, we prove that if the kv-store 
-ensures write-conflict freedom as well as few other properties, then clients can increment 
-and read from a single counter as if the kv-store were (strictly) serialisable.
+%A multi-counter program that allows client to access with different keys, is not robust against 
+%\( \PSI \) but \emph{weak snapshot isolation} \( \WSI \), 
+%a new consistency model we found.
+%\( \WSI \) is sightly weaker than snapshot isolation but maintains many good properties.
+%One of them is that 
+%any program with transactions that are either read-only or satisfy \emph{strict no blind write},
+%is robust against \( \WSI \).
+%A transaction satisfies \emph{strict no blind write} if 
+%\begin{enumerate*}
+    %\item it always read before write to any key and,
+    %\item if it writes to at least a key, then it must write to any key it read.
+%\end{enumerate*}
+%Using this general result, 
+%we prove a banking example \cite{bank-example-wsi} is robust against \( \WSI \) but not \( \PSI \).
+%Our robustness result is independent from specific implementations of consistency models.
+%..... shale end .....
 
 
+%.........probably note here...........In \cref{sec:program-analysis}, we prove that if the kv-store 
+%ensures write-conflict freedom as well as few other properties, then clients can increment 
+%and read from a single counter as if the kv-store were (strictly) serialisable.
 
-\mypar{Verifying COPS Protocol} 
+
+
+\mypar{Verifying Implementation Protocol} 
 The second application of our operational
 semantics is to determine that implementations of distributed
-kv-stores satisfy certain consistency models. We have shown that the
-COPS protocol \citep{cops} for implementing a replicated database satisfies {\em
-  causal consistency},  and the Clock-SI protocol \citep{clocksi} for implementing a
-partitioned database satisfies the consistency model called {\em
-  snapshot isolation}. We discuss the  COPS protocol  in this section. 
+kv-stores satisfy certain consistency models. 
+Kv-stores and views provide a 
+faithful abstraction of the state of geo-replicated and partitioned
+databases, and  execution tests provide a powerful abstraction of the synchronisation mechanisms 
+enforced by these databases to commit a transaction. This makes it
+possible to use our 
+semantics to verify the correctness of distributed database protocols. 
+We have shown that the
+COPS protocol \citep{cops} for implementing a replicated database satisfies {\em causal consistency}, 
+and the Clock-SI protocol \citep{clocksi} for implementing a
+partitioned database satisfies the consistency model called {\em snapshot isolation}. 
 
-... shale begin....
-COPS is a fully replicated database where each replica stores multiple versions of each key. 
-The COPS synchronisation mechanism ensures that an version eventually reaches in all replicas.
-The COPS provides restricted API, two operations for clients: 
-writing a single key; and reading a set of keys. 
-Each instance of these operations is processed by a single replica and does not require any synchronisation.
-These operations appear atomically to clients, but replicas process them in a fine-grained way,
-and in between non-deterministic synchronisation may happen.
-A COPS client maintains a context containing any versions it observed.
+%... shale begin....
+%We argue that states of distributed sites can be easily projected into our global centralised kv-store.
+%Our notion of partial views allows us 
+%to model clients and distributed sites that only have partial information of the overall database.
+%... shale end....
 
-We project COPS replicas into our global centralised kv-store.
-The client contexts are encoded as views.
-The implementation mechanism ensures that the encoded views always satisfy
-our definition of causal consistency using execution test.
-... shale end....
+%... shale begin....
+%COPS is a fully replicated database where each replica stores multiple versions of each key. 
+%The COPS synchronisation mechanism ensures that an version eventually reaches in all replicas.
+%The COPS provides restricted API, two operations for clients: 
+%writing a single key; and reading a set of keys. 
+%Each instance of these operations is processed by a single replica and does not require any synchronisation.
+%These operations appear atomically to clients, but replicas process them in a fine-grained way,
+%and in between non-deterministic synchronisation may happen.
+%A COPS client maintains a context containing any versions it observed.
+
+%We project COPS replicas into our global centralised kv-store.
+%The client contexts are encoded as views.
+%The implementation mechanism ensures that the encoded views always satisfy
+%our definition of causal consistency using execution test.
+
+%To verify implementation protocols,
+%it boils down to verifying the views, for example that COPS explicitly tracks dependency relations between versions of keys,
+%By modelling the distributed sites and clients into our framework,
 
 
-\newpage
+\sx{
+\newpage 
+
 BELOW GOES
-
-
 
 However, the situation becomes more complicated when the kv-store contains multiple counters:  
 since each client has its own view on the kv-store, and views of clients are independent from each other, it is possible for two 
@@ -320,5 +323,5 @@ the one of $\key_1$.
 %a geo-replicated protocol for causal consistency, and Clock-SI \cite{clocksi}, a protocol for \(\SI\) under partitioned key-value stores.
 %Each of these protocols is verified against our definition using execution tests.
 
-
 \newpage 
+}
