@@ -2,31 +2,26 @@
 \label{sec:applications}
 \label{sec:program-analysis}
 
-We showcase applications of our operational semantics by proving the
-robustness of transactional libraries in \cref{sec:robustness} 
-and verifying distributed protocols in \cref{sec:verify-impl}.
-In constrict to static methods,
-we prove robustness of a program against a weak consistency model \( \ET \) 
-by checking the invariant of kv-stores obtained from executing the program under \( \ET \).
-In \cref{sec:verify-impl}, 
-we show that distributed sites, replicas or partitions, can be projected to our centralised kv-store,
-and different implementation mechanisms corresponds to constructing views. 
+To demonstrate the applications of our operational semantics, 
+in \cref{sec:robustness} we use our formalism to prove the robustness of several transactional libraries.
+In contrast to static methods, we prove the robustness of a program $\prog$ against a weak consistency model \( \ET \)  by checking kv-store invariants when executing $\prog$ under \( \ET \).
+In \cref{sec:verify-impl} we then use our formalism to verify several distributed protocols.
+
+%In \cref{sec:verify-impl}, 
+%we show that distributed sites, replicas or partitions, can be projected to our centralised kv-store,
+%and different implementation mechanisms corresponds to constructing views. 
 %Consider a simple 
-\subsection{Robustness}
+\subsection{Application: Robustness of Transactional Libraries}
 \label{sec:robustness}
-A transactional library, $L =
-\Set{\ptrans{\trans}_{i}}_{i \in I}$
+A transactional library, $L {=} \Set{\ptrans{\trans}_{i}}_{i \in I}$
 %, which 
-provides  a set of transactions  used by  library clients for accessing  the
-kv-store\footnote{The choice of modelling each operation of a library
-  just  as a transaction is only a 
-matter of convenience. The definition of library can be easily extended to contain operations that involve multiple transactions.}. 
-For instance, the set of operations of the counter library on key $\key$ in \cref{sec:overview} is $\Counter(\key) = \Set{\ctrinc(\key), \ctrread(\key)}$.
-A program $\prog$ is a \emph{client} of library $L$ if  the only transactional calls in $\prog$ are those to operations of $L$.  
+provides a set of transactional operations used by library clients to access the underlying
+kv-store\footnote{For simplicity, we model each operation as a single transaction; it is straightforward to extend this to multiple transactions.}. 
+For instance, the set of operations of the counter library on key $\key$ in \cref{sec:overview} is $\Counter(\key) {=} \Set{\ctrinc(\key), \ctrread(\key)}$.
+A program $\prog$ is a \emph{client program} of $L$ if the only transactional calls in $\prog$ are to operations of $L$.  
 A transactional library $L$ is \emph{robust} against an execution test
-$\ET$ if the set of kv-stores obtained under $\ET$ using 
-clients of  $L$, written $\CMs(\ET, L)$, is included in
-$\CMs(\ET_{\SER})$. 
+$\ET$ if for all clients $\prog$ of $L$, the kv-stores obtained under $\ET$ can also be obtained under $\SER$; 
+\ie $\CMs(\ET, L) \subseteq \CMs(\ET_{\SER})$. 
 
 %Checking the robustness of an application against an execution test $\ET$ amounts to proving the serialisability of all the kv-stores that the 
 %application can produce under $\ET$: this property is equivalent to check that the dependency graphs associated with such kv-stores 
@@ -36,8 +31,8 @@ $\CMs(\ET_{\SER})$.
 For all kv-stores $\mkvs$, $\mkvs \in \CMs(\ET_{\SER})$ iff $(\SO \cup \WR_{\mkvs} 
 \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ is irreflexive.
 \end{theorem}
-This result is an adaptation of a well-known result on
-dependency graphs~\cite{adya}: $\mkvs \in \CMs(\ET_{\SER})$ if and
+This theorem is an adaptation of a well-known result on
+dependency graphs~\cite{adya} stating that $\mkvs \in \CMs(\ET_{\SER})$ if and
 only if its associated dependency graph is acyclic. 
 \pg{I don't think we need this......
 Our robustness proofs
@@ -58,34 +53,31 @@ dependency graphs. }
 %kv-stores obtained by running $\prog$ under $\ET$ are included in the set of kv-stores obtained by running $\prog$ under $\ET_{\SER}$.
 %As an application of our theory, we show how we can prove the robustness of simple transactional libraries. 
 %In the following, we write $\CMs(\ET, L)$ for the set of kv-stores obtained from running a client program $\prog$ of $L$. 
-Using this result, we prove the robustness of a single counter against $\ET_{\PSI}$ ; recall
-from~\cref{sec:overview} that the robustness
-of multiple counters against $\ET_{\PSI}$ does not hold.
-Then we prove the robustness of multiple counters and banking libraries~\cite{bank-example-wsi} against $\ET_{\WSI}$. 
-This is done by introducing a notation of \emph{\( \WSI \) safe}, libraries with certain patterns, that implies robustness against \( \WSI \).
-Previous work on checking
-robustness~\cite{giovanni_concur16,SIanalysis,laws,sureshConcur} use
-static-analysis techniques that cannot be extended to include
-sessions.  
+Using this theorem, we prove the robustness of a single counter against $\ET_{\PSI}$.
+As discussed in \cref{sec:overview} that the robustness of multiple counters against $\ET_{\PSI}$ does not hold.
+We thus prove the robustness of multiple counters and banking libraries \citep{bank-example-wsi} against $\ET_{\WSI}$ instead. 
+%This is done by introducing a notation of \emph{\( \WSI \) safe}, libraries with certain patterns, that implies robustness against \( \WSI \).
+While previous work on checking robustness \citep{giovanni_concur16,SIanalysis,laws,sureshConcur} uses
+static-analysis techniques that cannot be extended to support client sessions, 
 %As far as we are aware, 
-We believe that we give the first robustness proofs
-that take sessions into account.
+we give the first robustness proofs that take client sessions into account.
 
 
 
 \subsubsection{Robustness of a Single Counter against $\ET_{\PSI}$}
+Given the single counter library $\Counter(\key)$, 
+a client reads from $\key$ by calling $\ctrread(\key)$, and writes to $\key$ by calling $\ctrinc(\key)$ which first reads the value of $k$ and subsequently increments it by one.
 Pick an arbitrary key $\key$ and a kv-store $\mkvs \in \CMs(\ET_{\PSI}, \mathsf{Counter}(\key))$
-with $\Counter(\key) {=} \Set{\ctrinc(\key), \ctrread(\key)}$.
-Clients write to  $\key$ by calling $\ctrinc(\key)$ which first
-looks up a value of $k$ and then updates a value to $k$.
-Since $\ET_{\PSI}$ enforces write conflict freedom (\(\UA\)), we have 
+As $\ET_{\PSI}$ enforces write conflict freedom (\(\UA\)), we know: that if a transaction $\txid$ updates $\key$ (by calling $\ctrinc(\key)$) and writes version $\ver$ to $\key$, then it must have read the version of $\key$ immediately preceding $\ver$:
 % in all $\mkvs \in \CMs(\ET_{\PSI}, \mathsf{Counter})$, we have:
-$\fora{\txid, i > 0} \txid {=} \wtOf(\mkvs(\key, i)) \implies \txid \in \rsOf(\mkvs(\key, i{-}1))$. 
-Because $\ET_{\PSI}$ satisfies monotonic reads ($\ET_{\PSI} \subseteq \ET_{\MR}$),
-the order in which clients observe the versions of $\key$ by calling $\ctrread(\key)$
-is consistent with the order of the index of such versions in
-$\mkvs(\key)$: this yields to kv-stores in $\CMs(\ET_{\PSI}, \mathsf{Counter}(\key)$ 
-to have the canonical structure of \cref{fig:prog_analysis}, defined below: 
+$\fora{\txid, i > 0}\!\! \txid {=} \wtOf(\mkvs(\key, i)) \implies \txid \in \rsOf(\mkvs(\key, i{-}1))$. 
+Moreover, as $\ET_{\PSI}$ enforces monotonic reads ($\MR$),
+the order in which clients observe the versions of $\key$ (by calling $\ctrread(\key)$)
+is consistent with the order of versions in $\mkvs(\key)$. 
+As such, the kv-stores in $\CMs(\ET_{\PSI}, \mathsf{Counter}(\key)$ have the canonical structure depicted in   \cref{fig:prog_analysis}, as defined below, where $\lcat$ denotes list concatenation, and 
+$\{\txid^{\mathsf{}}_{i}\}_{i=1}^{n}$ and $\bigcup_{i=0}^{n} \txidset^{\mathsf{}}_{i}$ 
+are disjoint sets of transactions calling $\ctrinc(\key)$ and
+$\ctrread(\key)$ respectively: 
 
 \input{prog_analysis_kv_store}
 
@@ -102,42 +94,50 @@ to have the canonical structure of \cref{fig:prog_analysis}, defined below:
 \]
 }%
 %
-\noindent where $\{\txid^{\mathsf{}}_{i}\}_{i=1}^{n}$ and $\bigcup_{i=0}^{n} \txidset^{\mathsf{}}_{i}$ 
-are disjoint sets of transactions calling $\ctrinc(\key)$ and
-$\ctrread(\key)$ respectively.
 %is the set of transactions calling $\ctrinc(\key)$, 
 %and $\bigcup_{i=0}^{n} \txidset^{\mathsf{r}}_{i}$ is the set of transactions calling $\ctrread(\key)$. 
 
-We define a relation $\dashrightarrow$ between
-the transactions in $\mkvs$ as the smallest transitive relation that 
-satisfies the following: 
-\begin{enumerate*}
-	\item $\txid^{\mathsf{}}_{i} 
-	\dashrightarrow \txid$ if $\txid \in \txidset^{\mathsf{}}_{i}$;  
-	%or $\txid {=} \txid^{\mathsf{}}_{i+1}$; 
-	\item $\txid \dashrightarrow \txid'$ 
-	for some $\txid \in \txidset^{\mathsf{}}_{i}$,
-	if $\txid' {=} \txid^{\mathsf{}}_{i+1}$
-	or $\txid' \in \txidset^{\mathsf{}}_{i} \land \txid \toEDGE{\SO} \txid'$. 
-\end{enumerate*}
-\noindent The relation $\dashrightarrow$ is depicted in \cref{fig:prog_analysis}.
-%
-Note that $\dashrightarrow$ yields a total order over the transactions in $\mkvs$, 
-and includes $\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs}$. 
-As such, $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive, 
-ensuring the robustness of $\Counter(\key)$ against $\ET_{\PSI}$.
+%We define the $\dashrightarrow$ relation between
+%the transactions in $\mkvs$ as the smallest transitive relation that 
+%satisfies the following: 
+%\begin{enumerate*}
+%	\item $\txid^{\mathsf{}}_{i} 
+%	\dashrightarrow \txid$ if $\txid \in \txidset^{\mathsf{}}_{i}$;  
+%	%or $\txid {=} \txid^{\mathsf{}}_{i+1}$; 
+%	\item $\txid \dashrightarrow \txid'$ 
+%	for some $\txid \in \txidset^{\mathsf{}}_{i}$,
+%	if $\txid' {=} \txid^{\mathsf{}}_{i+1}$
+%	or $\txid' \in \txidset^{\mathsf{}}_{i} \land \txid \toEDGE{\SO} \txid'$. 
+%\end{enumerate*}
+%\noindent The relation $\dashrightarrow$ is depicted in \cref{fig:prog_analysis}.
+%%
+%Note that $\dashrightarrow$ yields a total order over the transactions in $\mkvs$, 
+%and includes $\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs}$. 
+%As such, $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive, 
+%ensuring the robustness of $\Counter(\key)$ against $\ET_{\PSI}$.
 
 
-Recall from \cref{sec:overview} that 
-under $\ET_{\PSI}$ clients can observe 
-increments of different counters in different order, 
-known as a long fork \cref{fig:cp-disallowed}. that is 
-not allowed by $\ET_{\SER}$. 
+
+We define the $\dashrightarrow$ relation depicted in \cref{fig:prog_analysis} by extending 
+$\SO \cup 
+\{
+	(\txid_i, \txid_j) 
+	\mid 
+	\txid_j \in \T_i \lor 	
+	(\txid_i \in \T_i \land j {=} i {+} 1)
+\}$
+to a strict total order (transitive and irreflexive). 
+Note that $\dashrightarrow$ contains $\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs}$ and thus
+$(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive; 
+\ie $\Counter(\key)$ is robust against $\ET_{\PSI}$.
+
+
+Recall from \cref{sec:overview} that unlike in $\SER$ and $\SI$, under $\PSI$ clients can observe 
+the increments on different keys in different orders (the long fork anomaly in \cref{fig:cp-disallowed}).
 %for two or more counters we can 
 %observe the long fork anomaly allowed by $\ET_{\PSI}$.
 %disallowed under serialisability ($\ET_{\SER}$). 
-Thus, multiple counters are not robust against $\ET_{\PSI}$. 
-The long fork cannot be replicated by $\ET_{\SI}$.
+As such, multiple counters are not robust against $\ET_{\PSI}$. 
 %The long fork anomaly arises because clients can observe increments 
 %of different counters in a different order.
 %This anomaly does not arise under $\SI$. 
