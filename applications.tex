@@ -133,7 +133,7 @@ $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive;
 
 
 Recall from \cref{sec:overview} that unlike in $\SER$ and $\SI$, under $\PSI$ clients can observe 
-the increments on different keys in different orders (the long fork anomaly in \cref{fig:cp-disallowed}).
+the increments on different keys in different orders (see \cref{fig:cp-disallowed}).
 %for two or more counters we can 
 %observe the long fork anomaly allowed by $\ET_{\PSI}$.
 %disallowed under serialisability ($\ET_{\SER}$). 
@@ -144,60 +144,54 @@ As such, multiple counters are not robust against $\ET_{\PSI}$.
 
 \subsubsection{Robustness against $\ET_{\WSI}$}
 \sx{strictly no blind write, \SI also works for sure, etc.}
-Many examples \cite{giovanni_concur16,bank-example-wsi} that are robust against Snapshot Isolation \( \SI \),
-turn out also robust against Weak Snapshot Isolation \( \WSI \).
-Those examples interact with databases via transactions that 
-are either read-only, or read and write any keys they touch.
-We call the latter as \emph{strict no blind write}.
-Such patterns are captured by the following \( \WSI\)-safe definition.
+Several existing examples in the literature that are robust against $\SI$ 
+\citep{giovanni_concur16,bank-example-wsi}, are also robust against $\WSI$.
+These examples all adhere to a particular pattern captured by the following definition.
 
 \begin{definition}[\(\WSI\)-safe]
-    \label{def:main-body-wsi-safe}
-    A key-value store \( \mkvs \) is \(\WSI\) safe if it is 
-    reachable from executing an program \( \prog \) from an initial configuration \( \conf_0 \),
-    that is, \( \conf_0, \prog \toPROG{}_{\ET_\WSI} (\mkvs, \vienv), \prog' \),
-    and satisfies the following properties:
+\label{def:main-body-wsi-safe}
+    A kv-store \( \mkvs \) is \emph{\(\WSI\)-safe} if it is 
+    reachable by executing a program \( \prog \) from an initial configuration \( \conf_0 \) under $\WSI$
+   (\ie \( \conf_0, \prog \toPROG{}_{\ET_\WSI} (\mkvs, \stub), \stub\)), and for all $\txid, \key, i$:
     \begin{align}
-         & \fora{\txid,\key, \key',i,j} ( \txid \in \rsOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key,i)] ) \implies \txid \neq \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-read-only} \\
-         & \fora{\txid,\key,i} \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \implies \exsts{j} \txid \in \rsOf[\mkvs(\key,j)] \label{equ:main-wsi-safe-write-must-read} \\
-         & \fora{\txid,\key,\key',i, j} \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \land \exsts{k} \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-all-write}
+         & \txid \in \rsOf[\mkvs(\key,i)] \land \txid \neq \wtOf[\mkvs(\key,i)]  \implies \fora{\key',j} \txid \neq \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-read-only} \\
+         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \implies \exsts{j} \txid \in \rsOf[\mkvs(\key,j)] \label{equ:main-wsi-safe-write-must-read} \\
+         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \land \exsts{k', j} \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-all-write}
     \end{align}
 \end{definition}
 
-\Cref{def:main-body-wsi-safe} captures that:
+This definition states that for each transaction $\txid$: 
 \begin{enumerate*} 
-    \item a transaction \( \txid \) is either a read-only transaction (\cref{equ:main-wsi-safe-read-only}); or
-    \item a transaction \( \txid \) satisfies \emph{strict no blind write}: 
-        \( \txid \) must read before write to any key, also known as \emph{no blind write} (\cref{equ:main-wsi-safe-write-must-read}) 
-        and moreover if \( \txid \) has writes, \( \txid \) must write any key it reads (\cref{equ:main-wsi-safe-all-write}).
+    \item if $\txid$ reads from $\key$ without writing to it then $\txid$ must be a read-only transaction \eqref{equ:main-wsi-safe-read-only}; 
+    \item if \( \txid \) writes to $\key$, then it must also read from it \eqref{equ:main-wsi-safe-write-must-read}, a property known as \emph{strictly-no-blind writes}; and
+	\item  if \( \txid \) writes to $\key$, then it must also must write to all keys it reads \eqref{equ:main-wsi-safe-all-write}.
 \end{enumerate*}
-It is easy to see in \cref{equ:main-wsi-safe-write-must-read} that 
-the version read by \( \txid \) must be the immediate predecessor of the one written by \( \txid \),
-that is, \( i = j + 1 \).
-Any kv-store that satisfies \( \WSI \)-safe is robustness against \( \WSI \).
+It is straightforward to see that the version $j$ read by \( \txid \) in \cref{equ:main-wsi-safe-write-must-read} must be written immediately before the version $i$ written by \( \txid \), \ie \( i {=} j + 1 \).
+%We next show that if a kv-store is \( \WSI \)-safe, then it is robustness against \( \WSI \).
 
 \begin{theorem}[\( \WSI \) robustness]
     If a key-value store \( \mkvs \) is \(\WSI\)-safe, it is robust against \(\WSI\).
 \end{theorem}
 
-\noindent By \cref{thm:serialisable_nocycle}, 
-it suffices to prove $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ is irreflexive.
-We prove it by contradiction.
-Because \( \mkvs \) is reachable under \( \WSI \) henceforth \( \CC \),
-any cycle must be in the form
+\noindent From \cref{thm:serialisable_nocycle} it suffices to prove $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ is irreflexive.
+We proceed by contradiction and assume there exists $\txid_1$ such that $\txid_1 \toEDGE{(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}} \txid_1$. 
+Since \( \mkvs \) is reachable under \( \WSI \) and thus also reachable under \( \CC \),
+this cycle is of the form:
 \[
     \txid_1 \toEDGE{\rel^*} \txid_2 \toEDGE{\RW} \txid_3 \toEDGE{\rel^*} \cdots \toEDGE{\rel^*} \txid_{n-2} \toEDGE{\RW} \txid_{n-1} \toEDGE{\rel^*} \txid_n = \txid_1
 \]
-\noindent where \( \rel = \WR \cup \SO \cup \WW \).
-By \cref{equ:main-wsi-safe-write-must-read,equ:main-wsi-safe-all-write}, 
-any \( \RW \)-edge that starts from a transaction that wrote a key, can be replaced by a \( \WW \)-edge.
-Moreover, \( \WW \)-edges can be replaced by \( \WR^* \)-edges, since \( \mkvs \) is reachable under \( \UA \).
-Now we have a new cycle,
+\noindent where \( \rel \defeq \WR \cup \SO \cup \WW \).
+From \eqref{equ:main-wsi-safe-write-must-read}, \eqref{equ:main-wsi-safe-all-write} we know that 
+an \( \RW \) edge from a writing transaction can be replaced by a \( \WW \) edge.
+Moreover, \( \WW \) edges can be replaced by \( \WR^* \) edges, since \( \mkvs \) is reachable under \( \UA \).
+We thus have:
 \[
     \txid_1 \toEDGE{{\rel'}^*} \txid'_2 \toEDGE{\RW} \txid'_3 \toEDGE{{\rel'}^+} \cdots \toEDGE{{\rel'}^+} \txid'_{m-2} \toEDGE{\RW} \txid'_{m-1} \toEDGE{{\rel'}^*} \txid'_m = \txid_n = \txid_1
 \]
-\noindent where \( \rel' = \WR \cup \SO \), in other words, \( \txid_1 \toEDGE{( (\WR \cup \SO); \RW^? )^* } \txid_n \).
-Yet it cannot be a cycle because \( \WSI \) requires views must be closed under \( \rel_\CP \) (\cref{fig:execution_tests}) and \( (\WR \cup \SO); \RW^? \subseteq \rel_\CP \).
+\noindent where \( \rel' = \WR \cup \SO \).
+That is, \( \txid_1 \toEDGE{( (\WR \cup \SO); \RW^? )^* } \txid_n \).
+This however leads to a contradiction as \( (\WR \cup \SO); \RW^? \subseteq \rel_\CP \) and 
+\( \WSI \) requires views to be closed under \( \rel_\CP \) (see \cref{fig:execution_tests}). 
 
 \subsubsection{Robustness of Multiple Counters against $\ET_{\WSI}$} 
 \label{sec:multi-counter-robust}
