@@ -2,31 +2,26 @@
 \label{sec:applications}
 \label{sec:program-analysis}
 
-We showcase applications of our operational semantics by proving the
-robustness of transactional libraries in \cref{sec:robustness} 
-and verifying distributed protocols in \cref{sec:verify-impl}.
-In constrict to static methods,
-we prove robustness of a program against a weak consistency model \( \ET \) 
-by checking the invariant of kv-stores obtained from executing the program under \( \ET \).
-In \cref{sec:verify-impl}, 
-we show that distributed sites, replicas or partitions, can be projected to our centralised kv-store,
-and different implementation mechanisms corresponds to constructing views. 
+To demonstrate the applications of our operational semantics, 
+in \cref{sec:robustness} we use our formalism to prove the robustness of several transactional libraries.
+In contrast to static methods, we prove the robustness of a program $\prog$ against a weak consistency model \( \ET \)  by checking kv-store invariants when executing $\prog$ under \( \ET \).
+In \cref{sec:verify-impl} we then use our formalism to verify several distributed protocols.
+
+%In \cref{sec:verify-impl}, 
+%we show that distributed sites, replicas or partitions, can be projected to our centralised kv-store,
+%and different implementation mechanisms corresponds to constructing views. 
 %Consider a simple 
-\subsection{Robustness}
+\subsection{Application: Robustness of Transactional Libraries}
 \label{sec:robustness}
-A transactional library, $L =
-\Set{\ptrans{\trans}_{i}}_{i \in I}$
+A transactional library, $L {=} \Set{\ptrans{\trans}_{i}}_{i \in I}$
 %, which 
-provides  a set of transactions  used by  library clients for accessing  the
-kv-store\footnote{The choice of modelling each operation of a library
-  just  as a transaction is only a 
-matter of convenience. The definition of library can be easily extended to contain operations that involve multiple transactions.}. 
-For instance, the set of operations of the counter library on key $\key$ in \cref{sec:overview} is $\Counter(\key) = \Set{\ctrinc(\key), \ctrread(\key)}$.
-A program $\prog$ is a \emph{client} of library $L$ if  the only transactional calls in $\prog$ are those to operations of $L$.  
+provides a set of transactional operations used by library clients to access the underlying
+kv-store\footnote{For simplicity, we model each operation as a single transaction; it is straightforward to extend this to multiple transactions.}. 
+For instance, the set of operations of the counter library on key $\key$ in \cref{sec:overview} is $\Counter(\key) {=} \Set{\ctrinc(\key), \ctrread(\key)}$.
+A program $\prog$ is a \emph{client program} of $L$ if the only transactional calls in $\prog$ are to operations of $L$.  
 A transactional library $L$ is \emph{robust} against an execution test
-$\ET$ if the set of kv-stores obtained under $\ET$ using 
-clients of  $L$, written $\CMs(\ET, L)$, is included in
-$\CMs(\ET_{\SER})$. 
+$\ET$ if for all clients $\prog$ of $L$, the kv-stores obtained under $\ET$ can also be obtained under $\SER$; 
+\ie $\CMs(\ET, L) \subseteq \CMs(\ET_{\SER})$. 
 
 %Checking the robustness of an application against an execution test $\ET$ amounts to proving the serialisability of all the kv-stores that the 
 %application can produce under $\ET$: this property is equivalent to check that the dependency graphs associated with such kv-stores 
@@ -36,8 +31,8 @@ $\CMs(\ET_{\SER})$.
 For all kv-stores $\mkvs$, $\mkvs \in \CMs(\ET_{\SER})$ iff $(\SO \cup \WR_{\mkvs} 
 \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ is irreflexive.
 \end{theorem}
-This result is an adaptation of a well-known result on
-dependency graphs~\cite{adya}: $\mkvs \in \CMs(\ET_{\SER})$ if and
+This theorem is an adaptation of a well-known result on
+dependency graphs~\cite{adya} stating that $\mkvs \in \CMs(\ET_{\SER})$ if and
 only if its associated dependency graph is acyclic. 
 \pg{I don't think we need this......
 Our robustness proofs
@@ -58,34 +53,31 @@ dependency graphs. }
 %kv-stores obtained by running $\prog$ under $\ET$ are included in the set of kv-stores obtained by running $\prog$ under $\ET_{\SER}$.
 %As an application of our theory, we show how we can prove the robustness of simple transactional libraries. 
 %In the following, we write $\CMs(\ET, L)$ for the set of kv-stores obtained from running a client program $\prog$ of $L$. 
-Using this result, we prove the robustness of a single counter against $\ET_{\PSI}$ ; recall
-from~\cref{sec:overview} that the robustness
-of multiple counters against $\ET_{\PSI}$ does not hold.
-Then we prove the robustness of multiple counters and banking libraries~\cite{bank-example-wsi} against $\ET_{\WSI}$. 
-This is done by introducing a notation of \emph{\( \WSI \) safe}, libraries with certain patterns, that implies robustness against \( \WSI \).
-Previous work on checking
-robustness~\cite{giovanni_concur16,SIanalysis,laws,sureshConcur} use
-static-analysis techniques that cannot be extended to include
-sessions.  
+Using this theorem, we prove the robustness of a single counter against $\ET_{\PSI}$.
+As discussed in \cref{sec:overview} that the robustness of multiple counters against $\ET_{\PSI}$ does not hold.
+We thus prove the robustness of multiple counters and banking libraries \citep{bank-example-wsi} against $\ET_{\WSI}$ instead. 
+%This is done by introducing a notation of \emph{\( \WSI \) safe}, libraries with certain patterns, that implies robustness against \( \WSI \).
+While previous work on checking robustness \citep{giovanni_concur16,SIanalysis,laws,sureshConcur} uses
+static-analysis techniques that cannot be extended to support client sessions, 
 %As far as we are aware, 
-We believe that we give the first robustness proofs
-that take sessions into account.
+we give the first robustness proofs that take client sessions into account.
 
 
 
 \subsubsection{Robustness of a Single Counter against $\ET_{\PSI}$}
+Given the single counter library $\Counter(\key)$, 
+a client reads from $\key$ by calling $\ctrread(\key)$, and writes to $\key$ by calling $\ctrinc(\key)$ which first reads the value of $k$ and subsequently increments it by one.
 Pick an arbitrary key $\key$ and a kv-store $\mkvs \in \CMs(\ET_{\PSI}, \mathsf{Counter}(\key))$
-with $\Counter(\key) {=} \Set{\ctrinc(\key), \ctrread(\key)}$.
-Clients write to  $\key$ by calling $\ctrinc(\key)$ which first
-looks up a value of $k$ and then updates a value to $k$.
-Since $\ET_{\PSI}$ enforces write conflict freedom (\(\UA\)), we have 
+As $\ET_{\PSI}$ enforces write conflict freedom (\(\UA\)), we know: that if a transaction $\txid$ updates $\key$ (by calling $\ctrinc(\key)$) and writes version $\ver$ to $\key$, then it must have read the version of $\key$ immediately preceding $\ver$:
 % in all $\mkvs \in \CMs(\ET_{\PSI}, \mathsf{Counter})$, we have:
-$\fora{\txid, i > 0} \txid {=} \wtOf(\mkvs(\key, i)) \implies \txid \in \rsOf(\mkvs(\key, i{-}1))$. 
-Because $\ET_{\PSI}$ satisfies monotonic reads ($\ET_{\PSI} \subseteq \ET_{\MR}$),
-the order in which clients observe the versions of $\key$ by calling $\ctrread(\key)$
-is consistent with the order of the index of such versions in
-$\mkvs(\key)$: this yields to kv-stores in $\CMs(\ET_{\PSI}, \mathsf{Counter}(\key)$ 
-to have the canonical structure of \cref{fig:prog_analysis}, defined below: 
+$\fora{\txid, i > 0}\!\! \txid {=} \wtOf(\mkvs(\key, i)) \implies \txid \in \rsOf(\mkvs(\key, i{-}1))$. 
+Moreover, as $\ET_{\PSI}$ enforces monotonic reads ($\MR$),
+the order in which clients observe the versions of $\key$ (by calling $\ctrread(\key)$)
+is consistent with the order of versions in $\mkvs(\key)$. 
+As such, the kv-stores in $\CMs(\ET_{\PSI}, \mathsf{Counter}(\key)$ have the canonical structure depicted in   \cref{fig:prog_analysis}, as defined below, where $\lcat$ denotes list concatenation, and 
+$\{\txid^{\mathsf{}}_{i}\}_{i=1}^{n}$ and $\bigcup_{i=0}^{n} \txidset^{\mathsf{}}_{i}$ 
+are disjoint sets of transactions calling $\ctrinc(\key)$ and
+$\ctrread(\key)$ respectively: 
 
 \input{prog_analysis_kv_store}
 
@@ -102,145 +94,148 @@ to have the canonical structure of \cref{fig:prog_analysis}, defined below:
 \]
 }%
 %
-\noindent where $\{\txid^{\mathsf{}}_{i}\}_{i=1}^{n}$ and $\bigcup_{i=0}^{n} \txidset^{\mathsf{}}_{i}$ 
-are disjoint sets of transactions calling $\ctrinc(\key)$ and
-$\ctrread(\key)$ respectively.
 %is the set of transactions calling $\ctrinc(\key)$, 
 %and $\bigcup_{i=0}^{n} \txidset^{\mathsf{r}}_{i}$ is the set of transactions calling $\ctrread(\key)$. 
 
-We define a relation $\dashrightarrow$ between
-the transactions in $\mkvs$ as the smallest transitive relation that 
-satisfies the following: 
-\begin{enumerate*}
-	\item $\txid^{\mathsf{}}_{i} 
-	\dashrightarrow \txid$ if $\txid \in \txidset^{\mathsf{}}_{i}$;  
-	%or $\txid {=} \txid^{\mathsf{}}_{i+1}$; 
-	\item $\txid \dashrightarrow \txid'$ 
-	for some $\txid \in \txidset^{\mathsf{}}_{i}$,
-	if $\txid' {=} \txid^{\mathsf{}}_{i+1}$
-	or $\txid' \in \txidset^{\mathsf{}}_{i} \land \txid \toEDGE{\SO} \txid'$. 
-\end{enumerate*}
-\noindent The relation $\dashrightarrow$ is depicted in \cref{fig:prog_analysis}.
-%
-Note that $\dashrightarrow$ yields a total order over the transactions in $\mkvs$, 
-and includes $\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs}$. 
-As such, $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive, 
-ensuring the robustness of $\Counter(\key)$ against $\ET_{\PSI}$.
+%We define the $\dashrightarrow$ relation between
+%the transactions in $\mkvs$ as the smallest transitive relation that 
+%satisfies the following: 
+%\begin{enumerate*}
+%	\item $\txid^{\mathsf{}}_{i} 
+%	\dashrightarrow \txid$ if $\txid \in \txidset^{\mathsf{}}_{i}$;  
+%	%or $\txid {=} \txid^{\mathsf{}}_{i+1}$; 
+%	\item $\txid \dashrightarrow \txid'$ 
+%	for some $\txid \in \txidset^{\mathsf{}}_{i}$,
+%	if $\txid' {=} \txid^{\mathsf{}}_{i+1}$
+%	or $\txid' \in \txidset^{\mathsf{}}_{i} \land \txid \toEDGE{\SO} \txid'$. 
+%\end{enumerate*}
+%\noindent The relation $\dashrightarrow$ is depicted in \cref{fig:prog_analysis}.
+%%
+%Note that $\dashrightarrow$ yields a total order over the transactions in $\mkvs$, 
+%and includes $\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs}$. 
+%As such, $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive, 
+%ensuring the robustness of $\Counter(\key)$ against $\ET_{\PSI}$.
 
 
-Recall from \cref{sec:overview} that 
-under $\ET_{\PSI}$ clients can observe 
-increments of different counters in different order, 
-known as a long fork \cref{fig:cp-disallowed}. that is 
-not allowed by $\ET_{\SER}$. 
+
+We define the $\dashrightarrow$ relation depicted in \cref{fig:prog_analysis} by extending 
+$\SO \cup 
+\{
+	(\txid_i, \txid_j) 
+	\mid 
+	\txid_j \in \T_i \lor 	
+	(\txid_i \in \T_i \land j {=} i {+} 1)
+\}$
+to a strict total order (transitive and irreflexive). 
+Note that $\dashrightarrow$ contains $\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs}$ and thus
+$(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive; 
+\ie $\Counter(\key)$ is robust against $\ET_{\PSI}$.
+
+
+Recall from \cref{sec:overview} that unlike in $\SER$ and $\SI$, under $\PSI$ clients can observe 
+the increments on different keys in different orders (see \cref{fig:cp-disallowed}).
 %for two or more counters we can 
 %observe the long fork anomaly allowed by $\ET_{\PSI}$.
 %disallowed under serialisability ($\ET_{\SER}$). 
-Thus, multiple counters are not robust against $\ET_{\PSI}$. 
-The long fork cannot be replicated by $\ET_{\SI}$.
+As such, multiple counters are not robust against $\ET_{\PSI}$. 
 %The long fork anomaly arises because clients can observe increments 
 %of different counters in a different order.
 %This anomaly does not arise under $\SI$. 
 
 \subsubsection{Robustness conditions against $\ET_{\WSI}$}
 \sx{strictly no blind write, \SI also works for sure, etc.}
-Many examples \cite{giovanni_concur16,bank-example-wsi} that are robust against Snapshot Isolation \( \SI \),
-turn out also robust against Weak Snapshot Isolation \( \WSI \).
-Those examples interact with databases via transactions that 
-are either read-only, or read and write any keys they touch.
-We call the latter as \emph{strict no blind write}.
-Such patterns are captured by the following \( \WSI\)-safe definition.
+Several existing examples in the literature that are robust against $\SI$ 
+\citep{giovanni_concur16,bank-example-wsi}, are also robust against $\WSI$.
+These examples all adhere to a particular pattern captured by the following definition.
 
 \begin{definition}[\(\WSI\)-safe]
-    \label{def:main-body-wsi-safe}
-    A key-value store \( \mkvs \) is \(\WSI\) safe if it is 
-    reachable from executing an program \( \prog \) from an initial configuration \( \conf_0 \),
-    that is, \( \conf_0, \prog \toPROG{}_{\ET_\WSI} (\mkvs, \vienv), \prog' \),
-    and satisfies the following properties:
+\label{def:main-body-wsi-safe}
+    A kv-store \( \mkvs \) is \emph{\(\WSI\)-safe} if it is 
+    reachable by executing a program \( \prog \) from an initial configuration \( \conf_0 \) under $\WSI$
+   (\ie \( \conf_0, \prog \toPROG{}_{\ET_\WSI} (\mkvs, \stub), \stub\)), and for all $\txid, \key, i$:
     \begin{align}
-         & \fora{\txid,\key, \key',i,j} ( \txid \in \rsOf[\mkvs(\key,i)] \implies \txid \neq \wtOf[\mkvs(\key,i)] ) \implies \txid \neq \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-read-only} \\
-         & \fora{\txid,\key,i} \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \implies \exsts{j} \txid \in \rsOf[\mkvs(\key,j)] \label{equ:main-wsi-safe-write-must-read} \\
-         & \fora{\txid,\key,\key',i, j} \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \land \exsts{k} \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-all-write}
+         & \txid \in \rsOf[\mkvs(\key,i)] \land \txid \neq \wtOf[\mkvs(\key,i)]  \implies \fora{\key',j} \txid \neq \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-read-only} \\
+         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \implies \exsts{j} \txid \in \rsOf[\mkvs(\key,j)] \label{equ:main-wsi-safe-write-must-read} \\
+         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \land \exsts{k', j} \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-all-write}
     \end{align}
 \end{definition}
 
-\Cref{def:main-body-wsi-safe} captures that:
+This definition states that for each transaction $\txid$: 
 \begin{enumerate*} 
-    \item a transaction \( \txid \) is either a read-only transaction (\cref{equ:main-wsi-safe-read-only}); or
-    \item a transaction \( \txid \) satisfies \emph{strict no blind write}: 
-        \( \txid \) must read before write to any key, also known as \emph{no blind write} (\cref{equ:main-wsi-safe-write-must-read}) 
-        and moreover if \( \txid \) has writes, \( \txid \) must write any key it reads (\cref{equ:main-wsi-safe-all-write}).
+    \item if $\txid$ reads from $\key$ without writing to it then $\txid$ must be a read-only transaction \eqref{equ:main-wsi-safe-read-only}; 
+    \item if \( \txid \) writes to $\key$, then it must also read from it \eqref{equ:main-wsi-safe-write-must-read}, a property known as \emph{strictly-no-blind writes}; and
+	\item  if \( \txid \) writes to $\key$, then it must also must write to all keys it reads \eqref{equ:main-wsi-safe-all-write}.
 \end{enumerate*}
-It is easy to see in \cref{equ:main-wsi-safe-write-must-read} that 
-the version read by \( \txid \) must be the immediate predecessor of the one written by \( \txid \),
-that is, \( i = j + 1 \).
-Any kv-store that satisfies \( \WSI \)-safe is robustness against \( \WSI \).
+It is straightforward to see that the version $j$ read by \( \txid \) in \eqref{equ:main-wsi-safe-write-must-read} must be written immediately before the version $i$ written by \( \txid \), \ie \( i {=} j + 1 \).
+%We next show that if a kv-store is \( \WSI \)-safe, then it is robustness against \( \WSI \).
 
 \begin{theorem}[\( \WSI \) robustness]
     \label{thm:main-wsi-robust}
     If a kv-store \( \mkvs \) is \(\WSI\)-safe, it is robust against \(\WSI\).
 \end{theorem}
 
-\noindent By \cref{thm:serialisable_nocycle}, 
-it suffices to prove $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ is irreflexive.
-We prove it by contradiction.
-Because \( \mkvs \) is reachable under \( \WSI \) henceforth \( \CC \),
-any cycle must be in the form
+\noindent From \cref{thm:serialisable_nocycle} it suffices to prove $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}$ is irreflexive.
+We proceed by contradiction and assume there exists $\txid_1$ such that $\txid_1 \toEDGE{(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}} \txid_1$. 
+Since \( \mkvs \) is reachable under \( \WSI \) and thus also reachable under \( \CC \),
+this cycle is of the form:
 \[
     \txid_1 \toEDGE{\rel^*} \txid_2 \toEDGE{\RW} \txid_3 \toEDGE{\rel^*} \cdots \toEDGE{\rel^*} \txid_{n-2} \toEDGE{\RW} \txid_{n-1} \toEDGE{\rel^*} \txid_n = \txid_1
 \]
-\noindent where \( \rel = \WR \cup \SO \cup \WW \).
-By \cref{equ:main-wsi-safe-write-must-read,equ:main-wsi-safe-all-write}, 
-any \( \RW \)-edge that starts from a transaction that wrote a key, can be replaced by a \( \WW \)-edge.
-Moreover, \( \WW \)-edges can be replaced by \( \WR^* \)-edges, since \( \mkvs \) is reachable under \( \UA \).
-Now we have a new cycle,
+\noindent where \( \rel \defeq \WR \cup \SO \cup \WW \).
+From \eqref{equ:main-wsi-safe-write-must-read}, \eqref{equ:main-wsi-safe-all-write} we know that 
+an \( \RW \) edge from a writing transaction can be replaced by a \( \WW \) edge.
+Moreover, \( \WW \) edges can be replaced by \( \WR^* \) edges, since \( \mkvs \) is reachable under \( \UA \).
+We thus have:
 \[
     \txid_1 \toEDGE{{\rel'}^*} \txid'_2 \toEDGE{\RW} \txid'_3 \toEDGE{{\rel'}^+} \cdots \toEDGE{{\rel'}^+} \txid'_{m-2} \toEDGE{\RW} \txid'_{m-1} \toEDGE{{\rel'}^*} \txid'_m = \txid_n = \txid_1
 \]
-\noindent where \( \rel' = \WR \cup \SO \), in other words, \( \txid_1 \toEDGE{( (\WR \cup \SO); \RW^? )^* } \txid_n \).
-Yet it cannot be a cycle because \( \WSI \) requires views must be closed under \( \rel_\CP \) (\cref{fig:execution_tests}) and \( (\WR \cup \SO); \RW^? \subseteq \rel_\CP \).
+\noindent where \( \rel' = \WR \cup \SO \).
+That is, \( \txid_1 \toEDGE{( (\WR \cup \SO); \RW^? )^* } \txid_n \).
+This however leads to a contradiction as \( (\WR \cup \SO); \RW^? \subseteq \rel_\CP \) and 
+\( \WSI \) requires views to be closed under \( \rel_\CP \) (see \cref{fig:execution_tests}). 
 
-A multiple counters library on a set of keys \( \codeFont{\keyset} \) is defined by:
-\( \mathsf{Counters(\keyset)} \defeq \bigcup_{\codeFont{\key} \in \codeFont{\keyset} } \Counter(\codeFont{\key}) \).
-It is easy to see it is \( \WSI \) safe, therefore robust against \( \WSI \) and any stronger models such as \( \SI \) (\cref{sec:multi-counter-robust})
-\begin{theorem}
-    Multiple counter libraries \( \mathsf{Counters(\keyset)}  \) are robust against \( \WSI \).
-\end{theorem}
+%A multiple counters library on a set of keys \( \codeFont{\keyset} \) is defined by:
+%\( \mathsf{Counters(\keyset)} \defeq \bigcup_{\codeFont{\key} \in \codeFont{\keyset} } \Counter(\codeFont{\key}) \).
+%It is easy to see it is \( \WSI \) safe, therefore robust against \( \WSI \) and any stronger models such as \( \SI \) (\cref{sec:multi-counter-robust})
+%\begin{theorem}
+    %Multiple counter libraries \( \mathsf{Counters(\keyset)}  \) are robust against \( \WSI \).
+%\end{theorem}
 
-\sx{
 
 \subsubsection{Robustness of Multiple Counters against $\ET_{\WSI}$} 
-A multiple counters library on a set of keys \( \codeFont{\keyset} \) is defined by:
+\label{sec:multi-counter-robust}
+A multi-counter library on a set of keys \( \codeFont{\keyset} \) is: 
 \( \mathsf{Counters(\keyset)} \defeq \bigcup_{\codeFont{\key} \in \codeFont{\keyset} } \Counter(\codeFont{\key}) \).
-It is easy to see it is \( \WSI \) safe, therefore robust against \( \WSI \) and any stronger models such as \( \SI \).
+We next show that a multi-counter library is \( \WSI \)-safe, and is therefore robust against \( \WSI \) and all stronger models such as \( \SI \).
 
 \begin{theorem}
-    Multiple counter libraries \( \mathsf{Counters(\keyset)}  \) are robust against \( \WSI \).
+  A multi-counter library \( \mathsf{Counters(\keyset)}  \) is robust against \( \WSI \).
 \end{theorem}
 
-It sufficient to prove that any kv-stores obtained by executing arbitrary transactional calls from the library are \( \WSI \) safe.
-We prove that by induction on the length of traces.
+It sufficient to show that a kv-store obtained by executing arbitrary transactional calls from the library are \( \WSI \)-safe.
+We proceed by induction on the length of traces.
 Let \( \conf_0 = (\mkvs_0, \vienv_0) \) be an initial configuration and \( \prog_0 \) be a program such that \( \dom(\prog_0) \subseteq \dom(\vienv_0) \).
-The initial kv-store trivially satisfies \cref{equ:main-wsi-safe-all-write,equ:main-wsi-safe-read-only,equ:main-wsi-safe-write-must-read},
-because \( \mkvs_0) \) contains only the initialisation transaction \( \txid_0 \).
-After \( i \) steps of execution under \( \WSI \), let \( \mkvs_i \) be the resulting kv-store.
-Let consider the next transaction \( \txid_{i+1} \), that may be either a \( \ctrinc(\pv{\key}) \) or a \( \ctrread(\pv{\key}) \).
-If it is a \( \ctrread(\pv{\key}) \),
-then the new kv-store will be
-\[ \mkvs_{i+1} = \mkvs_{i}\rmto{\pv{\key}}{\mkvs_i(\pv{\key})\rmto{j}{(\val, \txid, \txidset \uplus \Set{\txid_{i+1}})}} \]
-\noindent for some index \( j \) and \( \mkvs_i(\pv{\key},j) = (\val,\txid,\txidset)\).
+The initial kv-store trivially satisfies \eqref{equ:main-wsi-safe-read-only}, \eqref{equ:main-wsi-safe-write-must-read} and \eqref{equ:main-wsi-safe-all-write} above. 
+%because \( \mkvs_0) \) contains only the initialisation transaction \( \txid_0 \).
+Let \( \mkvs_i \) be the resulting kv-store after \( i \) steps of execution under \( \WSI \).
+The next transaction \( \txid_{i+1} \) may then be a call to either \( \ctrinc(\pv{\key}) \) or \( \ctrread(\pv{\key}) \).
+If \( \txid_{i+1} \) is a \( \ctrread(\pv{\key}) \) call,
+then the new kv-store is: 
+\[ 
+	\mkvs_{i+1} = \mkvs_{i}\rmto{\pv{\key}}{\mkvs_i(\pv{\key})\rmto{j}{(\val, \txid, \txidset \uplus \Set{\txid_{i+1}})}} 
+\]
+%
+for some \( j \) and \( \mkvs_i(\pv{\key},j) {=} (\val,\txid,\txidset)\).
 Since \( \txid_{i+1} \) is a read-only transaction,
-\cref{equ:main-wsi-safe-all-write,equ:main-wsi-safe-read-only,equ:main-wsi-safe-write-must-read} immediately hold.
-If \( \txid_{i+1} \) is a \( \ctrinc(\codeFont{\key}) \), 
-the new kv-store will be
+then  \eqref{equ:main-wsi-safe-read-only}, \eqref{equ:main-wsi-safe-write-must-read} and \eqref{equ:main-wsi-safe-all-write} immediately hold.
+On the other hand, if \( \txid_{i+1} \) is a \( \ctrinc(\codeFont{\key}) \) call, 
+then the new kv-store is: 
 \[
     \mkvs_{i+1} = \mkvs_{i}\rmto{\pv{\key}}{( \mkvs_i(\pv{\key})\rmto{j}{(\val, \txid, \txidset \uplus \Set{\txid_{i+1}})} ) \lcat (\val+1, \txid_{i+1}, \emptyset) } 
 \]
-\noindent for index \( j  = \abs{\mkvs_i(\pv{\key})} \) and \( \mkvs_i(\pv{\key},j) = (\val,\txid,\txidset)\).
-\( \txid_{i+1} \) read the last version of \( \pv{\key} \) and wrote a new version to \( \pv{\key} \),
-thus the new kv-store \( \mkvs_{i+1} \) still satisfies \cref{equ:main-wsi-safe-all-write,equ:main-wsi-safe-read-only,equ:main-wsi-safe-write-must-read}. 
-
-}
+where \( j  {=} \abs{\mkvs_i(\pv{\key})} \) and \( \mkvs_i(\pv{\key},j) {=} (\val,\txid,\txidset)\).
+As \( \txid_{i+1} \) reads the latest version of \( \pv{\key} \) and writes a new version to \( \pv{\key} \),
+the new kv-store \( \mkvs_{i+1} \) satisfies \eqref{equ:main-wsi-safe-read-only}, \eqref{equ:main-wsi-safe-write-must-read} and \eqref{equ:main-wsi-safe-all-write}.
 
 \subsubsection{Robustness of Banking example against $\ET_{\WSI}$}
 
