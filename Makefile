@@ -58,7 +58,7 @@ stat : .statistic
 
 clean:
 	rm -rf $(OUTDIR)
-	rm main.pdf
-	rm draft.pdf
-	rm .statistic
-	rm $(DRAFTTEX)
+	rm -f main.pdf
+	rm -f draft.pdf
+	rm -f .statistic
+	rm -f $(DRAFTTEX)
