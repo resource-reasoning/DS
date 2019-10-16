@@ -1,0 +1,133 @@
+In COPS protocol, there is no explicit transactional identifier,
+but the version identifier,
+which consist of the replica identifier who initially accepted the version 
+and the local time when the version was accepted,
+can be seen as the transactional identifier who wrote the version.
+
+\begin{definition}[COPS Replica and Transaction Identifiers]
+The set of \emph{COPS replicas}, \( \COPSReplicas \ni \repl \), 
+is a countably infinite set that is totally ordered on relation \( \replleq \).
+The set of \emph{COPS transaction identifiers}, \( \COPSTxIDs \ni \copstxid \),
+is defined by
+\[ 
+    \COPSTxIDs \TypeDef \Set{\copstxid[\cl][\repl](n,m) | 
+    \cl \in \Clients \land \repl \in \COPSReplicas \land n,m \in \Nat } \cup \Set{\txidinit}.
+\]
+The order over transactions is defined by
+\[ 
+\copstxid[\cl][\repl](n,m) \copstxidleq \copstxid[\cl'][\repl'](n',m')
+\PredDef n < n' \lor ( n = n' \land ( \repl < \repl' \lor ( \repl = \repl' \land m < m' ) ) .
+\]
+\end{definition}
+
+We annotate the COPS transaction identifier \(\copstxid[\cl][\repl](n,m)  \)
+with the client identifier \( \cl \), the local time \(n\),
+the replica identifier \( \repl \)
+and the extra counter \( m \) for read-only transactions.
+In the model and semantics of COPS protocol (\cref{sec:cops-model,sec:cops-semantics}), 
+the extra counter \(m\) is always ZERO.
+Later in the verification of COPS protocol (\cref{sec:cops-extended-trace}),
+we use the extra counter \( m \) to identify read-only transactions.
+Note that, all transactions, including read-only transactions,
+are totally order by \( (n,\repl,m) \) lexicographically.
+
+As explained in \cref{sec:overall-cops},
+a COPS version \( \copsver \) consists of the value, the identifier 
+and the dependency set that is other versions \( \copsver \) depends on.
+
+\begin{definition}[COPS versions and dependency sets]
+A \emph{dependency set} \( \copsdep \) 
+is defined by \( \copsdep \subseteq \Keys \times \COPSTxIDs \).
+Let \( \COPSDependencies \ni \copsdep \) denote the set of all dependency sets.
+The set of \emph{COPS versions} \( \COPSVersions \ni \copsver \), is defined by 
+\( \COPSVersions \TypeDef \Values \times \COPSTxIDs  \times \COPSDependencies \).
+Let \(\ValOf(\copsver)\), \(\WtOf(\copsver)\)  
+and \( \DepOf(\copsver)\) return the first to third projections of \( \copsver \) respectively.
+\end{definition}
+
+Each replica \( \repl \) consists of a local multi-versioning key-value store and a local time.
+A COPS database contains finite number of replicas that are opaque to the clients.
+
+\begin{definition}[COPS Key-value Stores and Databases]
+the set of \emph{COPS local key-value stores} or \emph{COPS local stores}
+is defined by
+\( \COPSKVSs \FuncDef \Set{\copskvs \in \Keys \ToTFunc \List{\COPSVersions} | \WfCOPSKvs(\copskvs)}. \)
+where \( \WfCOPSKvs \) is defined by: for any keys \( \key, \key' \in \Keys \),
+indexes \( \idx, \idx' \in \Indexs \) and the initial value \( \valinit \),
+\begin{Formulae}
+    & \begin{Formula}
+        \copskvs(\key,0) = (\valinit,\txidinit,\stub),
+        \label{equ:cops-kvs-init}
+    \end{Formula}
+    \\ & \begin{Formula}
+        \WtOf(\copskvs(\key,\idx)) = \WtOf(\copskvs(\key',\idx')) 
+            \implies \key = \key' \land \idx = \idx',
+        \label{equ:cops-version-unique}
+    \end{Formula}
+    \\ & \begin{Formula}
+        \WtOf(\copskvs(\key,\idx)) \copstxidleq \WtOf(\copskvs(\key,\idx')) 
+            \iff \idx < \idx'.
+        \label{equ:cops-version-order}
+    \end{Formula}
+\end{Formulae}
+Given two COPS local stores \(\copskvs, \copskvs' \), 
+the order \( \copskvs \copskvsleq \copskvs' \) is defined by
+\[
+    \copskvs \copskvsleq \copskvs' \PredDef \Forall{\key \in \Keys | \idx \in \Indexs }
+    \copsver = \copskvs(\key, \idx) \implies \Exists{\idx \in \Indexs} \copsver = \copskvs'(\key, \idx').
+\]
+The set of \emph{COPS databases} is defined by
+\[
+    \COPSs \FuncDef \Set{\cops \in \COPSReplicas \ToPFFunc 
+        \\  ( \COPSKVSs \times \Nat ) | 
+        \Forall{\repl, \repl' \in \Dom(\cops) | \key, \key' \in \Keys | \idx, \idx' \in \Indexs }
+            \\ \WtOf(\cops(\repl)(\key,\idx)) = \WtOf(\cops(\repl')(\key',\idx')) \iff
+            \\ \key = \key' \land \cops(\repl)(\key,\idx) = \cops(\repl')(\key',\idx') }.
+\]
+\end{definition}
+
+A COPS replica tracks all the history versions that are uniquely identified and ordered by their writers.
+Note that, without losing generality, versions for a key are organised into a list;
+the relative position of versions does not matter since all versions are ordered by their writers.
+Since versions will be eventually delivered to all sites,
+this means that versions with the same writer from different replicas must be the same version,
+which is captured by the well-formed condition \( \WfCOPSKvs \).
+
+Each COPS client maintain a local context to trace versions that the client read or wrote before.
+The client contexts is used to build the correct dependency sets for versions.
+Each client always interacts with a assigned replica (identifier).
+
+\begin{definition}[COPS Client Contexts and Environments]
+A \emph{COPS context} \( \copsctx \) is defined by 
+\(
+    \copsctx \subseteq \Keys \times \COPSTxIDs
+\).
+Let \( \COPSContexts \in \copsctx \) denotes the set of \emph{COPS contexts}.
+The set of \emph{COPS client contexts} \( \COPSContextEnvs \ni \copsctxenv \) is defined by
+\( \COPSContextEnvs \TypeDef \Clients \ToPFFunc (\COPSContexts \times \COPSReplicas ) \).
+\end{definition}
+
+When a client commits a new version, 
+the client context becomes the dependency set of the new version.
+Thus both dependency sets of versions and client contexts 
+are modelled as sets of tuples with keys and identifiers.
+
+Last, a COPS configuration consists of a COPS database  \( \cops \) and a COPS client environment \( \copsclenv \).
+Any client from the environment \( \copsclenv \) must be served by a replica that exists in \( \cops \).
+
+\begin{definition}[COPS Configurations]
+A COPS configuration \( \copsconf \in \COPSConfs \) comprises 
+a COPS database \( \cops \) and a client context \( \copsctxenv \), 
+that is, \[ 
+    \COPSConfs \TypeDef \Set{ (\cops, \copsctxenv) \in \\ \COPSs \times \COPSContextEnvs |
+        \Forall{\cl \in \Dom(\copsctxenv) | \repl \in \COPSReplicas} 
+        \\ \copsctxenv(\cl) = (\stub, \repl) \implies \repl \in \Dom(\cops) }.
+\]
+The set of \emph{initial COPS configurations}, \( \COPSConfInits \ni \copsconfinit\),
+is defined by 
+\[ \COPSConfInits \TypeDef \Set{ (\cops, \copsctxenv) \in \\ \COPSConfs | 
+        \Forall{\repl \in \COPSReplicas | \cl \in \Clients } 
+        \\ \cops(\repl) = \lambda \key \in \Keys \ldotp ( \List{(\valinit, \txidinit, \emptyset)}, 0 )
+        \land \copsctxenv(\cl) = (\emptyset, \stub) }. 
+\]
+\end{definition}

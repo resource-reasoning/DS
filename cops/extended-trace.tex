@@ -1,0 +1,144 @@
+In our kv-store semantics (\cref{sec:model}), 
+we assign a unique identifier for every transition (\(\rCAtomicTrans\) in \cref{fig:command-semantics}),
+but in COPS there is explicit transaction identifier.
+We encode the COPS version identifier as the transaction identifier
+for the single-write transaction who committed the version.
+We then annotate multiple-read transactions with transaction identifiers that preserves the session order.
+
+\begin{definition}[Extended COPS traces]
+\emph{A client local time environments} is defined by \(\copsclenv \IsTyped \cl \ToTFunc \COPSTxIDs \).
+Given a normal COPS trace \( \copstrc \in \COPSTraces \),
+the extended COPS trace for \( \copstrc \) is defined by
+\begin{align*}
+   \COPSToExt(\copsconfinit,\copsclenv) & \FuncDef \copsconfinit ,
+\\ \multicolumn{2}{l}{
+        \COPSToExt( \begin{Bracketed} \ToCOPSProg{ \cops | \copsctxenv 
+            | \copsrunprog | \lb -> \copstrc } \end{Bracketed} , \copsclenv ) }
+\\ \multicolumn{2}{l}{
+        \( \quad \FuncDef 
+        \begin{cases}
+            \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb
+                -> \COPSToExt(\copstrc, \copsclenv\UpdateFunc{\cl -> \copstxid[\cl][\repl](n,1) }) }    
+                & \If \lb =  \lbCOPSWrite{\opW(\key,\val), \copstxid[\cl][\repl](n,0), \copsctx } ,
+         \\ \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb, \copsclenv(\cl)
+                -> \COPSToExt(\copstrc, \copsclenv) }
+                & \If \lb =  \lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsctx }  ,
+         \\ \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb, \copsclenv(\cl)
+                -> \COPSToExt(\copstrc, \copsclenv\UpdateFunc{\cl -> \copstxid[\cl][\repl](n,m+1) }) }
+                & \If \lb =  \lbCOPSFinishRead{ \copsctx } \land \copsclenv(\repl) = \copstxid[\cl][\repl](n,m) ,
+         \\ \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb
+                -> \COPSToExt(\copstrc, \copsclenv) }
+                & \ow .
+        \end{cases} \)
+    }
+\end{align*}
+Then the set of \emph{extended COPS traces}, \( \ExtCOPSTraces \ni \copsexttrc \), is defined by
+defined by 
+\[ 
+    \ExtCOPSTraces \TypeDef \Set{\COPSToExt(\copstrc,\copsclenv) | \copstrc \in \COPSTraces 
+        \\ {} \land \Exists{\copsctxenv \in \COPSContextEnvs} 
+        (\stub,\copsctxenv) = \copstrc\Proj{0}
+        \\ \implies 
+        \Forall{\cl \in \Dom(\copsctxenv) }
+        \Forall{ \repl \in \COPSReplicas } 
+        \\ \copsctxenv(\cl) = (\stub,\repl) 
+        \implies \copsclenv(\cl) = \copstxid[\cl][\repl](0,1) 
+    } .
+\]
+\end{definition}
+
+We track the next available multiple-read transaction identifier for every client,
+that is, \( \copsclenv \).
+Recall that each COPS transaction identifier \( \copstxid[\cl][\repl](n,m) \) is annotated with
+a extra counter \( m \), namely the read counter.
+In the COPS semantics, the read counter is always set to be ZERO.
+Here, we assign transaction identifiers with non-zero read counters to multiple-read transactions:
+for each multiple-read transaction, 
+we annotate the re-fetch operations and the read return operation 
+with the next available identifier in \( \copsclenv \).
+To preserve the session order,
+we update \( \copsclenv \) for the client \( \cl \),
+if \( \cl \) commits a new transaction.
+By construction, the transaction identifiers that are assigned to multiple-read transactions must be unique.
+
+\begin{proposition}[Fresh multiple-read transaction identifiers]
+\label{prop:cops-read-id-unique}
+Given an extended COPS trace \( \copsexttrc \in \ExtCOPSTraces \),
+the annotated multiple-read transaction identifiers must be fresh with respect the key being read,
+that is,
+\begin{Formulae}*
+\begin{Formula}
+\copsexttrc = \ToCOPSProg{ \copsexttrc' | \stub 
+                -> \cops |  \copsctxenv | \copsrunprog | \lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsdep }, \copstxid'
+                -> \copsexttrc'' }
+        \\ \land
+        \Forall{\repl^* \in \COPSReplicas | \cl^* \in \Clients | \val^* \in \Values | \copsdep^* \in \COPSDependencies }
+        \\ \copsexttrc'' = \ToCOPSProg{\cdots | \lbCOPSRefetch[\cl^*](\repl^*){\opR(\key,\val^*), \copstxid^*, \copsdep^* }, \copstxid'' -> \cdots }
+        \implies  \copstxid' \neq \copstxid''
+\end{Formula}
+\end{Formulae}
+\end{proposition}
+\begin{proof}
+Suppose a replica \( \repl^* \), a client \( \cl^* \), a value \( \val^* \) and dependency set \( \copsdep^* \)
+such that
+\[
+\copsexttrc'' = \ToCOPSProg{\cdots | \lbCOPSRefetch[\cl^*](\repl^*){\opR(\key,\val^*), \copstxid^*, \copsdep^* }, \copstxid'' -> \cdots }.
+\]
+If \( \repl \neq \repl^*\) or \( \cl \neq \cl^* \), 
+by the definition of \(\ExtCOPSTraces\) (especially \(\COPSToExt\)), it is trivial that \(\copstxid \neq \copstxid''\).
+Consider \( \repl = \repl^*\) or \( \cl = \cl^* \).
+Because a client must provide a unique set of key \( \keyset \) when calling \( \pcopsread \)
+by the rules in \cref{fig:cops-semantics-read},
+it means that
+\[
+\copsexttrc'' = \ToCOPSProg{\cdots | \lbCOPSRefetch{ \copsdep' }, \copstxid'
+    -> \cdots | \lbCOPSRefetch[\cl^*](\repl^*){\opR(\key,\val^*), \copstxid^*, \copsdep^* }, \copstxid'' -> \cdots }.
+\]
+For this case, by the definition of \(\ExtCOPSTraces\) (especially \(\COPSToExt\)), 
+it must be the case that \(\copstxid \neq \copstxid''\).
+\end{proof}
+
+
+In our kv-store semantics, new versions are appended to the end,
+however, in COPS semantics, new versions are inserted into the lists to preserve
+the version order within the lists.
+As explained before, write operations in a normal COPS trace,
+henceforth in an extended COPS trace, must be in order.
+Thus, it is safe to \emph{append} any write operation to the end of the list of the key,
+instead of inserting into the list.
+
+\begin{proposition}[Appending write operation]
+\label{prop:cops-append-write}
+Given an extended COPS trace \( \copsexttrc \),
+for every write operation, \( \lb = \lbCOPSWrite{\opW(\key,\val), \copstxid, \copsctx } \),
+the version identifier, \(\copstxid \), is strictly greater than all version identifiers included in all replicas,
+which means that
+\begin{Formulae}*
+\begin{Formula}
+\copsexttrc = \ToCOPSProg{ \copsexttrc' | \stub 
+                -> \cops |  \copsctxenv | \copsrunprog | \lbCOPSWrite{\opW(\key,\val), \copstxid, \copsctx }
+                -> \cops' | \copsctxenv' | \copsrunprog' | \stub
+                -> \cdots }
+        \\ \land 
+        \Forall{\repl' \in \COPSReplicas | \copskvs' \in \COPSKVSs | \key' \in \Keys | \idx' \in \Indexs}
+        \\ \cops(\repl') = (\copskvs',\stub)
+        \land 0 \leq \idx < \copskvs(\key')
+        \implies  \WtOf(\copskvs'(\key',\idx')) \copstxidle \copstxid
+\end{Formula}
+\end{Formulae}
+\end{proposition}
+\begin{proof}
+Suppose a replica \( \repl' \) with key-value store \( \copskvs' \) (\( \cops(\repl') = (\copskvs',\stub)\)), a key \( \key' \)
+and an index \( \idx' \) such that \( 0 \leq \idx < \copskvs(\key') \).
+Let the \( \copstxid' = \WtOf(\copskvs(\key',\idx'))\).
+There must exist a step with label \( \lb' \) with some client \( \cl' \)
+in the trace \( \copsexttrc' \) that committed this version:
+\[ 
+\copsexttrc' = \ToCOPSProg{ \cdots | \lb' -> \cdots }
+\land \lb' = \lbCOPSWrite{\opW(\key',\val'), \copstxid', \copsdep } 
+\]
+for some value \( \val ' \) and dependent set \(\copsdep \).
+Since an extended trace \( \copsexttrc \) is also in its normal form, that is, \( \COPSNormalTrace(\copsexttrc) \),
+and the new kv-store \( \cops'(\repl')\Proj{0} \) must be a well-formed COPS key-value store,
+therefore \( \copstxid' \copstxidle \copstxid \).
+\end{proof}

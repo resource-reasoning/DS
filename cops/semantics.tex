@@ -1,534 +1,207 @@
-\subsubsection{Verification}
-\paragraph{\bf Semantics the code}
-Let \( \repl \in \Repls \) denotes the set of totally ordered replicates.
-Each replicate can have multiple clients, and 
-each clients can commit a sequence of either read-only transitions or single-write transactions.
-To model these, we annotate the transaction identifier with replicate \( \repl \), client \( \cl \), 
-local time of the replicate \( n \) and read-only transactions counter \( n' \), \ie \( \txidCOPS{\repl}{\cl}{n}{n'} \).
-Note that the \( (n, \repl, n') \) can be treated as a single number that \( n \) are the higher bits, 
-\( \repl \) the middle bits and \( n' \) the lower bits.
-For a new single-write transaction, it is allocated with a transaction identifier with larger local time,
-and for a read-only transactions, it is allocated with a transaction identifier with larger read-only counter.
-There is a total order among transitions from the same replica and from the same client.
+A COPS client interacts with the replica via calling \( \pcopsput \) and \( \pcopsread \):
+\begin{enumerate*}
+\item function \( \pcopsput(\key,\val) \) commits a new value \( \val \) for  key \( \key \),
+and the replica will accept this version immediately and then broadcast to other replicas via synchronised messages;
+\item function \( \pcopsread(\keyset) \) requests a causally dependent snapshot for the key set \( \keyset \),
+and for better performance, the replica will prepare this snapshot in a fine-grained manner, reading keys one by one.
+\end{enumerate*}
+The API is modelled in \cref{def:cops-commands}.
+To models the fine-grained read in the replica side, 
+we introduce \emph{runtime commands} \( \COPSRunCommands \) to track intermediate states of \(\pcopsread\).
 
-To model the dependencies of each version,
-We extend version from \cref{def:his_heap} 
-with the set of all versions it dependencies on, \( \dep \in \pset{\Keys \times \TxID} \).
-The function \( \depOf{\ver} \) denotes the dependencies set of the version.
-We use \( \mkvsCOPS \) for key-value store whose versions contain the dependencies.
-
-We use view to model the client context,
-that is, a version is included in a context if and only if such version is in the view of the client.
-We also use view to model a replica state,
-that is, if a replica contains a version if and only if such version in the view of the replica.
-For readability, we annotate view with either a replica, \( \viREPL \), or a client, \( \viCL \).
-The view environment is extended with replicas and their views, \( \vienvCOPS : (\Repls \times \Clients ) \parfinfun \Views \).
-We give the following semantics to capture the behaviours of the code.
-
-\paragraph{\bf Write}
-For purpose of verification, we eliminate code for performance, and put the client API and replica API in the same function (\cref{lst:simplified-put}).
-\begin{lstlisting}[caption={put},label={lst:simplified-put}]
-// mixing the client API and system API
-put(repl,k,v,ctx) {
-
-    // Dependency for previous reads and writes
-    deps = ctx_to_dep(ctx);(*\label{line:put-ctx-to-deps}*)
-
-    // increase local time and appending local kv with a new version.
-    inc(repl.local_time);(*\label{line:put-inc-local}*) 
-    list_isnert(repl.kv[k],(v, (local_time + id), deps));(*\label{line:put-update-kv}*)
-
-    // update dependency for writes
-    ctx.writers += (k,(local_time + id),deps);(*\label{line:put-update-ctx}*)
-
-    // broad case
-    asyn_brordcase(k, v, (time ++ id), deps);
-    return (local_time + id);
-}
-\end{lstlisting}
-
-The following is the rule corresponds to \cref{lst:simplified-put}:
-
-\begin{mathpar}
-    \inferrule[Put]{%
-        ( \stk, \ss, \emptyset ), \pmutate{\key}{\vx} \toTRANS
-        ( \stk', \stub, \Set{(\otW, \key, \val )} ), \pskip
-        \\\\
-        \dep = \Set{(\key', \txid)}[\exsts{i} i \in \viCL(\key') \land \txid = \wtOf(\mkvsCOPS(\key', i)) \lor (\key', \txid) \in \depOf[\mkvsCOPS(\key', i)] ] \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-ctx-to-deps}} 
-        \\\\
-        \txid = \min\Set{%
-        \txidCOPS{\repl}{\cl}{n'}{0}
-        }[%
-            \fora{\key', i \in \viREPL(\key'), n} 
-            \txidCOPS{\stub}{\stub}{n}{\stub} = \wtOf(\mkvsCOPS(\key',i))
-            \implies n' > n 
-        ] \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-inc-local}}
-        \\\\
-        \mkvsCOPS' = \mkvsCOPS\rmto{\key}{\mkvsCOPS(\key) \lcat (\key, \txid, \emptyset, \dep)} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-update-kv}}
-        \\\\
-        \viREPL' = \viREPL\rmto{\key}{\viREPL(\key) \uplus \Set{\abs{\mkvsCOPS'(\key)} - 1}} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-update-kv}}
-        \\\\
-        \viCL' = \viCL\rmto{\key}{\viREPL(\key) \uplus \Set{\abs{\mkvsCOPS'(\key)} - 1}} \texttt{ ---> \cref{lst:simplified-put}, \cref{line:put-update-ctx}}
-    }{%
-    \repl, \cl \vdash 
-    \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\pmutate{\key}{\vx};} \toCMD{\viCL, \Set{(\otW, \key, \val )} }
-    \mkvsCOPS', \viREPL', \viCL', \stk', \pskip
-    }
-\end{mathpar}
-
-The first premiss is to execute the transaction locally (\cref{fig:semantics-trans}).
-Since there is only a write, the snapshot \( \ss \) can be any snapshot.
-The second line computes the dependency set for the new write operation,
-by collecting all the writers of versions included in the view \( \viCL \).
-The third line simulates the increment of local time.
-Even thought we do not directly track the local time of a replica, 
-yet the local time can compute as the maximum time contained in the replica's view \( \viREPL \).
-The forth and fifth simulates the updates of the replica's key-value store,
-and the last premiss simulates the update of client context.
-
-\paragraph{\bf Read}
-The following is a simplified algorithm by directly taking a list of versions 
-\verb|ccv| satisfies causal consistency constraint,
-\ie the second phase of \cref{lst:cops-client-read},
-and then read the versions indicated by \verb|ccv|.
-%The simplified algorithm is easier to understand,
-%yet it is only for verification purpose because the extremely bad performance.
-
-\begin{lstlisting}[caption={get\_trans},label={lst:get-trans}]
-List(Val) get_trans(ks,ctx) {
-    // only guarantee to read up-to-date value 
-    // the moment reading the individual key
-    for k in ks { rst[k] = get_by_version(k,LATEST); } (*\label{line:get-trans-pick-ccv-1}*)
-
-    for k in ks { 
-        ccv[k] = max (ccv[k],rst[k].ver); (*\label{line:get-trans-ccv-1}*)
-        for dep in rst[k].deps (*\label{line:get-trans-ccv-2}*)
-            if ( dep.key (*$\in$*) ks ) ccv[k] = max (ccv[dep.key],dep.vers); (*\label{line:get-trans-ccv-3}*) 
-    } (*\label{line:get-trans-ccv-4}*)
-    for k in ks   (*\label{line:get-trans-ccv-5}*)
-        if ( ccv[k] > rst[k].vers ) rst[k] = get_by_version(k,ccv[k]); (*\label{line:get-trans-ccv-6}*)
-
-    // update the ctx
-    for (k,ver,deps) in rst { ctx.readers += (k,ver,deps); } (*\label{line:get-trans-update-ctx-1}*)
-
-    return to_vals(rst); (*\label{line:get-trans-read-1}*)
-}                                   
-\end{lstlisting}
-
-The following is the rule for read-only transaction:
-
-\begin{mathpar}
-    \inferrule[GetTrans]{%
-        %\viCL \viewleq \viCL' \viewleq \viREPL  \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-update-ctx-1,line:get-trans-update-ctx-2}}
-        \trans =  \plookup{\vx_1}{\key_1}; \dots; \plookup{\vx_j}{\key_j};
-        \\
-        \vi_0 = \viCL
-        \\\\
-        {\begin{array}{@{}l@{}}
-            \mathsf{for} \ i \ \mathsf{in} \Set{1, \dots, j} \\
-            \quad m_i \in \viREPL(\key_i) \\
-            \quad \vi'_i = \vi_{i-1}\rmto{\key_i}{\vi_{i-1}(\key_i) \cup \Set{m_i}} 
-            \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-pick-ccv-1}} \\
-            \quad \vi_i = \lambda \key \ldotp \vi'_i(\key) \cup \Set{x}[(\key,\wtOf[\mkvsCOPS(\key,x)]) \in \depOf[\mkvsCOPS(\key_i,m_i)]]  \\
-            \qquad \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-ccv-1,line:get-trans-ccv-2,line:get-trans-ccv-3,line:get-trans-ccv-4,line:get-trans-ccv-5,line:get-trans-ccv-6,line:get-trans-update-ctx-1}} \\
-        \end{array}}
-        \\\\
-        \\\\
-        \viCL' = \vi_j
-        \\
-        ( \stk, \func{getMax}[\mkvsCOPS, \viCL'], \emptyset ), \trans \toTRANS
-        ( \stk', \stub, \fp ), \pskip \texttt{ ---> \cref{lst:get-trans}, \cref{line:get-trans-read-1}}
-        \\\\
-        \txidCOPS{\repl}{\cl}{n'}{n} = \max\Set{\txidCOPS{\repl}{\cl}{z'}{z}}[\txidCOPS{\repl}{\cl}{z'}{z} \in \mkvsCOPS ]
-        \\
-        \mkvsCOPS' = \updateKV[\mkvsCOPS, \viCL', \fp, \txidCOPS{\repl}{\cl}{n'}{n+1}] 
-    }{%
-        \repl, \cl \vdash 
-        \mkvsCOPS, \viREPL, \viCL, \stk, \ptrans{\plookup{\vx_1}{\key_1}; \dots; \plookup{\vx_j}{\key_j}; } \toCMD{\viCL', \fp}
-        \mkvsCOPS', \viREPL, \viCL', \stk', \pskip
-    }
-    \and
-    \inferrule[ClientCommit]{%
-        \repl, \cl \vdash 
-        \mkvsCOPS, \vienvCOPS(\repl), \vienvCOPS(\cl), \stk, \prog(\cl) \toCMD{\viCL'', \fp}
-        \mkvsCOPS', \viREPL', \viCL', \stk', \cmd'
-    }{%
-        \mkvsCOPS, \vienvCOPS, \thdenv, \prog \toPROG{\viCL'', \fp}
-        \mkvsCOPS', \vienvCOPS\rmto{\repl}{\viREPL'}\rmto{\cl}{\viCL'}, \thdenv\rmto{\cl}{\stk'}, \prog\rmto{\cl}{\cmd'}
-    }
-\end{mathpar}
-
-The for-loop in the premiss picks a version for key \( \key_i \) from \( \viREPL \) and adds to client view, which corresponds to the initial \verb|ccv|\((\key_i)\).
-Then it add all the new dependencies \( \depOf[\mkvsCOPS(\key_i,m_i)] \) to the view that yields \( \vi_i \).
-The view \( \vi_i \) corresponds to \verb|ccv|\((\key_i)\) after the update against the dependencies.
-Given the view \( \viCL \), the client fetches the version with the maximum writer it can observed for each key, which is computed by \( \func{getMax} \) function. 
-It is different from \( \snapshot \) because \( \snapshot \) fetches the latest version with respect to the position in the list, but later one we will prove \( \func{getMax} \) and \( \snapshot \) are equivalent.
-\begin{align*}
-    \func{getMax}[\mkvsCOPS, \viCL] & \defeq 
-    \lambda \key \ldotp \left( \max\Set{(\val, \txid, \txidset, \dep)}[\exsts{i} (\val, \txid, \txidset, \dep) = \mkvsCOPS(\key, i) \land i \in \viCL(\key)] \right)\projection{1} \\
-    (\val, \txidCOPS{\repl}{\cl}{n}{n'}, \txidset, \dep) & > (\val', \txidCOPS{\repl'}{\cl'}{n''}{n'''}, \txidset', \dep') \defiff (n, \repl, n') > (n'', \repl, n''') 
-\end{align*}
-The rest part are trivial be picking a new transaction identifier with larger read counter and committing to key-value store.
-
-Last the rule for receiving a update.
-A replica updates its local state only if all the dependencies has been receive as shown in \cref{lst:cops-replica-receive-msg}.
-\begin{mathpar}
-    \inferrule[sync]{%
-        \viREPL = \vienvCOPS(\repl)\rmto{\key}{\vienvCOPS(\repl)(\key) \uplus i} 
-        \\\\
-        {\left(\begin{array}{@{}l@{}}
-        \fora{\key', m, \ver} 
-        \ver = \mkvsCOPS(\key, i) \land {}
-        (\key', \wtOf(\mkvsCOPS(\key', m))) \in \ver\projection{4}
-        \implies m \in \viREPL'(\key') 
-        \end{array}\right)} 
-    }{%
-        \mkvsCOPS, \vienvCOPS, \thdenv, \prog \toPROG{}
-        \mkvsCOPS, \vienvCOPS\rmto{\repl}{\viREPL}, \thdenv, \prog
-    }
-\end{mathpar}
-The premiss says, the first line, the replica \( \repl \) receive a new version \( i \) for key \( \key \),
-and, the second line, only if all the dependencies of the new update already in the replica's view.
-
-
-\paragraph{\bf COPS key-value store}
-To verify the algorithm, we prove that for any COPS trace produced by the algorithm,
-there exists a corresponding causal consistency trace.
-First we prove that the key-value stores from COPS trace satisfy \cref{def:mkvs}.
-
-\begin{theorem}[Well-formed COPS key-value]
-    \label{thm:cops-key-value-well-form}
-    Let ignore the dependencies of versions from \( \mkvsCOPS \).
-    Given the initial key-value store \( \mkvsCOPS_0 \), initial views \( \vienvCOPS_0 \) and some programs \( \prog_0 \), for any \( \mkvsCOPS_i \) and \( \vienvCOPS_i \)  such that: 
-    \[
-        \mkvsCOPS_0, \vienvCOPS_0, \thdenv_0, \prog_0 {\toPROG{}}^* \mkvsCOPS_i, \vienvCOPS_i, \thdenv_i, \prog_i
-    \]
-    The key-value store \( \mkvsCOPS_i \) satisfies \cref{def:mkvs} and any replica or client view \( \vi \) from \( \vienvCOPS_i \) is a valid view of the key-value store, \ie \( \vi \in \Views(\mkvsCOPS_i) \).
-\end{theorem}
-\begin{proof}
-    We need to prove the  \( \mkvsCOPS_i \) satisfies the well-formed conditions,
-    and any view \( \vi_i \Views(\mkvsCOPS_i) \).
-    We prove it by introduction on the length \( i \).
-    \begin{itemize}
-    \item \caseB{\(i = 0\)}
-        It holds trivially since each key only has the initial version \( (\val_0,\txid_0,\emptyset, \emptyset) \).
-        Since there is only the initial version for each key, it is easy to see that any view \( \vi_0 \) satisfying the well-formed conditions in \cref{def:views}.
-    \item \caseI{\(i+1\)}
-        We perform case analysis on the possible \((i+1)\)-\emph{th} step:
-        \begin{itemize}
-            \item \rl{Put}
-                Assume the client \( \cl \) of a replica \( \repl \) commits a single-write transaction \( \txid \) that installs a new version for key \( \key \).
-                By the premiss of \rl{Put}, the new transaction identifier \( \txid = \txidCOPS{\repl}{\cl}{n'}{0} \) where for some \( n' \) that is greater than any \( n \) from any writers \( \txidCOPS{\stub}{\stub}{n}{\stub} \) that are observable by the replica \( \repl \).
-                Since the new transaction \( \txid = \txidCOPS{\repl}{\cl}{n'}{0} \) is a single-write transaction which is always installed at the end of the list associated to \( \key \), it is sufficient to prove the following:
-                \begin{gather}
-                    \fora{j} 0 \leq j < \abs{ \mkvsCOPS_i(\key) } \implies \wtOf(\mkvsCOPS_{i}(\key, j)) \neq \txid \label{equ:write-trans-unique} \\
-                    \fora{j, n} \txidCOPS{\repl}{\cl}{n}{\stub} \in \Set{\wtOf(\mkvsCOPS_{i}(\key,j))} \cup \rsOf(\mkvsCOPS_{i}(\key, j)) \implies n < n' \label{equ:replica-time-monotonic-inc}
-                \end{gather}
-                \cref{lem:mono-local-time} implies \cref{equ:write-trans-unique} and \cref{equ:replica-time-monotonic-inc}.
-                Thus the new key-value store \( \mkvsCOPS_{i+1} \) satisfies the well-formed conditions.
-                Now let consider the views, especially the views of the replica \( \viREPL' \) and the client \( \viCL' \).
-                Because views different replicas or clients remain unchanged, by \ih they satisfy \( \vi' \in \Views(\mkvsCOPS_{i+1}) \).
-                The new view for replica \( \viREPL' = \viREPL\rmto{\key}{\abs{\mkvsCOPS_{i+1}(\key)} - 1} \)
-                where \( \viREPL \) is the replica's view before updating and the writer of the last version of \( \key \) is \( \txid \).
-                Because \( \txid \) is a single-write transaction, so the new view \( \viREPL' \) still satisfies the atomic read.
-                For similar reason, the new view for client \( \viCL' \) till satisfies atomic read.
-                Therefore we have \( \viREPL', \viCL' \in \Views(\mkvsCOPS_{i+1}) \).
-
-            \item \rl{GetTrans}
-                Assume the client \( \cl \) of a replica \( \repl \) commits a read-only transaction \( \txid \).
-                Since it is a read-only transaction, it suffice to prove the following:
-                \begin{gather}
-                    \fora{\key,j} 0 \leq j < \abs{ \mkvsCOPS_i(\key) } \implies \txid \notin \rsOf(\mkvsCOPS_{i}(\key, j)) \label{equ:read-trans-unique} 
-                \end{gather}
-                \cref{lem:mono-local-time} implies \cref{equ:read-trans-unique}.
-                Thus the new key-value store \( \mkvsCOPS_{i+1} \) satisfies the well-formed conditions.
-                Now let consider the views.
-                Since only the client view has changed, it is sufficient to  prove that \( \viCL' \in \Views(\mkvsCOPS_{i+1}) \), 
-                where \( \viCL' \) is the new client view.
-                By \cref{lem:write-unique}, the new view \( \viCL' \) satisfies the atomic read constraint.
-                Therefore \( \viCL' \in \Views(\mkvsCOPS_{i+1})  \).
-        \end{itemize}
-    \end{itemize}
-\end{proof}
-
-
-
-\begin{lemma}[Monotonic local time]
-    \label{lem:mono-local-time}
-    Given a reduction step such that: 
-    \[
-        \mkvsCOPS, \viREPL, \viCL, \stk, \cmd {\toCMD{}}^* \mkvsCOPS', \viREPL', \viCL', \stk', \cmd'
-    \]
-    let \( \txidCOPS{\repl}{\cl}{n}{n'} \) be the new transaction, \ie \( \txidCOPS{\repl}{\cl}{n}{n'} \in \mkvsCOPS' \land  \txidCOPS{\repl}{\cl}{n}{n'} \notin \mkvsCOPS \).
-    It implies the new transaction is greater than any transaction committed by the same client view \( \viCL \), \ie
-    \[ 
-        \txidCOPS{\repl}{\cl}{n''}{n'''} \in \mkvsCOPS \implies (n,\repl,n') > (n'', \repl, n''')
-    \]
-\end{lemma}
-\begin{proof}
-    We perform case analysis.
-    \begin{itemize}
-        \item \rl{Put}
-            By the premiss of the rule, 
-            the new transaction is in the form \( \txidCOPS{\repl}{\cl}{n}{0} \),
-            and for any existing transaction \( \txidCOPS{\repl}{\cl}{n'}{\stub} \),
-            \[
-                \txidCOPS{\repl}{\cl}{n'}{\stub} \in \mkvsCOPS \implies n > n'
-            \]
-        \item \rl{GetTrans}
-            Let \( \txidCOPS{\repl}{\cl}{n}{n'} \) be the new transaction.
-            By the premiss we have that for any existing transaction \( \txidCOPS{\repl}{\cl}{n''}{n'''} \), 
-            \[
-                \txidCOPS{\repl}{\cl}{n''}{n'''} \in \mkvsCOPS \implies n = n'' \land n' > n'''
-            \]
-    \end{itemize}
-\end{proof}
-
-\begin{lemma}[Unique writer]
-    \label{lem:write-unique}
-    Each version has a unique writer.
-\end{lemma}
-\begin{proof}
-    Because a transaction can write to at most one key, and 
-    a client at least observes its own writes (the premiss of \rl{Put})
-    we have the proof.
-\end{proof}
-
-\mypar{COPS normal trace}
-We define COPS semi-normal trace then normal trace.
-Later, we prove for any COPS trace, there exists an equivalent normal trace.
-
-The dependency of a transaction \( \depOf[\mkvsCOPS, \txid] \) is defined as:
-\begin{itemize}
-    \item if \( \txid \) is a single-write transaction:
-    \begin{align*}
-        \depOf[\mkvsCOPS, \txid] & \defeq 
-        \begin{multlined}
-            \dep  \ \text{where} \ 
-            \exsts{\key,j} \lastConf(\tr)\projection{1}(\key,j) = (\stub, \txid, \stub, \dep)
-        \end{multlined}
-    \end{align*}
-    \item if \( \txid \) is a read-only transaction:
-    \begin{align*}
-        \depOf[\mkvsCOPS, \txid] & \defeq 
-        \begin{multlined}
-            \bigcup_{\Set{\ver}[\exsts{\key,j} \ver = \mkvsCOPS(\key,j) \land \txid \in \rsOf(\ver)]} \depOf[\ver] \\
-        \end{multlined}
-    \end{align*}
-\end{itemize}
-Given a trace \( \tr \), 
-the function \( \func{maxVersion}[\tr, \txid] \) returns the version that the transaction \( \txid \) depends on
-and is the last one that appears in the trace:
-\begin{align*}
-    \func{maxVersion}[\tr, \txid] & \defeq \txid_i
-    \quad \begin{multlined}[t]
-        \text{the \( \txid_i \) is the last one appears in \( \tr \) such that} \\
-        (\key',\txid_i) \in \depOf[\lastConf(\tr)\projection{1}, \txid] \land \txid_i \notin \mkvsCOPS_i \land  \txid_i \in \mkvsCOPS_{i+1}
-    \end{multlined}
-\end{align*}
-Give two COPS's traces \( \tr \) and \( \tr' \), \( \mkvsCOPS \) being the final state of \( \tr \) and \( \mkvsCOPS' \) for \(\tr'\),
-if the two traces are equivalent, if and only if,
-\[ 
-    \begin{array}{@{}l@{}}
-    \fora{\txid,\fp,\dep} \txid \in \mkvsCOPS
-    \land \fp = \func{RWset}[\mkvsCOPS,\txid] \land \dep =  \depOf[\mkvsCOPS,\txid] \\
-    \quad {} \iff
-    \txid \in \mkvsCOPS'
-    \land \fp = \func{RWset}[\mkvsCOPS',\txid] \land \dep =  \depOf[\mkvsCOPS',\txid] \\
-    \end{array}
+\begin{definition}[COPS Commands and Programs]
+\label{def:cops-commands}
+A \emph{COPS command} \( \copscmd \) is defined by the following grammar:
+for any key \( \key \in \Keys\), key set \( \keyset \subseteq \Keys\) and \( \val \in \Values\),
+\[
+\copscmd ::= \pcopsput(\key,\val) | \pcopsread(\keyset) | \copscmd \pseq \copscmd  .
 \]
-where \( \func{RWset}[\mkvsCOPS,\txid] \) is the read-write set of \( \txid \).
-Note that \( \func{RWset} \) is well-defined by \cref{thm:cops-key-value-well-form}.
+Let \( \COPSCommands \ni \copscmd \) denote the set of \emph{COPS commands}.
+A \emph{COPS runtime command} \( \copsruncmd \) is defined by the following grammar:
+for any \( \copsverlist,\copsverlist' \in \List{\COPSVersions}\) and \( \copsdepset \in \List{\COPSDependencies} \),
+\[
+\copsruncmd ::= \pcopsput(\key,\val) | \pcopsread(\keyset) 
+        | \pcopsread(\keyset) : \copsverlist 
+        | \pcopsread(\keyset) : (\copsverlist,\copsdepset) 
+        | \pcopsread(\keyset) : (\copsverlist,\copsdepset,\copsverlist') 
+        | \copsruncmd \pseq \copsruncmd .
+\]
+Let \( \COPSRunCommands \ni \copsruncmd \) denote the set of \emph{COPS runtime commands}.
+The sets of \emph{COPS programs}, \( \COPSPrograms \ni \copsprog \),
+and \emph{COPS runtime programs}, \( \COPSRunPrograms \ni \copsrunprog \),
+are defined by \( \COPSPrograms \TypeDef \Clients \ToPFFunc \COPSCommands\)
+and \( \COPSRunPrograms \TypeDef \Clients \ToPFFunc \COPSRunCommands\) respectively.
+\end{definition}
 
-A COPS's semi-normal trace is a trace \( \tr \) if it is in the form that
-read-only transactions \( \txid_\rd \) directly follows its \( \func{maxVersion}[\tr, \txid_\rd] \) or another read-only transaction \( \txid_{\rd}' \) such that \( \func{maxVersion}[\tr, \txid_\rd]  =  \func{maxVersion}[\tr, \txid_{\rd}']\).
+A replica prepares the causally dependent snapshot for a key set \( \keyset \) in three phases,
+\( \pcopsread(\keyset) : \copsverlist \),
+\( \pcopsread(\keyset) : (\copsverlist,\copsdepset) \) and 
+\( \pcopsread(\keyset) : (\copsverlist,\copsdepset,\copsverlist') \).
+We will give the semantics later.
+
+\begin{proposition}[COPS Runtime Command Inclusion]
+\(\COPSCommands \subseteq \COPSRunCommands\).
+\end{proposition}
+
+We verify COPS via trace refinement.
+To help the proofs, we label each step in the COPS trace:
+each label corresponds to a rule in the semantics
+(\cref{fig:cops-semantics-write,fig:cops-semantics-read,fig:cops-semantics-program}).
+Any local computation is labelled with \( \lbCOPSPri \).
+The reduction step for a single-write transaction is labelled with \( \lbCOPSWrite{ \opW(\key,\val), \copstxid,\copsdep} \).
+As explained in \cref{sec:overall-cops},
+multiple-read requests are processed in two phase internally in the replica.
+The labels \( \lbCOPSOptRead{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSBound,
+    \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSFinishRead{\copsctx} \)
+means optimistic read of \( \key \), phase change, re-fetch of \( \key \)
+and return the set of versions \( \copsctx \) respectively.
+Last, \( \lbCOPSSync{\copstxid} \) labels the step where replica \( \repl \) receives new version \( \copsver \).
+                                                                                                          
+The reference semantics for COPS commands is defined in \cref{fig:cops-semantics-write,fig:cops-semantics-read}.
+Rules are labelled with information that are usefully for proving properties.
+
+\begin{definition}[COPS Labels]
+The set of \emph{COPS labels} \( \Labels \ni \lb \) is defined by 
+\[
+    \Labels \supseteq 
+    \bigcup_{\substack{\cl \in \Clients, \repl \in \COPSReplicas
+                    \\ \key \in \Keys, \val \in \Values
+                    \\ \copstxid \in \COPSTxIDs, \copsdep \in \COPSDependencies } }
+    \Set{\lbCOPSPri, \lbCOPSWrite{ \opW(\key,\val), \copstxid,\copsdep},
+              \\ \lbCOPSOptRead{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSBound,
+              \\ \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSFinishRead{\copsctx}
+              , \lbCOPSSync{\copstxid}}.
+\]
+\end{definition}
+
+\paragraph{Rule for \pcopsput.} 
+When a client calls \pcopsput function (\cref{lst:cops-put}),
+it sends a new value \( \var(v) \) for key \( \pk \) 
+with the context \( \copsctx \) to a replica  \( \repl \).
+Once the replica receives the update request, 
+it creates a new version for \( \pk \) with the new value \( \var(v) \), 
+allocates this version with a new version identifier consisting of 
+the next local time-stamp and the replica identifier
+and assigns the client context \( \pctx \) as the dependency set 
+(\cref{line:cops-put-update-kv} in \cref{lst:cops-put}).
+This new version will be added into the context in \cref{line:cops-put-update-ctx} in \cref{lst:cops-put}.
+Now the replica is ready to send back the acknowledgement to the client.
+Last, the new version is broadcasted to all other replicas.
+
+\input{cops/fig-write}
+
+In \rCOPSWrite rule in \cref{fig:cops-semantics-write},
+the second and third premises model \cref{line:cops-put-inc-local,line:cops-put-update-kv} 
+in \cref{lst:cops-put} respectively.
+Function \( \COPSInsert(\copskvs, \key, \copsver) \) inserts the version 
+in a position that preserves the order.
+
+\begin{definition}[List Insertion]
+Given a COPS store \( \copskvs \in \COPSKVSs \) and 
+a version \( \copsver \in \COPSVersions \) for a key \( \key \in \Keys \).
+Function \( \COPSInsert(\copskvs, \key, \copsver) \) is defined by
+\[
+    \COPSInsert(\copskvs, \key, \copsver) \FuncDef 
+    \begin{multlined}[t]
+    \CodeFont{let} \ \copsverlist = \copskvs(\key)
+    \ \CodeFont{and} \ \List{\copsver_0,\cdots, \copsver_i, \copsver_{i+1}, \cdots, \copsver_n} = \copsverlist
+    \\ \CodeFont{where} \ \WtOf(\copsver_i) \copstxidleq  \WtOf(\copsver) \copstxidleq  \WtOf(\copsver_{i+1})
+    \\ \CodeFont{in} \ \copskvs\UpdateFunc{
+        \key -> \List{\copsver_0,\cdots, \copsver_i, \copsver, \copsver_{i+1}, \cdots, \copsver_n}} .
+    \end{multlined}
+\]
+\end{definition}
+
+\begin{proposition}[Well-defined \COPSInsert]
+Given a COPS store \( \copskvs \in \COPSKVSs \) and 
+a version \( \copsver \in \COPSVersions \) for a key \( \key \in \Keys \)
+such that \( \WtOf(\copsver) \notin \copskvs \),
+the new store \( \COPSInsert(\copskvs, \key, \copsver) \) 
+is a well-formed COPS store.
+\end{proposition}
 
 
-\begin{corollary}
-    \label{lem:cops-semi-normal-trace}
-    \label{cor:cops-semi-normal-trace}
-    For any COPS's trace \( \tr \), there exists a equivalent semi-normal trace \( \tr' \) 
-    such that \( \lastConf(\tr) = \lastConf(\tr') \).
-\end{corollary}
-\begin{proof}
-    It is easy to prove by induction on the numbers of read-only transactions that are not in the wanted position.
-    Let take the first one for those read-only transactions \( \txid_\rd \) who does not follows its \( \func{maxVersion}[\tr, \txid_i] \).
-    It is safe to move the reduction step to the right in the trace,
-    until it directly follows its \( \func{maxVersion}[\tr, \txid_\rd] \) or another read-only transaction \( \txid_{\rd}' \) such that \( \func{maxVersion}[\tr, \txid_\rd] = \func{maxVersion}[\tr, \txid_{\rd}']\). 
-    Assume it is \(i\)-\emph{th} step, and assume  \( (i-1)\)-\emph{th} is not  \( \func{maxVersion}[\tr, \txid_\rd] \) nor another read-only transaction \( \txid_{\rd}' \) such that \( \func{maxVersion}[\tr, \txid_\rd] = \func{maxVersion}[\tr, \txid_{\rd}']\).
-    It means the \( (i-1)\)-\emph{th} step must be a write that \( \txid_\rd \) does not depend on.
-    Because if \( (i-1)\)-\emph{th} step is a read only transaction \( \txid''_\rd \) 
-    it must be the case 
-    \( \func{maxVersion}[\tr, \txid_\rd] = \func{maxVersion}[\tr, \txid_{\rd}'']\), 
-    otherwise \( \txid_\rd \) is not the first read-only transaction that is not in the wanted place.
-\end{proof}
+\paragraph{Rules for \pcopsread.} \Cref{lst:cops-read} presents the reference implementation for \pcopsread that
+a client requests a snapshot for keys \( \pks \) from a replica \( \repl \).
+The semantics for \pcopsread is given in \cref{fig:cops-semantics-read}.
+As explained in \cref{sec:overall-cops}, 
+the replica constructs this snapshot in two phases.
 
-A COPS's normal trace is a trace \( \tr \) if it is semi-normal trace and the single-write transactions step appears in the trace in the order of the writers of those transactions.
+\input{cops/fig-read}
 
-\begin{theorem}[normal trace]
-    \label{thm:cops-normal-trace}
-    \label{lem:cops-normal-trace}
-    \label{cor:cops-normal-trace}
-    For any COPS's trace \( \tr \), there exists an equivalent normal trace \( \tr' \).
-\end{theorem}
-\begin{proof}
-    By \cref{cor:cops-semi-normal-trace}, let consider a semi-normal trace \( \tr \).
-    It is easy to prove by induction on the single-write transactions that are out of order.
-    Let take the first single-write transaction \( \txid = \txidCOPS{\repl}{\cl}{n}{n'} \) that is out of order.
-    Suppose it is the i-\emph{step}.
-    Assume \( \txid \) write to key \( \key \) with value \( \val \).
-    Assume the preview write-only transaction \( \txid'  = \txidCOPS{\repl'}{\cl'}{n''}{n'''} \) and it follows \( (n,\repl,n') < (n'', \repl', n''') \).
-    The intuition here is to swap the reduction steps of these two transactions and those read-only transactions following them.
-    We assume \( \txid \)  and \( \txid' \) write to the same key, otherwise it is safe to swap.
-    For any read-only transactions \( \txid_{\rd} \in \txidset_{\rd} \) following \( \txid \), we knows \( \txid' \notin \depOf[\mkvsCOPS_i, \txid_{\rd}] \), otherwise it violate \( \func{maxVersion}[\tr, \txid_\rd] = \txid \).
-    Thus it is safe to swap the reduction steps and alter views that includes either or both versions.
-    Note that if a view \( \vi \) includes both \( \txid \)  and \( \txid' \), and if \( \txid' \) also write to the same key \( \key \) with value \( \val' \), the \( \vi \) will fetch the value from \( \txid' \):
-    \( \func{getMax}[\mkvsCOPS_i,\vi](\key) = \val' \)
-\end{proof}
+In the first phase (\cref{line:cops-optimistic-read} in \cref{lst:cops-read}),
+replica reads the latest version for each key 
+(using \( \CodeFont{get\_by\_version}\), with \( \CodeFont{LATEST} \) label).
+However, interleaving may happen between two reads.
+\rCOPSOptRead rule models this phase: 
+the latest version \( \copsver_i \) for key \( \key_i \) 
+in the replica kv-store \( \copskvs \) is added to the runtime version lists \( \copsverlist \),
+that is, \( \copsverlist \ListConcat \List{\copsver_i} \).
+The label for this rule tracks the client, the replica, the version and a \( \dagger \)
+to indicate the first phase.
 
-\begin{corollary}
-    \label{cor:get-max-to-get-snap}
-    For the \rl{Put} and \rl{GetTrans}, it is safe to replace the function \( \func{getMax} \) with the function \( \snapshot \).
-\end{corollary}
-\begin{proof}
-    By \cref{thm:cops-normal-trace}, each trace \( \tr \) has an equivalent normal trace \( \tr' \).
-    Assume i-\emph{th} step in the trace \( \tr' \).
-    Assume the key-value store before is \( \mkvsCOPS_i \).
-    For any versions \( m \) and \( j \) from the same key in the \( \tr' \):
-    \[
-        0 < m < j < \abs{\mkvsCOPS_i(\key)} \implies \wtOf(\mkvsCOPS_i(\key,m)) <  \wtOf(\mkvsCOPS_i(\key,j))
-    \]
-    thus it is safe to use \( \snapshot \).
-\end{proof}
+At the end of the first phase, 
+replica collects all dependency sets and uses them as an lower-bound in the second phase.
+This lower bound contains minimum versions in term of the version identifiers that can form
+a causal dependent snapshot for the key set \( \keyset \).
+In \(\rCOPSLowerBound\) rule, we use \(\VerLower( \keyset,\copsverlist ) \) 
+function to model the computation shown in \cref{line:cops-compute-lower-bound}.
 
-\paragraph{\bf COPS normal trace to \( \ET_\CC \) trace}
-Given \cref{thm:cops-key-value-well-form,thm:cops-normal-trace,cor:get-max-to-get-snap}, for any COPS's trace \( \tr \), 
-there exists a trace \( \tr' \) that is a normal trace and satisfies \( \ET_\top \).
-Then by the following theorem (\cref{thm:cops-cc}), we proof the COPS trace satisfies \( \ET_\CC \).
+\begin{definition}[Version Lower-bound]
+Given a key set \( \keyset \) and list of versions for the key set \( \copsverlist \) 
+the function \( \VerLower( \keyset,\copsverlist ) \) is defined by
+\begin{align*}
+    \VerLower( \keyset,\copsverlist ) & \FuncDef 
+    \Let n = \Abs{\keyset} - 1 \
+    \In \List{\VerLowerN(\keyset\Proj{0},\copsverlist, 0), \cdots, \VerLowerN(\keyset\Proj{n},\copsverlist, n)} 
+    \\ \VerLowerN(\key,\copsverlist, \idx) & \FuncDef
+    \Tuple{ \key, \Max[\copstxidleq](\Set{\copstxid | 
+            \copstxid = \WtOf(\copsverlist\Proj{\idx}) \lor 
+            \Exists{\idx'} (\key, \copstxid) \in \DepOf(\copsverlist\Proj{\idx'}) 
+        }) } .
+\end{align*}
+\end{definition}
 
-\begin{theorem}[COPS satisfying causal consistency]
-    \label{thm:cops-cc}
-    Given a trace starting from the initial key-value store \( \mkvsCOPS_0 \), initial views \( \vienvCOPS_0 \) and some programs \( \prog_0 \), for any \( \mkvsCOPS_i \) and \( \vienvCOPS_i \)  such that: 
-    \[
-        \mkvsCOPS_i, \vienvCOPS_i, \thdenv_i, \prog_i \toPROG{\viCL,\fp} \mkvsCOPS_{i+1}, \vienvCOPS_{i+1}, \thdenv_{i+1}, \prog_{i+1} 
-    \]
-    then the i-\emph{th} step satisfies \( \ET_\CC \), \ie
-    \[
-        \ET_\CC \vdash ( \mkvsCOPS_i, \viCL ) \csat \fp : (\mkvsCOPS_{i+1},\vienvCOPS_{i+1}(\cl) )
-    \]
-\end{theorem}
-\begin{proof}
-    We prove this by induction on the length of trace \( i \).
-    We introduce two invariants \( I_1, I_2 \).
-    The \( I_1 \) states that for any view \( \vi \), if the view \( \vi \) includes a version, 
-    it also includes all the version it depends on, that is,
-    \[
-        \begin{array}{@{}l@{}}
-        \fora{\cl, \vi,\key,\key',j,m,\dep} \\
-        \quad \vi = \func{co-dom}[\vienvCOPS_i] \land j \in \viCL(\key') 
-        \land (\stub,\stub,\stub,\dep) = \mkvsCOPS_i(\key,j)
-        \land (\key',\wtOf(\mkvsCOPS_i(\key',m))) \in \dep \\
-        \qquad \implies m \in \vi(\key')
-        \end{array}
-    \]
-    The \( I_2 \) states that for any transaction \( \txid \), 
-    \( \depOf[\mkvsCOPS_i,\txid] \) includes transactions that \( \txid \) depends on
-    with respect to \( (\SO \cup \WR) \).
-    \[
-        \begin{array}{@{}l@{}}
-        \fora{\txid,\key,j} 
-        \txid = \wtOf[\mkvsCOPS_i(\key,j)]
-        \implies 
-        ((\SO \cup \WR)^{-1})^*(\txid) \subseteq \depOf[\mkvsCOPS_i(\key,j)]
-        \end{array}
-    \]
-    if the view \( \vi \) includes a version, 
-    Since \( \ET_\CC = \ET_\MR \cap \ET_\RYW \cap \allowed[\SO \cup \WR] \), we prove the three constraints separately.
-    In each case we need to consider \rl{Put}, \rl{GetTrans} and \rl{Sync}
-    Let \( \txid \) be the new transaction committed to replica \( \repl \) by the client \( \cl \).
-    Let \( \viCL \) and \( \viCL' \) be the client views before and after respectively,
-    and \( \viREPL \) and \( \viREPL' \) be the replica views before and after respectively.
-    \begin{itemize}
-        \item \( \ET_\MR \). 
-            For \( \rl{Put} \), it is easy to see \( \viCL \viewleq \viCL' \) and \( \viREPL \viewleq \viREPL' \).
-            For \( \rl{GetTrans} \), it is known that \( \viREPL = \viREPL' \). 
-            In the premiss of \( \rl{GetTrans} \),
-            it fetches a version, \( m_i \)-\emph{th} version, from the replica for each key \( \key_i \) and adds all dependencies, which are associated with version, in the client view.
-            This means \( \viCL \viewleq \viCL' \).
+The second phase re-fetches the version \( \copsver \) for each key \( \key \) 
+contained in the lower-bound, if the version that was read in the first phase is older than \( \copsver \),
+which is captured by \cref{line:cops-final-read} in \cref{lst:cops-read}.
+We model this second phase by \rCOPSRefetch rule:
+it re-fetches the version contained in the lower-bound \( \copsdepset \)
+if the version read in the first phase, that is, \( \copsverlist\Proj{\idx} \),
+is older than the version contained in the lower-bound, that is, \( copsdepset\Proj{\idx} \).
 
-        \item \( \ET_\RYW \). 
-            By \( \ET_\MR \), it suffices to only consider 
-            if the newly committed transaction is included in the view.
-            We only need to consider \rl{Put}.
-            The new views \( \viCL' = \viCL\rmto{\key}{j} \) and \( \viREPL' = \viREPL\rmto{\key}{j} \)
-            where the new version \( \mkvsCOPS_{i+1}(\key,j)\) is written by the client \( \cl \).
-            
-        \item \( \allowed[\SO \cup \WR] \).
-            Given the invariants \( I_1 \) and \( I_2 \),
-            let consider \rl{Put}, \rl{GetTrans} and \rl{Sync}.
-            \begin{itemize}
-                \item \rl{Put}.
-                By invariants \( I_1 \) and \( I_2 \),
-                we know \( \viCL = \getView[\mkvsCOPS_i,((\SO \cup \WR)^{-1})^{*}(\Tx[\mkvsCOPS_i,\viCL])]\).
-                Now we need to re-establish the \( I_1 \) for the new views \( \viCL' \) and \( \vienvCOPS' \) and \( I_2 \) for the new transaction \( \txid \).
-                \begin{itemize}
-                    \item Since it is a single-write transaction,
-                    assume it appends \( j\)-\emph{th} version to key \( \key \).
-                    This means the new client views \( \viCL' = \viCL\rmto{\key}{ \viCL(\key) \cup \Set{j} } \),
-                    Let \( \dep \) be the dependency for the new version, \ie \( \dep = \depOf(\mkvsCOPS_{i+1}(\key,j)) \).
-                    By the premiss, the \( \dep \) includes all versions included in \( \viCL \).
-                    This means for any key \( \key' \) and index \( m \):
-                    \[
-                        (\key',\wtOf[\mkvsCOPS_i(\key',m)]) \in \dep \implies m \in \viCL'(\key')
-                    \]
-                    Note that \( \viCL' \viewleq \viREPL' \),
-                    therefore the invariant \( I_1 \) holds.
-                    \item 
-                    It is enough to only consider the newly committed transaction \( \txid \).
-                    Since it is a write transaction,
-                    let assume any transaction \( \txid' \) such that \( \txid' \toEDGE{\SO} \txid \).
-                    By \( \MR \) and \( \RYW \), transaction \( \txid' \) is in the view \( \viCL \),
-                    that is, for some \(\key',m \):
-                    \[
-                        \txid' \in \Set{\wtOf[\mkvsCOPS_i(\key',m)]} \cup \rsOf[\mkvsCOPS_i(\key',m)] \implies m \in \viCL(\key')
-                    \]
-                    Given the definition of dependencies the new version written by \( \txid \):
-                    \[ 
-                        \dep = \Set{(\key'', \txid'')}[
-                            \exsts{z} z \in \viCL(\key'') \land \txid'' = \wtOf(\mkvsCOPS_i(\key'', z)) \lor (\key'', \txid'') \in \depOf[\mkvsCOPS_i(\key'', z)] 
-                        ]
-                    \] 
-                    it follows \( (\key',m) \in \dep \).
-                    By \ih of invariant \( I_2 \), we know that  \( \dep \) is close with respect to \( \SO \cup \WR \).
-                    Thus we know for the new transaction \( ((\SO \cup \WR)^{-1})^*(\txid) \subseteq \depOf[\mkvsCOPS_i,\txid] \),
-                    that is, we re-establish invariant for \( i+1 \).
-                \end{itemize}
-                \item 
-                For \rl{GetTrans}, the client \( \cl \) commits a read-only transaction.
-                By the premiss of the rule, the client will pick a new view \( \viCL' \)
-                such that \( \vi_0 = \viCL \viewleq \viCL' = \vi_j \) and:
-                \[
-                    {\begin{array}{@{}l@{}}
-                        \mathsf{for} \ z \ \mathsf{in} \Set{1, \dots, j} \\
-                        \quad m_z \in \viREPL(\key_z) \\
-                        \quad \vi'_z = \vi_{z-1}\rmto{\key_z}{\vi_{z-1}(\key_z) \cup \Set{m_z}}  \\
-                        \quad \vi_z = \lambda \key \ldotp \vi'_z(\key) \cup \Set{x}[(\key,\wtOf[\mkvsCOPS(\key,x)]) \in \depOf[\mkvsCOPS(\key_z,m_z)]]  \\
-                    \end{array}}
-                \]
-                We prove each iteration preserves the invariant \( I_1 \).
-                Suppose the invariants holds after \((z-1)\)-\emph{th}, let consider \(z\)-\emph{th}.
-                By construction, \( \vi'_z = \vi_{z-1}\rmto{\key_z}{\vi_{z-1}(\key_z) \cup \Set{m_z}} \),
-                the \( m_z \) version of some key \( \key_z \) is included in \( \vi'_z \).
-                Then all the versions \( \mkvsCOPS_i(\key_z, m_z) \) is is included in \( \vi_z \) as 
-                \[
-                     \vi_z = \lambda \key \ldotp \vi'_z(\key) \cup \Set{x}[(\key,\wtOf[\mkvsCOPS(\key,x)]) \in \depOf[\mkvsCOPS(\key_z,m_z)]] 
-                \]
-                This implies \( I_1 \) for \( \vi_z \).
-                For \( I_2 \), we apply \ih of invariant \( I_2 \),
-                since the new transaction is a read-only transaction.
-            \item For \rl{Sync}, the premiss of the rule implies that \( I_1 \) holds under the new replica view \( \viREPL' \).
-            For \( I_2 \), we apply \ih of invariant \( I_2 \).
-            \end{itemize}
-    \end{itemize}
-\end{proof}
+Last, the replica returns the list of versions for the key set \( \keyset \)
+to the client and the client must include the versions in its context, 
+which is captured by \cref{line:cops-read-update-ctx}
+and modelled by \rCOPSFinishRead rule.
+
+All the rules for read and write are lift to a program level 
+standard interleaving semantics presented in \cref{fig:cops-semantics-program}:
+\rCOPSClient rule models that a client takes steps in turn.
+
+\input{cops/fig-program}
+
+\paragraph{Synchronisation Between Replicas}
+Replicas broadcast synchronisation messages for every new version that directly comes from client.
+Since versions are ordered and messages are assumed to be eventually delivered,
+this guarantees COPS satisfies eventual consistency, that is,
+all replicas eventually have the same state.
+Replica maintains queue for all new versions to be broadcasted.
+Once a replica receives a message with a new version \( \copsver \),
+it accepts the version only if all the versions that \(\copsver \) depends on exist in the replica.
+Otherwise, the replica waits the condition to be satisfied.
+This is captured by \cref{lst:cops-receive-msg}
+and \rCOPSSync rule in \cref{fig:cops-semantics-program} models the synchronisation.
+
+\begin{definition}[COPS Traces]
+The set of \emph{COPS traces} \( \COPSTraces \ni \copstrc \) is defined by 
+\( \COPSTraces \TypeDef \Set{\copsconfinit,\copsprog \ToCOPSProg*{\;}^* \copsconf,\copsprog' | 
+        \copsconfinit \in \COPSConfInits \land \copsprog, \copsprog' \in \COPSPrograms } \).
+Two traces \( \copstrc, \copstrc' \) are equivalent, written \( \copstrc \copstrceq \copstrc' \),
+if an only if, the last configurations are equal,
+\( \copstrc \copstrceq \copstrc' \PredDef \LastConf(\copstrc) = \LastConf(\copstrc') \).
+\end{definition}
+
+Note that a COPS trace has no unfinished read operation.
+Two COPS traces are equivalent if and only if the last configurations match.
 

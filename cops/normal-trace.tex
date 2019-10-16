@@ -1,0 +1,416 @@
+A normal COPS trace is a trace that: \begin{enumerate*}
+\item single-write transactions agree on the order over their the transaction identifiers (\cref{equ:cops-normal-trace-write-order});
+\item the second phase of multiple-read transactions cannot be interleaved (\cref{equ:cops-normal-trace-second-read}).
+\end{enumerate*}
+
+\begin{definition}[Normal COPS traces]
+\label{def:cops-normal-trace}
+A COPS trace \( \copstrc \in \COPSTraces \) is in the \emph{normal form} or a \emph{normal COPS trace}, 
+written \( \COPSNormalTrace(\copstrc) \), if and only if,
+for any clients \( cl, cl'\), replicas \( \repl, \repl'\), keys \( \key, \key' \)
+values \( \val,\val' \), transaction identifiers \( \copstxid, \copstxid' \),
+contexts \( \copsctx, \copsctx' \) and labels \( \lb,\lb'\),
+\begin{Formulae}
+& \begin{Formula}
+    \copstrc = \ToCOPSProg{\cdots | \lb -> \cdots | \lb' -> \cdots }
+    \land \lb = \lbCOPSWrite[\cl](\repl){\opW(\key,\val), \copstxid, \copsctx }
+    \\ {} \land \lb' = \lbCOPSWrite[\cl'](\repl'){\opW(\key',\val'), \copstxid', \copsctx' }
+    \implies \copstxid \copstxidleq  \copstxid',
+\label{equ:cops-normal-trace-write-order}
+\end{Formula}
+\\ & \begin{Formula}
+    \copstrc = \ToCOPSProg{\cdots | \lb -> \stub | \lb' -> \cdots }
+    \land \lb = \lbCOPSRefetch[\cl](\repl){\opW(\key,\val), \copstxid, \copsctx }
+    \\ \implies \lb' = \lbCOPSRefetch{\opR(\key',\val'), \copstxid', \copsctx' }
+    \lor \lb' = \lbCOPSFinishRead{\copsctx}.
+\label{equ:cops-normal-trace-second-read}
+\end{Formula}
+\end{Formulae}
+\end{definition}
+
+The normal COPS trace is the key for proving that COPS satisfies causal consistency against our semantics.
+In \(\rCOPSWrite\) rule, the new version is inserted into 
+the list of the key via \( \COPSInsert \) function that ensures the order of the new list.
+However, by \cref{equ:cops-normal-trace-write-order}, it is enough to append the new version and 
+it guarantees to preserve the order (\cref{prop:cops-append-write}).
+The second property, \cref{equ:cops-normal-trace-second-read}, ensures that 
+any multiple-read transaction can be treated as an atomic step:
+only the versions that are staged in the second phase (\(\rCOPSRefetch\))
+will be returned to the client, 
+thus it is enough to ensure no interleaving of the second phase.
+Every COPS trace can be transfer by swapping steps into an equivalent normal COPS trace.
+
+\begin{theorem}[Equivalent normal COPS traces]
+Given a COPS trace \( \copstrc \in \COPSTraces \),
+there is an equivalent normal COPS trace \( \copstrc^* \),
+that is, \( \copstrc \copstrceq \copstrc^* \land \COPSNormalTrace(\copstrc^*) \).
+\end{theorem}
+\begin{proof}
+let \( \copstrc^* = \copstrc \) initially.
+We perform the following equivalent transformation until \( \copstrc^* \) is a normal COPS trace.
+First, we move every re-fetch operation (in the second phase) to the right, that is, delaying the re-fetch,
+until the operation is followed by the return of the transaction or other re-fetch operation from the same transaction.
+Second, we move the out-of-order write operation to the left.
+\begin{enumerate}
+\item{\textbf{Right mover: second phase of reads}.} \label{item:cops-second-read}
+    Take the first read return step, \( \lbCOPSFinishRead{\copsctx} \),
+    with a re-fetch operation, \(\lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsctx' }\),  that 
+    is interleaved by other client, that is,
+    \begin{Formulae}*
+    \begin{Formula}
+        \copstrc^* = \ToCOPSProg{\copstrc' | \stub 
+            -> \stub | \lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsctx' }
+            -> \stub | \lb -> \copstrc'' | \lbCOPSFinishRead{\copsctx} -> \copstrc''' }
+        \land \lb \neq \lbCOPSRefetch{\opR(\key',\val'), \copstxid', \copsctx'' }
+    \end{Formula}
+    \end{Formulae}
+    for three trace segments \( \copstrc', \copstrc'', \copstrc''' \).
+    The \( \lb \) can be moved left:
+    \begin{Formulae}*
+    \begin{Formula}
+        \begin{Bracketed} \ToCOPSProg{\copstrc' | \stub 
+            -> \stub | \lb
+            -> \stub | \lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsctx' } 
+            -> \copstrc'' | \lbCOPSFinishRead{\copsctx} -> \copstrc''' } .
+        \end{Bracketed} \copstrceq \copstrc^*
+    \end{Formula}
+    \end{Formulae}
+    If the label \( \lb \) is not a write operation, 
+    it is easy to see that \( \lb \) and the re-fetch operation can be swapped.
+    If the label \( \lb \) is a write operation, it must not interfere the re-fetch operation.
+    This is because any re-fetch operations can only read versions written before the lower-bound computation step.
+    The full proof of the right mover is given in \cref{lem:cops-no-interleave-second-read}
+    on \pageref{lem:cops-no-interleave-second-read}.
+
+    Assign the new trace to \( \copstrc^* \) and go back to \cref{item:cops-second-read}.
+    There are finite number of steps in a trace 
+    and for each iteration, a re-fetch label moves closer to its read return label,
+    thus \cref{item:cops-second-read} must terminate.
+    The final trace \( \copstrc^* \) satisfies \cref{equ:cops-normal-trace-second-read}.
+
+\item{\textbf{Left mover: out-of-order writes}.} \label{item:cops-write}
+    Given a trace \( \copstrc^* \) satisfying \cref{equ:cops-normal-trace-second-read},
+    take two out-of-order write operations with the shortest distance in between,
+    \( \lbCOPSWrite[\cl](\repl){\opW(\key,\val), \copstxid, \copsctx } \) and
+    \( \lbCOPSWrite[\cl'](\repl'){\opW(\key',\val'), \copstxid', \copsctx' } \),
+    and the operation immediately before the latter write, \( \lb \),
+    that is,
+    \begin{Formulae}*
+    \begin{Formula}
+        \copstrc^* = \ToCOPSProg{\copstrc' | \stub 
+            -> \stub | \lbCOPSWrite[\cl](\repl){\opW(\key,\val), \copstxid, \copsctx }
+            -> \copstrc'' | \lb
+            -> \stub | \lbCOPSWrite[\cl'](\repl'){\opW(\key',\val'), \copstxid', \copsctx' }
+            -> \copstrc''' }
+        \land \copstxid' \copstxidleq \copstxid ,
+    \end{Formula}
+    \end{Formulae}
+    where all the free variables are universally quantified.
+    Note that there is no other out-of-order in the trace segment \( \copstrc'' \).
+    Let consider the step \( \lb \):
+    \begin{enumerate}
+    \item if the step is not a read or write operation, 
+    the step can be delayed, that is, the out-of-order write operation can be moved to the left;
+    \item if the step is a write operation,
+    by \cref{prop:cops-inv} it must come from a client that differs from \( \cl' \),
+    thus it is safe to move the out-of-order write operation to the left; and 
+    \item  if the step is a read operation, 
+    it is trivial that 
+    the read cannot depend on the out-of-order write operation,
+    thus it is safe to move the out-of-order write operation to the left.
+    \end{enumerate}
+    The full proof of the left mover is given in \cref{lem:cops-write-left-move} on \pageref{lem:cops-write-left-move}.
+
+    Continue to apply the left mover until the two write operations are in order:
+    \[
+        \begin{Bracketed} \ToCOPSProg{\copstrc' | \stub 
+            -> \stub | \lbCOPSWrite[\cl'](\repl'){\opW(\key',\val'), \copstxid', \copsctx' }
+            -> \stub | \lbCOPSWrite[\cl](\repl){\opW(\key,\val), \copstxid, \copsctx } 
+            -> {\copstrc''}^* | \lb
+            -> \copstrc''' } \end{Bracketed} \copstrceq \copstrc^*
+    \]
+    for some new trace segment \( {\copstrc''}^* \) that
+    contains the same operations as in \( \copstrc''\),
+    however, the states must incorporate the effect of 
+    \( \lbCOPSWrite[\cl'](\repl'){\opW(\key',\val'), \copstxid', \copsctx' } \).
+    Assign the new trace to \( \copstrc^* \) and go back to \cref{item:cops-write}.
+    For each iteration, two out-of-order write operations move closer to each other 
+    and eventually swap position;
+    there are finite number of steps in a trace, thus finite number of out-of-order write operations.
+    This means \cref{item:cops-write} must terminate.
+    The final trace \( \copstrc^* \) satisfies \cref{equ:cops-normal-trace-write-order}.
+\end{enumerate}
+After \cref{item:cops-second-read,item:cops-write}, 
+the trace \( \copstrc^*\) is in the normal form as \( \COPSNormalTrace(\copstrc^*) \).
+\end{proof} 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{theorem}[Right mover: re-fetch operations]
+\label{lem:cops-no-interleave-second-read}
+Assume a COPS trace \( \copstrc \in \COPSTraces \) that
+contains a re-fetch operation, \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsctx }, 
+that is interleaved by other operation, \( \lb \):
+\[
+\copstrc = \ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog | \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsctx } 
+    ->  \cops' | \copsctxenv' | \copsrunprog'
+    | \lb -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' } ,
+\]
+and
+\[
+    \lb \neq \lbCOPSRefetch{\opR(\key',\val'), \copstxid',\copsctx' }  
+    \land \lb \neq \lbCOPSFinishRead{\copsctx}
+\]
+where all other free variables are universally quantified.
+Then the re-fetch operation can be moved to the right, that is,
+\begin{Formulae}
+\begin{Formula}
+\begin{Bracketed} 
+\ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog | \lb  
+    ->  \stub | \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsctx }
+    -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' } 
+\end{Bracketed} \copstrceq \copstrc .
+\label{equ:cops-interleaving-left-move}
+\end{Formula}
+\end{Formulae}
+\end{theorem}
+\begin{proof}
+By \(\rCOPSRefetch\) in \cref{fig:cops-semantics-read}, any read from the second phase
+does not change the store nor the context, thus
+\[
+\copstrc = \ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog | \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsctx } 
+    ->  \cops | \copsctxenv' | \copsrunprog'
+    | \lb -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' }.
+\]
+We perform case analysis on the label \( \lb \).
+\begin{enumerate}
+\Case{\( \lbCOPSWrite[\cl'](\repl'){\opW(\key',\val'), \copstxid', \copsctx' } \)}
+    We immediately know \( \cl \neq \cl' \).
+    If \( \repl \neq \repl' \), \cref{equ:cops-interleaving-left-move} trivially holds.
+    Consider \( \repl = \repl' \).
+    Let \( \copskvs = \cops(\repl) \) and \( \copskvs'' = \cops''(\repl )\).
+    It is easy to see that \( \copskvs \copskvsleq \copskvs'' \),
+    thus by \cref{lem:cops-kvs-leq}, we have 
+    \[
+    \ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog |  \lb
+        ->  \cops'' | \copsctxenv'' | \copsrunprog^*
+        | \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsctx }
+        -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' }.
+    \]
+    for some program \( \copsrunprog^*\); this implies \cref{equ:cops-interleaving-left-move}.
+\Cases{\( \lbCOPSOptRead[\cl'](\repl'){\opR(\key',\val'), \copstxid', \copsctx'} \)
+        , \( \lbCOPSOptRead[\cl'](\repl'){\opR(\key',\val'), \copstxid', \copsctx'} \)
+        , \( \lbCOPSRefetch[\cl'](\repl'){\opR(\key',\val'), \copstxid', \copsctx' }\)
+        , \( \lbCOPSPri[\cl'](\repl') \)
+        and \( \lbCOPSBound[\cl'](\repl') \) }
+    First it is easy to see that \( \cl \neq \cl'\);
+    and these steps do not change the states of the database nor the contexts.
+    Therefore \cref{equ:cops-interleaving-left-move} holds for these steps.
+\Case{\(\lbCOPSFinishRead[\cl'](\repl'){\copsctx} \) }
+    By \rCOPSFinishRead in \cref{fig:cops-semantics-read}, it is easy to see that \( \cl \neq \cl'\);
+    and this step does not change the states of the database.
+    Because \( \cl \neq \cl' \) the new context for \( \cl' \)
+    will not affect the \( \cl \), thus 
+    \[
+    \ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog |  \lb
+        ->  \cops | \copsctxenv'' | \copsrunprog^* | \lbCOPSFinishRead[\cl'](\repl'){\copsctx}
+        -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' },
+    \]
+    which implies \cref{equ:cops-interleaving-left-move}.
+\Case{\(\lbCOPSSync(\repl'){\copstxid} \) }
+    Let \( \copskvs = \cops(\repl) \) and \( \copskvs'' = \cops''(\repl )\).
+    By \rCOPSSync in \cref{fig:cops-semantics-program},
+    It is easy to see that \( \copskvs \copskvsleq \copskvs'' \),
+    \( \copsctxenv' = \copsctxenv'' \) and \( \copsrunprog' = \copsrunprog'' \);
+    thus by \cref{lem:cops-kvs-leq} and the fact that \rCOPSSync does not rely on any context nor program,
+    we have 
+    \[
+    \ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog |  \lb
+        ->  \cops'' | \copsctxenv | \copsrunprog
+        | \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsctx }
+        -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' },
+    \]
+    which implies \cref{equ:cops-interleaving-left-move}. 
+\end{enumerate}
+\end{proof}
+
+Both replicas and clients are monotonic in that:
+\begin{enumerate*}
+\item every replica contains increasingly more versions and the local time must tick forward;
+and \item similarly, every client context contains increasingly more versions.
+\end{enumerate*}
+This is a useful property that allows us to swap out-of-order write operations.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{proposition}[Monotonicity of COPS replica and client]
+\label{prop:cops-inv}
+For any COPS databases \( \cops, \cops'\), client context environments \( \copsctxenv, \copsctxenv' \),
+programs \( \copsrunprog, \copsrunprog' \) and label \( \lb \),
+\begin{Formulae}
+\begin{Formula}
+    \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \stub | * -> \cops' | \copsctxenv' | \copsrunprog' }
+    \\ \implies \Forall{\repl \in \Dom(\cops)} \cops(\repl)\Proj{0} \copskvsleq \cops'(\repl)\Proj{0}
+    \land \cops(\repl)\Proj{1} \leq \cops'(\repl)\Proj{1} 
+    \\ {} \land \Forall{\cl \in \Dom(\copsctxenv)} \copsctxenv(\cl)\Proj{0} \subseteq  \copsctxenv'(\cl)\Proj{0} .
+\label{equ:cops-replica-inv}
+\end{Formula}
+\end{Formulae}
+\end{proposition}
+\begin{proof}
+We prove by induction on the length of the trace \( n \).
+\CaseBase{\(n = 0\)}
+    \Cref{equ:cops-replica-inv} is trivially true as \( \cops = \cops' \) and \( \copsctxenv = copsctxenv' \).
+\CaseBase{\(n > 0\)}
+    Assume
+    \(
+        \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \stub | (n-1)
+        -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb
+        -> \cops' | \copsctxenv' | \copsrunprog' }.
+    \)
+    By \ih, we know \( \cops(\repl)\Proj{0} \copskvsleq \cops'(\repl)\Proj{0} \) 
+    and \( \cops(\repl)\Proj{1} \leq \cops'(\repl)\Proj{1} \)  for \( \repl \in \Dom(\cops) \).
+    Consider the label \( \lb \).
+    If \( \lb = \lbCOPSWrite[cl](\repl){\opW(\key,\val), \copstxid, \copsctx } \),
+    by \rCOPSWrite, we have \( \cops' = \cops''\UpdateFunc{{\repl} -> \Tuple{\copskvs^*, \cops''(\repl)\Proj{1} + 1}}\),
+    for \( \copskvs^* = \COPSInsert(\cops''(\repl)\Proj{0},\key,\copsver) \) for a version \( \copsver \)
+    and, thus \cref{equ:cops-replica-inv}.
+    If \( \lb = \lbCOPSSync(\repl){\copstxid} \),
+    by \rCOPSSync we have \( \cops' = \cops''\UpdateFunc{\repl -> \Tuple{\copskvs^*, m } }\) such that
+    \( m =\Max(\cops''(\repl)\Proj{1},m^*) \) where \( \copstxid = \copstxid[\cl^*][\repl^*](m^*)\), 
+    and \( \copskvs' = \COPSInsert(\cops''(\repl)\Proj{0},\key,\copsver) \) for a version \( \copsver \),
+    and, thus \cref{equ:cops-replica-inv}.
+    For the rest cases, they do not change any COPS store and local time;
+    by \ih, \cref{equ:cops-replica-inv} holds. 
+\end{proof}
+
+%A write operation is out-of-order, 
+%if in COPS trace there is any write operation (that may from different a client on different a replica),
+
+\begin{theorem}[Left mover: out-of-order write]
+\label{lem:cops-write-left-move}
+Assume a COPS trace \( \copstrc \in \COPSTraces \) such that
+\[
+\copstrc = \ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog | \lb ->  \cops' | \copsctxenv' | \copsrunprog'
+   | \lbCOPSWrite{\opW(\key,\val), \copstxid,\copsctx } -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' }
+\]
+for a write operation \( \opW(\key,\val) \) from a client \( \cl \) with context \( \copsctx \)
+and a replica \( \repl \).
+If the step, \( \lb \), before the write operation satisfies:
+\begin{Formulae}
+\begin{Formula}
+\begin{array}{@{}l@{}}
+    \left(
+    \lb = \lbCOPSWrite[\cl'](\repl'){\opW(\key',\val'), \copstxid', \copsctx' } \land (\repl \neq \repl')
+    \right)
+    \\ {} \lor
+    \left(
+    \lb = \lbCOPSOptRead[\cl'](\repl'){\opR(\key',\val'), \copstxid', \copsctx'} 
+    \land ( \repl = \repl' 
+            \land \key' = \key 
+            \implies \copstxid \copstxidleq \copstxid' )
+    \right) 
+    \\ {} \lor \lb = \lbCOPSRefetch[\cl'](\repl'){\opR(\key',\val'), \copstxid', \copsctx' }
+    \lor \lb = \lbCOPSPri[\cl'](\repl') 
+    \\ {} \lor \lb = \lbCOPSBound[\cl'](\repl') 
+    \lor \lb = \lbCOPSFinishRead[\cl'](\repl'){\copsctx'}
+    \lor \lb = \lbCOPSSync(\repl'){\copstxid'},
+\end{array}
+\label{equ:cops-label-property-for-write-left-move}
+\end{Formula}
+\end{Formulae}
+then the write operation can be moved left, that is,
+\begin{Formulae}
+\begin{Formula}
+\begin{Bracketed} 
+ \ToCOPSProg{ \copstrc' | \stub -> \cops | \copsctxenv | \copsrunprog | \lbCOPSWrite{\opW(\key,\val), \copstxid,\copsctx } -> \stub
+    | \lb -> \cops'' | \copsctxenv'' | \copsrunprog'' | \lb' -> \copstrc'' }
+\end{Bracketed} \copstrceq \copstrc .
+\label{equ:cops-write-left-move}
+\end{Formula}
+\end{Formulae}
+\end{theorem}
+\begin{proof}
+Note that \( \lb \) are all annotated with replica \( \repl' \).
+If \(\repl \neq \repl' \) 
+by \rCOPSClient in \cref{fig:cops-semantics-program} \cref{equ:cops-write-left-move} trivially holds.
+Now consider \( \repl = \repl' \).
+We prove \cref{equ:cops-write-left-move} by case analysis on label \( \lb \).
+\begin{enumerate}
+%\Case{\( \lbCOPSWrite[\cl'](\repl){\opW(\key',\val'), \copstxid', \copsctx' } \)}
+    %Given \cref{prop:cops-inv}, there is nothing to prove since the hypothesis is false,
+    %since \( \repl = \repl \implies \copstxid' \copstxidleq \copstxid \).
+\Case{\( \lbCOPSOptRead[\cl'](\repl){\opR(\key',\val'), \copstxid', \copsctx'} \)}
+    For this case, \( \cl \) and \( \cl' \) must be two distinct clients.
+    If \( \key \neq \key' \), \cref{equ:cops-write-left-move} trivially holds.
+    Consider \( \key = \key' \) and \( \copstxid \copstxidleq \copstxid' \) 
+    Let \( \copsver = (\val,\copstxid, \copsctx ) \) and \( \copsver' = (\val',\copstxid', \copsctx' ) \).
+    Let \( \copskvs = \cops(\repl) \) and \( \copskvs'' = \cops''(\repl) \).
+    By \rCOPSOptRead in \cref{fig:cops-semantics-read}, \( \copskvs = \cops(\repl) = \cops'(\repl) \),
+    and \( \copsver' = \copskvs(\key, \Abs{\copskvs(\key)} - 1 )\).
+    By \rCOPSWrite in \cref{fig:cops-semantics-write}, we know \( \copskvs'' = \COPSInsert(\copskvs,\key,\copsver' ) \);
+    since \( \copstxid \copstxidleq \copstxid' \), the version \( \copsver \)
+    is inserted in the middle of \( \copskvs(\key) \).
+    Therefore we know that the last version of \( \copskvs''(\key) \) is still \( \copsver' \),
+    that is, \( \copsver' = \copskvs''(\key, \Abs{\copskvs''(\key)} - 1 ) \).
+    This means that the write operation does not interfere with the previous optimistic read,
+    thus \cref{equ:cops-write-left-move} holds.
+\Case{\(\lbCOPSOptRead[\cl'](\repl){\opR(\key',\val'), \copstxid', \copsctx' } \)}
+    For this case, \( \cl \) and \( \cl' \) must be two distinct clients.
+    Let \( \copsver = (\val,\copstxid, \copsctx ) \) and \( \copsver' = (\val',\copstxid', \copsctx' ) \).
+    Let \( \copskvs = \cops(\repl) \) and \( \copskvs'' = \cops''(\repl) \).
+    By \rCOPSRefetch in \cref{fig:cops-semantics-read}, \( \copskvs = \cops(\repl) = \cops'(\repl) \); 
+    and by \rCOPSWrite in \cref{fig:cops-semantics-write}, \( \copskvs'' = \COPSInsert(\copskvs,\key',\copsver' ) \).
+    It is easy to see that \( \copskvs \copskvsleq \copskvs'' \) defined in \cref{lem:cops-kvs-leq}.
+    By \cref{lem:cops-refetch-independence} we know that \cref{equ:cops-write-left-move} holds.
+\Cases{\(\lbCOPSPri[\cl'](\repl)\), \(\lbCOPSBound[\cl'](\repl)\) and  \(\lbCOPSFinishRead[\cl'](\repl){\copsctx'}\)}
+    Given the rules presented in \cref{fig:cops-semantics-read}, these steps are local to the client \( \cl' \)
+    without any interaction to the key-value store; thus \cref{equ:cops-write-left-move} holds. 
+\Case{\(\lbCOPSSync{\copstxid'}\)}
+    A new version \( \copsver' \) indexed by \( \copstxid' \) arrives to the replica \( \repl \).
+    Let \( \copsver = (\val,\copstxid, \copsctx ) \).
+    Let \( \copskvs = \cops(\repl) \), \( \copskvs' = \cops'(\repl) \) and \( \copskvs'' = \cops''(\repl) \).
+    By \rCOPSSync in \cref{fig:cops-semantics-program}, we know \( \copskvs' = \COPSInsert(\copskvs,\key',\copsver' ) \),
+    \( \copskvs'' = \COPSInsert(\copskvs',\key,\copsver ) \) and \( \copstxid \neq \copstxid'\).
+    By the definition  of \( \COPSInsert\), there exists \( \copskvs^*\) such that
+    \begin{Formulae}*
+    \begin{Formula}
+    \copskvs^* = \COPSInsert(\copskvs,\key,\copsver ) \land \copskvs'' = \COPSInsert(\copskvs^*,\key,\copsver' ),
+    \end{Formula}
+    \end{Formulae}
+    and therefore, a new cops database \( \cops^* \) such that
+    \[
+    \cops^* = \cops\UpdateFunc{\repl -> \copskvs^*}  \land \cops'' = \cops^*\UpdateFunc{\repl -> \copskvs''}.
+    \]
+    The rule \rCOPSSync does not depend nor change the context environment, thus we have the proof for
+    \cref{equ:cops-write-left-move}. 
+\end{enumerate}
+\end{proof}
+
+\begin{lemma}[Re-fetching version on a larger COPS store]
+\label{lem:cops-kvs-leq}
+\label{lem:cops-refetch-independence}
+Given two COPS stores \( \copskvs, \copskvs' \) such \( \copskvs \copskvsleq \copskvs' \), then 
+\[
+\begin{multlined}
+    \ToCOPSCmd{ \copskvs | \copsctx | \ts 
+        | \pcopsread( \keyset ) : (\copsverlist, \copsdepset, \copsverlist') | \lbCOPSRefetch{\opR(\key_i, \val_i), \copstxid_i, \copsdep_i} ->
+    \copskvs | \copsctx | \ts | \pcopsread( \keyset ) : (\copsverlist, \copsdepset, \copsverlist'')  }
+    \\ \implies
+    \ToCOPSCmd{ \copskvs' | \copsctx | \ts 
+        | \pcopsread( \keyset ) : (\copsverlist, \copsdepset, \copsverlist') | \lbCOPSRefetch{\opR(\key_i, \val_i), \copstxid_i, \copsdep_i} ->
+    \copskvs' | \copsctx | \ts | \pcopsread( \keyset ) : (\copsverlist, \copsdepset, \copsverlist'')  }
+\end{multlined}
+\]
+\end{lemma}
+\begin{proof}
+Depending on \( \copsverlist\Proj{\idx} \), we have two possible cases.
+\begin{enumerate}
+\Case{\( \WtOf(\copsverlist\Proj{\idx}) \copstxidleq \copstxid_\idx \)}
+    For this case, there exists an version \( \copskvs(\key_\idx,m) = (\val_\idx, \copstxid_\idx, \copsdep_\idx) \) for some index \( m \).
+    Given a new store \( \copskvs' \) such that \( \copskvs \copskvsleq \copskvs' \), this version must be also included in  \( \copskvs' \),
+    thus \( \copskvs'(\key_\idx,m') = (\val_\idx, \copstxid_\idx, \copsdep_\idx ) \) for some \( m' \); therefore we have the proof.
+\Case{\( \WtOf(\copsverlist\Proj{\idx}) = \copstxid_\idx \)}
+    For this case, the state of \( \copskvs \) is irrelevant. 
+\end{enumerate}
+\end{proof}
