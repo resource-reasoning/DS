@@ -71,15 +71,15 @@ This weak behaviour is known as the \emph{lost update} anomaly, which
 is  allowed under the consistency model called {\em causal consistency} \cite{cops,wren,redblue}.
 
 \input{lu-kvstores.tex}
-\mypar{Centralised Operational Semantics}
 
+\mypar{Centralised Operational Semantics}
 A well-known declarative approach for providing general reasoning
 about clients of distributed kv-stores is to use  execution 
 graphs~\cite{adya-icde,adya,framework-concur,ev_transactions},
 where nodes are atomic transactions and edges describe the
 known dependencies between transactions. The graphs capture the
 behaviour of the whole program, with different consistency models
-corresponding to different sets of axioms constraining the graphs. 
+corresponding to different sets of axioms ruling out the invalid graphs. 
 However, execution graphs provide little information about how the 
 state of a kv-store evolves throughout the execution of a program.
 By contrast, we provide an interleaving operational semantics based on an
@@ -109,13 +109,6 @@ and that the version \emph{reader set} is empty (no transaction has read this ve
 \Cref{fig:counter_kv_initial} depicts this initial kv-store, with the version
 represented as a box sub-divided in three sections: the value \(0\);
 the writer \(t_0\); and the reader set \(\emptyset\). 
-
-
-
-
-% implementation details of the distributed kv-store and, in
-%particular, on its \emph{consistency model}.
-
 
 
 First, suppose that \(\cl_1\)  invokes \(\ctrinc\) on
@@ -173,23 +166,8 @@ to show the equivalence of our operational definitions of consistency models and
 declarative ones based on  
 execution graphs. 
 
-\mypar{General Robustness Results} 
-The first application of our operational semantics is to prove
-general robustness results for clients with respect to specific
-consistency models (\cref{sec:robustness}). 
-Using our general operational semantics, we can prove invariant properties (\eg robustness)
-of a program \(\prog\) under weak consistency models. 
-%That is, we can show that the invariants have no weaker behaviours 
-%than invariants obtained by executing the same programs under serialisability.
-That is, the invariant obtained by executing \(\prog\) under a weak consistency model can also be obtained under serialisability.
-To demonstrate this, we prove the robustness of the single
-counter library discussed above against \(\PSI\), and the robustness of a multi-counter library and the banking library of \citet{bank-example-wsi}
-against our new proposed model \(\WSI\) and all stronger models such as \(\SI\).
-The latter is done through general conditions on invariant which guarantees robustness against \( \WSI \).
-Thanks to our operational semantics, our invariant-based approaches only need to work with single program steps rather than whole program traces.
-
 \mypar{Verifying Implementation Protocols} 
-The second application of our operational
+The first application of our operational
 semantics is for showing that implementations of distributed
 kv-stores satisfy certain consistency models. 
 Kv-stores and views provide a 
@@ -204,70 +182,14 @@ and the Clock-SI protocol \citep{clocksi} for implementing a
 partitioned database satisfies snapshot isolation (\cref{sec:clock-si}). 
 
 
-\sx{
-\newpage 
-
-BELOW GOES
-
-However, the situation becomes more complicated when the kv-store contains multiple counters:  
-since each client has its own view on the kv-store, and views of clients are independent from each other, it is possible for two 
-clients to observe the increments on two distinct counters, \(\Counter(\key_1)\) and \(\Counter(\key_2)\), in different order. 
-For instance, consider the following program:
-
-\vspace{-5pt}
-{%
-\displaymathfont
-\begin{align}
-		\cl_0: 
-		 \ctrinc(\key_1) ; \ctrinc(\key_2)
-		 \;\; || \;\;  \cl_1: 
-		 \ctrread(\key_1) ; \ctrread(\key_2)
-		  \;\; || \;\;  \cl_2: 
-		 \ctrread(\key_1); \ctrread(\key_2)
-	\tag{\textsc{LF}}
-	\label{prog:LF}
-\end{align}	 
-}%
-Suppose that \(\cl_0\) executes first by incrementing \(\key_1\), \(\key_2\).
-This results in \(\key_1\) and \(\key_2\) having two versions with values \(0\) and \(1\) each. 
-Client \(\cl_1\) executes its transactions next, using a view that 
-%Let us assume that the view of \(\cl_1\) 
-contains both versions of \(\key_1\), but only 
-the initial version of \(\key_2\):  client \(\cl_1\) then reads \(1\) for \(\key_1\) and \(0\) for \(\key_2\); \ie \(\cl_1\) observes
-%When next client \(\cl_1\) executes, it thus reads \(1\) for \(\key_1\) and \(0\) for \(\key_2\); 
-%that is, 
-%from the point of view of \(\cl_1\), 
-the increment of \(\key_1\) 
-happening before the increment of \(\key_2\). 
-Finally, \(\cl_2\) executes its transactions using a view that contains both versions for \(\key_2\), but only 
-the initial version of \(\key_1\): 
-client \(\cl_2\) reads \(0\) for \(\key_1\) and \(1\) for \(\key_2\); 
-\ie \(\cl_2\)
-%that is, from the point of view of \(\cl_2\), 
-observes the increment of \(\key_2\) 
-happening before the increment of \(\key_1\). 
-This behaviour is known as the \emph{long fork} anomaly (\cref{fig:cp-disallowed}). 
-
-The long fork anomaly is disallowed under strong models, \eg serialisability (\(\SER\)) and snapshot isolation (\(\SI\)), 
-but is allowed under weaker models \eg parallel SI (\(\PSI\)) and causal consistency (\(\CC\)). 
-To capture such consistency models and rule out the long fork anomaly as a possible result 
-of \eqref{prog:LF}, we must strengthen the execution test associated with the kv-store. 
-For \(\SER\), we strengthen the execution test by ensuring that a client can execute a transaction 
-only if its view contains all versions available in the global state. 
-For SI, the candidate execution test recovers the order in which 
-updates of versions have been observed by different clients (\eg \(\cl_1\)), 
-and allows a transaction to commit only if the observations made by the committing client (\eg \(\cl_2\)) are consistent with previous clients (\ie \(\cl_1\)): we give the formal definition of this execution test  in \cref{sec:cm}.
-Under such strengthened execution tests, in the \eqref{prog:LF} example \(\cl_2\) cannot
-observe \(1\) for \(\key_2\) after observing \(0\) for \(\key_1\); 
-this is because \(\cl_1\) has already established that the increment on \(\key_2\) happens after 
-the one of \(\key_1\). 
-
-%In \cref{sec:program-analysis}, we prove that if the kv-store consists of multiple counter objects, and the execution test employed by transactions guarantees \( \SI \), then the kv-store 
-%behaves as is it were (strictly) serialisable.
-%As we demonstrate in \cref{sec:cm}, using execution tests on kv-stores, we can define all well-known consistency models (weak or strong) subject to a few basic conditions. 
-%Moreover, in \cref{sec:verify-impl} we encode two different distributed protocols using kv-stores and views: COPS \cite{cops}, 
-%a geo-replicated protocol for causal consistency, and Clock-SI \cite{clocksi}, a protocol for \(\SI\) under partitioned key-value stores.
-%Each of these protocols is verified against our definition using execution tests.
-
-\newpage 
-}
+\mypar{General Robustness Results} 
+The second application of our operational semantics is to prove
+general robustness results for clients with respect to specific consistency models (\cref{sec:robustness}). 
+Using our operational semantics, we can prove invariant properties (\eg robustness)
+of a program \(\prog\) under weak consistency models. 
+That is, the invariant obtained by executing \(\prog\) under a weak consistency model can also be obtained under serialisability.
+To demonstrate this, we prove the robustness of the single
+counter library discussed above against \(\PSI\), and the robustness of a multi-counter library and the banking library of \citet{bank-example-wsi}
+against our new proposed model \(\WSI\) and all stronger models such as \(\SI\).
+The latter is done through general conditions on invariant which guarantees robustness against \( \WSI \).
+Thanks to our operational semantics, our invariant-based approaches only need to work with single program steps rather than whole program traces.
