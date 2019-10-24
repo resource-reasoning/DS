@@ -26,38 +26,44 @@ In the appendix (\cref{sec:clock-si}), we apply the same method to verify Clock-
 COPS is a fully replicated database, with each replica storing multiple versions of each key as shown in \cref{fig:cops-after-write-transaction}. 
 Each COPS version \( \ver \)
 such as \( (\key_1,\val_1,(\txid_1,\repl_1), \emptyset) \) in \cref{fig:cops-after-write-transaction},
-contains a key ($\key_1$), a value ($\val_1$), a time-stamp ($(\txid_1, \repl_1)$) denoting
+contains a key ($\key_1$), a value ($\val_1$), a time-stamp ($\txid_1, \repl_1$) denoting
 when a client first wrote the version to the replica, 
-and a set of dependencies, written $\depOf[\ver]$ ($\emptyset$). 
-The time-stamp associated with a version $\ver$ has the form $(\txid, \repl)$, where $\repl$ identifies the replica that committed $\ver$, and $\txid$ denotes the local, real time when $\repl$ committed $\ver$. 
-Each dependency in $\depOf[\ver]$ comprises a key and the time-stamp of the version of that key on which $\ver$ directly depends.  
-COPS assumes a total order over replica identifiers. As such, time-stamps can be
-totally ordered lexicographically over time-stamps. 
+and a set of dependencies ($\emptyset$), written $\depOf[\ver]$. 
+The time-stamp associated with a version $\ver$ has the form $(\txid, \repl)$, where $\repl$ identifies the replica that committed $\ver$, 
+and $\txid$ denotes the local time when $\repl$ committed $\ver$. 
+Each dependency in $\depOf[\ver]$ comprises a key and the time-stamp of the versions on which $\ver$ directly depends.  
+We define the \( \DEP \) relation: \( \ToEdge{ (\txid,\repl) | \DEP -> (\txid',\repl') } \),
+if the version \( (\txid,\repl) \) is included in the dependency set of \( (\txid',\repl')\).
+COPS assumes a total order over replica identifiers. As such, versions can be
+totally ordered lexicographically over their time-stamps. 
 
-The COPS API provides two operations: one for writing to a single
-key; and another for atomically reading from a set of keys. 
+The COPS API provides two operations: one for writing to a \emph{single}
+key; and another for atomically reading from \emph{multiple} keys. 
 Each call to a COPS operation is processed by a single replica. 
 Each client maintains a \emph{context}, which is a set of dependencies
 tracking the versions the client observes.  
-We demonstrate how a client \( \cl \) interacts with a replica through the following example:
+We demonstrate how a client \( \cl \) interacts with a replica through the program \(\prog_{\CodeFont{COPS}} \):
 
 \spaceshrink{-14pt}
 {\displaymathfont
-\begin{align}
-    \label{equ:client-repl-1}
-    \cl: \begin{transaction} \pmutate{\key_1}{\val_1}; \end{transaction} ; \ 
-    \begin{transaction} \pderef{\vx}{\key_1}; \ \pderef{\vy}{\key_2}; \end{transaction}
-    \tag{\textsc{cops-cl}}
-\end{align}
+\begin{align*}
+    \prog_{\CodeFont{COPS}} & \defeq
+    ( \cl: \begin{transaction} \pmutate{\key_1}{\val_1} \end{transaction} ; \ 
+    \begin{transaction} \pderef{\vx}{\key_1}; \ \pderef{\vy}{\key_2} \end{transaction} )
+    %\tag{\textsc{cops-cl}}
+    %\label{equ:client-repl-1}
+\end{align*}
 \normalsize}
 \spaceshrink{-14pt}
 
 For brevity, we assume that there are two keys, $\key_1$ and $\key_2$, and two replicas, $\repl_1$ and $\repl_2$, 
 as shown in \cref{fig:initial-cops}, where $\repl_1 < \repl_2$.
 Initially, client \( \cl \) connects to replica \( \repl_1 \) and initialises its local context as $ctx {=} \emptyset$.
-To execute its first single-write transaction, $\cl$ requests to write $\val_1$ to $\key_1$ by sending the message $(\key_1, \val_1, ctx)$ to its associated replica $\repl_1$. 
-It then awaits a reply from $\repl_1$.
-Upon receiving the message, $\repl_1$ produces a monotonically increasing local time $\txid_1$, and uses it to install  a new version $\ver {=} (\key_1,\val_1, (\txid_1,\repl_1), ctx)$, as shown in \cref{fig:cops-after-write-transaction}.
+To execute its first single-write transaction, $\cl$ requests to write $\val_1$ to $\key_1$
+by sending the message $(\key_1, \val_1, ctx)$ to its associated replica $\repl_1$
+and awaits a reply.
+Upon receiving the message, $\repl_1$ produces a monotonically increasing local time $\txid_1$, 
+and uses it to install  a new version $\ver {=} (\key_1,\val_1, (\txid_1,\repl_1), ctx)$, as shown in \cref{fig:cops-after-write-transaction}.
 Note that the dependency set of $\ver$ is the $\cl$ context ($ctx {=} \emptyset$).
 Replica $\repl_1$ then sends the time-stamp $(\txid_1,\repl_1)$ back to $\cl_1$, and $\cl_1$ in turn  incorporates $(\key_1, \txid_1,\repl_1)$ in its local context; \ie 
 $\cl$ observes its own write. 
@@ -72,10 +78,10 @@ Note that replicas may accept new versions from different clients in parallel.
 To execute its second multi-read transaction,
 client  \( cl \) requests to read from the $\key_1, \key_2$ keys by sending the message 
 \( \Set{\key_1, \key_2} \) to replica $\repl_1$ and awaits a reply.
-Upon receiving this message, $\repl_1$ builds a causally consistent snapshot (a mapping from $\Set{\key_1, \key_2}$ to values) in two phases as follows. 
-First, $\repl_1$ optimistically fetches the most recent versions for $\key_1$ and $\key_2$,
-one at a time. 
-This process may be interleaved with other writes and synchronisation messages (propagated from other replicas). 
+Upon receiving this message, $\repl_1$ builds a \emph{\( \DEP \)-closed snapshot} (a mapping from $\Set{\key_1, \key_2}$ to values) in two phases as follows. 
+First, $\repl_1$ \emph{optimistically reads} the most recent versions for $\key_1$ and $\key_2$,
+\emph{one at a time}. 
+This process may be interleaved with other writes and synchronisation messages. 
 For instance, \cref{fig:cops-request-values} depicts a scenario where \( \repl_1 \):
 \begin{enumerate*}
 	\item first reads \( (\key_1,\val_1,(\txid_1,\repl_1), \emptyset) \) for $\key_1$ (highlighted); %(highlighted in \cref{fig:cops-request-values})
@@ -83,79 +89,97 @@ For instance, \cref{fig:cops-request-values} depicts a scenario where \( \repl_1
 containing versions \( ( \key_1, \val'_1, (\txid_1,\repl_2),\emptyset ) \) and \( ( \key_2, \val'_2, (t_2,\repl_2),\Set{(\key_1,\txid_1,\repl_2)} ) \); and
 	\item finally reads \( ( \key_2, \val'_2, (t_2,\repl_2),\Set{(\key_1,\txid_1,\repl_2)} ) \) for $\key_2$ (highlighted).
 \end{enumerate*}
-As such, the versions fetched for \( \Set{\key_1,\key_2}\) are not causally consistent: 
+As such, the current snapshot for \( \Set{\key_1,\key_2}\) are not \( \DEP \)-closed: 
 since \( ( \key_2, \val'_2, (t_2,\repl_2),\Set{(\key_1,\txid_1,\repl_2)} ) \) depends on 
 a $\key_1$ version with time-stamp $(\txid_1, \repl_2)$ which is bigger than $(\txid_1, \repl_1)$ for $\key_1$.
 To remedy this, after the first phase of optimistic reads,
 $\repl_1$ collects all the dependency sets and uses them as a lower-bound in the second phase
-to re-fetch, for each key \( \key \), the most recent version with the biggest time-stamp between versions of \( \key \)
+to \emph{re-fetch}, for each key \( \key \), the most recent version with the biggest time-stamp between the versions of \( \key \)
 in the lower-bound and the version of \( \key \) from the first phase.
 For instance, in \cref{fig:cops-re-read-values} replica $\repl_1$ re-fetches the newer version \( ( \key_1, \val'_1, (\txid_1,\repl_2),\emptyset ) \) for \( \key_1 \) (\cref{fig:cops-re-read-values}).
-Finally, the versions obtained after the second phase 
+Finally, the snapshot obtained after the second phase 
 are sent to the client, and subsequently added to the client context.
-\citet{cops} informally argue that these versions sent back to the client are causally consistent in their specific setting.
+\citet{cops} informally argue that the snapshot sent back to the client are causally consistent in their specific setting.
 We verify the COPS protocol with our general definition of causal consistency.
 
 %The versions obtained after the second phase is thus 
 
-\input{cops-encoded.tex}
-
 \subsubsection{COPS Verification} To prove that COPS satisfies causal consistency,
-we show that COPS traces can be refined to traces in our semantics using the execution test for causal consistency \( \ET[\CC] \).
-We give an operational semantics for COPS that is faithful to the reference implementation, which allows fing-graind read and write.
-We show that every COPS trace induced by the COPS semantics can be transferred to normlaised COPS traces, 
-in which there is no inteleaving between the reads from a transaction.
-We then show that normlaised COPS traces can be refined to traces in our semantics, in which each step satisfies \( \ET[\CC] \).
+We give an operational semantics for COPS that is faithful to the reference implementation, which allows fing-graind read and write
+and show that COPS traces can be refined to traces in our semantics using the execution test for causal consistency \( \ET[\CC] \) in three steps:
+\begin{enumerate*}
+\item every COPS trace can be transferred to normlaised COPS traces, 
+in which there is no inteleaving for the reads from a transaction; and
+\item the normlaised COPS traces can be refined to traces in our semantics, in which \item each step satisfies \( \ET[\CC] \).
+\end{enumerate*}
 
-We first define an operational semantics for COPS 
-describing transitions over abstract states comprising a set of replicas, a set of client contexts and a program.
-A transition describes either writing a version to a replica, 
-reading a version from a replica, or a receiving synchronisation messages at a replica.
+The operational semantics for COPS 
+describes transitions over abstract states \( \copsconf \) comprising a set of replicas,
+a set of client contexts and a program.
+The COPS trace that repreduces \cref{fig:cops-request-values,fig:cops-re-read-values} is depicts in \cref{fig:cops-trace}.
+A transition in the semantic describes that:
+a client (\(\cl\)) of a replica (\( \repl_1 \))
+\begin{enumerate*}
+\item writes a version to the replica \( (\opW,(\txid_1,\repl_1)) \);
+\item reads a version from the replica \( (\opR,(\txid_1,\repl_1)) \);
+\item or a replica receives synchronisation messages (\(\mathtt{sync}\)).
+We also label \item the start (\( \mathtt{s} \)), \item the end (\( \mathtt{e} \)) and 
+\item the phase change (\( \mathtt{p} \)) of any read-only transaction.
+\end{enumerate*}
+%Recall that COPS supports reading from multiple versions atomically. 
+Recall that a multi-read transaction does not excuted atomically in the replca,
+which is captured by multiple read transitions in the trace.
+These read transitions are divided into two phases:
+those of optimistic reads between \( \mathtt{s} \)  and \( \mathtt{p} \),
+and those of re-fetches between \( \mathtt{p} \)  and \( \mathtt{e} \).
 
-Recall that COPS supports reading from multiple versions atomically. 
-This is captured by multiple read transitions in the trace, analogously divided into two phases: those of optimistic reads and those of re-fetch reads.
-Moreover, these read transitions may be interleaved by other transitions. 
-Note that the optimistic reads are opaque to the client\azalea{why is that?} and
+\input{cops-trace.tex}
+
+Read transitions may be interleaved by other transitions. 
+Note that the optimistic reads are not observable to the client and
 thus it suffices to show that the second re-fetch phase is atomic.
-To show this, we \emph{normalise} the trace by moving all re-fetch transitions to the right (essentially delaying them) so that re-fetch transitions are no longer interleaved by others.
-As such, in the resulting normalised trace each transaction is executed atomically. 
-Note that normalising the trace does not alter it observably in that the values read remain unchanged. 
-This is because the re-fetch phase cannot read a version committed after the end of the optimistic phase.
+To show this, we \emph{normalise} the trace 
+by moving all re-fetches for a transaction 
+towards the end label \( \mathtt{e}\) for the transaction
+so that the re-fetch phase are no longer interleaved by others.
+Since the re-fetch phase cannot read a version committed after the phase change \( \mathtt{p}\),
+normalising traces does not alter the returned versions to the client. 
+Single-write and multi-read transactions in the resulting normalised trace are executed atomically. 
 
 
-
-We next show that normalised COPS traces can be refined to causal consistency traces in our semantics.
-To do this, we encode the abstract COPS states above as configuration in our operational semantics (\cref{sec:model}). 
-As each replica stores several COPS versions, 
-we can project COPS replicas into kv-stores
-by mapping COPS replicas to kv-store replicas.
+We next show that normalised COPS traces can be refined to traces in our semantics.
+To do this, we encode the abstract COPS states \(\copsconf \) as a configuration
+in our operational semantics (\cref{sec:model}). 
+%As each replica stores several COPS versions, 
+%we can project COPS replicas into kv-stores
+We map all COPS replicas to a single kv-store.
 The writer of a mapped version is uniquely
-determined by the time-stamp of the corresponding COPS version, while
-its reader set 
-can be recovered by annotating read-only transactions.
-For example, the COPS state in \cref{fig:cops-after-write-transaction} can be encoded as the kv-store depicted in \cref{fig:encode-mkvs}.
+determined by the time-stamp of the corresponding COPS version, 
+while its reader set 
+can be recovered by annotating read-only transactions in the traces.
+For example, the COPS state in \cref{fig:cops-after-write-transaction}
+can be encoded as the kv-store depicted in \cref{fig:encode-mkvs}.
 Similarly, as the context of a client $\cl$ identifies the set of COPS versions that $\cl$ sees, 
 we can project COPS client contexts to our client views over kv-stores. 
-For example, the context of \( \cl \) after committing its first single-write transaction in \eqref{equ:client-repl-1} is encoded as the client view depicted in \cref{fig:encode-view}.
+For example, the context of \( \cl \) after committing its first single-write transaction in \( \prog_{\CodeFont{COPS}} \)
+is encoded as the client view depicted in \cref{fig:encode-view}.
 
-We next map a normalised COPS trace to a kv-store trace such that each resulting 
-kv-store transition corresponds 
-to either a write operation or the sequence of re-fetch operations. 
-Last, we show that every step in the kv-store trace satisfies \( \et[\CC] \).
+\input{cops-encoded.tex}
+
+we then show that every step in the kv-store trace satisfies \( \et[\CC] \).
 Note that existing verification techniques \cite{framework-concur,seebelieve} require examining 
 the \emph{entire} sequence of operations of a protocol to show that it implements a consistency model.
-By contrast, we only need to look at how the system evolves after a \emph{single} transaction is executed.
-In particular, we check the client views (obtained from COPS client contexts) over the kv-store as follows.
+By contrast, we only need to look at how the state evolves after a \emph{single} transaction is executed.
+In particular, we check the client views over the kv-store as follows.
 Intuitively, we observe that when a COPS client $\cl$ executes a transaction then:
 \begin{enumerate*} 
 \item the $\cl$ context grows, and thus we obtain a more up-to-date view of the associated kv-store; \ie $\vshiftname_{\MR}$ holds;
 \item the $\cl$ context always includes the time-stamp of the versions written by itself, and thus the 
 corresponding client view always includes the versions $\cl$ has written; \ie $\vshiftname_{\RYW}$ holds; and
-\item the $\cl$ context always contains the dependencies corresponding to versions it has 
-either written or read from other transactions, and thus the corresponding client view is always closed-down 
-with respect to the relation $\SO \cup \WR_{\mkvs}$; \ie $\closed[\mkvs, \vi, R_{\CC}])$ holds.
+\item the $\cl$ context are always closed to the relation \( \DEP \), 
+which contains the relation $\SO \cup \WR_{\mkvs}$; \ie $\closed[\mkvs, \vi, \rel[\CC]])$ holds.
 \end{enumerate*}
-As such, from the definition of $\CC$ in \cref{fig:execution_tests} we know that COPS satisfies causal consistency ($\CC$).
+We have demonstrated that COPS satisfies causal consistency.
 We refer the reader to \cref{sec:cops} for the full details.
 
 \subsection{Application: Invariant Properties of Transactional Libraries}
@@ -165,66 +189,120 @@ We refer the reader to \cref{sec:cops} for the full details.
 
 A transactional library provides 
 a set of transactional operations which can be used by its clients to access the underlying kv-store.
-%For simplicity, we model each operation as a single transaction.
-%It is straightforward to extend this to multiple transactions.
-For instance, the set of operations of the counter library on key $\key$ in \cref{sec:overview} is: 
+For instance, the counter library on key $\key$ in \cref{sec:overview} is
 $\Counter(\key) \defeq \Set{\ctrinc(\key), \ctrread(\key)}$.
-A program $\prog$ is a \emph{client program} of $L$ if the only transactional calls in $\prog$ are to operations of $L$.  
-Let $\CMs(\ET, L)$ denote the set of kv-stores obtained by running $L$ clients under $\ET$.
-A library $L$ is \emph{robust} against an execution test
-$\ET$ if for all clients of $L$, the kv-stores obtained under $\ET$ can also be obtained under $\SER$; 
-\ie $\CMs(\ET, L) \subseteq \CMs(\SER)$.
+Using our operational semantics, 
+we are able to prove invariant properties of kv-stores, such as:
+\begin{enumerate*}
+\item the robustness of the single
+counter library discussed above against \(\PSI\);
+\item the robustness of a multi-counter library and the banking library of \citet{bank-example-wsi}
+against our new proposed model \(\WSI\) and any stronger models such as \(\SI\); and
+\item the correctness of the standard lock paradigm under \( \UA \), although it is not robust.
+\end{enumerate*}
 
-\spaceshrink{-3pt}
+%A program $\prog$ is a \emph{client program} of $L$ if the only transactional calls in $\prog$ are to operations of $L$.  
+%Let $\CMs(\ET, L)$ denote the set of kv-stores obtained by running $L$ clients under $\ET$.
+%A library $L$ is \emph{robust} against an execution test
+%$\ET$ if for all clients of $L$, the kv-stores obtained under $\ET$ can also be obtained under $\SER$; 
+%\ie $\CMs(\ET, L) \subseteq \CMs(\SER)$.
+
+
+\subsubsection{Robustness of a Single Counter against $\PSI$}
+
+A library $L$ is \emph{robust} against an execution test $\ET$,
+if for all the client programs \( \prog \) of $L$, 
+the kv-stores \( \kvs \) obtained under $\ET$ can also be obtained under $\SER$,
+that is, if \( \kvs {\in} \CMs(\ET) \) then \( \kvs {\in} \CMs(\SER) \).
+
+\spaceshrink{-5pt}
 \begin{theorem}
 \label{thm:serialisable_nocycle}
 A kv-store $\mkvs {\in} \CMs(\SER)$ iff $(\SO {\cup} \WR_{\mkvs} 
 {\cup} \WW_{\mkvs} {\cup} \RW_{\mkvs})^{+} \cap \CodeFont{Id} = \emptyset$.% is irreflexive.
 \end{theorem}
-\spaceshrink{-3pt}
+\spaceshrink{-5pt}
 
-This theorem states that any kv-stores in trace under serialisability must contain no cycle, and vice versa.
-%This theorem is an adaptation of a well-known result on
-%dependency graphs~\cite{adya} stating that $\mkvs \in \CMs(\SER)$ iff its associated dependency graph is acyclic. 
-Using this theorem, we prove the robustness of a single counter against $\PSI$.
-As discussed in \cref{sec:overview}, the multi-counter library is not robust against $\PSI$. 
-We thus prove the robustness of the multi-counter library and the banking library of \citet{bank-example-wsi} against $\WSI$ instead. 
+\Cref{thm:serialisable_nocycle} states that any kv-stores in trace under serialisability must contain no cycle, and vice versa.
 While previous static-analysis techniques for checking robustness \citep{giovanni_concur16,SIanalysis,laws,sureshConcur}
 cannot be extended to support client sessions, 
 we give the first robustness proofs that take client sessions into account.
+%This theorem is an adaptation of a well-known result on
+%dependency graphs~\cite{adya} stating that $\mkvs \in \CMs(\SER)$ iff its associated dependency graph is acyclic. 
+Using this theorem, we prove the robustness of a single counter against $\PSI$.
+%As discussed in \cref{sec:overview}, the multi-counter library is not robust against $\PSI$. 
+%We thus prove the robustness of the multi-counter library and the banking library of \citet{bank-example-wsi} against $\WSI$ instead. 
 
-
-
-\subsubsection{Robustness of a Single Counter against $\PSI$}
 In the single-counter library $\Counter(\key)$, 
 a client reads from $\key$ by calling $\ctrread(\key)$, and writes to $\key$ by calling $\ctrinc(\key)$ which first reads the value of $k$ and subsequently increments it by one.
-Pick an arbitrary key $\key$ and a kv-store $\mkvs \in \CMs(\PSI, \mathsf{Counter}(\key))$.
-As $\PSI$ enforces write conflict freedom (\(\UA\)), we know that if a transaction $\txid$ updates $\key$ (by calling $\ctrinc(\key)$) and writes version $\ver$ to $\key$, then it must have read the version of $\key$ immediately preceding $\ver$:
+%Pick an arbitrary key $\key$ and a kv-store $\mkvs \in \CMs(\PSI, \CodeFont{Counter}(\key))$.
+As $\PSI$ enforces write conflict freedom (\(\UA\)),
+we know that if a transaction $\txid$ updates $\key$ (by calling $\ctrinc(\key)$) and writes version $\ver$ to $\key$, then it must have read the version of $\key$ immediately preceding $\ver$:
 $\fora{\txid, i > 0}\!\! \txid {=} \wtOf(\mkvs(\key, i)) \implies \txid \in \rsOf(\mkvs(\key, i{-}1))$. 
 Moreover, as $\PSI$ enforces monotonic reads ($\MR$),
 the order in which clients observe the versions of $\key$ (by calling $\ctrread(\key)$)
 is consistent with the order of versions in $\mkvs(\key)$. 
-As such, the kv-stores in $\CMs(\PSI, \mathsf{Counter}(\key))$ have the canonical structure depicted in  \cref{fig:prog_analysis} and defined below, where $\lcat$ denotes list concatenation, and 
-$\{\txid^{\mathsf{}}_{i}\}_{i=1}^{n}$ and $\bigcup_{i=0}^{n} \txidset^{\mathsf{}}_{i}$ 
-denote disjoint sets of transactions calling $\ctrinc(\key)$ and $\ctrread(\key)$: 
+As such, the invariant depicted and defined below, where  
+$\{\txid^{\CodeFont{}}_{i}\}_{i=1}^{n}$ and $\bigcup_{i=0}^{n} \txidset^{\CodeFont{}}_{i}$ 
+denote disjoint sets of transactions calling $\ctrinc(\key)$ and $\ctrread(\key)$ respectively:  
 
-\spaceshrink{-13pt}
-{
+\noindent
+\ 
+\begin{tabular}{@{} c | c @{} }
+{%
 \displaymathfont
-\[%
-	\mkvs(\key) = (0, \txid_{0}, \txidset^{\mathsf{}}_{0} \cup \Set{\txid^{\mathsf{}}_1}) 
-	\lcat (1, \txid^{\mathsf{}}_{1}, \txidset^{\mathsf{}}_{1} \cup \Set{\txid^{\mathsf{}}_2}) 
-	\lcat \cdots \lcat (n-1, \txid^{\mathsf{}}_{n-1}, \txidset^{\mathsf{}}_{n-1} \cup \Set{\txid^{\mathsf{}}_n})
-	\lcat (n, \txid^{\mathsf{}}_n, \txidset^{\mathsf{}}_{n}) .
-\]
+\(%
+\begin{multlined}
+\\[-25pt]
+	(0, \txid_{0}, \txidset_{0} \cup \Set{\txid_1}) 
+	\lcat (1, \txid_{1}, \txidset_{1} \cup \Set{\txid_2}) \lcat \cdots 
+    \\ \lcat (n{-}1, \txid_{n{-}1}, \txidset_{n{-}1} \cup \Set{\txid_n})
+	\lcat (n, \txid_n, \txidset_{n}) 
+\end{multlined}
+\)%
 \normalsize
+}\ % spacing
+
+& 
+
+\scalebox{.6}{%
+\begin{tikzpicture}%
+%Location x
+\node(locx) {};
+\draw pic at ([xshift=\tikzkvspace]locx.east) {vlist={versionx}{%
+    /0/\txid_0/\Set{\txid_1} \cup \T_0
+    , /1/\txid_1/\Set{\txid_2} \cup \T_1
+}};
+\path(versionx.east)+(0.3,0) node (dots) {$\cdots$};
+\draw pic at ([xshift=0.2]dots.east) {vlist= {versionxlast}{
+	/n{-}1/\txid_{n{-}1}/\Set{\txid_{n}} \cup \T_{n{-}1}
+	, /n/\txid_{n}/\T_{n}
+}};
+\coordinate  (A) at ([xshift=30,yshift=-14] versionx.north west);
+\coordinate  (B) at ([xshift=17,yshift=-9] A.center);
+\coordinate  (C) at ([xshift=26,yshift=10] B.center);
+\coordinate  (D) at ([xshift=16,yshift=0] C.center);
+\coordinate  (E) at ([xshift=21,yshift=-9] D.center);
+\coordinate  (F) at ([xshift=79,yshift=9] E.center);
+\coordinate  (G) at ([xshift=31,yshift=-9] F.center);
+\coordinate  (H) at ([xshift=31,yshift=9] G.center);
+\coordinate  (I) at ([xshift=17,yshift=0] H.center);
+\coordinate  (J) at ([xshift=2,yshift=-17] I.center);
+
+\path[->,dashed,thick] ([xshift=0,yshift=6]A) edge[bend left=30] ([xshift=-3,yshift=4]B)
+([xshift=3,yshift=4]B) edge[bend left=30] ([xshift=2,yshift=6]C)
+ ([xshift=0,yshift=6]D) edge[bend left=30] ([xshift=-3,yshift=4]E)
+ ([xshift=0,yshift=6]F) edge[bend left=30] ([xshift=-9,yshift=3]G)
+([xshift=3,yshift=4]G) edge[bend left=30] ([xshift=2,yshift=6]H)
+([xshift=0,yshift=6]I) edge[bend left=60] ([xshift=-2,yshift=5]J);
+\end{tikzpicture}%
 }
-\spaceshrink{-15pt}
 
+\end{tabular}
 
-\input{prog_analysis_kv_store}
+%\input{prog_analysis_kv_store}
 
-We define the $\dashrightarrow$ relation depicted in \cref{fig:prog_analysis} by extending 
+We define the $\dashrightarrow$ relation depicted above by extending 
 $\SO \cup 
 \{
 	(\txid_i, \txid_j) 
@@ -238,7 +316,7 @@ $(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^+$ is irreflexive;
 \ie $\Counter(\key)$ is robust against $\PSI$.
 
 A multi-counter library on a set of keys \( \codeFont{\keyset} \) is: 
-\( \mathsf{Counters(\keyset)} \defeq \bigcup_{\codeFont{\key} \in \codeFont{\keyset} } \Counter(\codeFont{\key}) \).
+\( \mathsf{Counters}(\keyset) \defeq \bigcup_{\key \in \keyset } \Counter(\key) \).
 Recall from \cref{sec:overview} that unlike in $\SER$ and $\SI$, under $\PSI$ clients can observe 
 the increments on different keys in different orders (see \cref{fig:cp-disallowed}).
 As such, multiple counters are not robust against $\PSI$. 
@@ -246,36 +324,38 @@ The following result shows that
 a multi-counter library is robust against \( \WSI \) and all stronger models such as \( \SI \).
 
 \subsubsection{Robustness Conditions against $\WSI$}
-\sx{strictly no blind write, \SI also works for sure, etc.}
-Several libraries in the literature that are robust against $\SI$ 
-\citep{giovanni_concur16,bank-example-wsi} are also robust against $\WSI$.
-The operations of these libraries all yield kv-stores that adhere to a particular pattern:% captured by the following definition.
+Many libraries \citep{snapshot-isolation-robust-tool,giovanni_concur16,bank-example-wsi} 
+yield kv-stores that adhere to a particular pattern that guarantees robustness against \( \WSI \):
+%Several libraries in the literature that are robust against $\SI$ 
+%\citep{giovanni_concur16,bank-example-wsi} are also robust against $\WSI$.
+%The operations of these libraries all yield kv-stores that adhere to a particular pattern:% captured by the following definition.
 
 \spaceshrink{-3pt}
 \begin{definition}[\(\WSI\)-safe]
 \label{def:main-body-wsi-safe}
     A kv-store \( \mkvs \) is \emph{\(\WSI\)-safe} if it is 
-    reachable by executing a program \( \prog \) from an initial configuration \( \conf_0 \) under $\WSI$
-   (\ie \( \conf_0, \prog \toPROG{}_{\ET_\WSI} (\mkvs, \stub), \stub\)), and for all $\txid, \key, i$:
+    reachable by executing a program \( \prog \)% from an initial configuration \( \conf_0 \) 
+    under $\WSI$,
+    \ie \( \conf_0, \prog \toPROG{}_{\ET_\WSI} (\mkvs, \stub), \stub\), and for all $\txid, \key, i$:
 
    \spaceshrink{-15pt}
    {\displaymathfont
     \begin{align}
-         & \txid \in \rsOf[\mkvs(\key,i)] \land \txid \neq \wtOf[\mkvs(\key,i)]  \implies \fora{\key',j} \txid \neq \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-read-only} \\
-         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \implies \exsts{j} \txid \in \rsOf[\mkvs(\key,j)] \label{equ:main-wsi-safe-write-must-read} \\
-         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \land \exsts{k', j} \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',j)] \label{equ:main-wsi-safe-all-write}
+         & \txid \in \rsOf[\mkvs(\key,i)] \land \txid \neq \wtOf[\mkvs(\key,i)]  \implies \fora{\key',j} \txid \neq \wtOf[\mkvs(\key',j)] , \label{equ:main-wsi-safe-read-only} \\
+         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \implies \exsts{j} \txid \in \rsOf[\mkvs(\key,j)] , \label{equ:main-wsi-safe-write-must-read} \\
+         & \txid \neq \txid_0 \land \txid = \wtOf[\mkvs(\key,i)] \land \exsts{k', j} \txid \in \rsOf[\mkvs(\key',j)] \implies \txid = \wtOf[\mkvs(\key',j)] , \label{equ:main-wsi-safe-all-write}
     \end{align}
     \normalsize
     }
    \spaceshrink{-15pt}
 
 \end{definition}
-\spaceshrink{-7pt}
+\spaceshrink{-9pt}
 
 This definition states that a kv-store $\mkvs$ is \(\WSI\)-safe if for each transaction $\txid$: 
 \begin{enumerate*} 
     \item if $\txid$ reads from $\key$ without writing to it then $\txid$ must be a read-only transaction \eqref{equ:main-wsi-safe-read-only}; 
-    \item if \( \txid \) writes to $\key$, then it must also read from it \eqref{equ:main-wsi-safe-write-must-read}, a property known as \emph{strictly-no-blind writes}; and
+    \item if \( \txid \) writes to $\key$, then it must also read from it \eqref{equ:main-wsi-safe-write-must-read}, a property we call \emph{strictly-no-blind writes}; and
 	\item  if \( \txid \) writes to $\key$, then it must also write to all keys it reads \eqref{equ:main-wsi-safe-all-write}.
 \end{enumerate*}
 It is straightforward to see that the version $j$ read by \( \txid \) in \eqref{equ:main-wsi-safe-write-must-read} must be written immediately before the version $i$ written by \( \txid \), \ie \( i {=} j + 1 \).
@@ -360,9 +440,8 @@ This leads to a contradiction as \( \rel'; \RW^? \subseteq \rel_\CP \) and
 
 \subsubsection{Robustness of a Banking Library against $\WSI$}
 
-\citet{bank-example-wsi} present a banking library
-which is robust against  \( \SI \).
-Here, we show that this library is also robust against \( \WSI \).
+Using \cref{thm:main-wsi-robust},
+we are able to prove the robustness of the banking library in \citet{bank-example-wsi} against \( \WSI \).
 The banking example is based on relational databases and has three tables: account, saving and checking.
 The account table maps customer names to customer IDs (\( \codeFont{Account(\underline{Name}, CID )} \)); 
 the saving table maps customer IDs to their saving balances (\( \codeFont{Saving(\underline{CID}, Balance )} \)); and
@@ -382,7 +461,7 @@ then:
 and \( (n, \valueOf[\mkvs(n_s, \abs{\mkvs(n_c)} - 1)]) \in \codeFont{Checking(\underline{CID}, Balance )} \).
 The banking library provides five transactional operations.% for accessing the database.
 
-\spaceshrink{-13pt}
+\spaceshrink{-15pt}
 {
 \displaymathfont
 \begin{align*}
@@ -403,14 +482,14 @@ The banking library provides five transactional operations.% for accessing the d
 %
 \normalsize
 }
-\spaceshrink{-8pt}
+\spaceshrink{-15pt}
 
 \noindent
 The \( \codeFont{balance(n)} \) operation returns the total balance of customer \codeFont{n} in  \( \ret \).
 The \( \codeFont{depositChecking(n,v)} \) operation deposits \codeFont{v} to the checking account of customer \codeFont{n} when \codeFont{v} is non-negative; otherwise the checking account remains unchanged.
 %
 
-\spaceshrink{-13pt}
+\spaceshrink{-15pt}
 {
 \displaymathfont
 \begin{align*}
@@ -483,13 +562,14 @@ on the key \( \key \) shared between all clients:
 \spaceshrink{-15pt}
 {\displaymathfont
 \begin{align*}
-    \ptrylock(k) & {\defeq} \begin{transaction}
+    \ptrylock(k) & \defeq \begin{transaction}
     \plookup{\pv{x}}{k}; \ \pifs{\pv{x} {=} 0} 
-    \pmutate{k}{ \var(ClientID) }; \passign{\ret}{\true}; \} 
-    \CodeFont{else} \{ \passign{\ret}{\false} \pife 
+    \pmutate{k}{ \var(ClientID) }; \passign{\var(m)}{\true}; \} 
+    \CodeFont{else} \{ \passign{\var(m)}{\false} \pife 
     \end{transaction}     
-    \\ \plock(k) & {\defeq} (\ptrylock(\key) ; \passume(\ret))^*
-    \quad \qquad \punlock(k) {\defeq} \begin{transaction}
+    \\ \plock(k) & \defeq \passign{\var(m)}{\false} ; 
+    \codeFont{while}(\var(m) = \false)  \{\ptrylock(\key) \}
+    \qquad \punlock(k) \defeq \begin{transaction}
         \pmutate{k}{ 0 };
     \end{transaction}     
 \end{align*}
@@ -519,7 +599,8 @@ Consider the program that the two clients complete the lock \( \key \):
 \spaceshrink{-17pt}
 
 \noindent
-This program \eqref{equ:lock-program} is obviously correct if executed under serialisability.
+This lock paradigm \eqref{equ:lock-program} is correct if executed under serialisability,
+that is, only one client can hold the lock.
 All the operations are trivially \( \WSI \)-safe,
 and therefore \eqref{equ:lock-program} is robust and correct under \( \WSI \) 
 and any stronger model such as \( \SI \).
@@ -527,8 +608,7 @@ The program is not robust under \( \UA \),
 since the \( \plock \) operation might read any old value of the key \( \key \)
 until it reads the up-to-date value of \( \key \) and acquires the lock.
 However, the program is still correct under \( \UA \),
-that is, only one client can hold the lock.
-The correctness of lock paradigms can be captured by the invariant: for any \( i \) such that \( i > 0\),
+The correctness of the lock paradigm can be captured by the invariant: for any \( i \) such that \( i > 0\),
 
 \spaceshrink{-17pt}
 {\displaymathfont
