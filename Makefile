@@ -1,64 +1,25 @@
-DRAFTTEX = .draft.tex
-TEXS = $(filter-out $(DRAFTTEX), $(shell find * -type f -name '*.tex'))
-BIBS = $(shell find * -type f -name '*.bib') 
-STYS = $(shell find * -type f -name '*.sty') 
-OUTDIR = output
-DRAFTDIR = $(OUTDIR)/draft
-SOURCES = $(TEXS) $(BIBS) $(STYS)
-LATEXMK=latexmk -pdf -bibtex 
+MAINTEX=main.tex
+STY=$(wildcard *.sty)
+OUTPUTDIR=output
 
-# all : default; generate main.tex and draft.tex
-# main : generate main.tex
-# draft : generate draft.tex by replacing 
-# 		  CommentEditsfalse with CommentEditstrue
-# once : compile only once to generate main.pdf
-# 		 useful to check syntax error
-# stat : run the  run-statistic.sh to generate .statistic
-# clean : clean everything
-.PHONY: all main draft once stat clean 
- 
-all: main draft
+SOURCETEX=$(filter-out $(MACROTEX) $(MAINTEX), $(wildcard *.tex) $(wildcard **/*.tex) )
 
-main : main.pdf
+LATEX=latexmk -outdir=$(OUTPUTDIR) -bibtex 
+FLAG=-pdf -interaction=nonstopmode -halt-on-error -file-line-error
+SOURCEDIR=$(addprefix $(OUTPUTDIR)/,$(sort $(dir $(SOURCETEX))))
 
-main.pdf : $(OUTDIR)/main.pdf
-	cp $< $@
+.PHONY: all clean
 
-$(OUTDIR)/main.pdf : $(SOURCES) $(OUTDIR)
-	 $(LATEXMK) -outdir=$(OUTDIR) main.tex
+all: main
 
-draft : draft.pdf
+main: $(MAINTEX) $(STY) $(SOURCETEX) $(SOURCEDIR)
+	$(LATEX) $(FLAG) $<
+	cp $(OUTPUTDIR)/$(MAINTEX:.tex=.pdf) $(MAINTEX:.tex=.pdf)
 
-draft.pdf : $(DRAFTDIR)/.draft.pdf
-	cp $< $@
-
-# switch on the CommentEdits flag in the tex 
-$(DRAFTDIR)/.draft.pdf : $(SOURCES) $(DRAFTDIR) $(DRAFTTEX)
-	$(LATEXMK) -outdir=$(DRAFTDIR) $(DRAFTTEX) 
-
-# a quick run
-once : $(SOURCES) $(DRAFTDIR) $(DRAFTTEX)
-	$(LATEXMK) -outdir=$(DRAFTDIR) $(DRAFTTEX) 
-	cp $(DRAFTDIR)/.draft.pdf draft.pdf
-
-$(OUTDIR) :
+$(SOURCEDIR): %: 
 	mkdir -p $@
-
-$(DRAFTDIR) :
-	mkdir -p $@
-
-$(DRAFTTEX): main.tex 
-	sed 's/CommentEditsfalse/CommentEditstrue/g' $< > $@
-
-stat : .statistic
-
-# the  run-statistic.sh will generate .statistic
-.statistic : $(SOURCES) run-statistic.sh statistic.py
-	./run-statistic.sh $@
 
 clean:
-	rm -rf $(OUTDIR)
-	rm -f main.pdf
-	rm -f draft.pdf
-	rm -f .statistic
-	rm -f $(DRAFTTEX)
+	$(LATEX) -CA
+	rm -f $(MACROTEX:.tex=.pdf) 
+	rm -f $(MAINTEX:.tex=.pdf) 
