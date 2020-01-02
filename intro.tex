@@ -8,26 +8,27 @@ guarantees. These weak guarantees pose two main challenges: the
 verification that database protocols satisfy a particular consistency
 guarantee; and the analysis of client behaviour with such guarantees.
 
-These consistency guarantees are known as \emph{consistency models}
-Much work has been done to formalise the semantics of such consistency models:
-declaratively, several \emph{general} formalisms have been proposed, such as
-dependency graphs \cite{adya} and abstract
-execution \cite{ev_transactions}, to provide a unified axiomatic semantics for
-formulating different consistency models;
-operationally, although {specific} consistency models have been captured 
-using reference implementations \cite{si,PSI,PSI-RA,cops,ramp,bayou},
-there has been little work on \emph{general} operational semantics
+These consistency guarantees are known as \emph{consistency models}.
+Many consistency models are originally invented by engineers
+using reference implementations to tackle real-world restraints \cite{tango,CORFU,ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi,PSI-RA,si}.
+It is difficult to compare different consistency models or the same model using different implementations.
+Much work has been done to uniformly formalise the semantics of such consistency models declaratively,
+%Several \emph{general} formalisms have been proposed, 
+such as dependency graphs \cite{adya} and abstract execution \cite{ev_transactions}.
+They provide a unified axiomatic semantics for formulating different consistency models.
+Operationally, there has been little work on \emph{general} operational semantics
 for describing a range of consistency models.
-Our goal is to provide such a general operational semantics, 
-to verify database protocols of particular consistency models 
-and to analyse client programs with respect to such consistency models.  
+These operational semantics focus on \emph{one} of the two challenges:
+verifying database protocols of particular consistency models;
+and analysing client programs with respect to such consistency models.  
+Our goal is to provide such a general operational semantics for both challenges.
 
 The declarative approach has been substantially
-studied~\cite{adya,ev_transactions,framework-concur,laws}. 
-It uses  a two-step procedure:
+studied \cite{adya,ev_transactions,framework-concur,laws}. 
+It uses a two-step procedure:
 \begin{enumerate*}
 \item construct {\em candidate executions} of the whole program comprising
-transactions in which reads may contain an arbitrary value; and 
+transactions in which reads may contain arbitrary values; and 
 \item apply a number of axioms on such executions to rule out invalid executions. 
 Such axioms may state, for example, that every read is
 validated by a write that has written the read value. 
@@ -37,13 +38,13 @@ This axiomatic approach is unsuitable for invariant-based program analysis
 which requires reasoning about the step-wise execution of a program. 
 
 The operational approach has been less studied \cite{sureshConcur,alonetogether,seebelieve,push-pull}.
-\citet{sureshConcur} introduce an operational semantics over abstract
+Nagar and Jagannathan \citet{sureshConcur} introduced an operational semantics over abstract
 execution graphs, and prove robustness of client programs using model
 checking. Each execution step adds a new transaction node in the graph
 by first constructing candidate steps and then applying axioms to the
 whole graph to rule out invalid candidate steps.  This approach is
 unlikely to be suitable for invariant-based analysis associated with
-the state.  \citet{alonetogether} propose an operational semantics for
+the state.  Kaki et al. \citet{alonetogether} proposed an operational semantics for
 SQL transaction programs over an abstract centralised store with the consistency
 models given by the standard ANSI/SQL isolation levels \cite{si}. They
 develop a program logic and prototype tool for reasoning about client
@@ -52,7 +53,7 @@ express snapshot isolation \cite{si}, but the consensus is
 that they cannot
 capture the weaker consistency models such as parallel snapshot isolation \cite{PSI} 
 important for distributed databases. 
-\citet{seebelieve} provide a trace semantics
+Crooks et al. \citet{seebelieve} provided a trace semantics
 over a global centralised store, where an execution step involves
 analysing the totally-ordered
 history of states and the read-write set of the transaction.
@@ -61,11 +62,10 @@ implementation-specific definitions of consistency model. However, their
 approach does not lend itself to  analysing client programs,
 since observations made by clients require the total order in
 which transactions commit which is not realistic for clients. 
-\citet{push-pull} provide a log-based abstract operational semantics for verifying 
-several implementations of serilisability.
-However, 
-it is unknown that they could be easily extended to tackle weaker consistency models.
-
+Koskinen and Parkinson \citet{push-pull}
+provided a log-based abstract operational semantics for verifying several implementations of serilisability.
+However, it is unknown that they could be easily extended to tackle weaker consistency models.
+We refer the readers to \cref{sec:related-work} for related work.
 
 
 We introduce an \emph{interleaving} operational semantics for
@@ -80,7 +80,7 @@ simply on the abstract state, the read-write set of the transaction, and an \emp
 determines if a client with a given view is allowed to commit a
 transaction. Different execution tests give rise to different consistency models, 
 which we show to be equivalent to well-known
-declarative definitions of consistency model for execution graphs (\cref{sec:other_formalisms}).
+declarative definitions of consistency model on abstract executions (\cref{sec:other_formalisms}).
 Our execution tests resemble the  approach taken in~\cite{seebelieve},
 except that they require an analysis of the whole trace for an
 execution step whereas we require the current abstract state. 
@@ -91,36 +91,51 @@ execution step whereas we require the current abstract state.
 We make the assumption that our transactions satisfy the \emph{snapshot property}, 
 also known as \emph{atomic visibility}. This means that
 the client observes that a transaction reads from an atomic snapshot
-of the database and commits atomically, even if the underlying
+of the database, commits atomically and intermediate states are not observable to other clients, 
+even if the underlying
 distributed protocol has a more fine-grained behaviour. This
 assumption is reasonable in distributed databases: for example, with
 on-line shopping application, a client only sees one snapshot of the database and
 only has knowledge that their transaction has successfully committed.
-Our execution tests  uniformly capture  the well-known consistency models 
-that satisfy this snapshot property (\cref{sec:cm}): \eg, 
-causal consistency (\(\CC\)) \cite{cops,bayou}, parallel snapshot isolation (\(\PSI\)) \cite{PSI,PSI-RA}, 
-snapshot isolation (\(\SI\)) \cite{si} and serialisability \cite{si}. 
+We also make the assumption that our transactions satisfy the \emph{last-write-wins} resolution policy,
+a widely used policy in many real-world distributed key-value stores. 
+This means that when a transaction observes several updates to a key,
+the atomic snapshot contains the value written by the last update.
+Our execution tests  uniformly capture  the well-known consistency models (\cref{sec:cm}) such as, 
+\emph{causal consistency} (\(\CC\)) \cite{cops,bayou}, 
+\emph{parallel snapshot isolation} (\(\PSI\)) \cite{PSI,PSI-RA}, 
+\emph{snapshot isolation} (\(\SI\)) \cite{si} and \emph{serialisability} \cite{si}. 
 We also identify a new consistency model, called \emph{weak snapshot isolation} (\(\WSI)\), 
 that interestingly sits between \(\PSI\) and \(\SI\) and retains good properties of both.
-
 
 Using our operational semantics, we demonstrate that we can verify
 that database protocols satisfy particular consistency models and
 prove invariant properties of client programs with respect to such
-consistency models (\cref{sec:applications,sec:program-analysis}). In particular, we establish the correctness of two database
-protocols: the COPS protocol for the fully replicated kv-stores~\cite{cops} 
+consistency models (\cref{sec:applications,sec:program-analysis}).
+In particular, we establish the correctness of two database
+protocols: the COPS protocol for the fully replicated kv-stores \cite{cops} 
 which satisfies causal consistency (\cref{sec:verify-impl}); 
 and the Clock-SI protocol for partitioned kv-stores \cite{clocksi} 
-which satisfies snapshot isolation (\cref{app:implementation-verification}). 
+which satisfies snapshot isolation 
+(%
+\ifTechRepEdits%
+technical report%
+\else%
+\cref{app:implementation-verification}%
+\fi%
+). 
 We prove invariant properties of client programs including general robustness results
 for client programs with certain patterns of transaction and
-invariant properties of specific programs not satisfying such robustness results (\cref{sec:invariant-client-programs}). 
+invariant properties of specific programs not satisfying 
+such robustness results (\cref{sec:invariant-client-programs}). 
 We believe out robustness results are the first to take into account client
 sessions: with sessions, we show that multiple counters {\em are not} robust against \(\PSI\);
 interestingly, without sessions, \citet{giovanni_concur16} show that multiple counters {\em are}
 robust against \(\PSI\) using static-analysis techniques which are
 known not to be applicable to sessions.  
-
+We show the correctness of a lock paradigm under \emph{update atomic} (\( \UA \)),
+a consistency model disallowing conflict writes to a key,
+although this lock is not robust against \( \UA \).
 
 With our operational semantics, we believe that we have identified an interesting \emph{mid-point}
 between distributed databases and clients.

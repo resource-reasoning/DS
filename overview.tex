@@ -2,7 +2,7 @@
 \label{sec:overview}
 
 We motivate our key ideas, centralised kv-stores, partial client views and execution tests,
-via an intuitive example.
+using an single counter example.
 We show that our interleaving semantics is an ideal mid-point for verifying distributed protocols 
 and proving invariant properties of client programs.
 
@@ -27,34 +27,32 @@ and
 Command \( \plookup{\pv{x}}{\key} \) reads the value of key \( \key \) to
 local variable \( \vx \), and command \( \pmutate{\key}{\pv{x}{+}1} \)
 writes the value of \( \pv{x}{+}1 \) to key \( \key \).  The code of each
-operation is wrapped in square brackets, denoting that 
-it must be executed \emph{atomically}.  
+operation is wrapped in square brackets, denoting a transaction that 
+must be executed \emph{atomically}.  
 
-Consider a replicated database where
-a client only interacts with one replica.
-For such a database, the 
-correctness of atomic transactions is subtle, depending heavily on the
-particular consistency model under consideration.  
-Consider the client program
-$\prog_{\CodeFont{LU}} \defeq \left(\cl_1 : \ctrinc(\key) \;|| \; \cl_2:
-  \ctrinc(\key) \right)$, 
+Consider a replicated database where a client only interacts with one replica.
+For such a database, the correctness of atomic transactions is subtle, 
+depending heavily on the particular consistency model under consideration.  
+Consider the client program, defend by:
+\[ 
+\prog_{\CodeFont{LU}} \defeq \left(\cl_1 : \ctrinc(\key) \;|| \; \cl_2: \ctrinc(\key) \right)
+\], 
 where we assume that the clients \( \cl_1 \) and \( \cl_2 \) work on different replicas and
 the \(\key\) initially holds value \(0\) in all replicas.
 Intuitively, since transactions are executed atomically, after both
-calls to \(\ctrinc(\key)\) have terminated, the counter should hold 
-the value \(2\).
-Indeed, this is the only outcome allowed under serialisability (\(\SER\)), where transactions
-appear to execute in a sequential (serial) order, one after another.
+calls to \(\ctrinc(\key)\) have terminated, the counter should hold the value \(2\).
+Indeed, this is the only outcome allowed under serialisability (\(\SER\)), 
+where transactions appear to execute in a sequential (serial) order, one after another.
 The implementation of \(\SER\) in distributed kv-stores comes at a
 significant performance cost. Therefore, implementers are content with
-{weaker} consistency models~\cite{tango,CORFU,ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}. 
+{weaker} consistency models \cite{tango,CORFU,ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi,PSI-RA,si}. 
 For example, if the replicas provide no synchronisation mechanism for transactions,
 then it is possible for both clients to read the same initial value \(0\) for \(\key\) at their
-distinct replicas, update them to \(1\), and eventually propagate their updates to other replicas. 
-Thus, both
-sites  are unchanged with value  \(1\) for \(\key\).
+distinct replicas, update them to \(1\), and eventually propagate the absolute value of \( \key \) to other replicas. 
+Thus, both sites are unchanged with value  \(1\) for \(\key\).
 This weak behaviour is known as the \emph{lost update} anomaly, which
-is  allowed under the consistency model called {\em causal consistency} \cite{cops,wren,redblue}.
+is  allowed under the consistency model called \emph{causal consistency},
+but not \emph{parallel snapshot isolation} and \emph{snapshot isolation}.
 
 \input{lu-kvstores.tex}
 
@@ -76,18 +74,20 @@ subsets of the versions in the kv-store. Each update is given by either
 a primitive command or an atomic transaction. The atomic
 transaction steps are subject to an {\em execution test} which
 analyses the state to determine if the update is allowed by 
-the associated  consistency model. 
+the associated consistency model. 
 
 
 
-Let us introduce  our global kv-stores and partial client views by
+Let us introduce our global kv-stores and partial client views by
 showing that we can reproduce the lost update anomaly given by 
 \(\prog_{\CodeFont{LU}}\).
 Our kv-stores are functions mapping keys to lists of versions, where
 the versions  record all the values written to each key together with the
 meta-data of the transactions that access it. 
-In the \(\prog_{\CodeFont{LU}}\) example, the initial kv-store comprises a single key \(\key\), with only one possible 
-version \((0, \txid_{0}, \emptyset)\),  stating that \(\key\) holds value \(0\), 
+These kv-stores are the abstraction of the machine states of real-world key-value stores.
+In the \(\prog_{\CodeFont{LU}}\) example, the initial kv-store comprises a single key \(\key\), with only one initialisation version \((0, \txid_{0}, \emptyset)\).
+This version represents the initialisations in both replicas,
+stating that \(\key\) holds value \(0\), 
 that the version \emph{writer} is the initialising transaction
 \(\txid_0\) (this version was written by \(\txid_0\)), 
 and that the version \emph{reader set} is empty (no transaction has read this version). 
@@ -96,15 +96,14 @@ represented as a box sub-divided in three sections: the value \(0\);
 the writer \(t_0\); and the reader set \(\emptyset\). 
 
 
-First, suppose that \(\cl_1\)  invokes \(\ctrinc\) on
-\cref{fig:counter_kv_initial}. It does this by choosing a fresh
-transaction identifier, \(\txid\), 
+First, suppose that \(\cl_1\) invokes \(\ctrinc\) on \cref{fig:counter_kv_initial}. 
+It does this by choosing a fresh transaction identifier, \(\txid\), 
 and then proceeds with \(\ctrinc(\key)\). It reads the initial version
 of \(\key\) with value \(0\) 
 and then writes a new value \(1\) for \(\key\). 
 The resulting kv-store is depicted in \cref{fig:counter_kv_first_inc},
 where  the initial version of \(\key\)  has been  updated to reflect that it
-has been read by \(\txid\). 
+has been read by \(\txid\) and a new version with value 1 installed to the end of the list.
 
 Second, client \(\cl_2\) invokes \(\ctrinc\) on
 \cref{fig:counter_kv_first_inc}.  As there are now two versions
