@@ -14,11 +14,15 @@ enforced by these databases when committing a transaction.
 This makes it possible to use our 
 semantics to verify the correctness of distributed database protocols. 
 We demonstrate this by showing that the replicated database,
-COPS \cite{cops}, satisfies causal consistency and
-the partitioned database, Clock-SI \cite{clocksi}, satisfies snapshot isolation.
-We present an intuitive account of how we verify the COPS protocol using trace refinement.
+COPS \cite{cops}, satisfies causal consistency.
 We refer the reader to \cref{sec:cops} for the full details.
-In \cref{sec:clock-si}, we apply the same method to verify Clock-SI.
+\ifTechRepEdits%
+In the technical report,
+\else%
+In \cref{sec:clock-si}, 
+\fi
+we apply the same method to verify that 
+Clock-SI \cite{clocksi}, a partitioned database, satisfies snapshot isolation.
 
 \input{cops-graph.tex}
 
@@ -37,23 +41,19 @@ to denote that version \( (\txid,\repl) \) is included in the dependency set of 
 COPS assumes a total order over replica identifiers. 
 As such, versions can be totally ordered lexicographically. 
 
-The COPS API provides two operations: one for writing to a \emph{single}
-key; and another for atomically reading from \emph{multiple} keys. 
-Each call to a COPS operation is processed by a single replica. 
+The COPS API provides two operations: \begin{enumerate*}
+\item \( \pcopsput(\key,\val) \) for writing to a \emph{single}
+key; and \item  \( \pcopsread(\keyset) \) for atomically reading from \emph{multiple} keys. 
+\end{enumerate*}
+Operations from a client is processed by a single replica. 
 Each client maintains a \emph{context}, which is a set of dependencies
 tracking the versions the client observes.  
-We demonstrate how a client \( \cl \) interacts with a replica through the program \(\prog_{\CodeFont{COPS}} \),
-defined by:
-%\SpaceAboveMath
-%\begin{align*}
-\(
-    \prog_{\CodeFont{COPS}} \defeq
-    ( \cl: \begin{transaction} \pmutate{\key_1}{\val_1} \end{transaction} ; \ 
-    \begin{transaction} \pderef{\vx}{\key_1}; \ \pderef{\vy}{\key_2} \end{transaction} ) .
-\)
-%\end{align*}
-%\SpaceBelowMath
 
+We demonstrate how a COPS client \( \cl \) interacts with a replica through the following example:
+\(
+    \prog_\CodeFont{cops-cl} \defeq \cl: \pcopsput(\key_1,\val_1) ; \ 
+    \pcopsread(\List{\key_1,\key_2})
+\).
 For brevity, we assume that there are two keys, $\key_1$ and $\key_2$, 
 and two replicas, $\repl_1$ and $\repl_2$, where $\repl_1 < \repl_2$ (\cref{fig:initial-cops}).
 Initially, client \( \cl \) connects to replica \( \repl_1 \) and initialises its local context as $ctx {=} \emptyset$.
@@ -99,12 +99,12 @@ For instance, in \cref{fig:cops-re-read-values}, replica $\repl_1$ re-fetches
 the newer version \( ( \key_1, \val'_1, (\txid_1,\repl_2),\emptyset ) \) for \( \key_1 \).
 Finally, the snapshot obtained after the second phase 
 are sent to the client, and then added to the client context.
-For their specific setting, \citet{cops} \emph{informally} argue that the snapshot sent to the client is causally consistent.
+For their specific setting, Lloyd et al. \citet{cops} \emph{informally} argue that the snapshot sent to the client is causally consistent.
 By contrast, we \emph{verify} the COPS protocol with our general definition of causal consistency.
 
 
-\mypar{COPS Verification} To prove that COPS satisfies causal consistency,
-we give an operational semantics for COPS that is faithful to the protocol, which allows fine-graind reads and writes
+\mypar{COPS Verification} 
+we give an operational semantics for the COPS protocol, which allows fine-grained single reads and writes of a key
 and show that COPS traces can be refined to traces in our semantics using \( \ET[\CC] \) in three steps:
 \begin{enumerate*}
 \item every COPS trace can be transferred to a normalised COPS trace, 
@@ -122,8 +122,14 @@ given client \(\cl\) and replica \( \repl_1 \),
 \item \( \cl \) starts a multi-read transaction (\( \mathtt{s} \));
 \item \( \cl \) reads  \( (\opR,\key_1, (\txid_1,\repl_1)) \) from $\repl_1$;
 \item \( \repl_1 \) receives synchronisation messages (\(\mathtt{sync}\));
+\item \( \cl \) reads  \( (\opR,\key_2, (\txid_2,\repl_2)) \) from $\repl_2$;
 \item \( \cl \) enters the second phase of the multi-read transaction (\(\mathtt{p}\));
+\item an arbitrary step \( \lb \) interferes;
+\item \( \cl \) re-fetches the version \( (\opR,\key_1, (\txid_1,\repl_2)) \) from \( \repl_2 \) and puts the version in the snapshot;
+\item an arbitrary step \( \lb' \) interferes;
 \item \( \cl \) receives returned versions of the transaction (\(\mathtt{e}\)).
+\item \( \cl \) puts the version \( (\opR,\key_2, (\txid_2,\repl_2)) \) in the snapshot;
+\item \( \cl \) reads the values in the snapshot and commit the multi-read transaction (\(\mathtt{e}\)).
 \end{enumerate*}
 
 \input{cops-trace.tex}
@@ -311,17 +317,20 @@ A multi-counter library on a set of keys \( \keyset \) is
 Recall from \cref{sec:overview} that unlike in $\SER$ and $\SI$, under $\PSI$ clients can observe 
 the increments on different keys in different orders (see \cref{fig:cp-disallowed}).
 As such, the multi-counter library is not robust against $\PSI$. 
+
 The following result shows that 
-the multi-counter library is robust against \( \SI \).
-We show that the multi-counter library satisfies a pattern, named \emph{\( \WSI \)-safe}
+the multi-counter library and banking library from \citet{bank-example-wsi} are robust against \( \SI \).
+We show that these two libraries satisfy a pattern, named \emph{\( \WSI \)-safe},
 which guarantees the robustness against \( \WSI \) 
 and hence \( \SI \).
-We then use this pattern to show a banking library from \cite{bank-example-wsi} is robust against \( \SI \)
+To show \( \WSI \)-safe inducing robustness,
+we use two specific acyclic results on kv-stores.
 
 \mypar{Acyclic results on kv-stores}
 We prove two general acyclic properties on kv-stores, which
 can be seen as invariant properties.
-We use these two specific acyclicity results in \( \WSI \)-safe.
+First, any reachable kv-store \( \kvs\) under \( \et[\top] \) does not contains cycle of the relation \( (\SO {\cup} \WR_{\mkvs}) \).
+Then, we show any reachable kv-store \( \kvs\) under \( \et[\CP] \) does not contains cycle of the relation \( ((\SO {\cup} \WR_{\mkvs}); \RW_{\mkvs}^{-1})\).                  
 
 \SpaceAboveDef
 \begin{theorem}
@@ -388,9 +397,6 @@ which means \(\ToEdge{ \txid | \RW_{\kvs'} -> \txid_1 } \) cannot happen.
 \mypar{Robustness Conditions against $\WSI$}
 Many libraries \citep{snapshot-isolation-robust-tool,giovanni_concur16,bank-example-wsi} 
 yield kv-stores that have a particular pattern that guarantees robustness against \( \WSI \):
-%Several libraries in the literature that are robust against $\SI$ 
-%\citep{giovanni_concur16,bank-example-wsi} are also robust against $\WSI$.
-%The operations of these libraries all yield kv-stores that adhere to a particular pattern:% captured by the following definition.
 
 \SpaceAboveDef
 \begin{definition}[\(\WSI\)-safe]
@@ -432,23 +438,29 @@ It is straightforward to see that the version $j$ read by \( \txid \) in \eqref{
 We proceed by contradiction.
 Assume that there exists $\txid_1$ such that $\txid_1 \toEDGE{(\SO \cup \WR_{\mkvs} \cup \WW_{\mkvs} \cup \RW_{\mkvs})^{+}} \txid_1$. 
 By \cref{thm:acyclic-cc}, \( (\SO \cup \WR_{\mkvs})^{+} \) is acyclic.
-Any \( \WW_{\mkvs} \) edge can be replace by \( \WR_{\mkvs}^{+} ]) \)
-because of no no-blind-writes in \eqref{equ:main-wsi-safe-write-must-read} and \( \UA \).
+Because of no no-blind-writes in \eqref{equ:main-wsi-safe-write-must-read} and \( \UA \),
+any \( \WW_{\mkvs}(\key)\) edge on a key \( \key \) can be replace by \( \WR_{\mkvs}^{+}(\key) ) \), 
+illustrated by \cref{fig:wr-replace-ww}.
 Therefore, \( (\SO \cup \WR_{\mkvs})^{+} \cup \WW_{\kvs}\) is acyclic.
 Hence, any cycle must of the form:
 \(
     \txid_1 \toEDGE{\rel^*} \txid_2 \toEDGE{\RW} \txid_3 \toEDGE{\rel^*} \cdots \toEDGE{\rel^*} \txid_{n-2} \toEDGE{\RW} \txid_{n-1} \toEDGE{\rel^*} \txid_n = \txid_1
 \),
 where \( \rel \defeq \WR \cup \SO \cup \WW \).
-By \eqref{equ:main-wsi-safe-write-must-read} and \eqref{equ:main-wsi-safe-all-write} we know that 
-an \( \RW \) edge starting from a writing transaction can be replaced by a \( \WW \) edge.
-Moreover, \( \WW \) edges can be replaced by \( \WR^+ \).
-We thus have:
+By \eqref{equ:main-wsi-safe-all-write} we know that 
+an \( \RW_{\mkvs}(\key_1) \) edge on a key \( \key_1 \) starting from 
+a writing transaction \( \txid \) can be replaced by a \( \WW \) edge,
+illustrated by \cref{fig:ww-replace-rw}.
+Note that \( \txid \) might not write to a different key \( \key_2 \).
+However, by the \( \RW_{\mkvs}(\key_1) \) edge, \( \txid \) reads \( \key_1 \),
+and by \eqref{equ:main-wsi-safe-all-write}, it must also write to \( \key_1 \).
+Moreover, we replace any new \( \WW \) edges by \( \WR^+ \).
+We thus have
 \(
     \txid_1 \toEDGE{{\rel'}^*} \txid'_2 \toEDGE{\RW} \txid'_3 \toEDGE{{\rel'}^+} \cdots \toEDGE{{\rel'}^+} \txid'_{m-2} \toEDGE{\RW} \txid'_{m-1} \toEDGE{{\rel'}^*} \txid'_m = \txid_n = \txid_1
 \),
-where \( \rel' \defeq \WR \cup \SO \).
-That is, \( \txid_1 \toEDGE{( \rel'; \RW^? )^* } \txid_1 \).
+where \( \rel' \defeq \WR \cup \SO \),
+that is, \( \txid_1 \toEDGE{( \rel'; \RW^? )^* } \txid_1 \).
 This leads to a contradiction with respect to \cref{thm:acyclic-cp}.
 
 \mypar{Robustness of a Banking Library against $\WSI$}
