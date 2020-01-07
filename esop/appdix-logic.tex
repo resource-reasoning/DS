@@ -1,0 +1,426 @@
+\section{Logic}
+
+
+\sx{
+    Parametrised by CM.
+
+    Generalise CAP by generalise the meaning of box assertions, stable and atomic update rule.
+
+    Two example write skew and long fork.
+
+    Discussion: our first step. For each consistency models, we want to build specific pattern to use the capabilities
+    so to provide a more syntactic rules.
+
+    Cite: FCSL(for the idea that recording some history in the assertions), 
+    CAP,
+    Iris (they have powerful framework, whether it also fits in the weaker consistency world?)
+    TaDA
+    Relaxed SL (The first separation logic that deal with weaker behaviour)
+
+    Alexey, Reaon about ..... in Dis. Sys. A proof system to verify if 
+    a system (a set of operations that might be installed with tokens to specify synchronisation ) satisfies invariant.
+}
+
+We present a logic that is parametrised by consistency models that have strong session guarantees.
+The logic has syntax that similar to concurrent abstract predicate (CAP),
+but we generalise \emph{assertions} and \emph{atomic update rule} so it is parametrised by consistency models.
+
+
+We motivate the logic by the \emph{write skew} example under snapshot isolation (\cref{fig:write-skew-si-proof}).
+This example distinguishes snapshot isolation (SI) from serialisability.
+For serialisability that transactions appear one after another, only one key, \( \vx \) or \( \vy \), will be 1 at the end.
+While for SI, transactions take a snapshot when they start, and concurrent transactions can commit as long as they write to different keys.
+In \cref{fig:write-skew-si-proof}, both transactions may take snapshots where \( \vx \) and \( \vy \) are 0, and can commit, 
+which yields result that \( \vx \) and \( \vy \) are 1.
+
+\begin{figure}[!t]
+\hrule
+\[
+\intass :
+\begin{array}[t]{@{} c @{\quad} c @{\quad}  @{} }
+\begin{rclarray}[t]
+    \CB{L} & : & \vx \fpW 1 \sep \vy \fpR 0 \sep \null \fpA \cass{\CB{L}}{\lrid} \\
+\end{rclarray}
+&
+\begin{rclarray}[t]
+    \CB{R} & : & \vx \fpR 0 \sep \vy \fpW 1 \sep \null \fpA \cass{\CB{R}}{\lrid} \\
+\end{rclarray}
+\\
+\begin{rclarray}[t]
+    \CB{U} & : & \exsts{\V n} \vx \fpR \V{n} \\
+\end{rclarray} 
+&
+\begin{rclarray}[t]
+    \CB{U} & : & \exsts{\V n} \vy \fpR \V{n} \\
+\end{rclarray} \\
+\end{array}
+\]
+\[
+\CB{L} \composeK \CB{L} \ \text{is undefined} \quad  \CB{R} \composeK \CB{R} \ \text{is undefined} \quad \CB{U} \ \text{is the unit}
+\]
+\hrule\vspace{5pt}
+\[
+\begin{session}
+{\color{blue}P : } \specline{ \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass}  } \\
+\begin{parl}
+\begin{session}
+    {\color{blue}P1 : } \specline{\cass{\CB{L}}{\lrid} \sep 
+            \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
+    } \\
+    \txid_1 : \begin{transaction}
+        {\color{blue}p1 : } \specline{\vx \fpI 0 \sep ( \vy \fpI 0 \lor \vy \fpI 1 )} \\
+        \plookup{\pvar{b}}{\vy} ; 
+        \quad \pifs{\pvar{b} = 0} 
+        \pmutate{\vx}{1} ;
+        \pife \\
+        {\color{blue}q1 : } \specline{\vx \fpW 1 \sep  \vy \fpR 0 \lor {}\\
+        \quad \vx \fpI 0 \sep \vy \fpR 1 )} \\
+    \end{transaction} \\
+    {\color{blue}Q1 : } \specline{ 
+            \boxass{ \vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} \\
+            {} \lor \boxass{\vx \pt 1 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep {} \\
+            \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}  \\
+            {} \lor \cass{\CB{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \\
+    } \\
+\end{session}
+&
+\begin{session}
+    {\color{blue}P2 : } \specline{\cass{\CB{R}}{\lrid} \sep 
+            \boxass{ ( \vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \\
+            {} \lor \boxass{ ( \vx \pt 0 \lor \vx \pt 1 ) \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
+    } \\
+    \txid_2 : \begin{transaction}
+        {\color{blue}p2 : } \specline{ ( \vx \fpI 0 \lor \vx \fpI 1 ) \sep \vy \fpI 0 )} \\
+        \plookup{\pvar{a}}{\vx} ; 
+        \quad \pifs{\pvar{a} = 0} 
+        \pmutate{\vy}{1} ; 
+        \pife \\
+        {\color{blue}q2 : } \specline{ \vx \fpR 0 \sep \vy \fpW 1 \lor {} \\
+        \quad \vx \fpR 1 \sep \vy \fpI 0 )} \\
+    \end{transaction} \\
+    {\color{blue}Q2 : } \specline{ 
+            \boxass{ \vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} \\
+            {} \lor \boxass{ ( \vx \pt 0 \lor \vx \pt 1 ) \sep \vy \pt 1 \sep {} \\
+            \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \\
+            {} \lor \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}  \\
+    } \\
+\end{session}
+\end{parl} \\
+{\color{blue}Q : } \specline{ 
+        \cass{\CB{L}}{\lrid} \sep \boxass{ \vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
+        \lor \cass{\CB{R}}{\lrid} \sep \boxass{\vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}
+        \lor \boxass{ \vx \pt 1 \sep \vy \pt 1 \sep \cass{\CB{L}}{\lrid} \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \\
+} \\
+\end{session}
+\]
+\hrule
+\caption{Interference (the top) and the sketch proof (the bottom) for write skew under snapshot isolation}
+\label{fig:write-skew-si-proof}
+\end{figure}
+
+We often use \( \lpre, \lpost \) to denote \emph{transactional assertions} and \( \gpre, \gpost \) for \emph{program assertions}.
+The transactional assertions, such as \( p1 \) in \cref{fig:write-skew-si-proof}, 
+describe the state of local snapshots for transactions and more importantly the fingerprints.
+The fingerprint is the transaction's contribution to the key-value store, that is, \emph{the first read preceding any write} and \emph{last write} of each key.
+The transactional assertions for individual keys have the following forms: \( \vx \fpI 0 \), \( \vx \fpR 0\), \( \vx \fpW 0\), and \( \vx \fpRW (0,1) \),
+where \( \otR \) and \( \otW \) are read and write labels respectively.
+The first three asserts the only key \( \vx \) in the local snapshot has value 0 and it has not been touched (no label), 
+has been read (\(\otR\)) and has been written (\(\otW\)) respectively.
+The last one asserts that the key \( \vx \) currently has value 1, 
+\emph{the first read preceding any write} fetched 0 and the \emph{the last write} updated the key to \( 1 \).
+We extend the standard sequential separation logic rules in a ways that the first read to a key adds a read label to the assertion; 
+and a write to a key adds a write label to assertion and updates the value.
+It is easy to see that transactional assertions are interpreted as pairs of snapshots and fingerprints.
+We use \( (\sn,\fp) \in \evalLS{\lpre} \) to denote the snapshot \( \sn \) and fingerprint \( \fp \) satisfy 
+the assertion \( \lpre \) under the stack \( \stk \) and logical environment \( \lenv \).
+All the detail is in \cref{sec:reasoning-transaction}.
+
+The program assertions, such as \( P1 \) in \cref{fig:write-skew-si-proof}, 
+describe clients' views on key-value stores, together with some capabilities for the purpose of reasoning.
+The assertion in the form of \( \boxass{\bar{\lpre}}{\lrid}{\intass}\),
+for example \( \boxass{\vx \pt 1 \sep \vy \pt 1}{\lrid}{\intass} \) in \( \gpre_1 \),
+is called the \emph{shared region assertions} also know as \emph{boxed assertions},
+where \( \lrid \) is a unique \emph{region identifier},  \( \intass \) is \emph{interference},
+and \( \lpre \) describes the views on key-value stores.
+Region are shareable and indivisible, \ie 
+\( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \iff \boxass{\bar{\lpre} \land \bar{\lpost}}{\lrid}{\intass}\).
+
+Interference is a set of actions to specify what transactions are allowed by the region.
+Each action has the form \( \kap : \assfp \),
+where \( \kap \) is the \emph{client-specified capability} and \( \assfp \) is the \emph{fingerprint},
+describes that if a client holds the capability \( \kap \), 
+it is allowed to execute a transaction with the fingerprint \( \assfp \).
+For instance in \cref{fig:write-skew-si-proof}, 
+the \( \CB{L}\) allows a client to read \( \vy \) when it is 0 (\(\vy \fpR 0\)) and write 1 to \( \vx \) (\(\vx \fpW 1\)),
+and similarly \( \CB{R} \) allows a client to read \( \vx \) when it is 0 and write 1 to \( \vy \).
+The fingerprint \( \assfp \) in an action also specifies capabilities transformation.
+For example, \( \null \fpA \cass{\CB{L}}{\lrid} \) means that \( \CB{L} \) needs to return to the shared region after the transaction is committed.
+Last, the capabilities forms \emph{a partial commutative monoid (PCM)} where \( \composeK \) denotes the composition function.
+In the write skew example (\cref{fig:write-skew-si-proof}), 
+both \( \CB{L} \) and \( \CB{R} \) are unique as the compositions are undefined and \( \CB{U} \) is the unit.
+
+Interference induces a label transitions system upon states \( (\mkvs, \vi, \ca) \)
+where the labels are actions from the interference.
+Then the \emph{invariant} of a region \( \func{inv}{\lrid} \) is the set of states reachable from 
+the initial states of the regions provided by the function \( \func{init}{\lrid}\).
+
+Given the invariant, a state \( (\mkvs, \vi, \ca) \) satisfies the assertion \( \boxass{\bar{\lpre}}{\lrid}{\intass} \),
+if it is in the invariant of the region \( (\mkvs, \vi, \ca) \in \func{inv}{\lrid} \) and the snapshot induced by the view \( \snapshot[\mkvs, \vi] \) and 
+the shared capabilities satisfy \( \bar{\lpre} \) (details in \cref{def:prog-assertion}).
+
+Now let discuss the sketch proof in \cref{fig:write-skew-si-proof}, 
+especially the \(\rl{PRCommit} \) rule for committing a transaction (other rules are standard and can be found in \cref{sec:reasoning-prog}):
+\[
+    \inferrule[\rl{PRCommit}]{%
+        \tripleL{\lpre}{\trans}{\lpost} 
+        \\ \repartition{\gpre}{\gpost}{\lpre}{\lpost}
+        \\\\ \stable{\gpre, \ET} 
+        \\ \stable{\gpost, \ET} 
+    }{%
+        \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
+    }
+\]
+An assertion \( \gpre \) is \emph{stable} under execution test \( \ET \), written \( \stable{\gpre, \ET} \), if it is true against the interference.
+Stabilisation needs to takes the following two situations into account: 
+\textbf{(i)} the environment might interfere and change the state of key-value stores, 
+note that, but not the views of the current client since the views are local; 
+\textbf{(ii)} consequentially, the client might advance the views.
+For example, \( P1 \) is stable as it describes the states that 
+either the environment does nothing \( \boxass{\vx \pt 0 \sep \vy \pt 0 }{\lrid}{\intass} \),
+or the environment has performed the action associated with \( \cass{\CB{R}}{\lrid}\), 
+after which the environment cannot do any further action since the capabilities \( \cass{\CB{R}}{\lrid}\) is in the shared region,
+\ie \( \boxass{\vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass}  \).
+Let discuss further the assertions \( \vx \pt 0 \sep ( \vy \pt 0 \lor \vy \pt 1 ) \sep \cass{\CB{R}}{\lrid} \).
+The environment returns the capability \( \cass{\CB{R}}{\lrid} \), 
+it means the environment commits a transaction that writes 1 to \( \vy \) and the capability \( \cass{\CB{R}}{\lrid} \), 
+yet since the current client still have the \( \vy \pt 0 \) as its view on the \( \vy \).
+Afterword, the view might be advanced so we get an more up-to-date view with \( \vy \pt 1 \).
+
+We generalise the \emph{repartitioning} \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \) from CAP \cite{cap}:
+\begin{definition}[Repartitioning]
+The repartitioning  \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \) is defined as that 
+given any key-value store, view and capabilities, \( (\mkvs, \vi, \ca) \) that satisfy the precondition \( \gpre \):
+\begin{itemize}
+    \item the snapshot \( \snapshot[\mkvs,\vi] \) together with empty fingerprint satisfies the transactional precondition \( \lpre \); and
+    \item for any snapshot and fingerprint \( \fp \) satisfy the transactional postcondition \( \lpost \), if
+        there exists a new key-value store \( \mkvs' \), a new view \( \vi' \) and new capabilities \( \ca' \) such that 
+    \begin{itemize}
+        \item the new key-value store \( \mkvs' \in \updateKV(\mkvs, \vi, \stub, \fp) \),
+        \item the update is allowed by the execution test, \ie \( (\mkvs, \vi) \csat \fp : \vi' \), and
+        \item the transition from \( (\mkvs, \vi, \ca) \) to \( (\mkvs', \vi', \ca') \) is allowed by guarantee, \ie some local capabilities,
+    \end{itemize} 
+\end{itemize}
+then the state \( (\mkvs', \vi', \ca') \) satisfies the postcondition \( \gpost \).
+\end{definition}
+
+For example,  let consider the transaction \( \txid_1 \) in \cref{fig:write-skew-si-proof}.
+The precondition \( P1 \) asserts following views:
+
+%\begin{center}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+
+%%Location x
+%\node(locx) {$\vx \mapsto$};
+
+%\matrix(versionx) [version list]
+    %at ([xshift=\tikzkvspace]locx.east) {
+    %{a} \& $\txid_0$ \\
+    %{a} \& $\emptyset $ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%\matrix(versiony) [version list]
+   %at ([xshift=\tikzkvspace]locy.east) {
+  %{a} \& $\txid_0$  \\
+  %{a} \& $\emptyset $ \\
+%};
+
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%%
+%\quad
+%%
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+
+%%Location x
+%\node(locx) {$\vx \mapsto$};
+
+%\matrix(versionx) [version list]
+    %at ([xshift=\tikzkvspace]locx.east) {
+    %{a} \& $\txid_0$ \\
+    %{a} \& $\Set{\txid}$  \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%\matrix(versiony) [version list, column 3/.style={dotted}, column 4/.style={dotted}]
+   %at ([xshift=\tikzkvspace]locy.east) {
+       %{a} \& $\txid_0$ \& {a} \& \color{gray}$\txid$ \\
+  %{a} \& $\emptyset$ \& {a} \&  \color{gray} $\emptyset$\\
+%};
+
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%\node[version node,draw=none,fit=(versiony-1-3) (versiony-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$1$};
+
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%%
+%\quad
+%%
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+
+%%Location x
+%\node(locx) {$\vx \mapsto$};
+
+%\matrix(versionx) [version list]
+    %at ([xshift=\tikzkvspace]locx.east) {
+    %{a} \& $\txid_0$ \\
+    %{a} \& $\Set{\txid}$  \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%\matrix(versiony) [version list]
+   %at ([xshift=\tikzkvspace]locy.east) {
+ %{a} \& $\txid_0$ \& {a} \& $\txid$ \\
+  %{a} \& $\emptyset$ \& {a} \& $\emptyset$\\
+%};
+
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
+
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\end{center}
+%Note that the they must satisfy the invariant of the region \( \lrid \).
+%The transactional precondition \( p1 \) describes exactly the snapshots given the views above.
+%The transaction \( \txid_1 \) has the fingerprints \( \Set{(\otW, \vx, 1), (\otR, \vy, 0)} \) or  
+%\( \Set{(\otR, \vx, 1)} \) by the transactional postcondition \( \lpost \).
+%The repartitioning asserts that any new key-value stores \( \mkvs' \) and new views \( \vi' \)
+%by committing the fingerprint under snapshot isolation \( \SI \):
+%\begin{center}
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+
+%%Location x
+%\node(locx) {$\vx \mapsto$};
+
+%\matrix(versionx) [version list, column 2/.style={text width=7mm}]
+    %at ([xshift=\tikzkvspace]locx.east) {
+        %{a} \& $\txid_0$ \& {a} \& $\txid'$ \\
+        %{a} \& $\emptyset$ \& {a} \& $\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%\matrix(versiony) [version list, column 2/.style={text width=7mm}]
+   %at ([xshift=\tikzkvspace]locy.east) {
+  %{a} \& $\txid_0$  \\
+  %{a} \& $\Set{\txid'}$ \\
+%};
+
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%%
+%\quad
+%%
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+
+%%Location x
+%\node(locx) {$\vx \mapsto$};
+
+%\matrix(versionx) [version list, column 2/.style={text width=7mm}]
+    %at ([xshift=\tikzkvspace]locx.east) {
+        %{a} \& $\txid_0$ \& {a} \& $\txid'$ \\
+        %{a} \& $\Set{\txid}$ \& {a} \& $\emptyset$ \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+%\tikzvalue{versionx-1-3}{versionx-2-3}{locx-v1}{$1$};
+
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%\matrix(versiony) [version list, column 2/.style={text width=7mm}, column 3/.style={dotted}, column 4/.style={dotted}]
+   %at ([xshift=\tikzkvspace]locy.east) {
+       %{a} \& $\txid_0$ \& {a} \& \color{gray}$\txid$ \\
+       %{a} \& $\Set{\txid'}$ \& {a} \&  \color{gray} $\emptyset$\\
+%};
+
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%\node[version node,draw=none,fit=(versiony-1-3) (versiony-2-3),fill=white, inner sep=0pt] (locx-v1) {\color{gray}$1$};
+
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%%
+%\quad
+%%
+%\begin{tikzpicture}
+%\begin{pgfonlayer}{foreground}
+%%\draw[help lines] grid(5,4);
+
+%%Location x
+%\node(locx) {$\vx \mapsto$};
+
+%\matrix(versionx) [version list]
+    %at ([xshift=\tikzkvspace]locx.east) {
+    %{a} \& $\txid_0$ \\
+    %{a} \& $\Set{\txid}$  \\
+%};
+%\tikzvalue{versionx-1-1}{versionx-2-1}{locx-v0}{$0$};
+
+%%Location y
+%\path (locx.south) + (0,\tikzkeyspace) node (locy) {$\vy \mapsto$};
+%\matrix(versiony) [version list]
+   %at ([xshift=\tikzkvspace]locy.east) {
+ %{a} \& $\txid_0$ \& {a} \& $\txid$ \\
+  %{a} \& $\emptyset$ \& {a} \& $\emptyset$\\
+%};
+
+%\tikzvalue{versiony-1-1}{versiony-2-1}{locy-v0}{$0$};
+%\tikzvalue{versiony-1-3}{versiony-2-3}{locy-v1}{$1$};
+
+%\end{pgfonlayer}
+%\end{tikzpicture}
+%\end{center}
+they should satisfy the postcondition \( \gpost \).
+It is easy to see that
+the fingerprint \( \Set{(\otW, \vx, 1), (\otR, \vy, 0)} \) is allowed to commit 
+by \( \cass{\CB{R}}{\lrid} \) after which it returns to the region,
+and \( \Set{(\otR, \vy, 1)} \) is allowed by \( \CB{U} \).
+This will give us a postcondition \emph{before stabilisation}:
+\[
+\boxass{ \vx \pt 1 \sep \vy \pt 0 \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass} 
+\lor \boxass{\vx \pt 1 \sep \vy \pt 1  \sep \cass{\CB{R}}{\lrid} \sep \cass{\CB{L}}{\lrid} }{\lrid}{\intass}
+\lor \cass{\CB{L}}{\lrid} \sep \boxass{\vx \pt 0 \sep \vy \pt 1 \sep \cass{\CB{R}}{\lrid} }{\lrid}{\intass} 
+\]
+By stabilisation we will get the final postcondition \( \gpost_1 \) shown in \cref{fig:write-skew-si-proof}.
+
+
+We can also prove the \emph{long fork} (\cref{.......}), 
+which distinguish snapshot isolation (SI) from parallel snapshot isolation (PSI).
+We use the similar pattern by putting back the capabilities to the region once the capabilities has been used for helping the reasoning.
+
+
+\input{\RootPath/logic/transaction.tex}
+\input{\RootPath/logic/program.tex}
+\input{\RootPath/logic/trans_sound.tex}
+\input{\RootPath/logic/prog_sound.tex}

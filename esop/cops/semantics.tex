@@ -1,0 +1,207 @@
+A COPS client interacts with the replica via calling \( \pcopsput \) and \( \pcopsread \):
+\begin{enumerate*}
+\item function \( \pcopsput(\key,\val) \) commits a new value \( \val \) for  key \( \key \),
+and the replica will accept this version immediately and then broadcast to other replicas via synchronised messages;
+\item function \( \pcopsread(\keyset) \) requests a causally dependent snapshot for the key set \( \keyset \),
+and for better performance, the replica will prepare this snapshot in a fine-grained manner, reading keys one by one.
+\end{enumerate*}
+The API is modelled in \cref{def:cops-commands}.
+To models the fine-grained read in the replica side, 
+we introduce \emph{runtime commands} \( \COPSRunCommands \) to track intermediate states of \(\pcopsread\).
+
+\begin{definition}[COPS Commands and Programs]
+\label{def:cops-commands}
+A \emph{COPS command} \( \copscmd \) is defined by the following grammar:
+for any key \( \key \in \Keys\), key set \( \keyset \subseteq \Keys\) and \( \val \in \Values\),
+\[
+\copscmd ::= \pcopsput(\key,\val) | \pcopsread(\keyset) | \copscmd \pseq \copscmd  .
+\]
+Let \( \COPSCommands \ni \copscmd \) denote the set of \emph{COPS commands}.
+A \emph{COPS runtime command} \( \copsruncmd \) is defined by the following grammar:
+for any \( \copsverlist,\copsverlist' \in \List{\COPSVersions}\) and \( \copsdepset \in \List{\COPSDependencies} \),
+\[
+\copsruncmd ::= \pcopsput(\key,\val) | \pcopsread(\keyset) 
+        | \pcopsread(\keyset) : \copsverlist 
+        | \pcopsread(\keyset) : (\copsverlist,\copsdepset) 
+        | \pcopsread(\keyset) : (\copsverlist,\copsdepset,\copsverlist') 
+        | \copsruncmd \pseq \copsruncmd .
+\]
+Let \( \COPSRunCommands \ni \copsruncmd \) denote the set of \emph{COPS runtime commands}.
+The sets of \emph{COPS programs}, \( \COPSPrograms \ni \copsprog \),
+and \emph{COPS runtime programs}, \( \COPSRunPrograms \ni \copsrunprog \),
+are defined by \( \COPSPrograms \TypeDef \Clients \ToPFFunc \COPSCommands\)
+and \( \COPSRunPrograms \TypeDef \Clients \ToPFFunc \COPSRunCommands\) respectively.
+\end{definition}
+
+A replica prepares the causally dependent snapshot for a key set \( \keyset \) in three phases,
+\( \pcopsread(\keyset) : \copsverlist \),
+\( \pcopsread(\keyset) : (\copsverlist,\copsdepset) \) and 
+\( \pcopsread(\keyset) : (\copsverlist,\copsdepset,\copsverlist') \).
+We will give the semantics later.
+
+\begin{proposition}[COPS Runtime Command Inclusion]
+\(\COPSCommands \subseteq \COPSRunCommands\).
+\end{proposition}
+
+We verify COPS via trace refinement.
+To help the proofs, we label each step in the COPS trace:
+each label corresponds to a rule in the semantics
+(\cref{fig:cops-semantics-write,fig:cops-semantics-read,fig:cops-semantics-program}).
+Any local computation is labelled with \( \lbCOPSPri \).
+The reduction step for a single-write transaction is labelled with \( \lbCOPSWrite{ \opW(\key,\val), \copstxid,\copsdep} \).
+As explained before,
+multiple-read requests are processed in two phase internally in the replica.
+The labels \( \lbCOPSOptRead{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSBound,
+    \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSFinishRead{\copsctx} \)
+means optimistic read of \( \key \), phase change, re-fetch of \( \key \)
+and return the set of versions \( \copsctx \) respectively.
+Last, \( \lbCOPSSync{\copstxid} \) labels the step where replica \( \repl \) receives new version \( \copsver \).
+                                                                                                          
+The reference semantics for COPS commands is defined in \cref{fig:cops-semantics-write,fig:cops-semantics-read}.
+Rules are labelled with information that are usefully for proving properties.
+
+\begin{definition}[COPS Labels]
+The set of \emph{COPS labels} \( \Labels \ni \lb \) is defined by 
+\[
+    \Labels \supseteq 
+    \bigcup_{\substack{\cl \in \Clients, \repl \in \COPSReplicas
+                    \\ \key \in \Keys, \val \in \Values
+                    \\ \copstxid \in \COPSTxIDs, \copsdep \in \COPSDependencies } }
+    \Set{\lbCOPSPri, \lbCOPSWrite{ \opW(\key,\val), \copstxid,\copsdep},
+              \\ \lbCOPSOptRead{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSBound,
+              \\ \lbCOPSRefetch{\opR(\key,\val), \copstxid,\copsdep}, \lbCOPSFinishRead{\copsctx}
+              , \lbCOPSSync{\copstxid}}.
+\]
+\end{definition}
+
+\paragraph{Rule for \pcopsput.} 
+When a client calls \pcopsput function (\cref{lst:cops-put}),
+it sends a new value \( \var(v) \) for key \( \pk \) 
+with the context \( \copsctx \) to a replica  \( \repl \).
+Once the replica receives the update request, 
+it creates a new version for \( \pk \) with the new value \( \var(v) \), 
+allocates this version with a new version identifier consisting of 
+the next local time-stamp and the replica identifier
+and assigns the client context \( \pctx \) as the dependency set 
+(\cref{line:cops-put-update-kv} in \cref{lst:cops-put}).
+This new version will be added into the context in \cref{line:cops-put-update-ctx} in \cref{lst:cops-put}.
+Now the replica is ready to send back the acknowledgement to the client.
+Last, the new version is broadcasted to all other replicas.
+
+\input{cops/fig-write}
+
+In \rCOPSWrite rule in \cref{fig:cops-semantics-write},
+the second and third premises model \cref{line:cops-put-inc-local,line:cops-put-update-kv} 
+in \cref{lst:cops-put} respectively.
+Function \( \COPSInsert(\copskvs, \key, \copsver) \) inserts the version 
+in a position that preserves the order.
+
+\begin{definition}[List Insertion]
+Given a COPS store \( \copskvs \in \COPSKVSs \) and 
+a version \( \copsver \in \COPSVersions \) for a key \( \key \in \Keys \).
+Function \( \COPSInsert(\copskvs, \key, \copsver) \) is defined by
+\[
+    \COPSInsert(\copskvs, \key, \copsver) \FuncDef 
+    \begin{multlined}[t]
+    \CodeFont{let} \ \copsverlist = \copskvs(\key)
+    \ \CodeFont{and} \ \List{\copsver_0,\cdots, \copsver_i, \copsver_{i+1}, \cdots, \copsver_n} = \copsverlist
+    \\ \CodeFont{where} \ \WtOf(\copsver_i) \copstxidleq  \WtOf(\copsver) \copstxidleq  \WtOf(\copsver_{i+1})
+    \\ \CodeFont{in} \ \copskvs\UpdateFunc{
+        \key -> \List{\copsver_0,\cdots, \copsver_i, \copsver, \copsver_{i+1}, \cdots, \copsver_n}} .
+    \end{multlined}
+\]
+\end{definition}
+
+\begin{proposition}[Well-defined \COPSInsert]
+Given a COPS store \( \copskvs \in \COPSKVSs \) and 
+a version \( \copsver \in \COPSVersions \) for a key \( \key \in \Keys \)
+such that \( \WtOf(\copsver) \notin \copskvs \),
+the new store \( \COPSInsert(\copskvs, \key, \copsver) \) 
+is a well-formed COPS store.
+\end{proposition}
+
+
+\paragraph{Rules for \pcopsread.} \Cref{lst:cops-read} presents the reference implementation for \pcopsread that
+a client requests a snapshot for keys \( \pks \) from a replica \( \repl \).
+The semantics for \pcopsread is given in \cref{fig:cops-semantics-read}.
+As explained before, 
+the replica constructs this snapshot in two phases.
+
+\input{cops/fig-read}
+
+In the first phase (\cref{line:cops-optimistic-read} in \cref{lst:cops-read}),
+replica reads the latest version for each key 
+(using \( \CodeFont{get\_by\_version}\), with \( \CodeFont{LATEST} \) label).
+However, interleaving may happen between two reads.
+\rCOPSOptRead rule models this phase: 
+the latest version \( \copsver_i \) for key \( \key_i \) 
+in the replica kv-store \( \copskvs \) is added to the runtime version lists \( \copsverlist \),
+that is, \( \copsverlist \ListConcat \List{\copsver_i} \).
+The label for this rule tracks the client, the replica, the version and a \( \dagger \)
+to indicate the first phase.
+
+At the end of the first phase, 
+replica collects all dependency sets and uses them as an lower-bound in the second phase.
+This lower bound contains minimum versions in term of the version identifiers that can form
+a causal dependent snapshot for the key set \( \keyset \).
+In \(\rCOPSLowerBound\) rule, we use \(\VerLower( \keyset,\copsverlist ) \) 
+function to model the computation shown in \cref{line:cops-compute-lower-bound}.
+
+\begin{definition}[Version Lower-bound]
+Given a key set \( \keyset \) and list of versions for the key set \( \copsverlist \) 
+the function \( \VerLower( \keyset,\copsverlist ) \) is defined by
+\begin{align*}
+    \VerLower( \keyset,\copsverlist ) & \FuncDef 
+    \Let n = \Abs{\keyset} - 1 \
+    \In \List{\VerLowerN(\keyset\Proj{0},\copsverlist, 0), \cdots, \VerLowerN(\keyset\Proj{n},\copsverlist, n)} 
+    \\ \VerLowerN(\key,\copsverlist, \idx) & \FuncDef
+    \Tuple{ \key, \Max[\copstxidleq](\Set{\copstxid | 
+            \copstxid = \WtOf(\copsverlist\Proj{\idx}) \lor 
+            \Exists{\idx'} (\key, \copstxid) \in \DepOf(\copsverlist\Proj{\idx'}) 
+        }) } .
+\end{align*}
+\end{definition}
+
+The second phase re-fetches the version \( \copsver \) for each key \( \key \) 
+contained in the lower-bound, if the version that was read in the first phase is older than \( \copsver \),
+which is captured by \cref{line:cops-final-read} in \cref{lst:cops-read}.
+We model this second phase by \rCOPSRefetch rule:
+it re-fetches the version contained in the lower-bound \( \copsdepset \)
+if the version read in the first phase, that is, \( \copsverlist\Proj{\idx} \),
+is older than the version contained in the lower-bound, that is, \( copsdepset\Proj{\idx} \).
+
+Last, the replica returns the list of versions for the key set \( \keyset \)
+to the client and the client must include the versions in its context, 
+which is captured by \cref{line:cops-read-update-ctx}
+and modelled by \rCOPSFinishRead rule.
+
+All the rules for read and write are lift to a program level 
+standard interleaving semantics presented in \cref{fig:cops-semantics-program}:
+\rCOPSClient rule models that a client takes steps in turn.
+
+\input{cops/fig-program}
+
+\paragraph{Synchronisation Between Replicas}
+Replicas broadcast synchronisation messages for every new version that directly comes from client.
+Since versions are ordered and messages are assumed to be eventually delivered,
+this guarantees COPS satisfies eventual consistency, that is,
+all replicas eventually have the same state.
+Replica maintains queue for all new versions to be broadcasted.
+Once a replica receives a message with a new version \( \copsver \),
+it accepts the version only if all the versions that \(\copsver \) depends on exist in the replica.
+Otherwise, the replica waits the condition to be satisfied.
+This is captured by \cref{lst:cops-receive-msg}
+and \rCOPSSync rule in \cref{fig:cops-semantics-program} models the synchronisation.
+
+\begin{definition}[COPS Traces]
+The set of \emph{COPS traces} \( \COPSTraces \ni \copstrc \) is defined by 
+\( \COPSTraces \TypeDef \Set{\copsconfinit,\copsprog \ToCOPSProg*{\;}^* \copsconf,\copsprog' | 
+        \copsconfinit \in \COPSConfInits \land \copsprog, \copsprog' \in \COPSPrograms } \).
+Two traces \( \copstrc, \copstrc' \) are equivalent, written \( \copstrc \copstrceq \copstrc' \),
+if an only if, the last configurations are equal,
+\( \copstrc \copstrceq \copstrc' \PredDef \LastConf(\copstrc) = \LastConf(\copstrc') \).
+\end{definition}
+
+Note that a COPS trace has no unfinished read operation.
+Two COPS traces are equivalent if and only if the last configurations match.
+

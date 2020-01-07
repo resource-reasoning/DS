@@ -1,0 +1,353 @@
+In this section,
+we show how to encode a COPS machine state to our centralised kv-store,
+and then client contexts to views on the kv-store.
+
+For each extended COPS trace,
+the final configuration corresponds to a kv-store by replying all the transactions in order
+on the initial kv-store.
+Note that, the final configuration itself contains enough information for all the write transactions,
+however, we need the trace to recover the annotated identifies for multiple-read transactions.
+
+\begin{definition}[Centralised COPS kv-store]
+Given an extended COPS trace \( \copsexttrc \in \ExtCOPSTraces \) 
+the centralised kv-store induced by the trace, written \( \COPSToKVS(\copsexttrc) \), is defined in \cref{fig:def-cops-kv-trace}.
+%\begin{align*}
+   %\COPSToKVS(\copsconfinit,\copsprog) & \FuncDef \kvsinit ,
+%\\ \COPSToKVS(\ToCOPSProg{ \copstrc | \lb -> \cops | \copsctxenv | \copsrunprog })  
+            %& \FuncDef \CodeFont{let} \ \kvs =  \COPSToKVS(\copstrc) \ \CodeFont{in} 
+%\\ \multicolumn{2}{l}{
+        %\( \begin{cases}
+               %\kvs\UpdateFunc{\key -> \kvs(\key) \ListConcat \List{(\val,\copstxid[\cl][\repl](n,0),\emptyset)}}
+                    %& \If \lb = \lbCOPSWrite{\opW(\key,\val), \copstxid[\cl][\repl](n,0), \copsctx }  ,
+            %\\ \kvs\UpdateFunc{\key -> \kvs(\key)\UpdateFunc{\idx -> \Tuple{\val,\copstxid,\txidset \uplus \copstxid[\cl][\repl](n,m)}}} 
+            %& \multirow{2}{*}{\( \begin{multlined}[t] 
+                        %\If \lb = \Tuple{{\lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsctx}}, \copstxid[\cl][\repl](n,m)} 
+                        %\\[-20pt] {} \land \kvs(\key)\Proj{\idx} = (\val,\copstxid,\txidset) , \end{multlined} 
+                    %\) } 
+            %\\ & 
+            %\\ \kvs & \ow .
+        %\end{cases} \)
+    %}
+%\end{align*}
+
+%Given a COPS database \( \cops \), the merge of the database
+%\( \COPSMerge : \COPSs \ToTFunc \COPSKVSs \) is defined
+%\begin{align*}
+%\COPSMerge(\Mapping{\repl -> (\copskvs,\stub)})(\key) 
+        %& \TypeDef \copskvs(\key)
+%\\ \COPSMerge(\cops \uplus \Mapping{\repl -> (\copskvs,\stub)})(\key) 
+        %& \TypeDef \Sort[\copstxidleq](\copskvs(\key) 
+            %\ListConcat (\COPSMerge(\cops)(\key) \setminus \copskvs(\key) ) )
+%\end{align*}
+%where \( \Sort[\copstxidleq] \) returns a sorted list ordered by the comparison \( \copstxidleq \).
+\end{definition}
+
+\input{cops/fig-kv-trace}
+
+Recall the properties of extended COPS traces:
+\begin{enumerate}
+\item multiple-read transactions are annotated with unique identifiers (\cref{prop:cops-read-id-unique});
+and \item it is safe to append new versions (\cref{prop:cops-append-write}).
+\end{enumerate}
+This mean that the function \( \COPSToKVS \) is well-defined and more importantly 
+returns a well-formed kv-store.
+
+\begin{proposition}[Well-formed COPS kv-store]
+Given an extended COPS trace \( \copsexttrc \),
+the kv-store \( \kvs = \COPSToKVS(\copsexttrc) \) is a well-formed COPS key-value store,
+that is, \( \WfKvs(\kvs) \),
+and it contains and only contains versions 
+in the last configuration \( (\cops,\copsctxenv) = \LastConf(\copsexttrc) \):
+\begin{Formulae}
+& \begin{Formula}
+    \Forall{\key \in \Keys | \idx \in \Indexs | \val \in \Values | \copstxid \in \COPSTxIDs }
+    \kvs(\key,\idx) = (\val, \copstxid, \stub )
+    \\ \implies 
+    \Exists{ \idx' \in \Indexs | \repl \in \COPSReplicas } 
+    \cops(\repl)(\key,\idx') = (\val, \copstxid, \stub ) ,
+    \label{equ:versions-in-merged-cops-to-replicas}
+\end{Formula}
+\\ & \begin{Formula}
+    \Forall{\key \in \Keys | \idx \in \Indexs | \val \in \Values | \copstxid \in \COPSTxIDs }
+    \\ \Forall{ \repl \in \COPSReplicas}
+    \cops(\repl)(\key,\idx') = (\val, \copstxid, \stub ) 
+    \implies 
+    \Exists{ \idx' \in \Indexs  } 
+    \kvs(\key,\idx') = (\val, \copstxid, \stub ) .
+    \label{equ:versions-in-replicas-to-merged-cops}
+\end{Formula}
+\end{Formulae}
+\end{proposition}
+\begin{proof}
+We prove this by induction on the length of trace \( \copsexttrc \).
+\begin{enumerate}
+\Cases{\( \copsexttrc = \copsconfinit \)}
+    By definition of \( \COPSToKVS \), 
+    the kv-store \(\kvsinit = \COPSToKVS(\copsconfinit) \) is trivially well-formed.
+    By the definition of \( \copsconfinit \), 
+    \cref{equ:versions-in-merged-cops-to-replicas,equ:versions-in-replicas-to-merged-cops} hold.
+\Cases{\( \copsexttrc = \ToCOPSProg{ \copsexttrc' | \lb -> \cops | \copsctxenv | \copsrunprog } \)}
+    Let \( \kvs' = \COPSToKVS(\copsexttrc') \);
+    by \ih, the kv-store \( \kvs' \) is a well-formed kv-store 
+    and satisfies \cref{equ:versions-in-merged-cops-to-replicas,equ:versions-in-replicas-to-merged-cops}.
+    Consider label \( \lb \).
+    \begin{enumerate}
+    \Cases{\(\lb = \lbCOPSWrite{\opW(\key,\val), \copstxid[\cl][\repl](n,0), \copsctx } \)}
+        By the definition of \( \COPSToKVS \), 
+        the new kv-store \( \kvs = \COPSToKVS(\copsexttrc) \) is given by
+        \( \kvs = \kvs'\UpdateFunc{\key -> \kvs'(\key) \ListConcat \List{(\val,\copstxid[\cl][\repl](n,0),\emptyset)}} \).
+        By \rCOPSWrite, the transaction identifier for the new version must be fresh, 
+        that is, \( \copstxid \notin \kvs \), which implies \( \WfKvs(\kvs) \).
+        Let \( (\cops,\copsctxenv) = \LastConf(\copsexttrc) \) and \( (\copskvs, \stub) = \cops(\repl) \);
+        The new version must be included in \( \copskvs \):
+        \( \copskvs(\key,\Abs{\copskvs(\key)} - 1) = (\val, \copstxid[\cl][\repl](n,0),\copsdep ) \) 
+        for some dependent set \( \copsdep \),
+        which means \cref{equ:versions-in-merged-cops-to-replicas,equ:versions-in-replicas-to-merged-cops}.
+    \Cases{\(\lb = \Tuple{\lbCOPSWrite{\opW(\key,\val), \copstxid, \copsctx }, \copstxid[\cl][\repl](n,m) } \)}
+        By the definition of \( \COPSToKVS \), 
+        the new kv-store \( \kvs = \COPSToKVS(\copsexttrc) \) is given by
+        \( \kvs = \kvs'\UpdateFunc{\key -> \kvs'(\key)\UpdateFunc{\idx -> \Tuple{\val,\copstxid,\txidset \cup \copstxid[\cl][\repl](n,m)}}} \)
+        and \(\kvs'(\key)\Proj{\idx} = (\val,\copstxid,\txidset)\) for some \( \idx, \val, \txidset \).
+        By \cref{prop:cops-read-id-unique},
+        the transaction identifier \( \copstxid[\cl][\repl](n,m) \) must be fresh with respect to the key \( \key \),
+        that is \( \copstxid[\cl][\repl](n,m) \notin \kvs'(\key,\idx') \) for all index \( \idx' \) in range;
+        this implies \( \WfKvs(\kvs) \).
+        There is no new version; 
+        therefore the new kv-store \( \kvs \) satisfies \cref{equ:versions-in-merged-cops-to-replicas,equ:versions-in-replicas-to-merged-cops}.
+    \Cases{other \(\lb\)}
+        By the definition of \( \COPSToKVS \), the new kv-store \( \kvs = \COPSToKVS(\copsexttrc) \);
+        and by \ih it is a well-formed kv-store and satisfies \cref{equ:versions-in-merged-cops-to-replicas,equ:versions-in-replicas-to-merged-cops}.  
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+
+Given the kv-store encoding the final configuration of an extended COPS trace,
+the final context for every client can be encoded to a view on the kv-store:
+the view contains all versions \( \ver \) that are included in the context
+and versions that \( \ver \) depends on, directly or indirectly.
+
+\begin{definition}[COPS context views]
+Assume an extended COPS trace \( \copsexttrc\).
+Given the last configuration \( (\cops, \copsctxenv) = \LastConf(\copsexttrc) \)
+and the kv-store \( \kvs = \COPSToKVS(\copsexttrc)\),
+the view environment induced by the client context \( \copsctxenv \),
+written \( \COPSViews(\cops,\copsctxenv) \), is defined by 
+\[
+    \COPSViews(\cops,\copsctxenv)(\cl) \FuncDef \lambda \key \in \Keys \ldotp
+        \Set{ \idx | \Exists{ \key,\key' \in \Keys | \copstxid,\copstxid' \in \COPSTxIDs }
+                    \\ (\key,\copstxid) \in \copsctxenv(\cl)
+                    \land \ToEdge{(\key',\copstxid') | \TraRe(\DEP[\cops]) -> (\key,\copstxid)}
+                    \\ {} \land \copstxid' = \WtOf(\kvs(\key',\idx)) } \cup \Set{0} ,
+\]
+where the \emph{COPS dependency relation} \( \DEP[\cops] \) is defined by
+\begin{align*}
+    \DEP[\cops] & \TypeDef \bigcup_{\kvs \in \Func{Image}(\cops)} 
+            \Set{\Tuple{\Tuple{\key,\copstxid},\Tuple{\key',\copstxid'}} | \Exists{\idx} 
+                                \copstxid' = \WtOf(\kvs(\key',\idx)) 
+                                \\ {} \land (\key,\copstxid) \in \DepOf(\kvs(\key',\idx))  }
+\end{align*}
+\end{definition}
+
+The relation \( \DEP[\cops] \) on a COPS database \( \cops \) denotes dependency relations between versions:
+if \( \Tuple{\Tuple{\key,\copstxid},\Tuple{\key',\copstxid'}} \in \DEP[\cops] \),
+then \( \Tuple{\key,\copstxid} \) is included in the dependent set of the newer version \( \copstxid' \).
+
+Since all versions have unique transactions,
+it is easy to see that the view induced by the COPS client context is well-formed.
+
+\begin{proposition}[Well-formed COPS context views]
+Assume an extended COPS trace \( \copsexttrc \).
+Let \( \kvs = \COPSToKVS(\copsexttrc) \) and \( \vienv = \COPSViews(\LastConf(\copsexttrc)) \).
+Then every view in \( \vienv \) is a well-formed view on the kv-store \( \kvs \),
+that is, \( \vienv(\cl) \in \Views(\kvs) \) for all clients \( \cl \in \Dom(\vienv) \).
+\end{proposition}
+\begin{proof}
+Assume a client \( \cl \) and the view \( \vi = \vienv(\cl) \) for the client \( \cl \).
+By definition of \COPSViews, \cref{eq:view.wf} are trivially true.
+Consider keys \( \key,\key' \) and indexes \( \idx,\idx' \) 
+such that \( \idx \in \vi(\key) \) and \( \WtOf(\kvs(\key,\idx)) = \WtOf(\kvs(\key',\idx')) \).
+By \cref{equ:cops-version-unique} \( \key = \key' \) and \( \idx = \idx' \)
+therefore \cref{eq:view.atomic} holds.
+\end{proof}
+
+Last, it is easy to convert the COPS syntax, namely \( \pcopsput\) and \( \pcopsread \) APIs,
+to explicit transactional syntax.
+
+\begin{definition}[COPS Atomic Transactions]
+Given a COPS command \( \copscmd \in \COPSCommands \),
+the (kv-store) command \( \COPSToKVCmd(\copscmd) : \Commands \) induced by \( \copscmd \) is defined by
+\begin{align*}
+   \COPSToKVCmd(\pcopsput(\key,\val)) & \FuncDef \ptrans{ \pmutate{\key}{\val} } ,
+\\ \COPSToKVCmd(\pcopsread(\List{\key_0, \cdots, \key_n })) 
+        & \FuncDef \ptrans{ \plookup{\var(x)_0}{\key_0} \pseq \cdots \pseq \plookup{\var(x)_n}{\key_n}  } ,
+%\\ \COPSToKVCmd(\pcopsread(\List{\key_0, \cdots, \key_n }) : \stub) 
+        %& \FuncDef \ptrans{ \pmutate{\var(x)_0}{\key_0} \pseq \cdots \pseq \pmutate{\var(x)_n}{\key_n}  } ,
+\\ \COPSToKVCmd(\copsruncmd \pseq \copsruncmd' ) 
+        & \FuncDef \COPSToKVCmd(\copsruncmd) \pseq \COPSToKVCmd(\copsruncmd') .
+\end{align*}                                                                 
+The (kv-store) program induced by a COPS program is defined by
+\[
+    \COPSToKVProg(\copsprog) = \lambda \cl \in \Dom(\copsprog) \ldotp \COPSToKVCmd(\copsprog(\cl)) .
+\]
+\end{definition}
+
+We now encode the COPS trace \( \copsexttrc \) into a \( \et[\top]\)-trace \( \ettrc \).
+In the encode, we throw away all the internal steps, optimistic reads and synchronisations between replicas,
+since those steps are opaque to clients.
+\begin{definition}[COPS Kv-store Traces]
+\label{def:cops-kv-store-trace}
+Given an extended COPS trace \( \copsexttrc \in \ExtCOPSTraces \)
+the kv-store traces converted from \( \copstrc \),
+written \( \COPSToKVTrace(\copstrc) \), is defined in \cref{fig:def-cops-kv-trace}.
+\end{definition}
+
+For any single-write transaction for a client in the COPS trace \( \copsexttrc \),
+we simulate in \( \et[\top]\)-trace by a step 
+with a singleton fingerprint of the write operation from the same client.
+For any multiple-read transaction, we ignore operations in the first phase, 
+and combine all the steps from the second phase into an atomic transaction in \( \et[\top]\)-trace.
+The fingerprint of this transaction contains all the re-fetch operations.
+We now prove the \( \et[\top]\)-trace \( \ettrc \) is a \( \CC \)-trace.
+
+\begin{theorem}[COPS causal consistency]
+Given an extended COPS trace \( \copsexttrc \in \ExtCOPSTraces \)
+the kv-store traces, \( \progtrc = \COPSToKVTrace(\copstrc) \), can be obtained under \(\CC\).
+\end{theorem}
+\begin{proof}
+Recall the definition of \( \CC \) that for kv-stores \( \kvs, \kvs' \),
+views \( \vi, \vi' \) and fingerprint \( \fp \),
+\begin{Formulae}
+& \begin{Formula}
+\vi \vileq \vi'
+\label{equ:cops-vi-increase}
+\end{Formula}
+\\ & \begin{Formula}
+\Forall{ \txid \in \kvs' \setminus \kvs | \key \in \Keys | \idx \in \Indexs } 
+\ToEdge{ \WtOf(\kvs'(\key,\idx)) | \Refl(\SO) -> \txid }
+\implies \idx \in \vi'(\key)
+\label{equ:cops-vi-write}
+\end{Formula}
+\\ & \begin{Formula}
+\PreClosed(\kvs,\vi,\WR[\kvs] \cup \SO )
+\label{equ:cops-vi-close}
+\end{Formula}
+\end{Formulae}
+We first show that every step in the trace \( \progtrc \) satisfies \cref{equ:cops-vi-increase};
+then we show that every step \emph{preserves} \cref{equ:cops-vi-write,equ:cops-vi-close} 
+for all views included in the view environment.
+We now prove by induction on the length of the trace \( \progtrc \).
+\begin{enumerate}
+\CaseBase{\( \progtrc = \ToProg[\TOP]{ \kvsinit | \vienvinit | \clenv | \prog }\)}
+    By the definition of \( \kvsinit \) and \( \vienvinit \),
+    It is trivial that \cref{equ:cops-vi-write,equ:cops-vi-close} hold.
+\CaseInd{\( \progtrc = \ToProg[\TOP]{ \progtrc' | \lb -> \kvs | \vienv | \clenv | \prog } \) for \( \progtrc = \COPSToKVTrace(\copsexttrc)\) and \( \CC\)-trace \( \progtrc' = \COPSToKVTrace(\copsexttrc') \) }
+    Consider the label \( \lb \).
+    \begin{enumerate}
+    \Case{\( \lb = \lbTrans{\vi,\Set{\opW(\key,\val)}}\)}
+        By definition of \( \COPSToKVTrace \), traces \( \copsexttrc, \copsexttrc' \) satisfy the following property
+        \begin{Formulae}
+        \begin{Formula}
+        \begin{multlined}
+            \vi = \COPSViews(\copsexttrc')(\cl) 
+            \land \copsexttrc = \ToCOPSProg{\copsexttrc' | \lbCOPSWrite{\opW(\key,\val), \copstxid[\cl][\repl](n,0), \copsdep } -> \cops | \copsctxenv | \copsrunprog }
+            \\ {} \land \LastConf(\copsexttrc') = (\cops', \copsctxenv')
+            \\ {} \land \copsctxenv' = \copsctxenv\UpdateFunc{\cl -> \left( \copsctxenv(\cl)\Proj{0} \cup \Set{\Tuple{\key,\copstxid[\cl][\repl](n,0)}}, \repl \right)}
+        \end{multlined}
+        \label{equ:cops-causal-write-new-version}
+        \end{Formula}
+        \end{Formulae}
+        Let \( \vi' = \COPSViews(\copsexttrc)(\cl) = \vienv(\cl) \) be the view after udpate.
+        By \cref{equ:cops-causal-write-new-version} and the definition of \COPSViews, 
+        the view must incresse as \(\vi \vileq \vi' \) and thus \cref{equ:cops-vi-increase};
+        also the new view \( \vi' \) must contains the new version written by \(\copstxid[\cl][\repl](n,0) \)
+        and thus \cref{equ:cops-vi-write}.
+        By definition of \( \COPSViews\) and \cref{prop:cops-dependency-set-to-causal}, 
+        it follows \cref{equ:cops-vi-close}.
+    \Case{\( \lb = \lbTrans{\vi,\Set{\opR(\key_0,\val_0), \cdots, \opR(\key_n,\val_n)} }\)}
+        By definition of \( \COPSToKVTrace \), traces \( \copsexttrc, \copsexttrc' \) satisfy the following property
+        \begin{Formulae}
+        \begin{Formula}
+        \begin{multlined}
+            \vi = \vienv(\cl) 
+            \\ {} \land \copsexttrc = \ToCOPSProg{ \copsexttrc' | \lbCOPSRefetch{\opR(\key_0,\val_0), \copstxid_0, \copsctx_0 },\copstxid
+                        -> \cdots  | \lbCOPSRefetch{\opR(\key_n,\val_n), \copstxid_n, \copsctx_n },\copstxid 
+                        -> \cdots | \lbCOPSFinishRead{ \copsctx' },\copstxid 
+                        -> \cops | \copsctxenv | \copsrunprog } 
+            \\ {} \land \LastConf(\copsexttrc') = (\cops', \copsctxenv')
+            \land \copsctxenv' = \copsctxenv\UpdateFunc{\cl -> \left( \copsctxenv(\cl)\Proj{0} \cup \copsctx', \repl \right)}
+        \end{multlined}
+        \label{equ:cops-causal-read-versions}
+        \end{Formula}
+        \end{Formulae}
+        By \cref{equ:cops-causal-read-versions} and the definition of \COPSViews, 
+        the view before and after read are the same view \( \vi \) and thus \cref{equ:cops-vi-increase};
+        since there is no new version and view cannot lost any version, thus \cref{equ:cops-vi-write} holds.
+        By rule \rCOPSFinishRead, it follows \((\key_i,\copstxid_i) \in \copsctx' \) for index \( \idx \)
+        such that \( 0 \leq \idx \leq n \).
+        By \cref{prop:cops-dependency-set-to-causal},
+        \begin{Formulae}
+        \begin{Formula}
+        \ToEdge{\WtOf(\kvs(\key,m)) | \Trasi((\WR[\kvs] \cup \SO )) -> \copstxid_i } \implies j \in \vi(\key) ,
+        \label{equ:cops-causal-read-causal-single-version}
+        \end{Formula}
+        \end{Formulae}
+        then by rules \rCOPSLowerBound and \rCOPSRefetch,
+        \begin{Formulae}
+        \begin{Formula}
+        \ToEdge{\WtOf(\kvs(\key,m)) | \Trasi((\WR[\kvs] \cup \SO )) -> \copstxid_i } 
+        \land \Exists{j} \key = \key_j \implies  \WtOf(\kvs(\key,m)) \copstxidleq \copstxid_j .
+        \label{equ:cops-causal-read-latest-single-version}
+        \end{Formula}
+        \end{Formulae}
+        Combining \cref{equ:cops-causal-read-causal-single-version,equ:cops-causal-read-latest-single-version},
+        the closure property \cref{equ:cops-vi-close} holds. 
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+
+\begin{proposition}[COPS dependency relation to \( CC \) relation]
+\label{prop:cops-dependency-set-to-causal}
+Given an extended COPS trace \( \copsexttrc \in \ExtCOPSTraces \),
+the kv-store traces \( \progtrc = \COPSToKVTrace(\copstrc) \),
+let \( \kvs \) be the finial kv-store such that \( (\kvs,\stub,\stub) = \LastConf(\progtrc)\);
+let \( \cops \) be the finial state of COPS database such that \( (\cops,\stub) = \LastConf(\copstrc)\).
+Given two versions \( \kvs(\key,\idx) \) written \( \copstxid \) and \( \kvs(\key',\idx') \) written by \( \copstxid' \), 
+if \( \ToEdge{\copstxid | \Trasi((\WR[\kvs] \cup \SO )) -> \copstxid' } \)
+then \( \ToEdge{( \key, \copstxid ) | \Trasi( \DEP[\cops] ) -> (\key', \copstxid') } \).
+\end{proposition}
+\begin{proof}
+By the hypothesis, both transactions are single-write transactions which means  \( (\txid,\txid') \notin \WR[\kvs] \).
+For any transaction in COPS, it either is a read-only transaction or a single-write transaction.
+Recall that \( \SO \) is traisitive.
+This means that \( \ToEdge{\copstxid | \Trasi((\WR[\kvs] \cup \SO )) -> \copstxid' } \) if and only if
+\( \ToEdge{\copstxid | \Trasi((\Refl(\WR[\kvs]) ; \SO )) -> \copstxid' } \) 
+and thus it is sufficient to prove the following result
+\begin{Formulae}
+\begin{Formula}
+   \ToEdge{\copstxid | \Refl(\WR[\kvs]) ; \SO  -> \copstxid' } 
+   \implies 
+   \ToEdge{( \key, \copstxid ) | \Trasi( \DEP[\cops] ) -> (\key', \copstxid') } .
+   \label{equ:dep-set-to-causal-relation}
+\end{Formula}
+\end{Formulae}
+\Case{\ToEdge{\copstxid | \SO  -> \copstxid' }  }
+Assume that \( \copstxid,\copstxid' \) are from client \( \cl \) that interacts with replica \( \repl \).
+For this case, transaction \( \copstxid \) must commit before \( \copstxid' \), that is
+\[
+    \copstrc = \ToCOPSProg{\cdots | \lbCOPSWrite{\opW(\key,\val),\copstxid,\copsctx} 
+            -> \cdots | \lbCOPSWrite{\opW(\key',\val'),\copstxid',\copsctx'} -> \cdots } .
+\]
+By rule \rCOPSWrite and COPS invariant in \cref{prop:cops-inv},
+it follows \( (\key,\copstxid) \in \copsctx' \) which implies \cref{equ:dep-set-to-causal-relation}.
+\Case{\ToEdge{\copstxid | \WR[\kvs] -> \copstxid'' | \SO  -> \copstxid' } for a read-only transaction \( \copstxid'' \) }
+Assume that \( \copstxid'',\copstxid' \) are from client \( \cl \) that interacts with replica \( \repl \).
+For this case, we know
+\[
+    \copstrc = \ToCOPSProg{\cdots | \lbCOPSRefetch{\opR(\key,\val),\copstxid,\copsdep}, \copstxid''
+            -> \cdots | \lbCOPSFinishRead{\copsctx}, \copstxid''
+            -> \cdots | \lbCOPSWrite{\opW(\key',\val'),\copstxid',\copsctx'} -> \cdots } .
+\]
+By rules \rCOPSRefetch and \rCOPSFinishRead, \( (\key,\copstxid) \in \copsctx \)
+and then by COPS invariant in \cref{prop:cops-inv},
+it follows \( (\key,\copstxid) \in \copsctx' \) which implies \cref{equ:dep-set-to-causal-relation}.
+\end{proof}

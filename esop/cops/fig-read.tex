@@ -1,0 +1,102 @@
+\begin{figure}[!hp]
+\vspace{-10pt}
+\begin{subfigure}{\textwidth}
+\begin{mathpar}
+\inferrule[\rCOPSStartRead]{ }{%
+    \ToCOPSCmd{
+    \copskvs | \copsctx | \ts | \pcopsread( \keyset ) | \lbCOPSPri ->
+    \copskvs |  \copsctx |  \ts | 
+    \pcopsread( \keyset ) : \emptyset }
+}
+\and
+\inferrule[\rCOPSOptRead]{%
+    \Unique(\keyset)
+    \\ \keyset = \List{\key_0, \cdots, \key_i, \cdots, \key_m }
+    \\ \copsverlist = \List{\copsver_0, \cdots, \copsver_{i-1}}
+    \\ \copskvs(\key, \Abs{\copskvs(\key)} - 1) = (\val_i, \copstxid[\cl_i][\repl_i](\ts_i), \copsdep_i) = \copsver_i
+    \\ \lb =  \lbCOPSOptRead{\opR(\key_i, \val_i), \copstxid[\cl_i][\repl_i](\ts_i),\copsdep_i} 
+}{%
+    \ToCOPSCmd{
+    \copskvs | \copsctx | \ts | \pcopsread( \keyset ) : \copsverlist | \lb ->
+    \copskvs |  \copsctx |  \ts | 
+    \pcopsread( \keyset ) : (\copsverlist \ListConcat \List{\copsver_i}) }
+}
+\and
+\inferrule[\rCOPSLowerBound]{%
+    \Abs{\keyset} = \Abs{\copsverlist} 
+    \\ \copsdepset = \VerLower(\keyset,\copsverlist)
+}{%
+    \ToCOPSCmd{ \copskvs | \copsctx | \ts | \pcopsread( \keyset ) : \copsverlist |
+    \lbCOPSBound ->
+    \copskvs | \copsctx | \ts | \pcopsread( \keyset ) : (\copsverlist, \copsdepset)  }
+}
+\and
+\inferrule[\rCOPSRefetch]{%
+    \copsverlist' = \List{\copsver_0, \cdots, \copsver_{\idx-1}}
+    \\ \copsdepset\Proj{\idx} = (\key_i, \copstxid)
+    \\ {(\val_i, \copstxid_i,\copsdep_i) = \begin{cases}
+        \copskvs(\key_i,m) 
+                & \If  \WtOf(\copsverlist\Proj{\idx}) \copstxidleq \copstxid
+                    \land \Exists{m} \copstxid = \WtOf(\copskvs(\key_i,m))
+        \\ \copsverlist\Proj{\idx} & \ow
+    \end{cases}}
+    \\ \copsverlist'' = \copsverlist' \ListConcat \List{(\val_i, \copstxid_i,\copsdep_i)}
+    \\ \lb' = \lbCOPSRefetch{\opR(\key_i, \val_i), \copstxid_i, \copsdep_i}
+}{%
+    \ToCOPSCmd{ \copskvs | \copsctx | \ts 
+        | \pcopsread( \keyset ) : (\copsverlist, \copsdepset, \copsverlist') | \lb ->
+    \copskvs | \copsctx | \ts | \pcopsread( \keyset ) : (\copsverlist, \copsdepset, \copsverlist'')  }
+}
+\and
+\inferrule[\rCOPSFinishRead]{%
+    \Abs{\keyset} = \Abs{\copsverlist'}
+    \\ \copsctx' = \Set{ (\key,\copstxid) | (\key,\copstxid,\stub) \in \copsverlist'}
+}{%
+    \ToCOPSCmd{ \copskvs | \copsctx | \ts 
+        | \pcopsread( \keyset ) : (\copsverlist, \copsdepset, \copsverlist')
+        | \lbCOPSFinishRead{\copsctx'} ->
+    \copskvs | \copsctx \cup \copsctx' | \ts | \pskip  }
+}
+\end{mathpar}
+
+
+\caption{The reference semantics for \pcopsread}
+\label{fig:cops-semantics-read}
+
+\end{subfigure}
+
+\hrulefill
+
+\begin{subfigure}{\textwidth}
+
+\begin{lstlisting}[caption={},label={}]
+List(Val) read(repl,ks,ctx) {
+    // Only guarantee to read up-to-date value at the moment
+    for k in ks { rst[k] = get_by_version(repl,k,LATEST); } (*\label{line:cops-optimistic-read}*)
+    // initially the list of lower bound for keys
+    for k in ks { ccv[k] = rst[k].id; (*\label{line:cops-init-lower-bound}*) }
+    // compute the lower bound
+    for k in ks { 
+        for dep in rst[k].deps 
+            if ( dep.key (*$\in$*) ks ) ccv[k] = max (ccv[dep.key].id, dep.id); (*\label{line:cops-compute-lower-bound}*) 
+    } 
+    // re-fetch a new version for some key
+    for k in ks 
+        if ( ccv[k] > rst[k].vers ) rst[k] = get_by_version(k,ccv[k]); (*\label{line:cops-final-read}*)
+    // update the ctx
+    for (k,ver,deps) in rst { ctx.readers += (k,ver,deps); } (*\label{line:cops-read-update-ctx}*)
+    return to_vals(rst); 
+}                                   
+\end{lstlisting}
+
+\caption{The reference implementation for \pcopsread}
+\label{lst:cops-read}
+
+\end{subfigure}
+
+\hrulefill
+
+\caption{COPS API: \pcopsread}
+\label{fig:cops-api-read}
+
+\end{figure}

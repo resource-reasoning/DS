@@ -1,0 +1,553 @@
+\subsection{KV-Store Traces to Abstract Execution Traces}
+\label{sec:kvtrace2aexec}
+
+To prove our definitions using execution test on kv-stores 
+is sound and complete with respect with the axiomatic definitions on abstract executions (\cref{sec:kv-sound-complete-proof}),
+we need to prove trace equivalent between these two models.
+
+In this section, we only consider the trace that does not involve \( \prog \) but only committing fingerprint and view shift.
+In \cref{sec:et-sound-complete-constructor}, we will go further and discuss the trace installed with \( \prog \).
+
+%Similar to \(\anarchicCM \), 
+Let $\ET_\top$ be the most permissive execution test.
+That is $\ET_\top \vdash (\mkvs, \vi) \csat \fp: (\mkvs',\vi')$ 
+such that whenever $\vi(\key) \neq \vi'(\key)$ then either $(\otW, \key, \stub) \in \fp$ or $(\otR, \key, \stub) \in \fp$.
+%{\color{red} I forgot this last constraint in the latest version of the document, definitions 
+%and proofs of theorems that follow must be re-factored to take the constraint into account.}
+We will relate $\ET_{\top}$-traces to abstract executions that satisfy the last write wins resolution policy, \ie \( (\RP_{\LWW}, \emptyset) \).
+
+To bridge $\ET_{\top}$-traces to abstract executions, 
+The \aeset(\tr) function converse the trace of \( \ET_\top \) to set of possible abstract executions (\cref{def:kvtrace2aexec}).
+In fact, for any trace \( \tr \) and abstract execution $\aexec \in \aeset(\tr)$, 
+the last configuration of $\tr$ is $(\mkvs_{\aexec}, \stub)$ (\cref{prop:kvtrace2aexec}).
+We often use \( \aexec_\tr \) for \( \aexec \in \aeset(\tr) \).
+
+\begin{definition}
+\label{def:kvtrace2aexec}
+Given a kv-store $\mkvs$, a view $\vi$, 
+an initial abstract execution $\aexec_0 = ( [ ], \emptyset, \emptyset)$, 
+an abstract execution $\aexec$, a set of transactions  
+$\txidset \subseteq \txidset_{\aexec}$, a transaction identifier $\txid$ and a set of operations $\fp$,
+the \( \extend \)  function defined as the follows:
+\begin{align*}
+\extend[\aexec, \txid, \txidset, \fp] & \defeq 
+\begin{cases}
+\text{undefined} & \text{if} \ \txid = \txid_{0}\\
+\left(\TtoOp{T}_{\aexec} \uplus \Set{\txid \mapsto \fp}, \VIS', \AR' \right) & \text{if} \ \dagger \\
+\end{cases} \\
+\dagger & \equiv 
+\begin{multlined}[t]
+\txid = \txid_{\cl}^{n}
+\land \VIS' = \VIS_{\aexec} \uplus \Set{(\txid', \txid)}[\txid \in \txidset]  \\
+{} \land \AR' = \AR_{\aexec} \uplus \Set{(\txid', \txid)}[\txid' \in \txidset_{\aexec}]
+\end{multlined}
+\end{align*}
+Given a $\ET_{\top}$ trace $\tr$, let $\lastConf(\tr)$ be the last configuration appearing in $\tr$.
+The set of abstract executions $\aeset(\tr)$ is defined as the smallest set such that:
+\begin{itemize}
+\item $\aexec_{0} \in \aeset((\mkvs_{0}, \vienv_{0}))$, 
+\item if $\aexec \in \aeset(\tr)$, then $\aexec \in \aeset\left(\tr \toET{(\cl, \varepsilon)}[\ET_{\top}] (\mkvs, \vienv) \right)$, 
+\item if $\aexec \in \aeset(\tr)$, then $\aexec \in \aeset\left(\tr \toET{(\cl, \emptyset)}[\ET_{\top}] (\mkvs, \vienv) \right)$, 
+\item 
+    let $(\mkvs', \vienv') = \lastConf(\tr)$; 
+    if $\aexec \in \aeset(\tr)$, $\fp \neq \emptyset$,
+    and $\txidset = \Tx[\mkvs, \vienv'(\cl)] \cup \txidset_\rd$ where \( \txidset_\rd \) is a set of \emph{read-only transactions}
+    such that $(\otW, \key, \val) \notin_{\aexec} \txid'$ for all keys \( \key \) and values \( \val \) and transactions \( \txid' \in \txidset_\rd\),
+    and if the transaction $\txid$ is the transaction appearing in $\lastConf(\tr)$ but not in $\mkvs$, 
+    then $\extend[\aexec, \txid, \txidset, \fp] \in \aeset\left(\tr \toET{(\cl, \fp)}[\ET_{\top}] (\mkvs, \vienv) \right)$.
+\end{itemize}
+\end{definition}
+
+\begin{proposition}[Trace of \( \ET \) to abstract executions]
+\label{prop:kvtrace2aexec}
+For any $\ET_{\top}$-trace $\tr$, 
+the abstract execution $\aexec \in \aeset(\tr)$ satisfies the last write wins policy,
+and $(\mkvs_{\aexec}, \stub) = \lastConf(\tr)$.
+\end{proposition}
+\begin{proof}
+Fix a $\ET_{\top}$-trace $\tau$. 
+We prove by induction on the number of transitions $n$ in $\tau$. 
+\begin{itemize}
+\item \caseB{$n = 0$}
+It means $\tr = (\mkvs_{0}, \stub)$.
+It follows from \cref{def:kvtrace2aexec} that $\aexec_{\tau} = ([], \emptyset, \emptyset)$. 
+This triple satisfies the constraints of \cref{def:aexec}, as well as the resolution policy $\RP_{\LWW}$. 
+It is also immediate to see that $\graphOf[\aexec] = ([], \emptyset, \emptyset, \emptyset)$.
+In particular, $\txidset_{\graphOf[\aexec]} = \emptyset$, 
+and the only kv-store $\mkvs$ such that $\txidset_{\Gr_{\mkvs}} = \emptyset$ 
+is given by $\mkvs = \mkvs_{0}$. 
+By definition, $\mkvs_{\aexec_{\tr}} = \mkvs_{0}$, as we wanted to prove.
+
+\item \caseI{$n > 0$} In this case, we have that $\tr = \tr' \toET{(\cl, \mu)} (\mkvs, \vienv)$ 
+for some $\cl, \mu, \mkvs, \vienv$. The $\ET_{\top}$-trace $\tau'$ contains exactly $n-1$ transitions, 
+so that by induction we can assume that $\aexec_{\tau'}$ is a valid abstract execution that satisfies 
+$\RP_{\LWW}$. and $\lastConf(\tau') = (\mkvs_{\aexec_{\tau'}}, \vienv')$ for some $\vienv'$. 
+
+We perform a case analysis on $\mu$. 
+If $\mu = \varepsilon$, then it follows that $\mkvs = \mkvs_{\aexec_{\tau'}}$, 
+and $\aexec_{\tau} = \aexec_{\tau'}$ by \cref{def:kvtrace2aexec}. 
+Then by the inductive hypothesis $\aexec_{\tau}$ is an abstract execution that satisfies $\RP_{\LWW}$,
+$\lastConf(\tau) = (\mkvs, \stub)$, and $\mkvs_{\aexec_{\tau}} = \mkvs_{\aexec_{\tau'}} = \mkvs$, 
+and there is nothing left to prove. 
+
+Suppose now that $\mu = \fp$, for some $\fp$. In this case we have that  
+$\mkvs \in \updateKV[\mkvs_{\aexec_{\tau'}}, \vienv'(\cl), \fp, \cl]$. Note that if 
+$\fp = \emptyset$, then $\mkvs = \mkvs_{\aexec_{\tau'}}$ and $\aexec_{\tau} = \aexec_{\tau'}$. 
+By the inductive hypothesis, $\aexec_{\tau}$ is an abstract execution that satisfies 
+$\RP_{\LWW}$, and $\mkvs = \mkvs_{\aexec_{\tau'}} = \mkvs_{\aexec_{\tau}}$. 
+Assume then that $\fp \neq \emptyset$. 
+By definition, $\mkvs = \updateKV[\mkvs_{\aexec_{\tau'}}, \vienv'(\cl), \fp, \txid]$ 
+for some $\txid \in \nextTxid(\cl, \mkvs_{\aexec_{\tau}})$. It follows that $\txid$ 
+is the unique transaction such that $\txid \notin \mkvs_{\aexec_{\tau'}}$, and $\txid \in \mkvs$ 
+(the fact that $\txid \in \mkvs$ follows from the assumption that $\fp \neq \emptyset$). Let 
+$\txidset = \Tx[\mkvs_{\aexec_{\tau'}}, \vienv'(\cl)]$; then $\aexec_{\tau} = \extend[\mkvs_{\aexec_{\tau'}}, \txid, \txidset, \fp]$. 
+Note that $\aexec_{\tau}$ satisfies the constraints of abstract execution required by \cref{def:aexec}:
+\begin{itemize}
+\item  Because $\txid \in \nextTxid(\cl, \mkvs_{\aexec_{\tau}})$, it must be the case that $\txid = \txid_{\cl}^{m}$ for some 
+$m \geq 1$; we have that $\TtoOp{T}_{\aexec_{\tau}} = \TtoOp{T}_{\aexec_{\tau'}}\rmto{\txid_{\cl}^{m}}{\fp}$, 
+from which it follows that 
+\[
+\txidset_{\aexec_{\tau}} = \dom(\TtoOp{T}_{\aexec_{\tau}}) = \dom(\TtoOp{T}_{\aexec_{\tau'}}) \cup 
+\Set{\txid_{\cl}^{m} } = \txidset_{\aexec_{\tau'}} \cup \Set{\txid_{\cl}^{m} }
+\]
+By inductive hypothesis, $\txid_0 \notin \txidset_{\aexec_{\tau'}}$, and therefore $\txid_{0} \notin 
+\txidset_{\aexec_{\tau'}} \cup \Set{\txid_{\cl}^{m} } = \txidset_{\aexec}$.
+
+\item \( \VIS_{\aexec_{\tau}} \subseteq \AR_{\aexec_{\tau}} \).
+    Let $(\txid' ,\txid'') \in \VIS_{\aexec_{\tau}}$. Then either $\txid'' = \txid_{\cl}^{m}$ and $\txid' \in \txidset$, or $(\txid', \txid'') \in 
+\VIS_{\aexec_{\tau'}}$. In the former case, we have that $(\txid', \txid_{\cl}^{m}) \in \AR_{\aexec_{\tau}}$ by definition; 
+in the latter case, we have that $(\txid', \txid'') \in \AR_{\aexec_{\tau'}}$ because $\aexec_{\tau'}$ is a valid 
+abstract execution by inductive hypothesis, and therefore $(\txid', \txid'') \in \AR_{\aexec_{\tau}}$ by definition. 
+This concludes the proof that $\VIS_{\aexec_{\tau}} \subseteq \AR_{\aexec_{\tau}}$. 
+\item \( \VIS_{\aexec_\tr} \) is irreflexive.
+Assume $(\txid', \txid'') \in \VIS_{\aexec_{\tau}}$, then either 
+$(\txid' \txid'') \in \VIS_{\aexec_{\tau'}}$, and because $\VIS_{\aexec_{\tau'}}$ is irreflexive by the inductive hypothesis, 
+then $\txid' \neq \txid''$; 
+or $\txid'' = \txid_{\cl}^{m}$, $\txid' \in \txidset \subseteq \txidset_{\aexec_{\tau'}}$, 
+and because $\txid_{\cl}^{m} \notin \mkvs_{\aexec_{\tau'}}$, then $\txid' \neq \txid_{\cl}^{m}$. 
+
+\item $\AR_{\aexec_{\tau}}$ is total. Let $(\txid', \txid'') \in \txidset_{\aexec_{\tau}}$. 
+Suppose that $\txid' \neq \txid''$.
+\begin{enumerate}
+\item If $\txid' \neq 
+\txid_{\cl}^{m}$, $\txid'' \neq \txid_{\cl}^{m}$, then it must be the case that $\txid', \txid'' \in \txidset_{\aexec_{\tau'}}$; 
+this is because we have already argued that $\txidset_{\aexec_{\tau}} = \txidset_{\aexec_{\tau'}} \cup \Set{\txid_{\cl}^{m}}$. 
+By the inductive hypothesis, we have that either $(\txid', \txid'') \in \AR_{\aexec_{\tau'}}$, or 
+$(\txid'', \txid') \in \AR_{\aexec_{\tau'}}$. Because $\AR_{\aexec_{\tau'}} \subseteq \AR_{\aexec_{\tau}}$, 
+then either $(\txid', \txid'') \in \AR_{\aexec_{\tau'}}$ or $(\txid'', \txid') \in \AR_{\aexec_{\tau}}$. 
+\item if $\txid'' = \txid_{\cl}^{m}$, then it must be $\txid' \in \txidset_{\aexec_{\tau'}}$. By definition, 
+$(\txid', \txid_{\cl}^{m}) \in \AR_{\aexec_{\tau}}$. Similarly, if $\txid' = \txid_{\cl}^{m}$, we 
+can prove that $(\txid'', \txid_{\cl}^{m}) \in \AR_{\aexec_{\tau}}$.
+\end{enumerate}
+\item  $\AR_{\aexec_{\tau}}$ is irreflexive. It follows is the same as the one of $\VIS_{\aexec_{\tau}}$.
+\item \( \AR_{\aexec_{\tau}} \) is transitive.
+Assume $(\txid', \txid'') \in \AR_{\aexec_{\tau}}$ and $(\txid'', \txid''') \in \AR_{\aexec_{\tau}}$. 
+Note that it must be the case that $\txid', \txid'' \in \txidset_{\aexec_{\tau'}}$ by the definition of 
+$\AR_{\aexec}$, and in particular $(\txid', \txid'') \in \AR_{\aexec_{\tau'}}$. 
+For $\txid'''$, we have two possible cases. 
+\begin{enumerate}
+\item Either $\txid''' \in \txidset_{\aexec_{\tau}}$, from 
+which it follows that $(\txid'', \txid''') \in \AR_{\aexec_{\tau'}}$; because
+of $\AR_{\aexec_{\tau'}}$ is transitive by the inductive hypothesis, then 
+$(\txid', \txid''') \in \AR_{\aexec_{\tau'}}$, and therefore $(\txid' ,\txid''') \in 
+\AR_{\aexec_{\tau}}$.
+\item Or $\txid''' = \txid_{\cl}^{m}$, and because $\txid' \in \txidset_{\aexec_{\tau'}}$, then 
+$(\txid', \txid_{\cl}^{m}) \in \AR_{\aexec_{\tau}}$ by definition. 
+\end{enumerate}
+\item \( \SO_{\aexec_{\tau}} \subseteq \AR_{\aexec_{\tau}} \).
+Let $\cl'$ be a client such that $(\txid_{\cl'}^{i}, \txid_{\cl'}^{j}) \in \AR_{\aexec_{\tau}}$. 
+If $\cl' \neq \cl$, then it must be the case that $\txid_{\cl'}^{i}, \txid_{\cl'}^{j} \in \txidset_{\aexec_{\tau'}}$, 
+and therefore $(\txid_{\cl'}^{i}, \txid_{\cl'}^{j}) \in \AR_{\aexec_{\tau'}}$. By the inductive hypothesis, 
+it follows that $i < j$. If $\cl' = \cl$, then by definition of $\AR_{\aexec_{\tau}}$ it must be  $i \neq m$. 
+If $j \neq m$ we can proceed as in the previous case to prove that $i < j$. If $j = m$, then 
+note that $\txid_{\cl}^{i} \in \txidset_{\aexec_{\tau}}$ only if $\txid_{\cl}^{i} \in \mkvs_{\aexec_{\tau'}}$. 
+Because $\txid_{\cl}^{m} \in \nextTxid(\mkvs_{\aexec_{\tau'}}, \cl)$, then we have that $i < m$, 
+as we wanted to prove.
+\end{itemize}
+
+Next, we prove that $\aexec_{\tau}$ satisfies the last write wins policy. 
+Let $\txid' \in \txidset_{\aexec_{\tau}}$, and suppose that $(\otR, \key, \val) \in_{\aexec_{\tau}} \txid'$. 
+\begin{itemize} 
+\item If $\txid' \neq \txid$, then we have that $\txid \in \txidset_{\aexec_{\tau'}}$. We also have that 
+$\VIS^{-1}_{\aexec_{\tau}}(\txid') = \VIS^{-1}_{\aexec_{\tau'}}(\txid')$, $\AR^{-1}_{\aexec_{\tau}}(\txid') 
+= \AR^{-1}_{\aexec_{\tau'}}(\txid')$; finally, for any $\txid'' \in \txidset_{\aexec_{\tau'}}$, 
+$(\otW, \key, \val') \in_{\aexec_{\tau}} \txid''$ if and only if $(\otW, \key, \val') \in_{\aexec_{\tau'}} 
+\txid''$. Therefore, let $\txid_{r} = \max_{\AR_{\aexec_{\tau}}}(\VIS^{-1}_{\aexec_{\tau}}(\txid') \cap 
+\Set{\txid'' }[ (\otW, \key, \stub) \in_{\aexec_{\tau}} \txid''])$. We have that 
+\[
+    \txid_{r} = \max_{\AR_{\aexec_{\tau'}}}(\VIS^{-1}_{\aexec_{\tau'}}(\txid) 
+    \cap \Set{ \txid'' }[ (\otW, \key, \stub ) \in_{\aexec_{\tau'}} \txid''])
+\]
+and because $\aexec_{\tau'}$ satisfies the last write 
+wins resolution policy, then $(\otW, \key, \val) \in_{\aexec_{\tau'}} \txid_{r}$. This also implies that 
+$(\otW, \key, \val) \in_{\aexec_{\tau}} \txid_{r}$. 
+
+\item Now, suppose that $\txid' = \txid$. Suppose that $(\otR, \key, \val) \in_{\aexec_{\tau}} \txid'$. 
+By definition, we have that $(\otR, \key, \val) \in \fp$. Recall that $\tau = \tau' \toET{(\cl, \fp)}[\ET_{\top}] (\mkvs, \vienv)$, 
+and $\lastConf(\tau') = (\mkvs_{\aexec_{\tau'}}, \vienv')$ for some $\vienv'$. 
+That is, 
+\[
+    (\mkvs_{\aexec_{\tau'}}, \vienv') \toET{(\cl, \fp)}[\ET_{\top}] (\mkvs, \vienv)
+\]
+which in turn implies that $\ET_{\top} \vdash (\mkvs_{\aexec_{\tau'}}, \vienv'(\cl)) \csat \fp : (\mkvs,\vienv(\cl) )$. 
+Let then $r = \max\Set{i}[ i \in \vienv'(\cl)(\key)]$. 
+By definition of execution test, and because $(\otR, \key, \val) \in \fp$, then it must be the case that 
+$\mkvs_{\aexec_{\tau'}}(\key, r) = (\val, \txid'', \stub)$ for some $\txid''$. 
+
+We now prove that 
+$\txid'' = \max_{\AR_{\aexec_{\tau}}}(\VIS^{-1}_{\aexec_{\tau}}(\txid) \cap \Set{ \txid'' }[ (\otW, \key, \stub) \in_{\aexec_{\tau}} \txid''])$. 
+First we have
+\[ 
+\begin{array}{l}
+\VIS^{-1}_{\aexec_{\tau}}(\txid) = 
+\Tx[\mkvs_{\aexec_{\tau'}}, \vienv'(\cl)] = 
+\Set{\wtOf(\mkvs_{\aexec_{\tau'}}(\key',  i)) }[ \key' \in \Keys \land  i \in \vienv'(\cl)(\key')]
+\end{array}
+\]
+Note that $r \in \vienv'(\cl)(\key)$, and $\txid'' = \wtOf(\mkvs_{\aexec_{\tau'}}(\key, r))$. 
+Therefore, $\txid'' \in \VIS^{-1}_{\aexec_{\tau}}(\txid)$. 
+Because $\mkvs = \updateKV[\mkvs_{\aexec_{\tau'}}, \vienv'(\cl), \fp, \txid]$, it 
+must be the case that $\wtOf(\mkvs(\key, r)) = \txid''$. Also, because $\wtOf(\mkvs_{\aexec_{\tau'}}(\key, r)) = \txid''$, 
+then $(\otW, \key, \stub) \in_{\aexec_{\tau''}} \txid''$, or equivalently $(\otW, \key, \stub) \in \TtoOp{T}_{\aexec_{\tau'}}(\txid'')$. 
+We have already proved that $\VIS_{\aexec_{\tau}}$ is irreflexive, hence it must be the case that $\txid'' \neq \txid$. 
+In particular, because $\aexec_{\tau} = \extend[\aexec_{\tau'}, \txid, \stub, \stub]$, then we have that 
+$\TtoOp{T}_{\aexec_{\tau}}(\txid'') = \TtoOp{T}_{\aexec_{\tau'}}\rmto{\txid}{\fp}(\txid'') = 
+\TtoOp{T}_{\aexec_{\tau'}}(\txid'')$, hence $(\otW, \key, \stub) \in \TtoOp{T}_{\aexec_{\tau}}(\txid'')$. Equivalently, 
+$(\otW, \key, \stub) \in_{\aexec_{\tau}} \txid''$. We have proved that $\txid'' \in \VIS^{-1}_{\aexec_{\tau}}(\txid)$, 
+and $(\otW, \key, \stub) \in_{\aexec_{\tau}} \txid''$. 
+
+Now let $\txid'''$ be such that $\txid''' \in \VIS^{-1}_{\aexec_{\tau}}(\txid)$, and $(\otW, \key \stub) \in_{\aexec_{\tau}} \txid'''$. 
+Note that $\txid''' \neq \txid$ because $\VIS_{\aexec_{\tau}}$ is irreflexive.
+We show that either $\txid''' = \txid''$, or $\txid''' \toEDGE{\AR_{\aexec_{\tau}}} \txid''$. 
+Because $\txid''' \in \VIS^{-1}_{\aexec_{\tau}}(\txid)$, then there exists a key $\key'$ and an index $i \in \vienv'(\cl)$ 
+such that $\wtOf(\mkvs_{\aexec_{\tau'}}(\key', i)) = \txid'''$. Because $(\otW, \key, \stub) \in_{\aexec_{\tau}} \txid'''$, 
+and because $\txid''' \neq \txid$, then $(\otW, \key, \stub) \in_{\aexec_{\tau'}} \txid'''$, and therefore there exists 
+an index $j$ such that $\wtOf(\mkvs_{\aexec_{\tau'}}(\key, j)) = \txid'''$. We have that $\wtOf(\mkvs_{\aexec_{\tau'}}(\key, j) = 
+\wtOf(\mkvs_{\aexec_{\tau'}}(\key', i))$, and $i \in \vienv'(\cl)$. By \cref{eq:view.atomic}, it must be $j \in \vienv'(\cl)$. 
+Note that $r = \max\Set{i}[ i \in \vienv'(\cl)]$, hence we have that $j \leq r$. If $j = r$, then $\txid''' = \txid''$ and 
+there is nothing left to prove. If $j < r$, then we have that $(\txid''', \txid'') \in \AR_{\aexec_{\tau'}}$, and 
+therefore $(\txid''', \txid'') \in \AR_{\aexec_{\tau}}$.
+\end{itemize}
+Finally, we need to prove that $\mkvs = \mkvs_{\aexec_{\tau}}$.
+Recall $\mkvs = \updateKV[\mkvs_{\aexec_{\tau'}}, \vienv'(\cl), \fp, \txid]$, 
+and $\aexec_{\tau} = \extend[\aexec_{\tau'}, \Tx[\mkvs_{\aexec_{\tau'}}, \vienv'(\cl)], \txid, \fp]$. 
+The result follows then from \cref{prop:extend.update.sameop}. 
+\end{itemize}
+\end{proof}
+
+
+\begin{proposition}[\( \extend \) matching \( \updateKV\)]
+\label{prop:extend.update.sameop}
+Given an abstract execution $\aexec$, a set of transactions $\txidset \subseteq \txidset_{\aexec}$,
+a transaction $\txid \notin \txidset_{\aexec}$, and a fingerprint $\fp \subseteq \pset{\Ops}$,
+if the new abstract execution $\aexec' = \extend[\aexec, \txidset, \txid, \fp]$,
+and the view $\vi = \getView[\mkvs_{\aexec}, \txidset]$,
+then $\updateKV[\mkvs_{\aexec}, \vi, \fp, \txid] = \mkvs_{\aexec'}$.
+\end{proposition}
+
+\begin{proof}
+Let $\Gr = \Gr_{\updateKV[\mkvs_{\aexec}, \vi, \fp, \txid]}$, $\Gr' = \graphOf[\aexec']$. 
+Note that $\mkvs_{\aexec'}$ is the unique kv-store such that $\Gr_{\mkvs_{\aexec'}} = \graphOf[\aexec'] = \Gr'$. 
+It suffices to prove that $\Gr = \Gr'$. Because the function $\Gr_{\cdot}$ is injective, it follows that 
+$\updateKV[\mkvs_{\aexec}, \vi, \fp, \txid] = \mkvs_{\aexec'}$, as we wanted to prove.  
+
+The proof is a consequence of \cref{lem:graph.extend} and \cref{lem:graph.update}. 
+Consider the dependency graph $\Gr_{\mkvs_{\aexec}}$.
+Recall that $\mkvs_{\aexec}$ is the unique kv-store such that $\Gr_{\mkvs_{\aexec}} = \graphOf[\aexec]$. 
+We prove that $\TtoOp{T}_{\Gr} = \TtoOp{T}_{\Gr'}$, $\WR_{\Gr} = \WR_{\Gr'}$ and 
+$\WW_{\Gr} = \WW_{\Gr'}$ (from the last two it follows that $\RW_{\Gr} = \RW_{\Gr'}$). 
+\begin{itemize}
+\item It is easy to see $\TtoOp{T}_{\Gr} = \TtoOp{T}_{\Gr'}$.
+
+\item $\WR_{\Gr} = \WR_{\Gr'}$.
+Let \( \mkvs  = \mkvs_\aexec \).
+Suppose that $\txid' \toEDGE{\WR_{\Gr}(\key)} \txid''$ for some $\txid', \txid''$. 
+By \cref{lem:graph.update} we have that either $\txid' \toEDGE{\WR_{\Gr_\mkvs}(\key)} \txid''$, 
+or $\txid'' = \txid$, $(\otR, \key, \stub) \in \fp$, $\txid' = \max_{\WW_{\Gr_\mkvs}(\key)}\Set{\wtOf(\key, i) }[i \in \vi(\key)]$. 
+
+\begin{itemize}
+\item If $\txid' \toEDGE{\WR_{\Gr_\mkvs}(\key)} \txid''$, then because 
+$\Gr_\mkvs = \graphOf[\aexec]$, we have that $\txid' \toEDGE{\WR_{\graphOf[\aexec]}(\key)} \txid''$. 
+Recall that $\Gr' = \graphOf[\extend[\aexec, \txidset, \txid, \fp]]$, hence by \cref{lem:graph.extend} 
+we obtain that $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid''$. 
+
+\item If $\txid'' = \txid$, $(\otR, \key, \stub) \in \fp$, and $\txid' = \max_{\WW_{\Gr_\mkvs}(\key)} \Set{\wtOf(\mkvs_{\aexec}(\key, i))}[i \in \vi(\key)]$, 
+    then we also have that $\txid' = \max_{\WW_{\graphOf[\aexec]}(\key)} (\txidset \cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec} \txid''']) $. 
+This is because of the assumption that 
+\begin{align*}
+    \Set{\wtOf(\mkvs_{\aexec}(\key, i))}[i \in \vi(\key)]
+    & = \Set{\wtOf(\mkvs_{\aexec}(\key', i))}[\key' \in \Keys \land i \in \vi(\key')] \cap \Set{\wtOf(\mkvs_{\aexec}(\key, \stub)} \\
+    & = \Tx[\mkvs_{\aexec}, \vi] \cap \Set{\wtOf(\mkvs_{\aexec}(\key, \stub)}  \\
+    & = \txidset \cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec} \txid''']
+\end{align*}
+Again, it follows from \cref{lem:graph.extend} that $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid''$. 
+\end{itemize}
+\item \( \WW_{\Gr} = \WW_{\Gr'}\). The \( \WW_{\Gr} = \WW_{\Gr'} \) follows the similar reasons as $\WR_{\Gr} = \WR_{\Gr'}$.
+\end{itemize}
+\end{proof}
+
+\begin{lemma}[Graph to abstract execution extension]
+\label{lem:graph.extend}
+Let $\aexec$ be an abstract execution, 
+$\txid \notin \txidset_{\aexec} \cup \Set{\txid_0}$ be a transaction identifier $\txidset_{\aexec}$, and $\fp \in \txidset_{\aexec}$. 
+Let $\txidset \subseteq \txidset_{\aexec}$ be a set of transaction identifiers.
+Let $\Gr = \graphOf[\aexec], \Gr' = \graphOf[\extend[\aexec, \txid, \txidset, \fp]]$. 
+We have the following: 
+\begin{enumerate}
+\item for any $\txid' \in \txidset_{\Gr'}$, either $\txid' \in \txidset_{\Gr}$ and $\TtoOp{T}_{\Gr}(\txid') = \TtoOp{T}_{\Gr'}(\txid')$, 
+or $\txid' = \txid$ and $\TtoOp{T}_{\Gr'}(\txid) = \fp$.
+\item $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid''$ if and only if either 
+$\txid' \toEDGE{\WR_{\Gr}(\key)_{\Gr}} \txid''$, or $(\otR, \key, \stub) \in \fp$, $\txid'' = \txid$ and 
+$\txid' = \max_{\WW_{\Gr}(\key)}(\txidset)$, 
+\item $\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid''$ if and only if 
+either $\txid' \toEDGE{\WW_{\Gr}(\key)} \txid''$, or $(\otW, \key, \stub) \in \fp$, $\txid'' = \txid$, 
+and $(\otW, \key, \stub) \in_{\Gr} \txid'$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+Fix a key $\key$. Let $\aexec' = \extend[\aexec, \txid, \txidset, \fp]$. Recall that $\Gr' = \graphOf[\aexec']$.
+
+\begin{enumerate}
+\item By definition of $\extend$, and 
+because $\txid \notin \txidset_{\aexec}$, we have that 
+$\txidset_{\aexec'} = \txidset_{\aexec} \uplus \Set{\txid}$. Furthermore, $\TtoOp{T}_{\aexec'}(\txid) = \fp$, 
+from which it follows that $\TtoOp{T}_{\Gr'}(\txid) = \fp$.
+For all $\txid' \in \txidset_{\aexec}$, we have that $\TtoOp{T}_{\aexec'}(\txid') = 
+\TtoOp{T}_{\aexec}(\txid') = \TtoOp{T}_{\Gr}(\txid')$.
+\item
+There are two cases that either the \( \txid'' \) already exists in the dependency graph before,
+or it is the newly committed transaction.
+\begin{itemize}
+\item Suppose that $\txid' \toEDGE{\WR(\key)_{\Gr}} \txid''$ for some $\txid', \txid'' \in \txidset_{\Gr}$. 
+By definition, $(\otR, \key, \stub) \in_{\aexec} \txid''$,  
+and $\txid' = \max_{\AR_{\aexec}}(\VIS_{\aexec}^{-1}(\txid'') \cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec} \txid'''])$. 
+Because $\txid'' \in \txidset_{\Gr} = \txidset_{\aexec}$, it follows that $\txid'' \neq \txid$. By definition, 
+$\VIS^{-1}_{\aexec'}(\txid'') = \VIS^{-1}_{\aexec}(\txid)$: also, whenever 
+$\txid_{a}, \txid_{b} \in \VIS^{-1}_{\aexec'}(\txid)$ we have that $\txid_{a}, \txid_{b} \in \txidset_{\aexec}$, 
+and therefore if $\txid_{a} \toEDGE{\AR_{\aexec'}} \txid_{b}$, then it must be the case 
+that $\txid_{a} \toEDGE{\AR_{\aexec}} \txid_b$; also, $\TtoOp{T}_{\aexec}(\txid_{a}) = \TtoOp{T}_{\aexec'}(\txid_{a})$. 
+As a consequence, we have that 
+\[
+    \begin{array}{l}
+        \max{}_{\AR_{\aexec'}}(\VIS^{-1}_{\aexec'}(\txid) \cap \Set{ \txid'''}[(\otW, \key, \stub) \in_{\aexec'} \txid''']) =
+        \max{}_{\AR_{\aexec}}(\VIS^{-1}_{\aexec}(\txid) \cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec} \txid''']) = \txid'
+    \end{array}
+\] 
+and therefore $\txid' \toEDGE{\WR_{\Gr'}} \txid$. 
+
+\item Suppose now that $(\otR,\key, \stub) \in \fp$, and $\txid' = \max_{\WW(\key)_{\Gr}}(\txidset)$. 
+    By Definition, $\txid' = \max_{\AR_{\aexec}}(\txidset) \cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec} \txid''']$, 
+and, $\txidset = \VIS^{-1}_{\aexec'}(\txid)$.
+Because $\txidset \subseteq \txidset_{\aexec}$, we have 
+that for any $\txid_{a}, \txid_{b}$, if $\txid_{a} \toEDGE{\AR_{\aexec}} \txid_{b}$, 
+then $\txid_{a} \toEDGE{\AR_{\aexec'}} \txid_{b}$; and $\TtoOp{T}_{\aexec'}(\txid_{a}) = 
+\TtoOp{T}_{\aexec}(\txid_a)$. Therefore, 
+\[
+    \txid' = \max{}_{\AR_{\aexec'}}(\VIS^{-1}_{\aexec'}(\txid) \cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec'} \txid'''], 
+\] 
+from which it follows that $\txid' \toEDGE{\WR_{\Gr'}(\key)}\txid$.
+
+Now, suppose that $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid''$ for some $\txid', \txid'' \in \txidset_{\Gr'} = 
+\txidset_{\aexec'}$. We have that $ (\otR, \key, \stub) \in_{\aexec'} \txid''$, 
+$(\otW, \key, \stub) \in_{\aexec'} \txid'$, and $\txid'' = \max_{\AR_{\aexec'}}(\VIS_{\aexec'}^{-1}(\txid'') 
+\cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec'} \txid''']$. 
+We also have that $\txidset_{\aexec'} = \txidset_{\aexec} \uplus \Set{\txid}$. We perform a case 
+analysis on $\txid''$. 
+
+\begin{itemize}
+\item If $\txid'' = \txid$, then by definition of $\extend$ we have that 
+$\VIS^{-1}_{\aexec'}(\txid) = \txidset$. Note that $\txidset \subseteq \txidset_{\aexec}$, so that 
+for any $\txid_{a}, \txid_{b} \in \txidset_{\aexec}$, we have that $\txid_{a} \toEDGE{\AR_{\aexec'}} \txid_{b}$ 
+if and only if $\txid_{a} \toEDGE{\AR_{\aexec}} \txid_{b}$, 
+and $(\otW, \key, \val) \in_{\aexec'} \txid_{a}$ if and only if $(\otW, \key, \val) \in_{\aexec} \txid_{a}$. 
+Thus, $\txid' = \max_{\AR_{\aexec}}(\txidset 
+\cap \Set{\txid'''}[(\otW, \key, \stub) \in_{\aexec} \txid''']) = \max_{\WW_{\Gr}(\key)}(\txidset)$. 
+
+\item If $\txid'' \in \txidset_{\aexec}$, then it is the case that 
+    $\txid' = \max_{\AR_{\aexec'}}(\VIS^{-1}_{\aexec'}(\txid'') \cap \Set{ \txid'''}[(\otW, \key, \stub) \in_{\aexec'} \txid''']$. 
+Similarly to the case above, we can prove that $\VIS^{-1}_{\aexec'}(\txid'') = \VIS^{-1}_{\aexec}(\txid)$, 
+for any $\txid_{a}, \txid_{b} \in \VIS^{-1}_{\aexec}(\txid)$, $(\otW, \key, \val) \in_{\aexec'} \txid_{a}$ 
+implies $(\otW, \key, \val) \in_{\aexec} \txid_{a}$, and $\txid_{a} \toEDGE{\AR_{\aexec'}} \txid_{b}$ 
+implies $\txid_{a} \toEDGE{\AR_{\aexec}} \txid_{b}$, from which it follows that 
+$\txid' = \max_{\AR_{\aexec}}(\VIS^{-1}_{\aexec}(\txid'') \cap \Set{\txid'''}[(\otW, \key \stub) \in_{\aexec} \txid'''])$, 
+and therefore $\txid' \toEDGE{\WR_{\Gr}(\key)} \txid''$.
+\end{itemize}
+\end{itemize}
+
+\item 
+Similar to \( \WR(\key)_{\Gr} \), there are two cases that either the \( \txid'' \) already exists in the dependency graph before,
+or it is the newly committed transaction.
+\begin{itemize}
+\item Suppose that $\txid' \toEDGE{\WW_{\Gr}(\key)} \txid''$ for some $\txid', \txid'' \in \txidset_{\aexec}$. 
+Then $(\otW,\key,\stub) \in_{\aexec} \txid', (\otW, \key, \stub) \in_{\aexec} \txid''$, and $\txid' \toEDGE{\AR_{\aexec}} \txid''$. 
+By definition of $\extend$, it follows that $\txid' \toEDGE{\AR_{\aexec'}} \txid''$, and because 
+$\txid', \txid'' \in \txidset_{\aexec}$, hence $\txid', \txid'' \neq \txid$, then 
+$(\otW,\key, \stub) \in_{\aexec'} \txid'$, $(\otW, \key, \stub) \in_{\aexec'} \txid''$. By definition, 
+we have that $\txid' \toEDGE{\WW_{\aexec'}(\key)} \txid''$.
+
+\item Suppose that $(\otW, \key, \stub) \in_{\aexec} \txid'$, $(\otW, \key, \stub) \in \fp$. Because $\txid' \in \txidset_{\aexec}$, 
+we have that $\txid' \neq \txid$, hence $(\otW, \key, \stub) \in_{\aexec' }\txid'$. By definition, 
+$\TtoOp{T}_{\aexec'}(\txid) = \fp$, hence $(\otW, \key, \stub) \in_{\aexec'} \txid$. Finally, 
+the definition of $\extend$ ensures that $\txid' \toEDGE{\AR_{\aexec'}} \txid$. Combining 
+these three facts together, we obtain that  
+$\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid$. 
+
+Now, suppose that $\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid''$ for some $\txid', \txid'' \in \txidset_{\aexec}$. 
+Then $\txid' \toEDGE{\AR_{\aexec'}} \txid''$, $(\otW, \key, \stub) \in_{\aexec'} \txid'$, $(\otW, \key, \stub) 
+\in_{\aexec'} \txid''$. 
+Recall that $\txidset_{\Gr'} = \txidset_{\aexec'} = \txidset_{\aexec} \uplus \Set{ \txid }$. We perform a case analysis on $\txid''$. 
+
+\begin{itemize}
+
+\item If $\txid'' = \txid$, then the definition of $\extend$ ensures that $\txid' \toEDGE{\AR_{\aexec'}} \txid$ 
+implies that $\txid \in \txidset_{\aexec}$, hence $\txid' \neq \txid$. 
+Together with $(\otW, \key, \stub) \in_{\aexec'} 
+\txid'$, this leads to $(\otW, \key, \stub) \in_{\aexec} \txid'$. 
+
+\item If $\txid'' \in \txidset_{\aexec}$, then $\txid'' \neq \txid$. The definition of $\extend$ ensures that $\txid' \toEDGE{\AR_{\aexec}} \txid''$. 
+This implies that $\txid', \txid'' \in \txidset_{\aexec}$, hence $\txid', \txid'' \neq \txid$, and $\TtoOp{T}_{\aexec'}(\txid') = \TtoOp{T}_{\aexec}(\txid')$, 
+$\TtoOp{T}_{\aexec'}(\txid'') = \TtoOp{T}_{\aexec}(\txid'')$. It follows that $(\otW, \key, \stub) \in_{\aexec} \txid'$, 
+$(\otW, \key, \stub) \in_{\aexec} \txid''$, and therefore $\txid' \toEDGE{\WW_{\Gr}(\key)} \txid''$.
+
+\end{itemize}
+\end{itemize}
+\end{enumerate}
+\end{proof}
+
+
+\begin{lemma}[Graph to kv-store update]
+\label{lem:graph.update}
+Let $\mkvs$ be a kv-store, and $\vi \in \Views(\mkvs)$. Let $\txid \notin \mkvs$, and 
+$\fp \subseteq \pset{\Ops}$, and let $\mkvs' = \updateKV[\mkvs, \vi, \fp, \txid]$. 
+Let $\Gr = \Gr_{\mkvs}$, $\Gr' = \Gr_{\mkvs'}$; then for all $\txid', \txid'' \in \txidset_{\Gr'}$ and keys $\key$, 
+\begin{itemize}
+\item $\TtoOp{T}_{\Gr'} = \TtoOp{T}_{\Gr}\rmto{\txid}{\fp}$, 
+\item $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid''$ if and only if either 
+$\txid' \toEDGE{\WR_{\Gr}(\key)} \txid''$, or $(\otR, \key, \stub) \in \fp$ and 
+\[\txid' = \max_{\WW_{\Gr}(\key)}(\Set{\wtOf(\mkvs(\key, i)) }{ i \in \vi(\key)})\]
+\item $\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid''$ if and only if either 
+$\txid' \toEDGE{\WW_{\Gr}(\key)} \txid''$, or $(\otW, \key, \stub) \in \fp$ 
+and $\txid' = \wtOf(\mkvs(\key, \stub))$. 
+\end{itemize}
+\end{lemma}
+
+\begin{proof}
+Fix $\key \in \Keys$. Because $\txid \notin \mkvs$, then $\txid \notin \txidset_{\Gr}$, 
+and by definition of $update$ we obtain that $\Set{\txid'}[\txid' \in \mkvs'] = 
+\Set{\txid'}[\txid' \in \mkvs] \cup \Set{\txid}$. It follows that $\txidset_{\Gr'} = \txidset_{\Gr} \uplus \Set{\txid }$.
+
+\begin{enumerate}
+\item Suppose that $(\otR, \key, \val) \in_{\Gr} \txid'$. By definition, 
+there exists an index $i$ such 
+that $\mkvs(\key, i) = (\val, \stub, \Set{\txid'} \cup \stub)$. Because $\mkvs' = \updateKV[\mkvs, \vi, \fp, \txid]$, 
+it is immediate to observe that $\mkvs'(\key, i) = (\val, \stub, \Set{\txid'} \cup \stub)$, and therefore 
+$(\otR,\key, \val) \in_{\Gr'} \txid'$. Conversely, note that if $(\otR, \key, \val) \in_{\Gr'} \txid$, 
+then there exists an index $i = 0,\cdots, \lvert \mkvs'(\key) \rvert - 1$ such that 
+$\mkvs'(\key, i) = (\val, \stub, \Set{\txid'} \cup \stub)$. 
+%As a simple consequence of \cref{cor:updatekv.singlecell} 
+it follows that it must be the case that $i \leq \lvert \mkvs(\key) \rvert - 1$, and because 
+$\txid' \neq \txid$, we have that $\mkvs(\key, i) = (\val, \stub, \Set{\txid'} \cup \stub)$. Therefore 
+$(\otR, \key, \val) \in_{\Gr} \txid'$. 
+
+Similarly, if $(\otW, \key, \val) \in_{\Gr} \txid'$, 
+then there exists an index $i=0,\cdots, \lvert \mkvs(\key) \rvert - 1$ such that 
+$\mkvs(\key, i) = (\val, \txid', \val)$. It follows that $\mkvs'(\key, i) = (\val, \txid', \stub)$, hence 
+$(\otW, \key, \val) \in_{\Gr'} \txid'$. If $(\otW, \key, \val) \in \fp$, then we 
+have 
+%from \cref{cor:updatekv.singlecell} 
+that $\mkvs'(\key, \lvert \mkvs'(\key) \rvert - 1) = (\val, \txid', \stub)$, 
+hence $(\otW, \key, \val) \in_{\Gr'} \txid'$. 
+Conversely, if $(\otW, \key, \val) \in_{\Gr'} \txid'$, then there exists an index 
+$i = 0, \cdots, \lvert \mkvs'(\key) \rvert - 1$ such that $\mkvs(\key, i) = (\val, \txid', \stub)$. 
+We have two possible cases: either $i < \lvert \mkvs'(\key, i) \rvert - 1$, leading to  
+$\txid' \neq \txid$ and $\mkvs(\key, i) = (\val, \txid', \stub)$, or equivalently 
+$(\otR,\key, \val) \in_{\Gr} \txid'$; or $i = \lvert \mkvs'(\key, i) \rvert - 1$, 
+leading to $\txid' = \txid$, and $\mkvs(\key, i) = (\val, \txid, \emptyset)$ 
+for some $\val$ such that $(\otW, \key, \val) \in \fp$. 
+
+Putting together the facts above, we obtain that $\TtoOp{T}_{\Gr'} = 
+\TtoOp{T}_{\Gr}\rmto{\txid}{\fp}$, as we wanted to prove.
+
+\item There are two cases that either the \( \txid'' \) already exists in the dependency graph before,
+or it is the newly committed transaction.
+\begin{itemize}
+\item Suppose that $\txid' \toEDGE{\WR_{\Gr}(\key)} \txid''$. 
+By definition, there exists an index $i = 0,\cdots, \lvert \mkvs(\key) \rvert - 1$ 
+such that $\mkvs(\key, i) = (\stub, \txid', \Set{\txid''} \cup \stub)$. It is immediate 
+to observer, from the definition of $\updateKV$, that $\mkvs'(\key, i) = (\stub, \txid', \Set{\txid''} \cup \stub)$, 
+and therefore $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid''$. 
+
+\item Next, suppose that $(\otR, \key, \stub) \in \fp$, and $\txid' = \max_{\WW_{\Gr}(\key)}(\Set{\wtOf(\mkvs(\key, i))}[i \in \vi(\key)]$. 
+By Definition, $\mkvs(\key, i) = (\stub, \txid', \stub)$, where $i = \max(\vi(\key))$. This is because 
+$\txid' \rightarrow{\WW_{\Gr}(\key)} \txid''$ if and only if $\txid' = \wtOf(\mkvs(\key, j_1)), \txid'' = 
+\wtOf(\mkvs(\key, j_2))$ for some $j_1, j_2$ such that $j_1 < j_2$. 
+The definition of $\updateKV$ now ensures that $\mkvs'(\key, i) = (\stub, \txid', \Set{\txid } \cup \stub)$, 
+from which it follows that $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid$.
+
+Conversely, suppose that $\txid' \toEDGE{\WR_{\Gr'}(\key)} \txid''$. 
+Recall that $\txidset_{\Gr'} = \txidset_{\Gr} \cup \Set{ \txid }$, hence either 
+$\txid'' \in \txidset_{\Gr}$ or $\txid'' = \txid$. 
+
+\begin{itemize}
+\item If $\txid'' = \txid$, then it must be the case that there exists an index $i = 0,\cdots, \lvert \mkvs'(\key) \rvert - 1$ 
+such that $\mkvs'(\key, i) = (\stub, \txid', \Set{\txid } \cup \stub)$. Note that if $\mkvs'(\key, \lvert \mkvs'(\key) \rvert -1)$ is 
+defined, then it must be the case that $\mkvs'(\key, \lvert \mkvs'(\key) \rvert -1) = (\stub, \txid, \emptyset)$, 
+hence it must be the case that $i < \lvert \mkvs'(\key) \rvert - 1$. Because $\txid \notin \mkvs$, 
+then by the definition of $\updateKV$ it must be the case that $(\otR, \key, \stub) \in \fp$, 
+$\mkvs(\key, i) = (\stub, \txid', \stub)$ and $i = \max(\vi(\key))$; this also implies that $\txid' = 
+\max_{\WW(\key)}\Set{\wtOf(\mkvs(\key, i))}[i \in \vi(\key)]$. 
+
+\item If $\txid'' \in \txidset_{\Gr}$, then  it must be the case that $\txid'' \neq \txid$. 
+In this case, it also must exist an index $i = 0,\cdots, \lvert \mkvs'(\key) \rvert - 1$ 
+such that $\mkvs'(\key, i) = (\stub, \txid', \Set{\txid''} \cup \stub)$. As in the previous 
+case, we note that $i < \lvert \mkvs'(\key) \rvert - 1$, which together 
+with the fact that $\txid'' \neq \txid$ leads to $\mkvs(\key, i) = (\stub, \txid', \Set{\txid''} \cup \stub)$. 
+It follows that $\txid' \toEDGE{\WR_{\Gr}(\key)} \txid''$.
+\end{itemize}
+\end{itemize}
+
+\item 
+Similar to \( \WR(\key)_{\Gr} \), there are two cases that either the \( \txid'' \) already exists in the dependency graph before,
+or it is the newly committed transaction.
+\begin{itemize}
+\item Suppose that $\txid' \toEDGE{\WW_{\Gr}(\key)} \txid''$. 
+By definition, there exist two indexes $i, j$ such that 
+$\mkvs(\key, i) = (\stub, \txid', \stub)$, $\mkvs(\key, j) = (\stub, \txid'', \stub)$ 
+and $i < j$. The definition of $\updateKV$ ensures that 
+$\mkvs'(\key, i) = (\stub, \txid', \stub)$, $\mkvs'(\key, j) = (\stub, \txid'', \stub)$, 
+and because $i < j$ we obtain that $\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid''$. 
+
+\item Suppose that $(\otW, \key, \stub) \in \fp$. Then $\mkvs'(\key, \lvert \mkvs(\key) \rvert) = (\stub, \txid, \stub)$.
+Let $\txid' \in \txidset_{\Gr}$; by definition there exists an index $i = 0,\cdots, \lvert \mkvs(\key) \rvert$ 
+such that $\mkvs(\key, i) = (\stub, \txid', \stub)$. It follows that $\mkvs'(\key, i) = (\stub, \txid', \stub)$, and 
+because $i < \lvert \mkvs(\key) \rvert$, then we have that $\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid$. 
+
+Conversely, suppose that $\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid''$. Because 
+$\txidset_{\Gr'} = \txidset_{\Gr} \cup \Set{ \txid }$, we have two possibilities. Either $\txid'' = \txid$, 
+or $\txid'' \in \txidset_{\Gr}$. 
+
+\begin{itemize}
+\item If $\txid'' = \txid$, then it must be the case that $(\otW, \key, \stub) \in_{\Gr'} \txid$, 
+or equivalently there exists an index $i=0,\cdots, \lvert \mkvs'(\key) \rvert -1 $ such that 
+$\mkvs'(\key, i) = (\stub, \txid, \stub)$. Because $\txid \notin \mkvs$, and because for any 
+$i = 0, \cdots, \lvert \mkvs(\key) \rvert - 1$, $\mkvs'(\key, i) = (\stub, \txid, \stub) \implies 
+\mkvs(\key, i) = (\stub, \txid, \stub)$, then it necessarily has to be $i = \mkvs'(\key) \rvert - 1$. 
+According to the definition of $\updateKV$, this is possible only if $(\otW,\key, \stub) \in \fp$. 
+Finally, note that because $\txid' \toEDGE{\WW_{\Gr'}(\key)} \txid$, then 
+there exists an index $j < \lvert \mkvs'(\key, i) \rvert - 1$ such that 
+$\mkvs'(\key, j) = (\stub, \txid' ,\stub)$. The fact that $j < \lvert \mkvs'(\key, i) \rvert - 1$ 
+%From \cref{cor:updatekv.singlecell} 
+we obtain that $\mkvs(\key, j) = (\stub, \txid', \stub)$, 
+or equivalently $\txid' = \wtOf(\mkvs(\key, \stub))$. 
+
+\item If $\txid'' \in \txidset_{\Gr}$, then there exist two indexes $i,j$ such that 
+$j < \lvert \mkvs'(\key, j) \rvert - 1$, $\mkvs'(\key, j) = (\stub, \txid'', \stub)$, 
+$i < j$, and $\mkvs'(\key, i) = (\stub, \txid', \stub)$. It is immediate to observe 
+that $\mkvs(\key, i) = (\stub, \txid', \stub)$, $\mkvs(\key, j) = (\stub, \txid'', \stub)$, 
+from which $\txid' \toEDGE{\WW_{\Gr}(\key)} \txid''$ follows. 
+\end{itemize}
+\end{itemize}
+
+\end{enumerate}
+\end{proof}

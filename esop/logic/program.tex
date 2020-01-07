@@ -1,0 +1,539 @@
+\subsection{Reasoning programs}
+\label{sec:reasoning-prog}
+
+Each region has \emph{client-specified capabilities} \( \kap \in \Kaps \) that forms \emph{a partial commutative monoid (PCM)} (\cref{def:capabilities}).
+To recall, \emph{a PCM} is a partially ordered set that is closed under a commutative binary operation \( \compose \) and has a set of unit elements \( \unitelem \).
+The client-specified capabilities are lifted to \emph{capability composition function} \( \ca \in \Caps \) with their associated region identifiers (\cref{def:capabilities}).
+For brevity, we often say \emph{capabilities} for \emph{capability composition function}.
+The composition function for \emph{capabilities} \( \ca_l \composeC \ca_r \) is defined as compositing each region point-wise
+and the units \( \unitC \) are functions where regions map to units of client-specified capabilities.
+
+\begin{definition}[Capabilities]
+\label{def:capabilities}
+Assume a \emph{partial commutative monoid (PCM)} of \emph{client-specified capabilities} \( (\Kaps, \composeK, \unitK) \) with \( \kap \in \Kaps \), 
+the composition \( \composeK \) and the units set \( \unitK \).
+Given a set of \emph{region identifiers} \( \rid, \lrid \in \RegionID \), 
+the \emph{capability composition function} or \emph{capabilities} is \( \ca \in \Caps \defeq \RegionID \parfun \Kaps \),
+where the composition \( \composeC \) is defined as the follows:
+\[
+    \begin{rclarray}
+        (\ca_{l} \composeC \ca_{r})(\rid) & \defeq  &
+        \begin{cases}
+            \ca_{l}(\rid) \composeK \ca_{r}(\rid) & \rid \in \dom(\ca_{l}) \cap \dom(\ca_{l}) \\
+            \ca_{l}(\rid)  & \rid \in \dom(\ca_{l}) \setminus \dom(\ca_{l}) \\
+            \ca_{r}(\rid) & \rid \in \dom(\ca_{r}) \setminus \dom(\ca_{l}) \\
+            \text{undefined} & \text{otherwise} \\
+        \end{cases}
+    \end{rclarray}
+\]
+and the units set \( \unitC \defeq \Setcon{\ca}{\fora{\rid} \ca(\rid) \in \unitK } \).
+A capability assertion is in the form of \( \cass{\kap(\vec{\lvar})}{\lrid} \in \CAst \).
+The assertion is interpreted to a capability:
+\[
+\begin{rclarray}
+    \evalC{\cass{\kap(\vec{\lvar})}{\lrid}} & \defeq & \Set{\lrid \mapsto \kap(\evalLE{\vec{\lvar}})} \\
+\end{rclarray}
+\]
+\end{definition}
+
+The \emph{capability assertions} are in the form of \( \cass{\kap(\vec{\lvar})}{\lrid} \) 
+where \( \kap(\vec{\lvar}) \) is a client-specified syntactic capability parametrised by logical variables \( \vec{\lvar} \) and \( \lrid \) is the region identifier.
+They are interpreted to some capabilities \( \Caps \) by interpreting the syntactic capabilities \( \kap(\vec{\lvar}) \).
+
+Capabilities are resources that grant abilities to access the region.
+That is, the \emph{interference} (\cref{def:intf}) of a region specifies the allowed fingerprints associated with certain capabilities,
+and if a client holds those capabilities, it is allowed to perform those fingerprints.
+Capabilities also can be used as ghost resources to track extra information and/or build protocols between clients.
+For example in \cref{fig:write-skew-si-proof}, the capabilities \( \cass{\CB{L}}{\lrid} \) and \( \cass{\CB{L}}{\lrid} \) returns to shared region once being used,
+so that other clients know the environment has executed transactions with fingerprints allowed by the capabilities.
+
+Each shared region assertion is associated with a \emph{interference assertion} \( \intass \) to specify how the region can evolve (\cref{def:intf}).
+\emph{A action} in the interference \( \exsts{\vec{\lvar}} \perm{\kap} : \bar{\assfp} \) says that 
+if a client holds the capability \( \perm{\kap} \), it is allowed to execute a transaction and transfer capabilities with respect to \( \bar{\assfp} \).
+The \emph{fingerprint and capability transferring assertions} \( \bar{\assfp} \) has fingerprint assertion (\cref{def:fingerprint-assertion}) and additionally assertions for transferring of capabilities, 
+\ie adding capabilities to the shared region \( \null \fpA \cass{\kap}{\lrid} \), 
+deleting capabilities from the shared region \( \null \fpD \cass{\kap}{\lrid} \) and updating the shared capabilities \( \cass{\kap(\vec{\lvar})}{\lrid} \fpU \cass{\kap(\vec{\lvar})}{\lrid} \). 
+Those assertions \( \bar{\assfp} \) are interpreted as triples \( ( \assfp, \ca, \ca' ) \) of fingerprints \( \fp \), capabilities that moves into the region \( \ca \) and capabilities that moves out of the region \( \ca' \).
+The existential quantification is for binding variables between the capability \( \kap \) and the assertions \( \bar{\assfp}\).
+
+\emph{Interference assertions} are interpreted to \emph{interference environment}, \( \intf \in \Interference \) (\cref{def:intf}).
+\emph{Interference environment} also \emph{interference} is a function from client-specified capabilities \( \kap \) to sets of possible transitions over shared states for a region, 
+\ie tuples consisting of key-value stores, views, and (shared) capabilities (\cref{def:intf}). 
+Given a interpretation of an action \( (\assfp, \ca_d, \ca_a) \in \evalF[\lenv',\stk]{\bar{\assfp}} \) and any initial state \( (\mkvs, \vi, \ca_r \composeC \ca_f ) \),
+the final states \( (\mkvs',\vi', \ca_f \composeC \ca_a) \) are defined by committing the fingerprint \( \fp \) through \( \updateKV \) function,
+updating the view \( \vi \sqsubseteq \vi' \), taking out \( \ca_r \) and adding \( \ca_a \).
+Note that \( \ca_f \) are frames of capabilities as long as they are compatible before and after the update.
+All the read values should match to the versions with respect to the view \( \vi \).
+For technical reasons, the view \( \vi' \) after updating is any view greater than before.
+
+\begin{definition}[Interference]
+\label{def:intf}
+The \emph{fingerprint and capability transferring assertions} is defined as:
+\[
+\begin{rclarray}    
+    \bar{\assfp}, \bar{\assfp}' & ::= & 
+    \assfp 
+    \mid \null \fpA \cass{\kap(\vec{\lvar})}{\lrid}  
+    \mid \null \fpD \cass{\kap(\vec{\lvar})}{\lrid} 
+    \mid \cass{\kap(\vec{\lvar})}{\lrid} \fpU \cass{\kap(\vec{\lvar})}{\lrid} 
+    \mid \bar{\assfp} \sep \bar{\assfp}'
+\end{rclarray}
+\] 
+Given a logical environment $\lenv \in \LEnv$ (\cref{def:local_assertions}), a stack $\stk \in \Stacks$ and the  interpretation function for transactional assertions \( \evalLS[(.,.)]{.} \) (\cref{def:fingerprint-assertion}), the \emph{fingerprint and capability transferring assertions} is interpreted through function, $\evalF[(., .)]{.}: \FAst \times \LEnv \times \Stacks \parfun \Fingerprints \times \Caps \times \Caps$:
+\[
+\begin{rclarray}
+    \evalF{ \assfp } & \defeq &
+        \Setcon{(\fp, \ca, \ca')}{
+            (\stub,\fp) \in \evalLS{\assfp} \land \ca, \ca' \in \unitC
+        }  \\
+    \evalF{\null \fpA \cass{\kap(\vec{\lvar})}{\lrid} } & \defeq & 
+        \Setcon{(\unitO, \ca, \ca')}{
+            \ca = \evalC{\cass{\kap(\vec{\lvar})}{\lrid}} \land \ca' \in \unitC
+        } \\
+    \evalF{\null \fpD \cass{\kap(\vec{\lvar})}{\lrid} } & \defeq &
+        \Setcon{(\unitO, \ca, \ca')}{
+            \ca \in \unitC \land \ca'  = \evalC{\cass{\kap(\vec{\lvar})}{\lrid}} 
+        } \\
+    \evalF{\cass{\kap(\vec{\lvar})}{\lrid} \fpU \cass{\kap'(\vec{\lvar}')}{\lrid} } & \defeq &
+        \Setcon{(\unitO, \ca, \ca')}{
+            \ca = \evalC{\cass{\kap(\vec{\lvar})}{\lrid}} \land \ca'  = \evalC{\cass{\kap'(\vec{\lvar}')}{\lrid}} 
+        } \\
+    \evalF{\assfp_{1} \sep \assfp_{2}} & \defeq & 
+    \Setcon{%
+        ( \fp_{1} \composeO \fp_{2}, \ca_{1} \composeC \ca_{2}, \ca'_{1} \composeC \ca'_{2} ) 
+    }{%
+        (\fp_{1}, \ca_{1}, \ca'_{1}) \in \evalF{\assfp_{1}}  \land{} \\ \quad  (\fp_{2}, \ca_{2}, \ca'_{2}) \in \evalF{\assfp_{2}}
+    }\\
+
+\end{rclarray}
+\]
+The grammar of \emph{interference assertions}, \( \intass \in \IAst \), is defined as:
+\(
+\begin{rclarray}
+	\intass & ::=  & \emptyset \mid \Set{ \exsts{\vec{\lvar}} \perm{\kap} : \assfp } \cup \intass 
+\end{rclarray}
+\).
+The \emph{interference environments} \( \intf \) is defined as the follows:
+\[
+\begin{rclarray}
+    \intf \in \Interference & \defeq & \Kaps \to ( \MKVSs \times \Views \times \Caps ) \times  ( \MKVSs \times \Views \times \Caps )
+\end{rclarray}
+\]
+The interference assertions are interpreted to interference environments via \emph{interference interpretation} function, $\evalI[(., .)]{.}: \IAst \times \LEnv \times \Stacks \to \Interference$:
+\[
+\begin{array}{@{}l}
+	\evalI{\Set{ \exsts{\vec{\lvar}} \perm{\kap} : \assfp } \cup \intass }(\kap') \defeq \\
+    	\qquad \left\{ 
+            \begin{array}{@{}l @{\qqquad} l}
+            \multicolumn{2}{@{}l@{}}{
+                    \Setcon{
+                        \begin{bracketarray}
+                            (\mkvs, \vi, \ca_r \composeC \ca_f ), \\ 
+                            (\mkvs',\vi', \ca_f \composeC \ca_a)
+                        \end{bracketarray}
+                    }{ 
+                        \vi \in \Views(\mkvs) \\
+                        \quad {} \land \exsts{\fp, \cl} 
+                        ( \fp, \ca_{a}, \ca_{r} ) \in \evalF[\lenv',\stk]{\assfp} \\
+                        \quad {} \land \mkvs' \in \updateKV[\mkvs, \vi, \cl, \fp] \\
+                        \quad {} \land \pred{readFrom}{\mkvs, \vi, \fp}  \\
+                        \quad {} \land \vi' \in \Views(\mkvs')
+                    } 
+                    \cup \evalI{\intass}(\kap')%
+            } \\
+            & \text{if there exist a logical environment} \ \lenv' \\
+            & \text{by replacing} \ \vec{\lvar} \ \text{with some} \ \vec{\val} \ \text{\ie} \lenv' = \lenv\rmto{\vec{\lvar}}{\vec{\val}}, \\
+            & \text{and under the new logical environment} \ \kap' = \evalI[\lenv', \stk]{\kap} \\
+            \\
+            \evalI{\intass}(\kap')        
+            & \text{otherwise} \\
+    	    \end{array}
+        \right.  \\
+\end{array}
+\]
+where the \( \pred{readFrom} \) asserts the fingerprint makes sense with respect to the view:
+\[
+\begin{rclarray}
+    \pred{readFrom}{\mkvs, \vi, \fp} & \defeq & \fora{\key, \val} (\otR, \key, \val) \in \fp \implies \snapshot[\mkvs,\vi](\key) = \val
+\end{rclarray}
+\]
+\end{definition}
+
+A \emph{world} \( \w \in \World \) (\cref{def:world}) is a pair of \emph{local capabilities} \( \ca \) (\cref{def:capabilities}) and \emph{a shared state} \( \gs \).
+The shared state is a function from region identifiers to quadruples consisting of key-value stores, views, shared capabilities and interference environments.
+The composition functions for shared states \( \composeS \) asserts two shared states are identical.
+
+\begin{definition}[Worlds]
+\label{def:invariant-region}
+\label{def:world}
+Given the set of key-value stores $\MKVSs$ (\cref{def:his_heap}), views \( \Views \) (\cref{def:views}), capabilities \( \Caps\) (\cref{def:capabilities}) and region identifiers \( \RegionID \), the set of \emph{shared states} is \( \SStates \defeq \RegionID \parfun \MKVSs \times \Views \times \Caps \times \Interference \).
+The \emph{shared state composition function}, $\composeS: \SStates \times \SStates \parfun \SStates$, is defined as $\composeS \defeq \composeEq$, where for all domains $\sort M$ and all $m, m' \in \sort M$:
+%
+\[
+\begin{rclarray}
+	m \composeEq m' &  \defeq  &
+	\begin{cases}
+		m & \text{if } m = m'\\
+		\text{undefined} & \text{otherwise}
+	\end{cases}
+\end{rclarray}
+\]
+The set of \emph{worlds} \( \World \) is defined as the follows:
+\[
+\begin{rclarray}
+	\world \in \World  & \defeq & 
+    \Setcon{
+        (\ca, \gs) 
+    }{ 
+        \ca \in \Caps \land \gs \in \SStates
+        \land \exsts{ \mkvs, \vi, \ca' }   \\
+        \quad (\mkvs, \vi, \ca') \in \func{collapse}[\gs] 
+        \land \dom(\mkvs) = \Keys \\
+        \quad {} \land \vi \in \Views(\mkvs) 
+        \land \dom(\ca \composeC \ca') \subseteq \dom(\gs) \\
+        \qquad {} \land \fora{\rid \in \dom(\gs)} 
+        \exsts{\mkvs, \vi, \ca'', \intf}  \\
+        \qquad \gs(\rid) = (\mkvs, \vi, \ca'', \intf) 
+        \land ( \mkvs, \vi, \ca'' ) \in \func{inv}[\rid, \intf] \\
+        \qquad {} \land  \left( \fora{ \key, i  }
+        i \in  \vi( \key ) \implies  0 \leq i < \abs{ \mkvs(\key) } \right)
+    }
+\end{rclarray}
+\]               
+The \( \func{collapse}\) function is defined as the follows:
+\[
+\begin{rclarray}
+    \func{collapse}[\emptyset] & \defeq & \Setcon{(\unitHH, \unitVI, \ca )}{ \ca \in \unitC } \\
+    \func{collapse}[\Set{\rid \mapsto (\mkvs, \vi, \ca, \intf)} \uplus \gs ] & \defeq & 
+        \Setcon{ 
+            (\mkvs \composeHH \mkvs', \vi \compose \vi', \ca \composeC \ca') 
+        }{ 
+            (\mkvs', \vi', \ca') \in \func{collapse}[\gs] }\\
+\end{rclarray}
+\] 
+where the composition for kv-store are standard disjointed union for functions \( \composeHH \defeq \uplus\).
+Assume a global function \( \func{initCap} : \RegionID \to \Caps \) that returns the initial capabilities for a region.
+The \( ( \mkvs, \vienv, \ca ) \in \func{inv}[\rid, \intf] \) iff:
+\[
+\begin{array}[t]{@{}l}
+    (\mkvs, \vienv) \text{ is initial }
+    \land \func{initCap}[\rid]  = \ca \\
+    {} \lor \exsts{\mkvs', \vienv', \ca', \vi, \cl} 
+    ( \mkvs' , \vienv', \ca' ) \in \func{inv}[\rid, \intf] \\
+    \quad {} \land (( \mkvs' , \vienv'(\cl), \ca' ), ( \mkvs, \vi, \ca )) \in \intf(\kap) 
+    \land \vienv = \vienv'\rmto{\cl'}{\vi}
+\end{array}
+\]
+The \( ( \mkvs, \vi, \ca ) \in \func{inv}[\rid, \intf] \) is a short-hand for:
+\[ 
+\exsts{\vienv, \cl} \vi = \vienv(\cl) \land ( \mkvs, \vienv, \caset ) \in \func{inv}[\rid, \intf]
+\]
+% 
+The \emph{world composition function}, $\composeW: \World \times \World \parfun \World$, is defined component-wise as: $\composeW \defeq (\composeC, \composeS)$.
+The \emph{world unit set} is 
+\[ \unitW \defeq \Setcon{(\ca, \gs)}{(\ca, \gs) \in \World \land \ca \in \unitC}
+\]
+The \emph{partial commutative monoid of worlds} is $(\World, \composeW, \unitW)$.
+\end{definition}
+
+The well-formed conditions for a world are:
+\textbf{(i)} the state of every region is disjointed with each others (induced by the \(\func{collapse}\) function);
+\textbf{(ii)} capabilities from regions are compatible with local capabilities and there is no capability of which the region identifier never appears in the shared state \ie \( \dom(\ca \composeC \ca') \in \dom(\gs) \); 
+\textbf{(iii)} the state of a region \( (\mkvs, \vi, \ca'') \) satisfies the invariant of the region \( (\mkvs, \vi, \ca'') \in \func{inv}[\rid, \intf]\) and the domain of the view is the same as the domain of the key-value store, meaning they have exactly the same keys;
+and \textbf{(iv)} the view of each region should be in the range of the key-value store.
+In the \cref{def:world}, the \( \func[collapse] \) function erases the region identifiers and composites the states point-wise.
+Because of the well-formedness, we introduce the \emph{erase function} \( \eraseW{.} : \World \to \MKVSs \times \Views \) that collapses a world to \emph{a unique pair of a key-value store and a view}:
+\(
+\begin{rclarray}
+    \eraseW{(\ca,\gs)} & \defeq & (\mkvs, \vi)
+\end{rclarray}
+\),
+where \( (\mkvs, \vi, \stub) \in \func{collapse}[\gs] \).
+
+The \emph{program assertions} also \emph{assertions} (\cref{def:assertion}) have capability assertions \( \cass{\kap}{\lrid} \) for local capabilities, \emph{shared region assertions} also known as \emph{boxed assertions} \( \boxass{\bar{\lpre}}{\lrid}{\intass} \) for the shared states and standard separation logic assertions.
+We assume the entire key-value store are shared, thus we do not have assertions related to key-value stores outside shared regions.
+
+\begin{definition}[Program assertions]
+\label{def:assertion}
+\label{def:prog-assertion}
+Given the set of logical expression \( \lexpr \in \LExpr\), the set of \emph{program assertions}, $\gpre, \gpost \in \Ast$, are defined by the following inductive grammar:
+\[
+\begin{rclarray}
+    \bar{\lpre}, \bar{\lpost} & ::= & \assfalse \mid \asstrue \mid \bar{\lpre} \land \bar{\lpost} \mid \bar{\lpre} \lor \bar{\lpost} \mid \exsts{\lvar} \bar{\lpre} \mid \bar{\lpre} \implies \bar{\lpost} \mid \assemp \mid \cass{\kap}{\lrid} \mid \lexpr \pt \lexpr \mid \bar{\lpre} \sep \bar{\lpost} \\
+	\gpre , \gpost & ::= & \assfalse \mid \asstrue \mid \gpre \land \gpost \mid \gpre \lor \gpost \mid \exsts{\lvar}\gpre \mid \gpre \implies \gpost \mid \assemp \mid \cass{\kap}{\lrid} \mid \boxass{\bar{\lpre}}{\lrid}{\intass} \mid \gpre \sep \gpost \\
+\end{rclarray}
+\]
+%
+where $\lvar, \lrid \in \LVar$, $\lexpr_1, \lexpr_2 \in \LExpr$ (\cref{def:local_assertions}), $\kap \in \Kaps$ (\cref{def:capabilities}) and $\intass \in \IAst$ (\cref{def:intf}).
+Given a logical environment $\lenv \in \LEnv$ and a stack $\stk \in \Stacks$, the \emph{assertion interpretation} function, $\evalW[(., .)]{.}: \Ast \times \LEnv \times \Stacks \to \pset{\World}$, is defined as follows:
+%
+\[
+\begin{rclarray}
+	\evalW{\assfalse} & \defeq & \emptyset \\
+	\evalW{\asstrue} & \defeq & \World \\
+	\evalW{\gpre \land \gpost} & \defeq & \evalW{\gpre} \cap \evalW{\gpost} \\
+	\evalW{\gpre \lor \gpost} & \defeq & \evalW{\gpre} \cup \evalW{\gpost} \\ 
+	\evalW{\exsts{\lvar}  \gpre} & \defeq & \bigcup_{\val \in \textnormal{\Val}} \evalW[\lenv\rmto{\lvar}{\val}, \stk]{\gpre} \\
+	\evalW{\gpre \implies \gpost} & \defeq & \Setcon{\w}{\w \in \evalW{\gpre} \implies \w \in \evalW{\gpost}} \\
+	\evalW{\assemp} & \defeq & \unitW \\
+	\evalW{\cass{\kap}{\lrid}} & \defeq & \Setcon{ (\Set{\lrid \mapsto \evalI{\kap}}, \gs) }{\gs \in \SStates} \\
+	\evalW{ \boxass{\bar{\lpre}}{\lrid}{\intass} } & \defeq & 
+    \Setcon{
+        (\ca, \gs)
+    }{         
+        \exsts{\mkvs, \vi, \ca'}
+        \ca \in \unitC \\
+        \quad {} \land \gs(\lrid) = (\mkvs, \vi, \ca', \evalI{\intass}) 
+        \land (\mkvs, \vi, \ca') \in \evalAUX{\bar{\lpre}} 
+    } \\
+	\evalW{ \gpre \sep \gpost } & \defeq & 
+	\Setcon{
+	   (\world_1 \composeW \world_2) 
+    }{
+       \world_1 \in \evalW{\gpre} \land \world_2 \in \evalW{\gpost}
+	} \\
+\end{rclarray}%
+\]
+The function \( \evalAUX[(., .)]{.} \) evaluates the assertions \( \bar{\lpre} \):
+\[
+\begin{rclarray}
+    \evalAUX{\assfalse} & \defeq & \emptyset \\
+    \evalAUX{\asstrue} & \defeq & \MKVSs \times \Views \times \Caps \\
+    \evalAUX{\bar{\lpre} \land \bar{\lpost}} & \defeq & \evalAUX{\bar{\lpre}} \cap \evalAUX{\bar{\lpost}} \\ 
+    \evalAUX{\bar{\lpre} \lor \bar{\lpost}} & \defeq & \evalAUX{\bar{\lpre}} \cup \evalAUX{\bar{\lpost}} \\ 
+    \evalAUX{\exsts{\lvar} \bar{\lpre}} & \defeq & \bigcup_{\val \in \Val} \evalAUX[\lenv\rmto{\lvar}{\val}, \stk]{\bar{\lpre}} \\
+    \evalAUX{\bar{\lpre} \implies \bar{\lpost}} & \defeq & \Setcon{ (\mkvs, \vi, \ca) }{ (\mkvs, \vi, \ca) \in \evalAUX{\bar{\lpre}} \implies (\mkvs, \vi, \ca) \in \evalAUX{\bar{\lpost}} }\\
+    \evalAUX{\assemp} & \defeq & \Setcon{ (\unitHH, \unitVI, \ca) }{\ca \in \unitC } \\
+    \evalAUX{\cass{\kap}{\lrid}} & \defeq & \Set{ (\unitHH, \unitVI, \Set{\lrid \mapsto \evalC{\kap}}) }\\
+    \evalAUX{\lexpr_{1} \pt \lexpr_2} & \defeq & \Setcon{ (\mkvs, \vi, \ca) }{ \Set{ \evalLE{\lexpr_{1}} \mapsto \evalLE{\lexpr_{2}} } = \snapshot[\mkvs, \vi] \land \ca \in \unitC } \\
+    \evalAUX{\bar{\lpre} \sep \bar{\lpost}} & \defeq & 
+    \Setcon{ (\mkvs \composeHH \mkvs', \vi \composeVI \vi', \ca \composeC \ca') }{ (\mkvs, \vi, \ca) \in \evalAUX{\bar{\lpre}} \land (\mkvs', \vi', \ca') \in \evalAUX{\bar{\lpost}} } \\
+\end{rclarray}%
+\]
+\end{definition}
+
+
+The assertions inside regions \( \bar{\lpre} \) have capability assertions for shared capabilities, single-key assertions \( \lexpr \pt \lexpr \) and other standard separation logic assertions.
+The single-key assertions \( \lexpr_1 \pt \lexpr_2 \) are interpreted to any pairs of kv-stores and views.
+The view of each pair points to a version of the key \( \evalLE{\lexpr_1 }\) carrying value \( \evalLE{\lexpr_2}\).
+The interpretation \( \evalAUX[(.,.)]{.} \) for the rest of \( \bar{\lpre} \) are standard.
+
+Given \( \bar{\lpre} \) and its interpretation, shared region assertions are in the form of \( \boxass{\bar{\lpre}}{\lrid}{\intass} \).
+They are interpreted to any world \( (\ca, \gs) \) where the local capabilities \( \ca \) is of unit elements,
+the state of the region \( \lrid \) satisfies the assertion \( \bar{\lpre} \) and the interference environment of the region satisfies \( \intass \).
+Because the composition of worlds is defined when the shared states are identical,
+it means \( \boxass{\bar{\lpre}}{\lrid}{\intass} \sep \boxass{\bar{\lpost}}{\lrid}{\intass} \implies \boxass{\bar{\lpre} \land \bar{\lpost} }{\lrid}{\intass} \).
+
+The \emph{rely} \( \Rely \) describes the allowed actions for the environment while the \emph{guarantee} \( \Guar \) are for the current client (\cref{def:rely-guarantee}).
+They are defined as transitions over worlds.
+
+\begin{definition}[Rely and guarantee]
+\label{def:rely-guarantee}
+Given the set of worlds $\World$ (\cref{def:world}), the \emph{update rely} relation, $\relyU \subseteq \World \times \World$, is defined as the follows:
+\[	
+    \begin{rclarray}
+	\relyU & \defeq &
+	\Setcon{
+		((\ca_l,\gs), (\ca_l, \gs'))	
+	}{
+        \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor 
+        \exsts{\kap, \mkvs, \mkvs', \vi_\rid, \vi_{e}, \vi_{e}', \ca, \ca_\rid, \ca_{\rid}', \intf}   \\
+        \quad \gs(\rid) = (\mkvs, \vi_\rid, \ca_\rid, \intf)
+        \land \gs'(\rid) = (\mkvs', \vi_{\rid}, \ca_{\rid}',\intf)  \\
+        \quad {} \land ( \ca \composeC \ca_l \composeC \ca_r )\isdef
+        \land \kap \sqsubseteq \ca(\rid)  \\ 
+        \quad {} \land ( (\mkvs, \vi_e, \ca_\rid), (\mkvs', \vi_{e}', \ca_{\rid}') )  \in \intf(\kap)
+	} \\
+    \end{rclarray}
+\]
+The \emph{view shift rely} relation $\relyV \subseteq \World \times \World$, is defined as follows:
+\[
+    \begin{rclarray}
+	\relyV & \defeq &
+	\Setcon{
+		((\ca_l,\gs), (\ca_l, \gs'))	
+	}{
+        \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor 
+        \exsts{\mkvs, \vi, \vi'\ca, \ca, \intf} \\
+        \quad \gs(\rid) = (\mkvs, \vi, \ca, \intf)
+        \land \gs'(\rid) = (\mkvs, \vi', \ca, \intf) 
+	} \\
+    \end{rclarray}
+\]
+The \emph{rely} relation \( \Rely \) is the transitive closure of updates and view shift: \( \Rely \defeq {(\relyU \cup \relyV)}^{*} \).
+The \emph{guarantee} relation, $\Guar \subseteq \World \times \World$, is defined as follows:
+\[	
+    \begin{rclarray}
+	\Guar & \defeq &
+	\Setcon{
+		((\ca_l,\gs), (\ca_{l}', \gs'))	
+	}{
+        \fora{\rid}
+        \gs(\rid) = \gs'(\rid) \lor {}
+        \exsts{\kap, \mkvs, \mkvs', \vi_\rid, \vi_{\rid}', \ca_\rid, \ca_{\rid}', \intf}   \\
+        \quad \gs(\rid) = (\mkvs, \vi_\rid, \ca_\rid,\intf)
+        \land \gs'(\rid) = (\mkvs', \vi_{\rid}', \ca_{\rid}',\intf)  \\
+        \quad \land \kap \sqsubseteq \ca_{l}(\rid)
+        \land ( (\mkvs, \vi_\rid, \ca_\rid), (\mkvs', \vi_{\rid}', \ca_{\rid}') )  \in \intf(\kap) \\
+        \quad \land (\ca_{l} \composeC \ca_\rid)^{\perp} = (\ca_{l}' \composeC \ca_{\rid}')^{\perp}
+	} \\
+    \end{rclarray}
+\]
+where for any element \( m \) from its domain \( \sort{M} \), the  \emph{orthogonal} is defined as:
+\[
+\begin{rclarray}
+m^{\perp} & \defeq & \Setcon{m'}{(m \compose{} m')\isdef \land m' \in \sort{M}} 
+\end{rclarray}
+\]
+\end{definition}
+
+The \emph{rely} \( \Rely \) describes how the environment can change the state of the shared regions.
+Given the local capabilities \( \ca_l \) and shared capabilities \( \ca_r \), the environment might own any capabilities \( \ca\) that are compatible, \ie \( (\ca \composeC \ca_l \composeC \ca_r)\isdef \).
+Then the \emph{update rely} \( \relyU \) allows the environment to perform those actions associated with the capabilities \( \ca \) with their own view \( \vi_e \) to update the key-value store and shared capabilities.
+Note that the \emph{update rely} does not change the views, since the views are actually local for clients.
+Separately, the \emph{view shift rely} \( \relyV \) allows to advance the local view.
+
+The \emph{guarantee} \( \Guar \) describes the allowed actions for the current client (\cref{def:rely-guarantee}).
+The current client can perform actions associated with the local capabilities \( \ca_l \) to update the shared region and consequently the local capabilities.
+Yet it should ensure no resource created or deleted through requiring that the \emph{orthogonal} of local capabilities and shared capabilities together remains unchanged.
+The orthogonal of a capability \( \ca \) is a set of capabilities that are compatible with the capability \( \ca \).
+The guarantee allows to update several regions, but each region can be updated at most once.
+
+
+\begin{definition}[Stable]
+\label{def:stable}
+A set of worlds $\setworld \subseteq \World$ is \emph{stable}, written $\stable{\gpre, \ET}$, if and only if it is closed under the rely relation: 
+\[
+    \begin{rclarray}
+        \stable{\gpre, \ET} & \defeq & 
+        \begin{array}[t]{@{}l}
+            \fora{\stk, \lenv, \w, \w', \mkvs, \mkvs', \vi, \vi', \vi''} 
+            \exsts{\fp, \vi''} \\
+            \quad \w \in \evalW{\gpre} 
+            \land \ET \vdash (\mkvs, \vi) \csat \fp :  \vi''
+            \land \vi'' \subseteq \vi' \\
+            \quad {} \land (\w, \w') \in \Rely  
+            \land (\mkvs, \vi) = \eraseW{\w} \\
+            \quad {} \land (\mkvs', \vi') = \eraseW{\w'} 
+            \implies \w' \in \evalW{\gpre}
+        \end{array} \\
+    \end{rclarray}
+\]
+\end{definition}
+
+Assertions are \emph{stable} if they remain true against the rely (\cref{def:stable}).
+Formally speaking, a set of worlds \( \evalW{\gpre} \) is stable under certain execution test \( \ET \) if the set is closed under rely relation \( (\w, \w') \in \Rely \) with the side conditions:
+the new key-value store after a rely step is allowed by the consistency model induced by the execution test \( \mkvs' \in \CMs(\ET) \).
+
+The rules for programs are in \cref{fig:rule-prog}.
+The triple \( \tripleG{\gpre}{\prog}{\gpost} \) asserts that given any state satisfying the precondition \( \gpre \), if the program \( \prog \) terminates under the execution test \( \ET \), the state after satisfies the postcondition \( \gpost \).
+The \rl{PRCommit} rule is the key rule.
+It commits the local effect of a transaction \( \trans \) via \emph{repartitioning} \( \repartition{\gpre}{\gpost}{\lpre}{\lpost} \).
+The repartitioning means:
+\begin{itemize}
+\item
+for any possible world \( \w \) satisfying the precondition \( \gpre \), there exists a snapshot corresponding the world \( \snapshot[\mkvs, \vi] \) with empty fingerprint \( \unitO \) that overall satisfies the transactional precondition \( \lpre \);
+\item
+for any possible fingerprints  \( \fp \) satisfying the transactional postcondition \( \lpost \), there exists a world \( \w' \) satisfying the postcondition \( \gpost \) such that:
+\begin{itemize}
+\item 
+the new key-value store in the new world \( \mkvs' \) is updated via committing the fingerprints \( \fp \) to \( \mkvs \);
+\item
+the new view \( \vi' \) is picked so that the update passes the execution test \( \ET \vdash (\mkvs,\vi) \csat \fp : \vi' \);
+\item
+and, the update is allowed by the guarantee \( (\w, \w') \in \Guar\).
+\end{itemize}
+\end{itemize}
+
+
+\begin{figure}[t!]
+\hrule\vspace{5pt}
+
+\begin{mathpar}
+    \inferrule[\rl{PRCommit}]{%
+        \tripleL{\lpre}{\trans}{\lpost} 
+        \\ \repartition{\gpre}{\gpost}{\lpre}{\lpost}
+        \\\\ \stable{\gpre, \ET} 
+        \\ \stable{\gpost, \ET} 
+    }{%
+        \tripleG{\gpre}{ \ptrans{\trans} }{\gpost}
+    }
+    \and
+    \inferrule[\rl{PRPar}]{%
+        \tripleG{ \gpre_{1} }{ \cmd_{1} }{ \gpost_{1} }
+        \\ \tripleG{ \gpre_{2} }{ \cmd_{2} }{ \gpost_{2} } 
+        \\\\ \stable{\gpre_{1}, \ET} 
+        \\ \stable{\gpre_{2}, \ET} 
+    }{%
+        \tripleG{ \gpre_{1} \sep \gpre_{2} }{ \cmd_{1} \ppar \cmd_{2} }{ \gpost_{1} \sep \gpost_{2} }
+    }
+    \and
+    \inferrule[\rl{PRAss}]{%
+        \var \notin \func{fv}[\lexpr]
+    }{%
+        \tripleG{\var \dot= \lexpr }{ \passign{\var}{\expr} }{\var \dot= \expr\sub{\var}{\lexpr} }
+    }
+    \and
+    \inferrule[\rl{PRAssume}]{ }{%
+        \tripleG{ \expr \dot\neq 0 }{ \passume{\expr} }{ \expr \dot\neq 0 } 
+    }
+    \and
+    \inferrule[\rl{PRChoice}]{%
+        \tripleG{ \gpre }{ \cmd_{1} }{ \gpost } 
+        \\ \tripleG{ \gpre }{ \cmd_{2} }{ \gpost } 
+    }{%
+        \tripleG{ \gpre }{ \cmd_{1} \pchoice \cmd_{2} }{ \gpost }
+    }
+    \and
+    \inferrule[\rl{PRSeq}]{%
+        \tripleG{ \gpre }{ \cmd_{1} }{ \gframe }
+        \\ \tripleG{ \gframe }{ \cmd_{2} }{ \gpost }
+    }{%
+        \tripleG{ \gpre }{ \cmd_{1} \pseq \cmd_{2} }{ \gpost }
+    }
+    \and
+    \inferrule[\rl{PRIter}]{%
+        \tripleG{ \gpre }{ \cmd }{ \gpre } 
+    }{%
+        \tripleG{ \gpre }{ \cmd\prepeat }{ \gpre }
+    }
+    \and
+    \inferrule[\rl{PRFrame}]{%
+        \tripleG{ \gpre }{ \cmd }{ \gpost } 
+        \\ \stable{\gframe, \ET}
+        \\ \func{fv}[\gframe] \cap \func{modify}[\cmd] = \emptyset 
+    }{%
+        \tripleG{ \gpre \sep \gframe }{ \cmd }{ \gpost \sep \gframe }
+    }
+\end{mathpar}
+
+
+\hrule\vspace{5pt}
+\[
+\begin{rclarray}
+    \repartition{\gpre}{\gpost}{\lpre}{\lpost} & \defeq & 
+    \begin{array}[t]{@{}l@{}}
+        \fora{ \w, \mkvs, \vi, \lenv, \stk } 
+        \w \in \evalW{\gpre} 
+        \land (\mkvs, \vi) = \eraseW{\w}
+        \implies  \\
+        \quad \exsts{\sn_\lpre, \sn}
+        \sn_\lpre \composeH \sn = \snapshot[\mkvs, \vi]
+        \land (\sn, \unitO) \in \evalLS{\lpre}  \\
+        \quad {} \land \fora{\w', \mkvs', \vi', \stk', \fp, \cl}  \\
+        \qquad  (\stub, \fp) \in \evalLS[\lenv, \stk']{\lpost} 
+        \land \mkvs' \in \updateKV[\mkvs, \vi, \cl, \fp] \\
+        \qquad {} \land \ET \vdash (\mkvs, \vi) \csat \fp : \vi' 
+        \land (\mkvs', \vi') = \eraseW{\w'} 
+        \land (\w, \w') \in \Guar \\
+        \qqqquad \implies \w' \in \evalW[\lenv, \stk']{\gpost}
+    \end{array} 
+\end{rclarray}                          
+\]
+
+\hrule\vspace{5pt}
+\caption{The rules for programs}
+\label{fig:rule-prog}
+\end{figure}

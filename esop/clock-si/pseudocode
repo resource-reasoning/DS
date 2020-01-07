@@ -1,0 +1,65 @@
+VersionNo :: Time
+
+Shard :: ID -> ( clockTime )
+
+KV :: Keys -> List( Val, VersionNo )
+(each key is asscoaited with a shard)
+
+writeSet :: Key -> Val
+State :: { active, prepared, committing, committed }
+Trans :: ( state, snapTime, prepareTime, commitTime, ws )
+
+
+startTransaction( Trans t, Time ts )
+    wait until ts < getClockTime();
+    t.snapshotTime = getClockTime();
+    t.state = active;
+
+Read( Trans t, key k )
+    if ( k in t.ws ) return ws(k);
+    if ( k is updated by t' and t'.state = committing and t.snapshotTime > t'.committingTime)
+        wait until t'.state == committed
+    if ( k is updated by t' and t'.state = prepared and t.snapshotTime > t'.preparedTime 
+                and t.snapshotTime > t'.committingTime )
+        wait until t'.state == committed
+    return K(k,i) where i is the latest version before t.snapshotTime
+
+On read k request from remote transaction t
+    if ( t.snapshotTime > getClockTime() )
+        wait until t.snapshotTime < getClockTime() 
+    return read(t,k);
+
+commitTransaction( Trans t )
+    if t update single partition
+        localCommit(t)
+    else
+        distributedCommit(t)
+
+localCommit( Trans t )
+    if noConcurrentWrite(t)
+        t.state = committing;
+        t.commitTime = getClockTime();
+        log t.ws
+        t.state = committed;
+
+distributedCommit( Trans t )
+    for p in t.updatedPartitions
+        send ``prepare t'' to p;
+    wait receiving ``t prepared'' from all participants, store into prep;
+    t.state = committing;
+    t.commitTime = max(prep);
+    log
+    t.state = committed;
+    for p in t.updatedPartitions
+        send ``commit t'' to p;
+
+On receiving ``prepare t''
+    if noConcurrentWrite(t)
+        log t.ws and t.coordinator ID
+        t.state = prepared;
+        t.prepareTime = getClockTime();
+        send ``t prepared'' to t.coordinator
+
+On receiving ``commit t''
+    log t.commitTime
+    t.state = committed

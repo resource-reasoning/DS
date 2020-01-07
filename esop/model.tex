@@ -1,0 +1,678 @@
+\section{Operational Model}
+\label{sec:model}
+
+We define an interleaving operational semantics for atomic transactions over
+global, centralised kv-stores and partial client views. 
+
+\subsection{Key-Value Stores and Client Views}
+\label{subsec:kvstores}
+\label{sec:mkvs-view}
+Our global, centralised key-value stores (kv-store) and partial client views
+provide the abstract machine states for our operational semantics. A
+kv-store comprises key-indexed lists of versions which record
+the history of the key with values and meta-data of the
+transactions that accessed it: the writer and readers.
+
+We assume a countably infinite set of \emph{client identifiers}\footnote{ We use the notation
+ $\sort A \ni a$ to denote that elements of $\sort A$ are ranged over
+  by $a$ and its variants such as $a', a_1, \cdots$.},
+$\Clients \ni \cl$.
+The set of \emph{transaction identifiers}, $\TxID \ni t$, 
+ is defined by
+$\TxID \defeq  \Set{\txid_{0}} \uplus \Set{ \txid_{\cl}^{n} \mid \cl
+  \in \Clients \land n \geq 0 }$, 
+where  $\txid_0$ denotes  the  \emph{initialisation transaction}
+and $\txid_{\cl}^{n}$ identifies a transaction committed by client
+$\cl$ with $n$  determining  the client session order: that is, $\SO \defeq \Set{ (\txid, \txid') \mid \exsts{ \cl, n,m } \txid =
+\txid_{\cl}^{n} \land \txid' = \txid_{\cl}^{m} \land n < m}$.
+Subsets of $\TxID$  are ranged over by $\txidset, \txidset', \cdots$. 
+We let $\TxID_{0} \defeq \TxID \setminus \Set{\txid_0}$. 
+
+\spaceshrink{-3pt}
+\begin{definition}[Kv-stores]
+\label{def:his_heap}
+\label{def:mkvs}
+Assume a countably infinite set of \emph{keys}, $\Keys \ni \key$, 
+and a countably infinite set of  \emph{values}, $\Val \ni \val$, 
+which includes the keys and an \emph{initialisation value} $\val_0$.
+The set of \emph{versions}, $\Versions \ni \ver$, is defined by $\Versions \defeq \Val \times \TxID \times \pset{\TxID_{0}}$. 
+A \emph{kv-store} 
+is a function $\mkvs: \Keys \to \func{List}[\Versions]$, 
+where $\func{List}[\Versions] \ni \vilist$ is the set of lists of versions. %$\Versions$. 
+\end{definition}
+\spaceshrink{-3pt}
+
+Each version has the form 
+$\ver {=} (\val, \txid, \txidset)$, where $\val$ is
+a value, the \emph{writer} $\txid$ identifies the transaction that
+wrote $\val$,  and the \emph{reader set} $\txidset$ identifies the
+transactions that read $\val$. We use the notation 
+$\valueOf(\ver)$,
+$\wtOf(\ver)$ and $\rsOf(\ver)$ to project
+the individual components of $\ver$.
+Given a kv-store $\mkvs$ and a transaction $\txid$, we write 
+$\txid \in \mkvs$ if $\txid$ is either the writer or 
+one of the readers of a version included in $\mkvs$, 
+write $\lvert \mkvs(\key) \rvert$ for the length of the version
+list $\mkvs(\key)$,
+and write $\mkvs(\key, i)$ for the $i$\textsuperscript{th} version of $\key$.
+%with $0 \leq i < \lvert \mkvs(\key) \rvert$.
+
+We assume that the version list for each key has an initialisation version 
+carrying the initialisation value $\val_0$,  written by the 
+initialisation transaction $\txid_0$ with an initial empty reader set.
+We focus on kv-stores whose consistency model satisfies the
+\emph{snapshot property}, ensuring that
+a transaction reads and writes at most one version for each key.
+
+\spaceshrink{-15pt}
+{\displaymathfont
+\[
+\fora{\key, i, j} 
+\left( \rsOf(\kvs(\key, i)) \cap \rsOf(\kvs(\key, j)) \neq \emptyset \lor
+\wtOf(\kvs(\key, i)) = \wtOf(\kvs(\key, j)) \right)
+\implies i = j  
+\]
+\normalsize}
+\spaceshrink{-15pt}
+
+\noindent 
+This is a normal assumption for distributed databases, \eg in \cite{ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi}.
+Finally, we assume that the kv-store agrees with the session order of clients: 
+a client cannot read a
+version of a key that has been written by a future transaction within
+the same session, and the order in which versions are written by a
+client must agree with its session order. 
+
+\spaceshrink{-15pt}
+{\displaymathfont
+\[
+\fora{ \key, \cl, i,j, n, m} 
+\left( i < j
+\land \txid_{\cl}^{n} = \wtOf(\mkvs(\key,i)) \land \txid_{\cl}^{m} \in
+\Set{\wtOf(\mkvs(\key,j))} \cup \rsOf(\mkvs(\key, i)) \right) \implies n < m
+\]
+\normalsize}
+\spaceshrink{-15pt}
+
+\noindent 
+A kv-store is
+\emph{well-formed} if it satisfies these assumptions.
+Henceforth, we assume kv-stores are well-formed,
+and let $\MKVSs$ denote the set of well-formed kv-stores.
+
+A global kv-store provides an abstract centralised description of
+updates associated with distributed kv-stores that is \emph{complete} in 
+that no update has been lost in the description. By contrast, in
+both replicated and partitioned distributed databases, a client may
+have incomplete information about updates distributed between
+machines.  We model this incomplete information by
+defining a {\em view} of the kv-store which provides a {\em
+  partial} record of the updates observed by a client. We require that a client view be {\em atomic} in that it can
+see either all or none of the updates of a transaction.
+
+\spaceshrink{-3pt}
+\begin{definition}[Views]
+\label{def:view}
+\label{def:cuts}
+\label{def:views}
+A \emph{view} of a kv-store $\mkvs \in \MKVSs$ is a function
+$\vi \in \Views(\mkvs) \defeq \Keys \to\pset{\Nat}$ such that, for all $i, i', \key, \key'$:
+
+\spaceshrink{-12pt}
+{%
+\displaymathfont
+\begin{align*}
+    & 
+    0 \in \vi(\key) 
+    \land (i \in \vi(\key) \implies 0 \leq i < \abs{ \mkvs(\key) }) 
+    \tag{well-formed}
+    \label{eq:view.wf}\\
+    & 
+    \begin{array}{@{}l@{}}
+	i \in \vi(\key)  
+  	\land \wtOf(\mkvs(\key, i)) {=} \wtOf(\mkvs(\key', i'))  
+  	\implies i' \in \vi(\key')
+    \end{array}
+	\tag{atomic}
+	\label{eq:view.atomic}
+\end{align*}
+}%
+\spaceshrink{-12pt}
+
+Given two views $\vi, \vi' \in \Views(\mkvs)$, 
+the order between them is defined by $\vi \viewleq \vi' \defiff \fora{\key \in \dom(\mkvs)} \vi(k) \subseteq \vi'(\key)$.
+The set of views is $\Views \defeq \bigcup_{\mkvs \in \MKVSs} \Views(\mkvs)$.
+The \emph{initial view}, $\vi_{0}$,  is defined by
+$\vi_{0}(\key) = \Set{0}$ for every $\key \in \Keys$. 
+\end{definition}
+\spaceshrink{-3pt}
+
+Our operational semantics updates {\em configurations},  which are pairs
+comprising a kv-store and a function describing the
+views of a finite set of clients. 
+
+\spaceshrink{-3pt}
+\begin{definition}[Configurations]
+\label{def:configuration}
+A \emph{configuration}, $\conf \in \Confs $,  is a pair $ (\mkvs, \vienv)$
+with $\mkvs \in \MKVSs$ and
+$\vienv : \Clients \parfinfun \Views(\mkvs)$. 
+The set of \emph{initial configurations}, $\Confs_0 \subseteq \Confs$,
+contains configurations of the form $ (\mkvs_0, \vienv_0)$, where
+$\mkvs_0$ is the initial kv-store defined by
+$\mkvs_{0}(\key)\defeq  (\val_0, \txid_0, \emptyset)$ for
+all $\key \in \Keys$. 
+\end{definition}
+\spaceshrink{-3pt}
+
+
+Given a configuration $(\mkvs, \vienv)$ and a client $\cl$, 
+if $\vi = \vienv(\cl)$ is defined then, for each $k$,  the
+configuration determines the sub-list of versions in $\mkvs$ that $\cl$ sees.
+If $i,j \in \vi(\key)$ and $i < j$, then $\cl$ sees the values 
+carried by versions $\mkvs(\key, i)$ and  $\mkvs(\key, j)$, 
+and it also sees that the version $\mkvs(\key, j)$ is more up-to-date than $\mkvs(\key, i)$. 
+It is therefore possible to associate a \emph{snapshot} with the view $\vi$, 
+which identifies, for each key $\key$, the last version included in the view. 
+This definition assumes that the database satisfies the \emph{last-write-wins}
+resolution policy, employed by many distributed key-value stores.
+However, our formalism can be adapted straightforwardly  to capture other resolution policies. 
+
+\spaceshrink{-3pt}
+\begin{definition}[View Snapshots]
+\label{def:snapshot}
+Given $\mkvs \in \MKVSs$ and $\vi \in \Views(\mkvs)$, the \emph{snapshot} of $\vi$ in 
+$\mkvs$ is a function, $\snapshot[\mkvs, \vi] : \Keys \to
+\Val$,   defined by $\snapshot[\mkvs, \vi] \defeq \lambda \key \ldotp \valueOf(\mkvs(\key, \max_{<}(\vi(\key))))$, 
+where $\max_{<}(\vi(\key))$ is the maximum element in $\vi(\key)$ with respect to the natural 
+order $<$ over $\mathbb{N}$.
+\end{definition}
+\spaceshrink{-3pt}
+
+\subsection{Operational Semantics}
+
+\mypar{Programming Language}
+We assume a language of expressions built from values \( \val \)
+and program variables \( \var \), defined by:
+$\expr ::= \val \mid \var \mid \expr + \expr \mid \cdots$.
+The \emph{evaluation} $\evalE{\expr}$ of expression $\expr$ is parametric in
+the client-local stack \( \stk \):%
+
+\spaceshrink{-5pt}
+{%
+\[
+\displaymathfont
+\begin{gathered}
+\evalE{\val} \defeq
+\val
+\quad
+\evalE{\var} \defeq
+\stk(\var)
+\quad
+\evalE{\expr_{1} + \expr_{2}} \defeq
+\evalE{\expr_{1}} + \evalE{\expr_{2}}
+\quad
+\dots
+\end{gathered}%
+\]
+}%
+A \emph{program} \( \prog \) comprises a finite number of clients,
+where each client is associated with a unique identifier \( \cl \in \Clients \), 
+and executes a sequential \emph{command} $\cmd$, given by the following grammar:
+
+\spaceshrink{-5pt}
+{%
+\[
+\displaymathfont
+\begin{aligned}
+\cmd & ::=  
+\pskip \!\mid\!
+\cmdpri \!\mid\!  
+\ptrans{\trans} \!\mid\! 
+\cmd \pseq \cmd \!\mid\! 
+\cmd \pchoice \cmd \!\mid\! 
+\cmd \prepeat
+&
+ \cmdpri & ::=  
+\passign{\var}{\expr} \!\mid\! 
+\passume(\expr)
+\\
+\trans & ::=
+\pskip \!\mid\!
+\transpri \!\mid\! 
+\trans \pseq \trans \!\mid\!
+\trans \pchoice \trans \!\mid\!
+\trans\prepeat    
+&
+\transpri & ::= 
+\cmdpri \!\mid\!
+\plookup{\var}{\expr} \!\mid\!
+\pmutate{\expr}{\expr} 
+\end{aligned}%
+\]
+}%
+%
+%
+Sequential commands $\cmd$ comprise $\pskip$, primitive commands
+$\cmdpri$, atomic transactions $\ptrans{\trans}$, and standard
+compound constructs: sequential composition (\( ; \)), non-deterministic
+choice (\( + \)) and iteration (\( * \)). 
+Primitive commands include variable assignment
+$\passign{\var}{\expr}$ and assume statements $\passume(\expr)$
+which can be used to encode conditionals. They are used for computations based on client-local variables and can hence be invoked
+without restriction.  Transactional commands $\trans$ comprise
+$\pskip$, primitive transactional commands $\transpri$, and the
+standard compound constructs.  Primitive transactional commands comprise
+primitive commands $\cmdpri$, lookup $\plookup{\var}{\expr}$ and mutation
+$\pmutate{\expr}{\expr}$ used for reading and writing a single key to kv-stores
+respectively, which can only be invoked as part of an atomic
+transaction.
+
+
+A {\em program} is a finite partial function from client identifiers to sequential
+commands.
+For clarity, we often write \( \cmd_{1}\ppar \dots \ppar \cmd_{n}\) as syntactic sugar 
+for a program \( \prog \) with $n$ clients associated with identifiers
+$\cl_1 \dots \cl_n$, where each client $\cl_i$ executes
+$\cmd_i$. 
+Each client $\cl_i$ is associated with its own client-local \emph{stack}, 
+$\stk_i \in \Stacks \defeq \Vars \to \Val$,  mapping program variables
+(ranged over by $\pvar{x}, \pvar{y}, \cdots$)
+to values. 
+
+\mypar{Transactional Semantics} 
+In our operational semantics, transactions are executed
+\emph{atomically}. It is still possible for an
+implementation, such as COPS \cite{cops}, 
+to update the underlying distributed key-value stores while
+the transaction is in progress. It just means that, given the
+abstractions captured by our global kv-stores and partial views, 
+such an update is modelled as  an instantaneous  atomic
+update.
+Intuitively, given a configuration $\conf = (\mkvs, \vienv)$, 
+when a client $\cl$ executes a transaction $\ptrans{\trans}$, 
+it performs the following steps: 
+\begin{enumerate*}
+	\item it constructs an initial \emph{snapshot} $\sn$ of $\mkvs$ using its view $\vienv(\cl)$ as defined in \cref{def:snapshot};  
+	\item it executes $\trans$ in isolation over $\sn$
+        accumulating the effects (the reads and writes) of executing $\trans$; and
+	\item it commits $\trans$ by incorporating these effects into $\mkvs$.
+\end{enumerate*}
+
+\spaceshrink{-3pt}
+\begin{definition}[Transactional snapshots]
+\label{def:heaps}
+A \emph{transactional snapshot}, \( \sn \in \Snapshots \defeq \Keys \to
+\Val\),  is a function from keys to values. When the meaning is clear,
+it is just called a {\em snapshot}. 
+\end{definition}
+\spaceshrink{-3pt}
+
+The rules for transactional commands (\cref{fig:semantics-trans}) will be defined  using an arbitrary 
+transactional snapshot. The rules for sequential
+commands and programs (\cref{fig:semantics-commands}) will be defined  using a transactional
+snapshot given by a view snapshot. 
+To capture the effects of executing a transaction $\trans$ on a snapshot $\sn$ of kv-store $\mkvs$, 
+we identify a \emph{fingerprint} of $\trans$ on $\sn$ which captures
+ the values $\trans$ reads from $\sn$, and
+the values $\trans$ writes to $\sn$ and intends to commit to $\mkvs$. 
+Execution of a transaction in a given configuration may result in more than one fingerprint due to non-determinism (non-deterministic choice). 
+
+\spaceshrink{-3pt}
+\begin{definition}[Fingerprints]
+\label{beebop}
+\label{def:fingerprint}
+Let \( \Ops\) denote the set of \emph{read (\( \otR\)) and write (\(\otW\)) operations} defined by 
+$\Ops \defeq \Set{(l, \key, \val) }[ l \in \Set{\otR, \otW} \land \key \in \Keys \land \val \in \Val ]$.
+A \emph{fingerprint} $\fp$ is a set of operations, $\fp \subseteq \Ops$,
+such that: 
+$\fora{\key \in \Keys, l  \in \Set{\otR, \otW}}
+	(l, \key, \val_1), (l, \key, \val_2) \in \fp \implies \val_1 = \val_2$.
+\end{definition}
+\spaceshrink{-3pt}
+
+\noindent 
+A fingerprint contains at most one read operation and at most one write operation for a given key. 
+This reflects our assumption regarding transactions that satisfy the snapshot property: reads are taken from a single snapshot of the kv-store;
+and only the last write of a transaction to each key is committed to the kv-store.
+\begin{figure*}[!t]
+\begin{center}
+\scalebox{.9}{%
+\begin{tabular}{@{}c@{\hspace{10pt}}c@{}}
+    $
+    \inferrule[\rl{TPrimitive}]{%
+        (\stk, \sn) \toLTS{\transpri} (\stk', \sn') 
+       \\
+        \op = \func{op}[\stk, \sn, \transpri]
+    }{%
+        (\stk, \sn, \fp) , \transpri  \toTRANS   (\stk', \sn', \fp \addO \op) , \pskip 
+    }%
+    $
+    &
+    $
+ \begin{array}{ll}
+    \fp \addO (\otR, \key, \val)  
+    & \defeq \
+    \begin{cases}
+        \fp \cup \Set{(\otR, \key, \val)} & \text{if } \fora{l, v'} (l, \key, v') \! \notin \! \fp \\
+        \fp &  \text{otherwise} \\
+    \end{cases}  \\
+    \fp \addO (\otW, \key, \val) 
+    & \defeq \
+    \left( \fp \! \setminus \! \Set{(\otW, \key, v')}[v' \in \Val] \right)  \!
+    \cup \! \Set{(\otW, \key, \val)} \\
+    \fp \addO \emptyop  & \defeq \ \fp 
+\end{array}
+$
+\end{tabular}
+}
+\end{center}
+
+\spaceshrink{-10pt}
+
+\hrulefill
+
+\caption{Rules for transactional commands}
+\spaceshrink{-3pt}
+\label{fig:semantics-trans}
+\end{figure*}
+ 
+The rules for primitive transactional commands, \( \rl{TPrimitive} \),
+is given in \cref{fig:semantics-trans}.
+The rules for the compound constructs are straightforward and given in \cref{sec:full-semantics}.
+The \( \rl{TPrimitive} \) rule updates 
+the snapshot and the fingerprint of a transaction: the premise 
+$(\stk, \sn) \toLTS{\transpri} (\stk', \sn')$ describes how executing
+$\transpri$ affects the local state (the client stack and the snapshot)
+of a transaction; and the premise $o =\func{op}(\stk, \sn, \transpri)$ identifies the operation on the 
+kv-store associated with $\transpri$. 
+
+\spaceshrink{-5pt}
+\begin{definition}
+\label{def:primitive_semantics}
+The relation $\toLTS{\transpri} {\subseteq} (\Stacks {\times} \Snapshots) {\times} (\Stacks {\times} \Snapshots)$ % \times (\Stacks \times \Snapshots)
+is defined by\footnote{ 
+For any function \( \mathsf f \), the new function \( \mathsf f
+\rmto{\mathsf d}{\mathsf r}\) 
+is defined by 
+\( \mathsf f
+\rmto{\mathsf d}{\mathsf r}
+( {\mathsf d}) = {\mathsf r}$, and \( 
+\mathsf f
+\rmto{\mathsf d}{\mathsf r}
+({\mathsf d}') = {\mathsf f}({\mathsf d}')$ if \( 
+{\mathsf d}' \neq {\mathsf d}\). } :
+%
+
+\spaceshrink{-17pt}
+{%
+\[
+\displaymathfont
+    \begin{array}{@{} r @{\ } c @{\ } l @{\quad} r @{\ } c @{\ } l@{}}
+(\stk, \sn)  & \toLTS{\passign{\var}{\expr}}
+             & (\stk\rmto{\var}{\evalE{\expr}}, \sn) 
+&
+(\stk, \sn)  & \toLTS{\passume(\expr)}  
+             & (\stk, \sn) \text{ where } \evalE{\expr} \neq 0
+\\
+(\stk, \sn)  & \toLTS{ \plookup{\var}{\expr} } 
+             & (\stk\rmto{\var}{\sn(\evalE{\expr})}, \sn) 
+&
+(\stk, \sn) & \! \toLTS{\pmutate{\expr_{1}}{\expr_{2}}} \!
+            & (\stk, \sn\rmto{\evalE{\expr_{1}}}{\evalE{\expr_{2}}}) \ 
+\end{array}
+\]%
+}%
+\spaceshrink{-10pt}
+
+\noindent 
+The function $\mathsf{op}$,\! computing the fingerprint of primitive commands,\! is defined by:
+%
+
+\spaceshrink{-13pt}
+{
+\displaymathfont
+\[%
+\begin{aligned}
+    \func{op}[\stk, \sn, \passign{\var}{\expr}] & \defeq  \emptyop 
+    & 
+    \func{op}[\stk, \sn, \passume(\expr)] & \defeq \emptyop 
+    \\
+    \func{op}[\stk, \sn,  \plookup{\var}{\expr}] & \defeq (\otR, \evalE{\expr}, \sn(\evalE{\expr})) 
+    &
+    \func{op}[\stk,  \sn, \pmutate{\expr_{1}}{\expr_{2}}] & \defeq (\otW, \evalE{\expr_{1}}, \evalE{\expr_{2}})
+\end{aligned}
+\]%
+}
+\spaceshrink{-10pt}
+
+\noindent
+The empty operation $\emptyop$ is used for those primitive commands that do not
+contribute to the fingerprint.
+\end{definition}
+\spaceshrink{-5pt}
+
+
+The conclusion of the \( \rl{TPrimitive}\)  rule uses the \emph{combination operator} $\addO: 
+\pset{\Ops} \times (\Ops \uplus \Set{\emptyop}) \to \pset{\Ops}$, defined 
+in \cref{fig:semantics-trans}, to extend the fingerprint $\fp$ accumulated with
+operation $o$ associated with $\transpri$, as
+appropriate: it adds  a read from $\key$  if $\fp$ 
+contains no entry for $\key$; and it always updates the  write for 
+$\key$ to $\fp$, removing previous writes to $\key$.
+
+
+%\begin{definition}[Fingerprint Set]
+%Given a client stack $\stk$ and a snapshot $\sn$, the \emph{fingerprint set} of a transaction $\trans$ is:
+%\(
+%\Fingerprints(\trans) \defeq \Set{\fp \mid \exsts{\stk,\stk',\sn,\sn'} (\stk, \sn, \emptyset), \trans \toTRANS^* (\stk', \sn', \fp), \pskip }
+%\)
+%where $\toTRANS^*$ denotes the reflexive, transitive closure of $\toTRANS$ given in \cref{fig:semantics-trans}.  
+%A set $\fp \in \Fingerprints(\trans)$ is called a \emph{final fingerprint} of $\trans$. 
+%\end{definition}
+%\noindent 
+%It is immediate to see that final fingerprints of $\trans$ 
+%A final fingerprint of $\trans$ contains at most one read (resp.\ one write) operation per key.
+
+\subsubsection{Command and Program Semantics}
+We give the operational semantics of commands and programs in
+\cref{fig:semantics-commands}.  
+%
+\begin{figure*}[!t]
+\begin{center}
+\scalebox{.9}{%
+\begin{tabular}{@{}c@{\hspace{20pt}}c@{}}
+    $
+    \inferrule[\rl{CPrimitive}]{
+		\stk \toLTS{\cmdpri} \stk'
+    }{
+        \cl \vdash 
+        ( \mkvs, \vi, \stk ) , \cmdpri 
+        \toCMD{(\cl,\iota)}_{\ET} 
+        ( \mkvs, \vi, \stk' ) , \pskip
+    }%
+    $
+    &
+    $
+ \begin{array}{r @{\ }c @{\ } l}
+        \stk & \toLTS{\passign{\var}{\expr}} & \stk\rmto{\var}{\evalE{\expr}} \\
+        \stk & \toLTS{\passume(\expr)} & \stk \ \text{where} \ \evalE{\expr} \neq 0
+\end{array}
+$
+\\[15pt]
+\multicolumn{2}{c}{
+    $
+     \inferrule[\rl{CAtomicTrans}]{%
+        \vi \viewleq  \vi'' 
+        \quad 
+        \sn = \snapshot[\mkvs,\vi''] 
+        \quad
+        (\stk, \sn, \emptyset), \trans \toTRANS^{*}   (\stk', \stub,
+  \fp) , \pskip
+  \quad
+	\cancommit{\mkvs}{\vi''}{\fp}
+    \\\\
+   \txid \in \nextTxid[\cl, \mkvs] 
+\\
+     \mkvs' = \updateKV[\mkvs, \vi'', \fp, \txid] 
+\\
+	\vshift{\mkvs}{\vi''}{\mkvs'}{\vi'}	
+    }{%
+        \cl \vdash 
+        ( \mkvs, \vi, \stk ), \ptrans{\trans} 
+        \toCMD{(\cl, \vi'', \fp)}_{\ET}
+        (\mkvs',\vi', \stk' ) , \pskip
+    }%
+    $
+    }
+
+
+
+
+    \\[10pt]
+    \multicolumn{2}{c}{
+    $
+    \inferrule[\rl{PProg}]{%
+	    \vi = \vienv (\cl)
+        \\
+        \stk = \thdenv(\cl)
+        \\
+        \cmd = \prog(\cl)
+        \\
+		\cl \vdash 
+		( \mkvs, \vi, \stk ) , \cmd
+		\toCMD{\lambda}_{\ET} 
+		( \mkvs', \vi', \stk' ) , \cmd'  
+    }{%
+		\vdash 
+		(\mkvs, \vienv, \thdenv ), \prog
+		\toCMD{\lambda}_{\ET} 
+		( \mkvs', \vienv\rmto{\cl}{\vi'}, \thdenv\rmto{\cl}{\stk'} ) , \prog\rmto{\cl}{\cmd'} ) 
+    }%
+    $
+    }\\[-10pt]
+\end{tabular}
+}
+\end{center}
+
+\hrulefill
+
+\caption{Rules for sequential commands and programs}
+\label{fig:semantics-commands}
+\spaceshrink{-3pt}
+\end{figure*}
+%
+The command semantics describes transitions of the form
+$\cl \vdash (\mkvs, \vi, \stk), \cmd \ \toCMD{\lambda}_{\ET} \ (\mkvs', \vi', \stk') ,
+\cmd'$, stating that given the kv-store $\mkvs$, view $\vi$ and stack $\stk$, 
+a client $\cl$ may execute command $\cmd$ for one step, updating 
+the kv-store to $\mkvs'$, the stack to $\stk'$, the view to \( \vi' \) and the command to its continuation $\cmd'$.
+The label $\lambda$ is either of the form $(\cl, \iota)$ denoting that $\cl$ executed a primitive command
+that required no access to $\mkvs$, 
+or $(\cl, \vi'', \fp)$ denoting that $\cl$ committed an atomic transaction with final fingerprint $\fp$ under the view $\vi''$.
+The semantics is parametric in the choice of \emph{execution test}
+$\ET$ for kv-stores, which is used to generate 
+the \emph{consistency model} on kv-stores
+under which a 
+transaction can execute.
+In \cref{sec:cm}, we give many examples of execution tests for
+well-known consistency models.
+In \cref{sec:other_formalisms} and \cref{app:et_sound_complete}, we prove that our execution tests 
+generate consistency models that are equivalent to the existing definitions of
+consistency models (using execution graphs). 
+
+The rules for the compound constructs are straightforward and given in \cref{sec:full-semantics}.
+The rule for primitive commands, $\rl{CPrimitive}$, 
+depends on the 
+transition system $\toLTS{\cmdpri} \subseteq \Stacks \times \Stacks$ 
+which simply describes how the primitive command $\cmdpri$ affects the local state of a client.
+The rule \rl{CAtomicTrans}  describes the execution of an atomic 
+transaction under the execution test $\ET$. 
+
+
+We explain the \rl{CAtomicTrans} rule in detail. 
+The first premise 
+states that the current view $\vi$ of the executing command may be advanced to a newer  view $\vi''$ (see \cref{def:views}). 
+Given the new view $\vi''$, the transaction obtains a snapshot $\sn$ of the kv-store $\mkvs$, 
+and executes $\trans$ locally to completion ($\pskip$), updating the stack to $\stk'$, while accumulating the fingerprint $\fp$; 
+this behaviour  is modelled in the second and third premises of \rl{CAtomicTrans}.
+Note that the resulting snapshot is ignored 
+as the effect of the transaction is recorded in the fingerprint $\fp$. 
+The $\cancommit{\mkvs}{\vi''}{\fp}$ premise ensures that under the execution test $\ET$, 
+the final fingerprint $\fp$ of the transaction is compatible with the (original) kv-store
+$\mkvs$ and the client view $u''$, and thus the transaction \emph{can commit}. 
+Note that the \cancommitname check is parametric in the execution test $\ET$.
+This is because the conditions checked upon committing depend on the consistency model under which the transaction is to commit. 
+In \cref{sec:cm}, we define \cancommitname for several execution tests associated with well-known consistency models.
+
+
+Now we are ready for client $\cl$ to commit the transaction resulting 
+in the kv-store $\mkvs'$ with the client view $\vi''$ \emph{shifting} to a new view $\vi'$: 
+\begin{enumerate*}
+\item pick a fresh transaction identifier $\txid \in \nextTxid[\cl, \mkvs]$;
+\item compute the new kv-store $\mkvs' = \mathtt{update}(\mkvs, {\allowbreak \vi''},$
+$\fp, \txid)$; and 
+\item check if the \emph{view shift} is permitted under execution test $\ET$ using $\vshift{\mkvs}{\vi''}{\mkvs'}{\vi'}$. 
+\end{enumerate*}
+Observe that as with \(\cancommitname\), the \(\vshiftname\) check is parametric in the execution test $\ET$. 
+Once again this is because the conditions checked for shifting the client view depend on the consistency model. 
+In \cref{sec:cm}, we define \(\vshiftname\) for several execution tests associated with well-known consistency models.
+The set $\nextTxid[\cl, \mkvs]$ is defined by
+\(
+\nextTxid[\cl, \mkvs] \defeq 
+\{ \txid_{\cl}^{n} \mid %
+\fora{m} \txid_{\cl}^{m} \in \mkvs \allowbreak \implies \allowbreak m < n \}
+\).
+The function $\updateKV[\mkvs, \vi, \fp, \txid]$
+describes how the fingerprint $\fp$ of transaction $\txid$ executed under view $\vi$ updates kv-store $\mkvs$:
+for each read $(\otR, \key, \val) \in \fp$, it adds $\txid$ 
+to the reader set of the last version of $\key$ in $\vi$; 
+for each write $(\otW, \key, \val)$, it appends a new version $(\val, \txid, \emptyset)$ 
+to $\mkvs(\key)$. 
+
+
+\spaceshrink{-3pt}
+\begin{definition}[Transactional update]
+\label{eq:updatekv}
+\label{def:updatekv}
+The function  $\updateKV[\mkvs, \vi, \fp, \txid]$,  is
+defined by: \( \updateKV[\mkvs, \vi, \emptyset, \txid] \defeq \mkvs  \) and
+
+\spaceshrink{-10pt}
+{%
+\displaymathfont
+\[%
+\begin{array}{lcl}
+    \updateKV[\mkvs, \vi, \Set{(\otR, \key, \val)} \uplus \fp, \txid]
+    & \defeq & \text{let} \ i = \max_{<}(\vi(\key)) \ \text{and} \ (\val,\txid',\txidset) = \mkvs(\key,i) \text{ in } \\
+    && \;\;\;\; \updateKV[\mkvs\rmto{\key}{\mkvs(\key)\rmto{i}{(\val, \txid', \txidset \uplus \Set{\txid})}},\vi, \fp, \txid] \\
+%	
+	\updateKV[\mkvs, \vi, \Set{(\otW, \key, \val)} \uplus \fp, \txid]
+    & \defeq & \text{let } \mkvs' = \mkvs\rmto{\key}{ \mkvs(\key) \lcat (\val, \txid, \emptyset) } \text{ in } \updateKV[\mkvs', \vi, \fp, \txid] 
+\end{array}
+\]%
+\normalsize%
+}%
+\spaceshrink{-5pt}
+
+\noindent 
+where, given a list of versions $\vilist = \ver_0 \lcat \cdots \lcat \ver_n$ 
+and an index $i: 0 \leq i \leq n$, 
+then $\vilist\rmto{i}{\ver} \defeq \ver_0 \lcat \cdots \lcat \ver_{i-1} \lcat \ver \lcat \ver_{i+1} \cdots \ver_{n}$.
+
+\end{definition}
+\spaceshrink{-3pt}
+
+The last rule, \( \rl{PProg} \) (\cref{fig:semantics-commands}),
+captures the execution of a program step 
+given a \emph{client environment} $\thdenv \in \ThdEnv$.
+A client environment $\thdenv$ is a function from client identifiers to stacks, associating each client with its stack. 
+We assume that the domain of client environment contains 
+the domain of the program throughout the execution: 
+$\dom(\prog) \subseteq \dom(\thdenv)$.
+Program transitions are simply defined in terms of the transitions of
+their constituent client commands. 
+This yields an interleaving semantics for transactions of different clients:  
+a client executes a transaction in an atomic step without
+interference from the  other clients. 
