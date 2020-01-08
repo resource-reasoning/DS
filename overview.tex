@@ -138,8 +138,22 @@ To avoid undesirable behaviour, such as the \emph{lost update} anomaly in \cref{
 we use an \emph{execution test} which restricts the possible update at the
 point of the transaction commit.  One such test is to enforce a client
 to commit a transaction writing to \(\key\) if and only if its view
-contains all versions available in the global state for \(\key\).  This
-prevents \(\cl_2\) from running \(\ctrinc(\key)\) on
+contains all versions available in the global state for \(\key\),
+captured by the following predicate:
+\[ \textstyle \closed[\kvs,\vi,{\bigcup_{(\mathtt{w},\key,\val) \in \fp}\WWInv[\kvs](\key)}] . \]
+It means a client with a given view \( \vi \) is allowed to commit a transaction to \( \kvs \) 
+if the view is \emph{closed} with respect to a relation 
+\( \rel  = {\bigcup_{(\mathtt{w},\key,\val) \in \fp}\WWInv[\kvs](\key)} \),
+in the sense that:
+if a view \( \vi \) includes a versions written by a transaction \( \txid \), 
+and if there is an edge \( (\txid',\txid) \in \rel \),
+then the view \( \vi \)  must also include versions written by \( \txid' \).
+The \emph{fingerprint} \( \fp \) of a transaction is 
+the read (label \( \mathtt{r} \)) and  write (label \( \mathtt{w} \)) set of the transaction.
+The write-write relation on a key, for example \( (\txid_0,\txid) \in \WW[\kvs](\key) \) in \cref{fig:counter_kv_first_inc},
+means that a transaction \( \txid \) overwrites a version of \( \key \) written by another transaction \( \txid_0 \).
+Note that \( \rel^{-1} \) denotes the reverse of the relation \( \rel \).
+This \( \Pred{closed} \) predicate prevents \(\cl_2\) from running \(\ctrinc(\key)\) on
 \cref{fig:counter_kv_first_inc} if its view only contains the initial
 version of \(\key\).  Instead, the \(\cl_2\) view must contain both
 versions of \(\key\), thus enforcing \(\cl_2\) to write a version with
@@ -147,7 +161,72 @@ value \(2\) after running \(\ctrinc(\key)\). This particular test
 corresponds to \emph{write-conflict freedom}:
 at most one concurrent transaction can write to a key at any one time.
 
-{\color{red} ANOTHER EXAMPLE ABOUT LONG FORK?? }
+The situation becomes more complicated when the library contains multiple counters
+where each client can read and increments several counters in one session.
+For instance, consider the following program:
+\[
+    \prog_{\CodeFont{LF}} \defeq 
+    \begin{multlined}[t]
+    \cl_1 : \ptrans{\plookup{\var}{\key_1} ; \pmutate{\key_1}{\var + 1 }} ; 
+                \ptrans{\plookup{\var(y)}{\key_2} ; \pmutate{\key_2}{\var(y) + 1} }
+        \\ || \ \cl_2: \ptrans{\plookup{\var}{\key_1} ; \plookup{\var(y)}{\key_2} }
+                 || \ \cl_3:  \ptrans{\plookup{\var}{\key_1} ; \plookup{\var(y)}{\key_2} } .
+    \end{multlined}
+\]
+For simplicity, we assume that the initial kv-store contains two keys (\cref{fig:overview-sec-long-fork-init}).
+Suppose that \(\cl_1\) executes first the transactions \( \txid \) and \( \txid' \)
+that updates \(\key_1\) and \(\key_2\) to values \(1\) respectively.
+This results in \(\key_1\) and \(\key_2\) having two versions with values \(0\) and \(1\) each. 
+Client \(\cl_2\) executes its transaction \( \txid_2 \), using a view that 
+contains both versions of \(\key_1\), but only the initial version of \(\key_2\) and therefore
+client \(\cl_2\) reads \(1\) for \(\key_1\) and \(0\) for \(\key_2\): that is, 
+\(\cl_2\) observes the update of \(\key_1\) happening before the increment of \(\key_2\). 
+Finally, \(\cl_3\) executes its transaction \( \txid_3 \) using a view that contains both versions for \(\key_2\), 
+but only the initial version of \(\key_1\) and therefore
+client \(\cl_3\) reads \(0\) for \(\key_1\) and \(1\) for \(\key_2\),
+that is, \(\cl_3\) observes the increment of \(\key_2\) happening before the increment of \(\key_1\). 
+This behaviour is known as the \emph{long fork} anomaly (\cref{fig:overview-sec-long-fork}). 
+
+\input{multi-counter-fig}
+
+The long fork anomaly is disallowed under strong models 
+such as serialisability (\(\SER\)) and snapshot isolation (\(\SI\)), 
+but is allowed under weaker models such as parallel snapshot isolation (\(\PSI\)), causal consistency (\(\CC\)) and update atomic (\( \UA \)).
+To capture such consistency models and rule out the long fork anomaly as a possible result 
+of \(\prog_{\CodeFont{LF}}\), we must strengthen the execution test associated with the kv-store.
+For \(\SER\), we strengthen the execution test by ensuring that a client can execute a transaction 
+only if its view contains all versions available in the global state, 
+captured by the following predicate \( \closed[\kvs,\vi,{\WWInv[\kvs]}]  \),
+which means the view \( \vi \) before commit the transaction must contains all versions in \( \kvs \).
+For \(\SI\), the execution test recovers the order in which 
+updates of versions have been observed by different clients:
+\[
+    \PreClosed(\kvs,\vi,\Trasi(\left( \WR[\kvs] \cup \SO \cup \WW[\kvs] \right)) ; \Refl(\RW[\kvs]) ) 
+\]
+where: 
+\begin{enumerate*} 
+\item write-read dependency relation,
+such as \( (\txid,\txid'') \in \WR[\kvs] \)
+in \cref{fig:overview-sec-long-fork}, states that
+a transaction, \( \txid \), reads a version written by another transaction, \( \txid'' \);
+\item session order, \( \SO \), determines, for each client \( \cl \),
+the commit order of transactions of \( \cl \); and
+\item read-write anti-dependency relation, 
+such as \( (\txid_3,\txid) \in \RW[\kvs] \),
+in \cref{fig:overview-sec-long-fork}, states that
+a transaction, \( \txid_3 \), reads a version that has been overwritten by another transaction, \( \txid \).
+\end{enumerate*} 
+Given this strengthen, client \( \cl_3 \) must
+observe the second version of \( \key_1 \),
+because \( \ToEdge{\txid | \WR[\kvs] -> \txid'' | \RW[\kvs] -> \txid' } \)
+Under such strengthened execution tests for \(\SER \) and \( \SI \), 
+in the \( \prog_{\CodeFont{LF}} \) example,
+\(\cl_2\) cannot observe \(1\) for \(\key_2\) after observing \(0\) for \(\key_1\),
+if \(\cl_1\) has already established that the increment on \(\key_2\) happens after 
+the one of \(\key_1\). 
+We will give more detail about the formal definitions of many execution tests 
+for well-known consistency models in \cref{sec:model}.
+
 
 In \cref{sec:cm}, we give many examples of execution tests and their
 associated consistency models on kv-stores. 
