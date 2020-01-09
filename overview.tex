@@ -1,10 +1,12 @@
 \section{Overview}
 \label{sec:overview}
 
-We motivate our key ideas, centralised kv-stores, partial client views and execution tests,
-using an single counter example.
-We show that our interleaving semantics is an ideal mid-point for verifying distributed protocols 
-and proving invariant properties of client programs.
+We introduce our centralised operational semantics for describing the
+client-observable behaviour of atomic transactions on distributed
+kv-stores.  We show that our
+interleaving semantics provides an ideal mid-point for both verifying
+distributed protocols and proving invariant properties of client
+programs.
 
 
 \mypar{Example} We use a simple transactional library, \(\CodeFont{Counter}(\key)\), to
@@ -24,16 +26,16 @@ and
 \plookup{\pv{x}}{\key}
 \end{transaction}
 \).
-Command \( \plookup{\pv{x}}{\key} \) reads the value of key \( \key \) to
-local variable \( \vx \), and command \( \pmutate{\key}{\pv{x}{+}1} \)
+The command \( \plookup{\pv{x}}{\key} \) reads the value of key \( \key \) to
+local variable \( \vx \), and the command \( \pmutate{\key}{\pv{x}{+}1} \)
 writes the value of \( \pv{x}{+}1 \) to key \( \key \).  The code of each
 operation is wrapped in square brackets, denoting a transaction that 
 must be executed \emph{atomically}.  
 
 Consider a replicated database where a client only interacts with one replica.
-For such a database, the correctness of atomic transactions is subtle, 
+For such a database, the behaviour of the atomic transactions is subtle, 
 depending heavily on the particular consistency model under consideration.  
-Consider the client program, defend by:
+Consider the client program defined by:
 \[ 
 \prog_{\CodeFont{LU}} \defeq \left(\cl_1 : \ctrinc(\key) \;|| \; \cl_2: \ctrinc(\key) \right)
 \]
@@ -41,7 +43,8 @@ where we assume that the clients \( \cl_1 \) and \( \cl_2 \) work on different r
 the \(\key\) initially holds value \(0\) in all replicas.
 Intuitively, since transactions are executed atomically, after both
 calls to \(\ctrinc(\key)\) have terminated, the counter should hold the value \(2\).
-Indeed, this is the only outcome allowed under serialisability (\(\SER\)), 
+Indeed, this is the only outcome allowed under 
+called {\em serialisability} (\(\SER\)), 
 where transactions appear to execute in a sequential (serial) order, one after another.
 The implementation of \(\SER\) in distributed kv-stores comes at a
 significant performance cost. Therefore, implementers are content with
@@ -51,40 +54,54 @@ then it is possible for both clients to read the same initial value \(0\) for \(
 distinct replicas, update them to \(1\), and eventually propagate the absolute value of \( \key \) to other replicas. 
 Thus, both sites are unchanged with value  \(1\) for \(\key\).
 This weak behaviour is known as the \emph{lost update} anomaly, which
-is  allowed under the consistency model called \emph{causal consistency},
+is  allowed under  \emph{causal consistency},
 but not \emph{parallel snapshot isolation} and \emph{snapshot isolation}.
 
 \input{lu-kvstores.tex}
 
+\pg{In figure 1, say Example centralised key-value stores.}
+
 \mypar{Centralised Operational Semantics}
-A well-known declarative approach for a range of consistency models
+
+
+\pg{This should be in the introduction or later in (new) section on
+  comparison with execution test, not here: A well-known declarative approach for a range of consistency models
 is to use execution graphs \cite{adya-icde,adya,framework-concur,ev_transactions},
 where nodes are atomic transactions and edges describe the
 known dependencies between transactions. The graphs capture the
 behaviour of the whole program, with different consistency models
 corresponding to different sets of axioms ruling out the invalid graphs. 
 However, execution graphs provide little information about how the 
-state of a kv-store evolves throughout the execution of a program.
-By contrast, we provide an interleaving operational semantics based on an
-abstract centralised state. The centralised state comprises a
+state of a kv-store evolves throughout the execution of a program.}
+
+Our  operational semantics comprises centralised abstract states
+ and
+execution steps parametrised by an execution test for a particular
+consistency model.
+% which determines if a client  is
+%able to commit a transaction.
+An abstract  state is a
 centralised, multi-versioned kv-store, which is {\em global} in the
-sense that it contains all the versions written by clients, and client views of the store,
+sense that it contains all the versions written by clients, with
+client views associated with the  store 
 which are {\em partial} in the sense that clients may see different 
 subsets of the versions in the kv-store. Each update is given by either
-a primitive command or an atomic transaction. The atomic
+a primitive command which does not affect the kv-store or an atomic
+transaction which does affect the store. These atomic
 transaction steps are subject to an {\em execution test} which
 analyses the state to determine if the update is allowed by 
 the associated consistency model. 
 
 
-Let us introduce our global kv-stores and partial client views by
-showing that we can reproduce the lost update anomaly given by 
-\(\prog_{\CodeFont{LU}}\).
-Our kv-stores are functions mapping keys to lists of versions, where
-the versions  record all the values written to each key together with the
-meta-data of the transactions that access it. 
-These kv-stores are the abstraction of the machine states of real-world key-value stores.
-In the \(\prog_{\CodeFont{LU}}\) example, the initial kv-store comprises a single key \(\key\), with only one initialisation version \((0, \txid_{0}, \emptyset)\).
+We demonstrate  that we can reproduce the lost update anomaly given by 
+\(\prog_{\CodeFont{LU}}\) using our operational semantics.
+A centralised kv-store provides   an   abstraction of  the real-world
+replicated key-value store of our example. 
+It is a  function mapping keys to lists of {versions}.
+Each list  records {\em  all} the values written to a  key together with
+information about the transactions that accessed  it. \pg{now
+  something about order of versions always know because of ....}
+In the \(\prog_{\CodeFont{LU}}\) example, the initial centralised kv-store comprises a single key \(\key\), with only one initialisation version \((0, \txid_{0}, \emptyset)\).
 This version represents the initialisations in both replicas,
 stating that \(\key\) holds value \(0\), 
 that the version \emph{writer} is the initialising transaction
@@ -95,16 +112,20 @@ represented as a box sub-divided in three sections: the value \(0\);
 the writer \(t_0\); and the reader set \(\emptyset\). 
 
 
-First, suppose that \(\cl_1\) invokes \(\ctrinc\) on \cref{fig:counter_kv_initial}. 
+First, suppose that \(\cl_1\) invokes \(\ctrinc(\key)\) on
+\cref{fig:counter_kv_initial}.
+%with the (only possible) view given by
+%given by the initialisation verision  \((0, \txid_{0}, \emptyset)\).
 It does this by choosing a fresh transaction identifier, \(\txid\), 
-and then proceeds with \(\ctrinc(\key)\). It reads the initial version
+and then reading the initial version
 of \(\key\) with value \(0\) 
-and then writes a new value \(1\) for \(\key\). 
+and writing  a new value \(1\) for \(\key\). 
 The resulting kv-store is depicted in \cref{fig:counter_kv_first_inc},
 where  the initial version of \(\key\)  has been  updated to reflect that it
-has been read by \(\txid\) and a new version with value 1 installed to the end of the list.
+has been read by \(\txid\) and a new version with value 1 installed at
+the end of the list.
 
-Second, client \(\cl_2\) invokes \(\ctrinc\) on
+Now, suppose that client \(\cl_2\) invokes \(\ctrinc(\key)\)  on
 \cref{fig:counter_kv_first_inc}.  As there are now two versions
 available for \(\key\), we must determine the version from which
 \(\cl_2\) fetches its value, before running \(\ctrinc(\key)\).  This is
@@ -236,6 +257,11 @@ In \cref{app:et_sound_complete},
 \fi
 we show the equivalence of our operational definitions of consistency models and 
 the declarative ones based on abstract executions. 
+
+
+\mypar{Comparison with Execution Graphs}
+
+\pg{Maybe something here, maybe somewhere else.}
 
 \mypar{Verifying Implementation Protocols} 
 The first application of our operational
