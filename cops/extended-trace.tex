@@ -1,69 +1,118 @@
 In our kv-store semantics (\cref{sec:model}), 
-we assign a unique identifier for every transition (\(\rCAtomicTrans\)),
-but in COPS there is explicit transaction identifier.
-We encode the COPS version identifier as the transaction identifier
+we assign a unique identifier for every transaction in \(\rCAtomicTrans\) in \cref{fig:command-semantics}.
+In COPS semantics, there is no explicit transaction identifier.
+We encode the COPS version identifier as \emph{COPS transaction identifier}
 for the single-write transaction who committed the version.
-We then annotate multiple-read transactions with transaction identifiers that preserves the session order.
+We then annotate multiple-read transactions with transaction identifiers that preserves the session order
+using the read-only transaction counter \( m \) in \(\copstxid[\cl][\repl](n,m)  \).
 
-\begin{definition}[Extended COPS traces]
-\emph{A client local time environments} is defined by \(\copsclenv \IsTyped \cl \ToTFunc \COPSTxIDs \).
-Given a normal COPS trace \( \copstrc \in \COPSTraces \),
-the extended COPS trace for \( \copstrc \) is defined by
+\begin{definition}[COPS transaction identifiers]
+The set of \emph{COPS transaction identifiers}, \( \COPSTxIDs \ni \copstxid \),
+is defined by:
+\[ 
+    \COPSTxIDs \TypeDef \Set{\copstxid[\cl][\repl](n,m) | 
+    \cl \in \Clients \land \repl \in \COPSReplicas \land n,m \in \Nat } \cup \Set{\txidinit}.
+\]
+The order over transactions is defined by:
+\[ 
+\copstxid[\cl][\repl](n,m) \copstxidleq \copstxid[\cl'][\repl'](n',m')
+\PredDef n < n' \lor ( n = n' \land ( \repl < \repl' \lor ( \repl = \repl' \land m < m' ) ) .
+\]
+\end{definition}
+
+The COPS transaction identifier \(\copstxid[\cl][\repl](n,m)  \) contains
+a client identifier \( \cl \), a local time \(n\),
+a replica identifier \( \repl \)
+and an extra counter \( m \) for read-only transactions.
+For the single write transaction, the transaction identifier is the version identifier \( (n,\repl) \) and \( m = 0 \).
+%In the operational semantics of COPS protocol (\cref{sec:cops-model,sec:cops-semantics}), 
+%the extra counter \(m\) is always ZERO.
+%Because COPS does not directly tracks read-only transactions.
+%Later, in the verification of COPS protocol (\cref{sec:cops-extended-trace}),
+we then use the extra counter \( m \) to annotate read-only transactions.
+Note that, transaction identifiers are order lexicographically.
+If we encode all tuples, \( (\repl,n,m) \), as individual numbers, 
+all these encodes numbers must be totally ordered.
+Therefore, there is a bijection between \( \COPSTxIDs \) 
+and kv-store transaction identifiers \( \TxIDs\) defined in \cref{def:transaction-id}.
+
+We first assign COPS transaction identifiers to single-write transactions:
+that is, we extend the version identifiers with the client identifiers and the reader counters \( m \) being zero.
+We then assign COPS transaction identifiers with non-zero read-only counters to multiple-read transactions:
+that is, for each multiple-read transaction, 
+we annotate the re-fetch operations and the end operation 
+with the next available identifier in \( \copsclenv \in \Clients \ToTFunc \COPSTxIDs  \).
+To preserve the session order, we update \( \copsclenv \) for the client \( \cl \),
+if \( \cl \) commits a new transaction.
+By construction, the transaction identifiers that are assigned to multiple-read transactions must be unique.
+The detail is given in \cref{prop:cops-read-id-unique} on page \pageref{sec:proof-multiple-read-trans-id-unique}.
+
+%We track the next available multiple-read transaction identifier for every client,
+%that is, \(\copsclenv \in \Clients \ToTFunc \COPSTxIDs \).
+%Recall that each COPS transaction identifier \( \copstxid[\cl][\repl](n,m) \) is annotated with
+%a read-only transaction counter \( m \).
+%In the COPS semantics, this read-only transaction counter is always set to be ZERO.
+
+\begin{definition}[Annotated normalised COPS traces]
+
+A \emph{client local time environment} is defined by: \(\copsclenv \in \Clients \ToTFunc \COPSTxIDs \).
+Given a normalised COPS trace \( \copstrc \in \COPSTraces \),
+the annotated normalised COPS trace is defined by:
 \begin{align*}
-   \COPSToExt(\copsconfinit,\copsclenv) & \FuncDef \copsconfinit ,
+   \COPSToExt((\copsconfinit,\copsprog_0),\copsclenv) & \FuncDef (\copsconfinit,\copsprog_0) ,
 \\ \multicolumn{2}{l}{
         \COPSToExt( \begin{Bracketed} \ToCOPSProg{ \cops | \copsctxenv 
             | \copsrunprog | \lb -> \copstrc } \end{Bracketed} , \copsclenv ) }
 \\ \multicolumn{2}{l}{
         \( \quad \FuncDef 
         \begin{cases}
-            \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb
+            \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb, \copstxid[\cl][\repl](n,0)
                 -> \COPSToExt(\copstrc, \copsclenv\UpdateFunc{\cl -> \copstxid[\cl][\repl](n,1) }) }    
-                & \If \lb =  \lbCOPSWrite{\opW(\key,\val), \copstxid[\cl][\repl](n,0), \copsctx } ,
+                & \If \lb =  \lbCOPSWrite{\opW(\key,\val), (n,0), \copsdep } ,
          \\ \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb, \copsclenv(\cl)
                 -> \COPSToExt(\copstrc, \copsclenv) }
-                & \If \lb =  \lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsctx }  ,
+                & \If \lb =  \lbCOPSRefetch{\opR(\key,\val), \copstxid, \copsdep }  ,
          \\ \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb, \copsclenv(\cl)
                 -> \COPSToExt(\copstrc, \copsclenv\UpdateFunc{\cl -> \copstxid[\cl][\repl](n,m+1) }) }
-                & \If \lb =  \lbCOPSFinishRead{ \copsctx } \land \copsclenv(\repl) = \copstxid[\cl][\repl](n,m) ,
+                & \If \lb =  \lbCOPSFinishRead{ \copsctx } \land \copsclenv(\cl) = \copstxid[\cl][\repl](n,m) ,
          \\ \ToCOPSProg{ \cops | \copsctxenv | \copsrunprog | \lb
                 -> \COPSToExt(\copstrc, \copsclenv) }
                 & \ow .
         \end{cases} \)
     }
 \end{align*}
-Then the set of \emph{extended COPS traces}, \( \ExtCOPSTraces \ni \copsexttrc \), is defined by
-defined by 
-\[ 
-    \ExtCOPSTraces \TypeDef \Set{\COPSToExt(\copstrc,\copsclenv) | \copstrc \in \COPSTraces 
-        \\ {} \land \Exists{\copsctxenv \in \COPSContextEnvs} 
-        (\stub,\copsctxenv) = \copstrc\Proj{0}
-        \\ \implies 
-        \Forall{\cl \in \Dom(\copsctxenv) }
-        \Forall{ \repl \in \COPSReplicas } 
-        \\ \copsctxenv(\cl) = (\stub,\repl) 
-        \implies \copsclenv(\cl) = \copstxid[\cl][\repl](0,1) 
-    } .
-\]
+%where \( \COPSToExtW \) is defined by:
+%\begin{align*}
+%\COPSToExtW((\copsconfinit,\copsprog_0),(\ts,\repl),\cl) & \FuncDef (\copsconfinit,\copsprog_0)
+%\\ \COPSToExtW( \begin{Bracketed} \ToCOPSProg{ \cops | \copsctxenv 
+            %| \copsrunprog | \lb -> \copstrc } \end{Bracketed} , (\ts,\repl),\cl) & 
+%\\ \multicolumn{2}{l}{
+        %\( \quad \FuncDef 
+        %\begin{cases}
+        %a
+        %\end{cases} \)
+    %}
+%\end{align*}
+%Then the set of \emph{annotated normalised COPS traces}, \( \ExtCOPSTraces \ni \copsexttrc \), is defined by
+%defined by 
+%\[ 
+    %\ExtCOPSTraces \TypeDef \Set{\COPSToExt(\copstrc,\copsclenv) | \copstrc \in \COPSTraces 
+        %\\ {} \land \Exists{\copsctxenv \in \COPSContextEnvs} 
+        %(\stub,\copsctxenv, \stub) = \First(\copstrc)
+        %\\ \implies 
+        %\Forall{\cl \in \Dom(\copsctxenv) }
+        %\Forall{ \repl \in \COPSReplicas } 
+        %\\ \copsctxenv(\cl) = (\stub,\repl) 
+        %\implies \copsclenv(\cl) = \copstxid[\cl][\repl](0,1) 
+    %} .
+%\]
 \end{definition}
 
-We track the next available multiple-read transaction identifier for every client,
-that is, \( \copsclenv \).
-Recall that each COPS transaction identifier \( \copstxid[\cl][\repl](n,m) \) is annotated with
-a extra counter \( m \), namely the read counter.
-In the COPS semantics, the read counter is always set to be ZERO.
-Here, we assign transaction identifiers with non-zero read counters to multiple-read transactions:
-for each multiple-read transaction, 
-we annotate the re-fetch operations and the read return operation 
-with the next available identifier in \( \copsclenv \).
-To preserve the session order,
-we update \( \copsclenv \) for the client \( \cl \),
-if \( \cl \) commits a new transaction.
-By construction, the transaction identifiers that are assigned to multiple-read transactions must be unique.
-
+\begin{toappendix}
+\label{sec:proof-multiple-read-trans-id-unique}
 \begin{proposition}[Fresh multiple-read transaction identifiers]
 \label{prop:cops-read-id-unique}
-Given an extended COPS trace \( \copsexttrc \in \ExtCOPSTraces \),
+Given an annotated normalised COPS trace \( \copsexttrc \in \ExtCOPSTraces \),
 the annotated multiple-read transaction identifiers must be fresh with respect the key being read,
 that is,
 \begin{Formulae}*
@@ -97,26 +146,35 @@ it means that
 For this case, by the definition of \(\ExtCOPSTraces\) (especially \(\COPSToExt\)), 
 it must be the case that \(\copstxid \neq \copstxid''\).
 \end{proof}
+%\begin{proofsketch}
+%It is trivial by the construction of annotated normalised traces.
+%The full proof is given in \cref{sec:proof-multiple-read-trans-id-unique}
+%on \pageref{sec:proof-multiple-read-trans-id-unique}.
+%\end{proofsketch}
+\end{toappendix}
 
 
-In our kv-store semantics, new versions are appended to the end,
-however, in COPS semantics, new versions are inserted into the lists to preserve
-the version order within the lists.
-As explained before, write operations in a normal COPS trace,
-henceforth in an extended COPS trace, must be in order.
-Thus, it is safe to \emph{append} any write operation to the end of the list of the key,
-instead of inserting into the list.
+%In our kv-store semantics, any new version is appended to the end of a list.
+%However, in COPS semantics, any version is inserted into the list to preserve the version order of the new list.
+%As explained before, write operations in a normalised COPS trace,
+%henceforth in an annotated normalised COPS trace, must be in order.
+%Thus, in a normalised COPS trace, 
+%it is safe to \emph{append} any write operation to the end of the list 
+%instead of inserting into the list.
+%The detail is given in \cref{prop:cops-append-write} on page \pageref{sec:proof-append-write-op}.
 
-\begin{proposition}[Appending write operation]
+\begin{toappendix}
+\label{sec:proof-append-write-op}
+\begin{proposition}[Appending write operations]
 \label{prop:cops-append-write}
-Given an extended COPS trace \( \copsexttrc \),
-for every write operation, \( \lb = \lbCOPSWrite{\opW(\key,\val), \copstxid, \copsctx } \),
-the version identifier, \(\copstxid \), is strictly greater than all version identifiers included in all replicas,
-which means that
+Given an annotated normalised COPS trace \( \copsexttrc \),
+for every write operation, \( \lb = \lbCOPSWrite{\opW(\key,\val), \copstxid, \copsdep } \),
+the version identifier, \(\copstxid \), is strictly greater than all version identifiers included in all replicas:
+that is,
 \begin{Formulae}*
 \begin{Formula}
 \copsexttrc = \ToCOPSProg{ \copsexttrc' | \stub 
-                -> \cops |  \copsctxenv | \copsrunprog | \lbCOPSWrite{\opW(\key,\val), \copstxid, \copsctx }
+                -> \cops |  \copsctxenv | \copsrunprog | \lbCOPSWrite{\opW(\key,\val), \copstxid, \copsdep }
                 -> \cops' | \copsctxenv' | \copsrunprog' | \stub
                 -> \cdots }
         \\ \land 
@@ -138,7 +196,14 @@ in the trace \( \copsexttrc' \) that committed this version:
 \land \lb' = \lbCOPSWrite{\opW(\key',\val'), \copstxid', \copsdep } 
 \]
 for some value \( \val ' \) and dependent set \(\copsdep \).
-Since an extended trace \( \copsexttrc \) is also in its normal form, that is, \( \COPSNormalTrace(\copsexttrc) \),
+Since an annotated normalised trace \( \copsexttrc \) is also in its normalised form, that is, \( \COPSNormalTrace(\copsexttrc) \),
 and the new kv-store \( \cops'(\repl')\Proj{0} \) must be a well-formed COPS key-value store,
 therefore \( \copstxid' \copstxidle \copstxid \).
 \end{proof}
+%\begin{proofsketch}
+%It is trivial by the definition of normalised COPS traces (\cref{def:cops-normal-trace}),
+%therefore it also holds for annotated normalised COPS traces.
+%The full proof is given in \cref{sec:proof-append-write-op}
+%on \pageref{sec:proof-append-write-op}.
+%\end{proofsketch}
+\end{toappendix}
