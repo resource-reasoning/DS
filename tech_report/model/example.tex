@@ -1,0 +1,133 @@
+We give several examples of execution tests which give rise to consistency models on kv-stores.
+Recall that the \emph{snapshot property} and the \emph{last-write-wins policy} are hard-wired into our semantics. 
+This means that we can only define  consistency models that satisfy these two constraints. 
+Although this prevent us expressing interesting consistency models such as \emph{read committed} \citep{si}, 
+we are able to express a large variety of consistency models employed by distributed kv-stores,
+from \emph{read atomic} (\(\RA\)) to \emph{serialisability} (\(\SER\)).
+
+\paragraph{Notation.} \input{relation-notation}
+
+Recall that an execution test \(\et\) (\cref{def:execution-test})
+comprises tuples of the form \((\kvs,\vi, \fp, \kvs', \vi')\) 
+where  \(\CanCommit[\et]( \kvs, \vi, \fp )\) and \(\ViewShift[\et]( \kvs, \vi, \kvs', \vi' )\). 
+We define \(\CanCommit\) and \(\ViewShift\) for several consistency models,
+using a couple of auxiliary definitions. 
+Predicate \(\CanCommit[\et]( \kvs, \vi, \fp ) \) requires the view \( \vi \) be closed
+with respect to a relation \( \rel \) on transactions in \( \kvs \),
+in the sense that for any transaction \( \txid \) being the \emph{writer} of a version in \( \vi \),
+if \( (\txid',\txid) \in \Trasi(\rel) \), then any version \emph{written} by \( \txid' \) must be
+included in \( \vi \).
+Note that any read-only transactions do not directly affect the view,
+however, these transactions may be intermediate steps to link other transactions that have writes.
+This closure property is captured by \( \PreClosed \).
+
+\begin{definition}[Visible transactions and prefix closure]
+\label{def:vis-transactions-function}
+Given a kv-store \(\kvs \in \KVSs\) and a view on the kv-store \(\vi \in \Views(\kvs)\), 
+the \emph{set of visible transactions} is defined by:
+\begin{align*}
+\VisTrans(\kvs, \vi) & \FuncDef \Set{\WtOf(\kvs(\key, \idx)) | \idx \in \vi(\key)}
+\end{align*}
+where \( \WtOf \) is defined in \cref{def:versions}.
+Given a binary relation on transactions, \(\rel \subseteq \TxIDs \times \TxIDs\), 
+a view \(\vi\) is \emph{prefix closed} or \emph{closed} 
+with respect to a kv-store \(\kvs\) and the relation \(\rel\), 
+written \(\PreClosed(\kvs,\vi,\rel)\), if and only if
+\begin{align*}
+    \begin{multlined}[t]
+    \VisTrans(\kvs, \vi) = 
+    \left( \Inv((\TraRe(\rel))) (\VisTrans(\kvs, \vi)) 
+            \setminus  \ReadOnlyTrans(\kvs) \right) ,
+    \end{multlined}
+\end{align*}
+where the set of read-only transaction, \( \ReadOnlyTrans(\kvs) \), is defined by:
+\begin{align*}
+\ReadOnlyTrans(\kvs) & \FuncDef
+ \Set{\txid | \txid \in \kvs \land \Forall{\key \in \Keys | \idx \in \Nat} 
+    \txid \neq \WtOf(\kvs(\key,\idx))} .
+\end{align*}
+\end{definition}
+
+The prefix closure, \( \PreClosed \), states that
+if transaction \(\txid\) is visible in \(\vi\)
+in that a version written by \(\txid\) is included in \vi, that is, \( \txid \in \VisTrans(\kvs, \vi) \)
+then all transactions \( \txid' \) that are \(\TraRe(\rel)\)-before \(\txid\) 
+(\((\txid',\txid) \in \TraRe(\rel)\)) are also visible in \(\vi\).
+%that is, any versions written by \( \txid' \) must be included in \vi.
+Note that the set of prefix closed transactions, \( \Inv((\TraRe(\rel))) (\VisTrans(\kvs, \vi)) \),
+may contain read-only transactions.
+However, the read-only transactions have no effect on the view.
+
+We define \emph{dependency relations for kv-stores}, 
+inspired by analogous relations for dependency graphs due to \citet{adya}.
+The relations are \emph{write-read} (\(\WR\)), \emph{write-write} (\(\WW\)) and \emph{read-write} (\(\RW\)).
+These three dependency relations, and the session order \( \SO \) defined in \cref{def:session-order},
+are the basic building blocks for defining consistency models using execution tests:
+the view must be closed with respect to certain combination of these four relations.
+%Many execution tests for well-known consistency models 
+%use these dependency relations to constrain the view.
+Note that we specifically use the same names as in dependency graphs (\cref{sec:sound-complete}).
+This is to emphasis the similarity of dependency relations in kv-stores and in dependency graphs.
+
+\input{fig-dependency-edge}
+
+\begin{definition}[Dependency relations on kv-stores]
+\label{def:dependency-kv-store}
+Given a kv-store \(\kvs \in \KVSs\) and a key \( \key \in \Keys \):
+\begin{enumerate}
+\item the \emph{write-read dependency} on the key, \( \WR[\kvs](\key) \), is defined by:
+    \[ 
+    \WR[\kvs](\key) \FuncDef \Set{(\txid,\txid') | 
+        \Exists{\idx} \txid = \WtOf(\kvs(\key,\idx)) \land \txid' \in \RsOf(\kvs(\key,\idx))} ;
+    \]
+\item the \emph{write-write dependency} on the key, \( \WW[\kvs](\key) \), is defined by:
+    \[ 
+    \WW[\kvs](\key) \FuncDef \Set{(\txid,\txid') | 
+        \Exists{\idx,\idx'} \txid = \WtOf(\kvs(\key,\idx)) 
+        \land \txid' = \WtOf(\kvs(\key,\idx')) \land \idx < \idx'}  ; \ and
+    \]
+\item the \emph{read-write anti-dependency} on the key, \( \RW[\kvs](\key) \), is defined by:
+    \[ 
+    \RW[\kvs](\key) \FuncDef \Set{(\txid,\txid') | 
+        \Exists{\idx,\idx'} \txid \in \RsOf(\kvs(\key,\idx)) 
+        \land \txid' = \WtOf(\kvs(\key,\idx')) 
+        \land \idx < \idx' \land \txid \neq \txid'} .
+    \]
+\end{enumerate}
+The \emph{write-read}, \emph{write-write} and \emph{read-write dependencies}
+on the kv-store \( \kvs \) are then defined by:
+\(  \rel[\kvs] \FuncDef \bigcup_{\key \in \Keys}\rel[\kvs](\key) \)
+for \( \rel \in \Set{\WR, \WW, \RW} \).
+\end{definition}
+
+\Cref{fig:dependencies-kvstore} illustrates an example kv-store and its dependency relations,
+and \cref{fig:dependencies-time-line} is an example time line, 
+if transactions in \cref{fig:dependencies-kvstore} are executed in a centralised database.
+The write-read dependency, \( (\txid_0, \txid_1) \in \WR \), states that
+transaction \( \txid_2 \) reads a version written by \( \txid_1 \).
+This means that \( \txid_2 \) \emph{starts} after the commit of \( \txid_1 \), hence 
+\( \txid_2 \) observes effect of \( \txid_1 \), depicted in \cref{fig:dependencies-time-line}.
+The write-write dependency, \( (\txid_1, \txid_2) \in \WW \), states that 
+transaction \( \txid_2 \) overwrites a version written by \( \txid_1 \).
+This means that \( \txid_2 \) \emph{commits} after the commit of \( \txid_1 \).
+However, there is no information about the starts of these two transaction,
+which means these two transactions may be executed concurrently, 
+as shown in \cref{fig:dependencies-time-line}.
+Last, the read-write anti-dependency, \( (\txid_1,\txid_2) \in \RW \),
+states that \( \txid_1 \) reads a version that has been over-written by \( \txid_2 \).
+This means that \( \txid_1 \) starts before the commit of \( \txid_2 \), depicted in \cref{fig:dependencies-time-line},
+hence, \( \txid_1 \) does not observe the effect of \( \txid_2 \).
+The anti-dependency can be derived from \( \WR \) and \( \WW \)
+in that \( (\txid,\txid') \in \RW 
+        \PredDef \Exists{\txid''} (\txid'',\txid) \in \WR \land (\txid'',\txid') \in \WW \).
+
+
+Recall that execution tests are defined using  \(\ViewShift\) and \(\CanCommit\)  predicates.
+We now give several definitions of \(\ViewShift\) and \(\CanCommit\) for
+well-known consistency models in \cref{fig:execution-tests}. 
+In \cref{sec:sound-complete}, we demonstrate that the associated consistency
+models on kv-stores correspond to well-known consistency models on abstract executions. 
+%We anticipate these results, by labelling the
+%execution test with their well-known consistency models.
+
+\input{execution-table}

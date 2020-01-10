@@ -1,0 +1,186 @@
+\ProvidesPackage{thesis-tikz}[2019/02/09 Tikz setting and macros for kv-store semantics, proofs, applications]
+
+\RequirePackage{tikz}
+\usetikzlibrary{positioning, shapes, decorations.pathmorphing, arrows, calc,fit,matrix}
+
+
+\NewDocumentCommand\DiagramMathFont{}{\large}
+\NewDocumentCommand\DiagramMath{m}{\(\mbox{\DiagramMathFont \ensuremath{#1}}\)}
+
+
+% global variable environment
+\newcommand{\tikzkvspace}{1.5pt}
+\newcommand{\tikzkeyspace}{-1.1}
+
+\NewEnviron{centertikz}[1][\scaleboxscaling]{%
+    \begin{center}%
+    \scalebox{#1}{%
+    \begin{tikzpicture}[font=\large]%
+    \BODY%
+    \end{tikzpicture}%
+    }%
+    \end{center}%
+}
+
+\tikzset{
+    v-cell/.style={
+        rectangle
+        , minimum height=5mm
+        , text depth=1ex
+        , minimum width=5mm
+        , text height=3ex
+        , inner sep=0pt
+        , outer sep=1pt
+        , font=\DiagramMathFont
+    }, nonvisible/.style={
+        dotted, gray
+    }, fillshade/.style={
+        fill=gray!30
+    }, fillbg/.style={
+        fill=gray, opacity=0.2
+    }, pics/singleversion/.style n args = {6}{
+        % the first parameter is only for internal use.
+        % #2 - #4 value, writer and reader
+        % #5 name
+        code = {
+        \def\versionname{#5}
+        \def\VALUE{Value\versionname}
+        \def\WT{Writer\versionname}
+        \def\RS{Readers\versionname}
+        \node[v-cell] (\VALUE) at (0,0) {\DiagramMath{#2}};  
+        \node[anchor=south west,v-cell] (\WT) at (\VALUE.east){\DiagramMath{#3}};
+        \node[anchor=north west,v-cell] (\RS) at (\VALUE.east){\DiagramMath{#4}};
+        % vertical line
+        \draw[#6] (\WT.north west) -- (\RS.south west);
+        % horizon line
+        \draw[#6] (\RS.north west) -- (\RS.north east)
+              (\WT.south west) -- (\WT.south east);    
+        \node[#6,outer sep=0pt,inner sep=0pt,draw,fit=(\VALUE)(\WT)(\RS)] (#1) {}; 
+    }}, pics/vlist/.style n args = {2}{
+        code={
+        \def\vlistname{#1}
+        \coordinate (VERSION-TEMP) at (0,0);
+        \coordinate (\vlistname) at (0,0);
+        \edef\i{1}
+        \foreach \vi/\v/\wt/\rs in {#2}{
+            % draw a new version
+            \draw pic [anchor=east,right=0pt of VERSION-TEMP] {singleversion={VERSION-TEMP}{\v}{\wt}{\rs}{\vlistname\i}{\vi}};
+            % add the new version into the node vlistname
+            \node[inner sep=0pt, outer sep=0pt,fit=(\vlistname)(VERSION-TEMP)] (\vlistname) {};
+            \xdef\i{\the\numexpr(\i)+1}
+    }}}, pics/kvmapping/.style n args = {4}{
+        code = {
+        \def\mappingname{#1}
+        \coordinate (\mappingname) at (0,0);
+        \node[anchor=west] (Key\mappingname) at (\mappingname) {\DiagramMath{#2 \mapsto}};
+        \draw pic at ([xshift=#3]Key\mappingname.east) {vlist={\mappingname}{#4}};
+        \node[outer sep=0pt,inner sep=0pt,fit=(Key\mappingname)(\mappingname)] (\mappingname) {}; 
+}}}
+
+% global variable environment
+\newcommand{\KeyVlistSpace}{3pt}
+\newcommand{\MappingSpace}{20pt}
+
+% #1 the previous mapping name
+% #2,#3 spaces between key and version list, and between mappings
+% #4 name of this mapping; the names for sub components. 
+%   Key: Key#4, i-th versions: Value#4i, Writer#4i, Readers#4i
+% #5 key 
+% #6 version lists  in the form ([nonvisible]/value/writer/readers,)*
+\NewDocumentCommand\KVMapping{oO{\KeyVlistSpace}O{\MappingSpace}mmm}{
+\noexpandarg%
+\IfNoValueTF{#1}{\draw pic {kvmapping={#4}{#5}{#2}{#6}}
+}{\draw[anchor=west] pic at ([xshift=#3]#1.east) {kvmapping={#4}{#5}{#2}{#6}}
+}}
+
+\NewDocumentCommand\KVMAPPINGT{ >{\SplitArgument{3}{|}} m}{
+\noexpandarg%
+\KVMAPPING #1
+}
+
+%% name -> key -> vlist | name -> key -> vlist
+%\NewDocumentCommand\KVStore{O{\KeyVlistSpace}O{\MappingSpace}m}{
+%\noexpandarg%
+%\setsepchar{{|}}%
+%\readlist*\KVElems{#3}%
+%\foreachitem\KVElem\in\KVElems{%
+%\setsepchar{->}
+%\readlist\SEG{\KVElem}%
+%\KVMAPPING[#1]{\SEG[1]}{\SEG[2]}{\SEG[3]};%
+%}}
+
+%% the following is the demo of vilist
+%\node (NODE-NAME) {$KEY-NAME \mapsto$};
+
+%\draw pic at ([xshift=\tikzkvspace]locx.east) {vlist={LEFT-MOST-COORDINATOR-NAME}{%
+        %VERSION-LIST-CONTENT
+        % [nonvisible]/value/writer/readers, ...
+        % with maximum 10 elements
+%}};
+%e.g.
+%\node(locx) {$\key_1 \mapsto$};
+
+%\draw pic at ([xshift=\tikzkvspace]locx.east) {vlist={xlist}{%
+        %/0/$\txid_0$/$\t$,%
+        %nonvisible/1/$\txid_1$/$\t'$,%
+        %/2/$\txid_2$/$\Set{\txid_3}$%
+%}};
+
+\tikzset{
+    transaction-node/.style={
+        rectangle, draw=black
+        , rounded corners=1.2mm
+        , inner ysep=3pt, inner xsep=6pt
+    }, background/.style={
+        transaction-node
+    }, pics/transaction/.style n args = {7}{
+        code={
+        \def\transactionnode{#4}
+        \coordinate (TRANSACTION-TEMP) at (0,0);
+        \coordinate (ROW-BEGIN) at (0,0);
+        %\coordinate (ROW-ELEM) at (0,0);
+        \coordinate (\transactionnode) at (0,0);
+        \edef\i{0};
+        \edef\currow{0};
+        \foreach \vi/\nd in {#6}{ % draw a new version
+            % the first row
+            {\ifnum\i=0
+                % the first column of the first row
+                {\ifnum\currow=0 
+                \else \coordinate (ROW-BEGIN) at ($(ROW-BEGIN)+(0,-#3)$);
+                \fi
+                \xdef\currow{\the\numexpr(\currow)+1}}
+            \node[inner sep=0pt,outer sep=0pt,anchor=west,right=0pt of ROW-BEGIN,\vi] (TRANSACTION-TEMP) {\ensuremath{\nd}};
+            \else
+                \node[inner sep=0pt,outer sep=0pt,anchor=east,right=#2 of TRANSACTION-TEMP,\vi] (TRANSACTION-TEMP) {\ensuremath{\nd}};
+            \fi}
+            \xdef\i{\the\numexpr(\i)+1};
+            \node[inner sep=0pt, outer sep=0pt,fit=(TRANSACTION-TEMP)] (Op\transactionnode\currow{}N\i) {};
+            {\ifnum\i=#1
+                \xdef\i{0};
+            \fi}
+            % add the new version into the node vlistname
+            \node[inner sep=0pt, outer sep=0pt,fit=(\transactionnode)(TRANSACTION-TEMP)] (\transactionnode) {};
+        }
+        \node[transaction-node, fit=(\transactionnode), label=#7:\ensuremath{#5}] (\transactionnode) {};
+}}}
+
+\newcommand\OpXSpace{10pt}
+\newcommand\OpYSpace{20pt}
+
+% #1 in () bracket is the position
+% #2 is the label position from above, below, right, left
+% #3 the number os operation in each row
+% #4 is the X space between two operations
+% #5 is the Y space between two operations
+% #6 the node name
+%   Node: #4, i,j-th operations: Op#4iNj where i is row and j is column
+% #7 the label of this node
+% #8 the context: in the form of ([nonvisible]/op,)*
+\NewDocumentCommand\OperationsBox{d()O{above}O{3}O{\OpXSpace}O{\OpYSpace}mmm}{
+\noexpandarg%
+\IfNoValueTF{#1}{
+\draw pic {transaction={#3}{#4}{#5}{#6}{#7}{#8}{#2}}
+}{
+\draw pic at ($#1$) {transaction={#3}{#4}{#5}{#6}{#7}{#8}{#2}}
+}}

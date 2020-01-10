@@ -1,0 +1,505 @@
+By \cref{thm:clock-si-normalised-trace}, it is enough to only consider annotated normalised traces.
+We verify Clock-SI protocol by first converting normalised Clock-SI traces to our kv-store program traces.
+We then show that these kv-store  program traces can be obtained under execution test for snapshot isolation \( \et[\PSI] \).
+
+\begin{definition}[Conversion of Clock-SI traces to kv-store  program traces]
+Given an annotated normalised Clock-SI trace \( \clockexttrc \),
+the kv-store  program trace induced by the trace, written \( \ClockToKVTrace(\clockexttrc) \),
+is defined in \cref{fig:def-clock-kv-trace}.
+The auxiliary predicate \( \CLOCKAtomic(\clockexttrc,\cl,\clockshard,\clocktime)\),
+and the auxiliary functions for extracting static program, fingerprint and view,
+that is, \( \ClockStaticProg \), \( \ClockFp\) and \( \ClockView\), are defined in \cref{fig:def-clock-kv-trace}.
+\end{definition}
+
+\input{clock/fig-kv-trace}
+
+Given an annotated normalised  Clock-SI trace \( \clockexttrc \),
+We know that the read, write and preparation steps of a transaction 
+can only be interfered by time-tick or snapshot steps, captured by predicate \( \CLOCKAtomic \).
+The predicate \( \CLOCKAtomic(\clockexttrc',\cl,\clockshard,n) \)  states that 
+the trace segment \( \clockexttrc' \) contains all the read, write and preparation steps
+of the same transaction from the client \( \cl \) 
+with the coordinator \( \clockshard \) and the commit time \( n\).
+Function \( \ClockToKVTrace \) constructs a kv-store program trace from \( \clockexttrc \) by inductively converting
+each atomic trace segment \( \clockexttrc' \) 
+into a single transition of the form \(\lbTrans{\vi,\fp} \).
+First, the transactional identifier \( \clocktxid[\cl](n,m) \) in the kv-store trace is annotated 
+with the client \( \cl \) that commits the transaction, and 
+the commit time \( n \) and snapshot time  \( m \) of the transaction.
+
+\begin{definition}[Clock-SI transaction identifiers]
+The set of \emph{Clock-SI transaction identifiers}, \( \ClockTxIDs \ni \clocktxid \),
+is defined by:
+\[
+    \ClockTxIDs \TypeDef \Set{\clocktxid[\cl](n,m) | \cl \in \Clients \land n,m \in \CLOCKTimes} .
+\]
+Given two identifiers \( \clocktxid[\cl](n,m), \clocktxid[\cl'](n',m') \),
+the order \( \clocktxid[\cl](n,m) \clocktxidleq \clocktxid[\cl'](n',m') \) is defined by
+\[
+    \clocktxid[\cl](n,m) \clocktxidleq \clocktxid[\cl'](n',m') \TypeDef
+    n \leq n' \lor (n = n' \land m \leq m') .
+\]
+\end{definition}
+
+Note that it is useful to annotate the transaction identifiers with the snapshot times,
+however, it does not affect the encoding.
+Clock-SI identifiers in a store must be unique,
+because transactions for a client must have unique commit times.
+The detail is given in \cref{prop:clock-si-unique-txid} on page \pageref{sec:proof-clock-si-txid-unique}.
+
+\begin{toappendix}
+\label{sec:proof-clock-si-txid-unique}
+\begin{proposition}[Clock-SI unique transactional identifiers]
+\label{prop:clock-si-unique-txid}
+Assume an annotated normalised Clock-SI trace \( \clockexttrc \),
+and the kv-store trace induced by the Clock-SI trace \( \progtrc = \ClockToKVTrace(\clockexttrc) \).
+Let \( (\clocksi,\clockclientenv,\clenv,\clockrunprog) = \LastConf(\clockexttrc) \)
+and \( (\kvs,\vienv,\clenv,\prog) = \LastConf(\progtrc) \).
+The transaction identifiers in \( \kvs \) are unique in that:
+\begin{Formulae}
+& \begin{Formula}
+    \nonumber
+\end{Formula}
+\\ & \begin{Formula}
+    \land \Forall{\clockexttrc' \in \clockexttrc | \cl, \clockshard}
+    \left( \CLOCKAtomic(\clockexttrc',\cl,\clockshard,n)
+    \implies \clocktxid[\cl](n,\stub) \in \kvs \right) 
+    \label{equ:clock-si-txid-unique}
+\end{Formula}
+\\ & \begin{Formula}
+    \land \Forall{\clocktxid[\cl](n,m) \in \kvs }
+    \Exists{ \clockexttrc' \in \clockexttrc | \cl, \clockshard}
+    \\ \left( \CLOCKAtomic(\clockexttrc',\cl,\clockshard,n)
+    \land \Forall{ \clockexttrc'' \in \clockexttrc }
+    \left( \CLOCKAtomic(\clockexttrc'',\cl,\clockshard,n)
+    \implies \clockexttrc' = \clockexttrc'' \right) \right) .
+    \label{equ:clock-kv-store-txid-unique}
+\end{Formula}
+\end{Formulae}
+\end{proposition}
+\begin{proof}
+By the definition of \( \ClockToKVTrace \),
+it is easy to see that \cref{equ:clock-si-txid-unique}
+and 
+\[
+    \Forall{\clocktxid[\cl](n,m) \in \kvs }
+    \Exists{ \clockexttrc' \in \clockexttrc | \cl, \clockshard}
+    \CLOCKAtomic(\clockexttrc',\cl,\clockshard,n) .
+\]
+We now prove that 
+\[
+    \Forall{\clocktxid[\cl](n,m) \in \kvs |
+    \clockexttrc', \clockexttrc'' \in \clockexttrc | \cl, \clockshard}
+    \CLOCKAtomic(\clockexttrc',\cl,\clockshard,n)
+    \land \CLOCKAtomic(\clockexttrc'',\cl,\clockshard,n)
+    \implies \clockexttrc' = \clockexttrc'' .
+\]
+The above can be derived from the follows,
+\begin{Formulae}*
+\begin{Formula}
+    \Forall{ \clockexttrc', \clockexttrc'' \in \clockexttrc 
+        | \cl \in \Clients | \clockshard, \clockshard' \in \CLOCKShards
+        | n,n' \in \Nat }
+    \\ \CLOCKAtomic(\clockexttrc',\cl,\clockshard,n)
+    \land \CLOCKAtomic(\clockexttrc'',\cl,\clockshard',n')
+    \\ \clockexttrc = \ToClockProg{\cdots | \stub -> \clockexttrc' 
+            | \stub -> \cdots | \stub -> \clockexttrc' | \stub -> \cdots}
+    \implies n < n' .
+\end{Formula}
+\end{Formulae}
+The above can be directly derived by \cref{lem:clock-si-local-time-mono}:
+the snapshot time must be strictly greater then the client local time,
+and the commit time must be greater or equal to the snapshot time.
+Therefore, \cref{equ:clock-kv-store-txid-unique} holds.
+\end{proof}
+%\begin{proofsketch}
+%By \cref{lem:clock-si-local-time-mono}, the snapshot time must be strictly 
+%greater then the client local time (\( \rCLOCKStart \)),
+%and the commit time must be greater or equal to the snapshot time (\( \rCLOCKCommit \)).
+%Then, by the definition of \( \ClockToKVTrace \),
+%it is easy to prove \cref{equ:clock-si-txid-unique,equ:clock-kv-store-txid-unique}.
+%The full detail is given in \cref{sec:proof-clock-si-txid-unique}
+%on page \pageref{sec:proof-clock-si-txid-unique}.
+%\end{proofsketch}
+\end{toappendix}
+
+
+\begin{toappendix}
+\label{sec:proof-client-local-time-mono}
+\begin{lemma}[Monotonic Clock-SI client local times]
+\label{lem:clock-si-local-time-mono}
+Client local times monotonically increases:
+given Clock-SI databases \( \clocksi, \clocksi'\), local time environments \( \clockclientenv, \clockclientenv' \),
+local stack environments \( \clenv, \clenv'\), runtime programs \( \clockrunprog, \clockrunprog' \),
+and label \( \lb \),
+\begin{Formulae}*
+& \begin{Formula}
+\ToClockProg{\clocksi | \clockclientenv | \clenv | \clockrunprog | \lb 
+            -> \clocksi' | \clockclientenv' | \clenv' | \clockrunprog' }
+\land \Forall{\cl \in \Dom(\clockclientenv) | \clockshard \in \Dom(\clocksi) | \clocktime }
+    \clockclientenv(\cl) \leq \clockclientenv'(\cl)
+\\ {} \land \left( 
+    \lb = \lbCLOCKStart{\clocktime} \implies 
+    \clockclientenv(\cl) < \clockclientenv'(\cl) .
+\right)
+\end{Formula}
+\end{Formulae}
+\end{lemma}
+\begin{proof}
+We perform case analysis on the label \( \lb \).
+\begin{enumerate}
+\Case{\( \lb = \lbCLOCKStart{\clocktime} \)}
+    By the premise of \( \rCLOCKStart \), we have 
+    \( \clockclientenv(\cl) < \clockclientenv'(\cl) \).
+    Other clients \( \cl' \) such that \( \cl' \neq \cl \), remains unchanged,
+    therefore \( \clockclientenv(\cl') = \clockclientenv'(\cl') \).
+\Case{\( \lb = \lbCLOCKOp{(l,\key,\val),\clocktime} \) with \( l \in \Set{\opW,\opR,\opP}\)}
+    By \( \rCLOCKWrite \), \( \rCLOCKReadLocal \), \( \rCLOCKReadShard \) and \( \rCLOCKPrepare\), 
+    the client local environment remains unchanged,
+    therefore \( \clockclientenv(\cl) = \clockclientenv'(\cl) \) for all clients \( \cl \).
+\Case{\( \lb = \lbCLOCKEnd{\clocktime} \) or \( \lb = \lbCLOCKTick{\clocktime}\)}
+    By \( \rCLOCKCommit \) and \( \rCLOCKShardTick \), 
+    the client local environment remains unchanged,
+    therefore \( \clockclientenv(\cl) = \clockclientenv'(\cl) \) for all clients \( \cl \). \qedhere
+\end{enumerate}
+\end{proof}
+%\begin{proofsketch}
+%It is trivial by the rules presented in 
+%\cref{fig:clock-si-transaction-start,fig:clock-si-write-value,fig:clock-si-read-value,fig:clock-si-commit}.
+%The full detail is given in \cref{sec:proof-client-local-time-mono}
+%on page \pageref{sec:proof-client-local-time-mono}
+%\end{proofsketch}
+\end{toappendix}
+
+The partial client views are extracted from the client local times via function \( \ClockView \).
+Given a client \( \cl \), its view, \( \vi = \ClockView(\kvs,\clocktime) \), contains all the versions 
+that are committed before its local time, \( \clocktime = \clockclientenv(\cl) \).
+The view \( \vi \) is well-formed, because transactions are committed at the same time to all shards.
+
+\begin{proposition}[Well-formed Clock-SI views]
+\label{prop:clock-si-view}
+Assume an annotated normalised Clock-SI trace \( \clockexttrc \),
+and the kv-store trace induced by the Clock-SI trace \( \progtrc = \ClockToKVTrace(\clockexttrc) \).
+Let \( (\clocksi,\clockclientenv,\clenv,\clockrunprog) = \LastConf(\clockexttrc) \)
+and \( (\kvs,\vienv,\clenv,\prog) = \LastConf(\progtrc) \).
+The views in \( \vienv \) are well-formed:
+\begin{Formulae}*
+& \begin{Formula}
+   \Forall{\cl \in \Dom(\vienv) | \vi}
+   \vi = \vienv(\cl) \implies \WfView(\kvs,\vi) .
+\end{Formula}
+\end{Formulae}
+\end{proposition}
+\begin{proof}
+By the definition of \( \CLOCKTraces \), all keys in all shards are initialised at time ZERO,
+which implies \cref{equ:view-wf-initial} in \cref{def:views}.
+Assume a client \( \cl \) and its view \( \vi = \vienv(\cl) \).
+By the definition of \( \ClockView \) that \( \vi \) contains transactions committed
+before the client local time \( \clockclientenv(\cl) \), 
+it is easy to see that the view is in range, defined in \cref{equ:view-wf-with-in-range} in \cref{def:views}.
+Because new versions of a transaction must commit at the same time.
+This view includes all or none of the effect of transactions defined in \cref{equ:view-wf-atomic} in \cref{def:views}.
+\end{proof}
+
+Given an atomic trace segment \( \clockexttrc' \) in an annotated normalised Clock-SI trace,
+The corresponding fingerprint, \( \fp \), is extracted via function \( \ClockFp \).
+Given an initial fingerprint \( \fp_0 = \emptyset \), 
+function \( \ClockFp(\fp_0,\clockexttrc) \) 
+composites the read and write operations in \( \clockexttrc' \) 
+using the fingerprint combination operator \( \AddOp \).
+This final fingerprint \( \fp = \ClockFp(\fp_0,\clockexttrc) \) is well-formed,
+that is,
+it contains the first read of each key and the last write of each key.
+Detail is given in \cref{prop:well-formed-clock-fp} on page \pageref{sec:proof:clock-fp-well-formed}.
+
+\begin{toappendix}
+\label{sec:proof:clock-fp-well-formed}
+\begin{proposition}[Well-formed Clock-SI fingerprints]
+\label{prop:well-formed-clock-fp}
+Assume an atomic trace segment \( \clockexttrc \) such that:
+for some \( \clocksi,\clockclientenv,\clenv,\clockrunprog, \trans,\clockbuffer,\clocktime,\clockshard,\cmd\),
+\begin{align}
+\CLOCKAtomic(\clockexttrc,\cl,\clockshard)
+\land (\clocksi,\clockclientenv,\clenv,\clockrunprog) = \clockexttrc\Proj{0}
+\land \clockrunprog(\cl) = \pruntrans{\trans}{\emptyset,\clockbuffer}{\clocktime,\clockshard} \pseq \cmd .
+\label{equ:clock-init-fp-match-with-trace}
+\end{align}
+Then, the fingerprint \(\fp = \ClockFp(\emptyset,\clockexttrc)\) satisfies the follows:
+for some \( \clocksi',\clockclientenv',\clenv',\clockrunprog', \trans',\clockbuffer',\clocktime,\clockshard,\cmd\),
+\begin{align}
+(\clocksi',\clockclientenv', \clenv',\clockrunprog') = \LastConf(\clockexttrc)
+\land \clockrunprog(\cl) = \pruntrans{\trans'}{\fp,\clockbuffer'}{\clocktime,\clockshard} \pseq \cmd .
+\label{equ:clock-fp-match-with-trace}
+\end{align}
+\end{proposition}
+\begin{proof}
+Fix the initial fingerprint \( \fp \),
+we prove by induction on the length of trace \( \clockexttrc \).
+\begin{enumerate}
+\CaseBase{\( \clockexttrc = \emptyset \)}
+    By the definition,
+    we have \( \ClockStaticProg(\emptyset,\clockexttrc) = \emptyset \).
+    It is trivial that \( \emptyset \) is a well-formed fingerprint and \cref{equ:clock-fp-match-with-trace} holds.
+\CaseInd{\( \clockexttrc = \ToClockProg{\clockexttrc' | \lb -> \clocksi' | \clockclientenv' | \clenv' | \clockrunprog' } \)}
+    Given the client \( \cl \),
+    assume the fingerprint \( \fp' \) such that 
+    \[
+        (\clocksi,\clockclientenv,\clenv,\clockrunprog) = \LastConf(\clockexttrc') 
+        \land \clockrunprog(\cl) = \pruntrans{\trans}{\fp',\clockbuffer}{\clocktime,\clockshard} \pseq \cmd .
+    \]
+    and assume fingerprint \( \fp'' \) such that 
+    \[ 
+        \clockrunprog'(\cl) = \pruntrans{\trans'}{\fp'',\clockbuffer'}{\clocktime,\clockshard} \pseq \cmd 
+    \]
+    where the free variables are existentially quantified.
+    By the \ih, we immediately have \( \ClockStaticProg(\fp,\clockexttrc') = \fp' \).
+    We perform case analysis on the label \( \lb \).
+    \begin{enumerate}
+    \Case{\(\lb = \lbCLOCKOp{\opW(\key,\val),\clocktime,\clocktime'} \)}
+        By the rule \( \rCLOCKWrite \),
+        we have \( \fp'' = \fp' \AddOp \opW(\key,\val)\).
+        By the definition of \( \ClockStaticProg \),
+        we have 
+        \[ 
+        \ClockStaticProg(\fp,\clockexttrc) 
+                = \ClockStaticProg(\fp,\clockexttrc') \AddOp \opW(\key,\val) 
+                = \fp'  \AddOp \opW(\key,\val) = \fp''
+        \]
+        which implies \cref{equ:clock-fp-match-with-trace}.
+    \Case{\(\lb = \lbCLOCKOp{\opR(\key,\val),\clocktime,\clocktime'} \)}
+        Consider if \( \fp' \) contains an entry for the key \( \key \), 
+        which corresponds to the two rules \( \rCLOCKReadLocal\) and \( \rCLOCKReadShard\).
+        \begin{enumerate} 
+        \Case{\( \rCLOCKReadLocal\)}
+            In this case, we have \( (l,\key,\val) \in \fp' \) for some \( l \in \Set{\opW,\opR} \) and value \( \val \).
+            By the premise of  \( \rCLOCKReadLocal\),
+            we have \( \fp' = \fp''\).
+            By the definition of \( \ClockStaticProg \),
+            we have 
+            \[ 
+            \ClockStaticProg(\fp,\clockexttrc) = \ClockStaticProg(\fp,\clockexttrc') \AddOp \opR(\key,\val) 
+            = \fp' \AddOp \opR(\key,\val) = \fp''
+            \]
+            which implies \cref{equ:clock-fp-match-with-trace}.
+        \Case{\( \rCLOCKReadShard\)}
+            In this case, we have \( (l,\key,\val) \notin \fp' \) for all \( l \in \Set{\opW,\opR} \) and value \( \val \).
+            By the premise of  \( \rCLOCKReadLocal\),
+            we have \( \fp'' = \fp' \AddOp \opR(\key,\val) \).
+            By the definition of \( \ClockStaticProg \),
+            we have 
+            \[ 
+            \ClockStaticProg(\fp,\clockexttrc) = \ClockStaticProg(\fp,\clockexttrc') \AddOp \opR(\key,\val) 
+            = \fp' \AddOp \opR(\key,\val) = \fp''
+            \]
+            which implies \cref{equ:clock-fp-match-with-trace}. \qedhere
+        \end{enumerate}
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+%\begin{proofsketch}
+    %We prove \cref{equ:clock-fp-match-with-trace} by induction on the length of \( \clockexttrc \).
+    %In the inductive case, \cref{equ:clock-fp-match-with-trace} can be derived 
+    %by \( \rCLOCKWrite \) if the next step is a write,
+    %\( \rCLOCKReadLocal\) if the next step is a local read,
+    %or \( \rCLOCKReadShard\) if the next step is a read from a shard.
+    %The full detail is given in \cref{sec:proof:clock-fp-well-formed}
+    %on page \pageref{sec:proof:clock-fp-well-formed}.
+%\end{proofsketch}
+\end{toappendix}
+
+We then show that:
+\begin{enumerate*}
+\item every transition in the program kv-store \( \progtrc = \ClockToKVTrace(\clockexttrc)\) is well-formed; and
+\item if a version exists in the \( \Last(\progtrc) \), 
+then it also exists in  \( \Last(\clockexttrc) \), and vice versa.
+\end{enumerate*}                                
+
+
+\begin{toappendix}
+\label{sec:proof-well-formed-clock-si-to-kvs}
+\end{toappendix}
+\begin{theoremrep}[Well-formed Clock-SI centralised kv-store]
+\label{thm:well-formed-clock-trace}
+Assume an annotate normalised Clock-SI trace \( \clockexttrc \)
+and the kv-store trace induced by the Clock-SI trace \( \progtrc = \ClockToKVTrace(\clockexttrc)\).
+Let \( (\kvs,\vienv,\clenv,\prog) = \LastConf(\progtrc) \) and \( (\clocksi,\clockclientenv,\clenv,\clockrunprog) = \LastConf(\clockexttrc) \).
+The final kv-store \(\kvs\) is well-formed,
+and \( \kvs \) only contains versions that exist in \( \clocksi \), and vice versa,
+that is,
+\begin{Formulae}
+& \begin{Formula}
+    \Forall{\key, \idx, \val, \cl,n,m,\txidset} 
+    \kvs(\key,\idx) = (\val,\clocktxid[\cl](n,m),\txidset) 
+    \implies \Exists{\clockshard,\clockkvs,\idx'} 
+    \\ \clockshard = \ShardOf(\clocksi,\key) 
+    \land (\clockkvs, \stub) = \clocksi(\clockshard)
+    \land \clockkvs(\key,\idx') = (\val,n,\stub) ,
+    \label{equ:kvs-to-clock-si}
+\end{Formula}
+\\ & \begin{Formula}
+\Forall{\key,\clockshard,\clockkvs,\idx,\val,n} 
+    \clockshard = \ShardOf(\clocksi,\key) 
+    \land (\clockkvs, \stub) = \clocksi(\clockshard)
+    \land \clockkvs(\key,\idx) = (\val,n,\stub) 
+    \implies
+    \\ \Exists{\idx', \cl,m,\txidset} 
+    \kvs(\key,\idx) = (\val,\clocktxid[\cl](n,m),\txidset)  .
+    \label{equ:clock-si-to-kvs}
+\end{Formula}
+\end{Formulae}
+%and any read in \( \kvs \) must have a corresponding read transition in the trace \( \clockexttrc \),
+%\begin{Formulae}
+%& \begin{Formula}
+    %\Forall{\key, \idx,\cl,\cl',n,n',m,m',\val,\txidset} 
+    %\kvs(\key,\idx) = \Tuple{\val,\clocktxid[\cl](n,m),\txidset \cup \Set{\clocktxid[\cl'](n',m')}}
+    %\implies \Exists{\clockshard} 
+    %\\ \clockshard = \ShardOf(\clocksi,\key) 
+    %\land \ClockReadFromShard(\clockexttrc,\cl',\clockshard,\key,m',n') 
+    %\\ {} \land n = \Set{n'' | \Exists{\idx,\clockkvs} n'' < \clocktime 
+    %\land \clocksi(\clockshard) = (\clockkvs,\stub) \land \clockkvs(\key,\idx) = (\stub,n'')} ,
+    %\label{equ:kvs-read-to-clock-si-read}
+%\end{Formula}
+%\\ & \begin{Formula}
+    %\Forall{\key,\clockshard,\clocktime,\val,\cl',n,n',m'} 
+    %\clockshard = \ShardOf(\clocksi,\key) 
+    %\land \ClockReadFromShard(\clockexttrc,\cl',\clockshard,\key,m',n')
+    %\\ {} \land n = \Set{n'' | \Exists{\idx,\clockkvs} n'' < \clocktime 
+    %\land \clocksi(\clockshard) = (\clockkvs,\stub) \land \clockkvs(\key,\idx) = (\stub,n'')}
+    %\\ {} \implies \Exists{\idx,\txidset,\cl} 
+    %\kvs(\key,\idx) = \Tuple{\val, \clocktxid[\cl](n,m), \txidset \cup \Set{\clocktxid[\cl'](n',m')}} ,
+    %\label{equ:clock-si-read-to-kvs-read}
+%\end{Formula}
+%\end{Formulae}
+%where predicate \( \ClockReadFromShard \) is defined by
+%\begin{multline*}
+%\ClockReadFromShard(\clockexttrc,\cl,\clockshard,\key,\clocktime,n)
+%\PredDef
+%\Exists{\val,\clocksi,\clockclientenv,\clenv,\clenv',\clockrunprog,\trans',\fp,\var,\expr}
+%\\ \clockexttrc = \ToClockProg{\cdots | \stub
+                                %-> \clocksi | \clockclientenv | \clenv 
+                                            %| \clockrunprog\UpdateFunc{\cl ->
+                                                %\pruntrans{\plookup{\var}{\expr}; \trans}%
+                                                            %{\fp,\emptyset}%
+                                                            %{\clocktime',\clockshard} } }
+                  %\\ \ToClockProg{\ | \lbCLOCKOp{\opR(\key,\val),\clocktime,n}
+                                %-> \clocksi | \clockclientenv | \clenv'
+                                            %| \clockrunprog\UpdateFunc{\cl -> \pruntrans{\trans}%
+                                                            %{\fp \AddOp \opR(\key,\val),\emptyset}%
+                                                            %{\clocktime',\clockshard} }  | \stub 
+                                %-> \cdots } .
+%\end{multline*}
+\end{theoremrep}
+\begin{proof}
+We prove by induction on Clock-SI trace \( \clockexttrc \).
+\begin{enumerate}
+\CaseBase{\clockexttrc = \ToClockProg{\clocksiinit | \clockclientenvinit | \clenv_0 | \prog_0 }}
+    By  the definition of \( \ClockToKVTrace \),
+    \( \progtrc = \ToProg{ \kvsinit | \vienvinit | \clenv_0 | \prog_0 } \).
+    It is trivial that the initial kv-store \( \kvsinit \) is well-formed,
+    and \( \clocksiinit \) and \( \kvsinit \)  satisfy 
+    %\cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs,equ:kvs-read-to-clock-si-read,equ:clock-si-read-to-kvs-read}.
+    \cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs}.
+\CaseInd{ \clockexttrc = \ToClockProg{\clockexttrc' | \lb -> \clockexttrc'' | \lb' 
+        -> \clocksi'' | \clockclientenv'' | \clenv'' | \clockrunprog'' } }
+    Let \( (\clocksi',\clockclientenv',\clenv',\clockrunprog) = \LastConf(\clockexttrc') \)
+    and \( \progtrc' = \ClockToKVTrace(\clockexttrc') \).
+    By \ih, the final kv-store \( \kvs' \) such that \( (\kvs',\vienv',\stub,\stub) = \LastConf(\progtrc') \),
+    is well-formed,
+    and \( \clocksi'\) and \( \kvs' \) satisfy
+    %\cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs,equ:kvs-read-to-clock-si-read,equ:clock-si-read-to-kvs-read}.
+    \cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs}.
+    Now let consider the next step:
+    there are two possible cases for \( \clockexttrc''\).
+    \begin{enumerate}
+    \Cases{\( \lb = \lbCLOCKStart{\clocktime}\) or \( \lb = \lbCLOCKTick{\clocktime} \), and both with \( \clockexttrc'' = \emptyset\)}
+        By the definition of \( \ClockToKVTrace \), \( \ClockToKVTrace(\clockexttrc) = \ClockToKVTrace(\clockexttrc') \),
+        and by \ih, we have the proof.
+    \Cases{\( \lb = \lbCLOCKOp{(l,\key,\val), \clocktime,n}\)}
+        Let \( \clockexttrc^* = 
+                \ToClockProg{\LastConf(\clockexttrc) | \lb 
+                            -> \clockexttrc' | \lb' 
+                            -> \clocksi'' | \clockclientenv'' | \clenv'' | \clockrunprog'' } \).
+        In this case, we have \( \CLOCKAtomic(\clockexttrc^*,\cl,\clockshard,n) \).
+        Let \( \vi = \ClockView(\kvs',\clocktime) \) and \( \fp =  \ClockFp(\emptyset,\clockexttrc^*) \).
+        By the definition of \( \progtrc = \ClockToKVTrace(\clockexttrc) \), we have 
+        \[
+            \progtrc = \ToProg{\progtrc' | \lbTrans{\vi,\fp} 
+                                    ->  \kvs''
+                                       | \vienv'\UpdateFunc{\cl -> \vi'} 
+                                       | \clenv'' 
+                                       | \ClockStaticProg(\clockrunprog) }
+        \]
+        where \( \kvs'' = \UpdateKV(\kvs,\vi,\fp,\clocktxid[cl](n,m)) \) and \( \vi = \ClockView(\kvs'',n) \).
+        Note that we have the following results:
+        \begin{enumerate}
+            \item by \ih, the kv-store \( \kvs'' \) is well-formed;
+            \item by \cref{prop:clock-si-view}, the pre-view \( \vi \) is well-formed on \( \kvs'' \);
+            \item by \cref{prop:well-formed-clock-fp}, the fingerprint \( \fp \) is well-formed fingerprint; and 
+            \item by \cref{prop:clock-si-unique-txid}, the transaction identifier \( \clocktxid[cl](n,m) \) must be a unique 
+            and by \cref{lem:clock-si-local-time-mono}, \( \clocktxid[\cl](n,m) \in \NextTxid(\kvs,\cl) \).
+        \end{enumerate}
+        Given above, by \cref{thm:well-deifned-updatekv},
+        we have that \( \kvs'' = \UpdateKV(\kvs,\vi,\fp,\clocktxid[cl](n,m)) \) is well-formed.
+        
+        Now we prove \cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs}.
+        Note that \( \kvs' \) and \( \clocksi' \) satisfy \cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs},
+        Consider the new versions in \( \kvs'' \).      
+        Take a write operation such that \( \opW(\key,\val) \in \fp \).
+        This means that, if and only if, \( \kvs''(\key,\Abs{\kvs''(\key)} - 1 ) = (\val,\clocktxid[\cl](n,m),\emptyset) \).
+        By definition of \( \fp = \ClockFp(\emptyset,\clockexttrc^*) \),
+        if and only if, there exists two transitions, 
+        \( \lbCLOCKOp{\opW(\key,\val),\clocktime,n} \) and \( \lbCLOCKOp{\opW(\key,\val),\clocktime',n} \) 
+        for some preparation time \( \clocktime' \) such \( \clocktime' > \clocktime\),
+        in the trace \( \clockexttrc^*\).
+        By the definition of \( \rCLOCKPrepare \) and \( \rCLOCKCommit \),
+        if and only if, we have \( \clockkvs''(\key, \Abs{\clockkvs''(\key)} - 1)  = (\val,n,\clocksicommitted) \)
+        for \( (\clockkvs'',\stub) = \clocksi''(\ShardOf(\key))\).
+        Thus, \cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs} hold. \qedhere
+
+        %Last, we prove \cref{equ:kvs-read-to-clock-si-read,equ:clock-si-read-to-kvs-read}.
+        %Note that \( \kvs' \) and \( \clocksi' \) satisfy 
+        %\cref{equ:kvs-read-to-clock-si-read,equ:clock-si-read-to-kvs-read},
+        %Consider the new transaction \( \clocktxid[\cl](n,m) \) from \( \cl \) that commits at time \( n\).
+        %Assume \( \kvs(\key,\idx) = 
+            %\Tuple{\val, \clocktxid[\cl'](n'), \txidset \cup \Set{\clocktxid[\cl](n,m)}} \)
+        %for some \( \key, \idx, \val, \txid[\cl](n) ,\txidset \).
+        %This means, if and only if, the read operation \( \opR(\key,\val) \in \fp \),
+        %by the definition of \( ClockToKVTrace \).
+        %By definition of \( \fp = \ClockFp(\emptyset,\clockexttrc^*) \),
+        %if and only if, 
+        %\[
+            %\ClockReadFromShard(\clockexttrc^*,\cl,\clockshard,\key,\clocktime,n)
+        %\]
+        %and, then if and only if, 
+        %\[
+            %n' = \Set{n'' | \Exists{\idx,\clockkvs} n'' < \clocktime \land \clocksi(\clockshard) = (\clockkvs,\stub) \land \clockkvs(\key,\idx) = (\stub,n'')}
+        %\] 
+        %by the premise of \( \rCLOCKReadShard \).
+        %Thus, \cref{equ:kvs-read-to-clock-si-read,equ:clock-si-read-to-kvs-read} hold. \qedhere
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+\begin{proofsketch}
+We prove this by induction on the trace \( \clockexttrc\).
+In the base case, \cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs} trivial hold.
+In the inductive case, by the definition of \( \ClockToKVTrace\),
+we need to prove that the new kv-store, \(  \kvs' = \UpdateKV(\kvs,\vi,\fp,\clocktxid[cl](n,m)) \), 
+as the result of committing a new transaction \( \clocktxid[cl](n,m) \) with fingerprint \( \fp \) and view \( \cl \),
+is still well-formed.
+Note that we have the following results:
+\begin{enumerate}
+    \item by \ih, the kv-store \( \kvs \) is well-formed;
+    \item the pre-view \( \vi \) is well-formed on \( \kvs \),
+    the fingerprint \( \fp \) is well-formed fingerprint,
+    and the transaction identifier \( \clocktxid[cl](n,m) \) must be a unique,
+    of which details are given in \cref{prop:clock-si-unique-txid,prop:well-formed-clock-fp,prop:clock-si-view}; and 
+    \item client local times in Clock-SI monotonically increases (\cref{lem:clock-si-local-time-mono}), hence \( \clocktxid[\cl](n,m) \in \NextTxid(\kvs,\cl) \).
+\end{enumerate}
+Given above and \cref{thm:well-deifned-updatekv},
+the new kv-store \( \kvs' \) is well-formed.
+Then, \Cref{equ:kvs-to-clock-si,equ:clock-si-to-kvs} can be derived by the definition of \( \ClockToKVTrace \),
+since the function does not create or remove any versions.
+The full proof is given in \cref{sec:proof-well-formed-clock-si-to-kvs}
+on page \pageref{sec:proof-well-formed-clock-si-to-kvs}.
+\end{proofsketch}
+

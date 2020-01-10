@@ -1,0 +1,95 @@
+\begin{figure}
+
+\begin{subfigure}{\textwidth}
+\begin{lstlisting}
+commitTrans( trans )
+    prep = [];
+    snapshotTime = trans.snapshotTime;
+    for (w,k,v) in trans.read-write-set { 
+        send ``prepare (k,v,snapshotTime)'' to shardOf(k); (* \label{line:asyn-send-prepare}*)
+        wait ``(k,v,t)''; (* \label{line:asyn-wait-prepare}*)
+        prep = prep + (k,v,t); (* \label{line:clock-collect-reply}*)
+    }
+
+    commitTime = maxTime(prep) (* \label{line:clock-final-commit-time}*)
+
+    for (k,v,t) in prep {
+        send ``commit (k,v,commitTime)'' to shardOf(k);
+    }
+
+On receive ``prepare (k,v,snapshotTime)'' 
+    wait snapshotTime < getShardClockTime(); 
+    if noConcurrentWriteSince(k,snapshotTime) { (* \label{line:clock-no-conflict-write}*)
+        preparedTime = getShardClockTime(); (* \label{line:clock-assign-prepare-time}*)
+        log ``(k,v,preparedTime,prepared)'' in preparation set; (* \label{line:clock-log-prepare-time}*)
+        send ``(k,v,preparedTime)''; (* \label{line:clock-echo-prepare-time}*)
+    } else {
+        // either abort or restart this transaction entirely.
+        ...
+    }
+
+On receive ``commit (k,v,commitTime)'' 
+    insert(k,v,commitTime,committed); (* \label{line:clock-insert-version}*)
+\end{lstlisting}
+
+\caption{The reference implementation of transaction commit}
+\label{lst:clock-si-commit}
+\end{subfigure}
+
+\hrulefill
+
+\begin{subfigure}{\textwidth}
+\begin{mathpar}
+\inferrule[\rCLOCKPrepare]{ 
+    \opW(\key,\val) \in \fp
+    \\
+    \clockshard = \ShardOf(\clocksi,\key)
+    \\
+    (\clockkvs,\clocktime'') = \clocksi(\clockshard)
+    \\
+    \clocktime' < \clocktime''
+    \\
+    \clockverlist = \clockkvs(\key)
+    \\
+    \Forall{\idx} 0 \leq \idx < \Abs{\clockverlist} \implies \TimeOf(\clockverlist(\idx)) < \clocktime'
+    \\
+    \clocksi' = \clocksi\UpdateFunc{\clockshard -> (\clockverlist \ListConcat \List{(\val,\clocktime'',\clocksiprepared)}, \clocktime'') }
+}{%
+    \ToClockCmd{
+    \clocksi | \clocktime | \stk
+            | \pruntrans{\pskip}{\fp,\clockbuffer}{\clocktime',\clockshard} 
+            | \lbCLOCKOp(\clockshard'){\opP(\key,\val),\clocktime''} -> \ }
+   \ToClockCmd{ \clocksi' | \clocktime |  \stk
+            | \pruntrans{\pskip}{
+                    \fp \setminus \Set{\opW(\key,\val) }
+                    , \clockbuffer \uplus \Set{(\key,\Abs{\clockverlist},\clocktime'') }
+                }{\clocktime',\clockshard} } 
+}
+\and
+\inferrule[\rCLOCKCommit]{ 
+    \Forall{\key,\val} \opW(\key,\val) \notin \fp
+    \\
+    \clocktime'' = \CLOCKMaxTime(\clockbuffer)
+    \\
+    \clocksi'' = \CLOCKUpdate(\clocksi,\clockbuffer,\clocktime'')
+    %\\
+    %\clockshardset = \Set{\ShardOf(\clocksi,\key') | (\key',\stub,\stub) \in \clockbuffer }
+}{%
+    \ToClockCmd{
+    \clocksi | \clocktime | \stk
+            | \pruntrans{\pskip}{\fp,\clockbuffer}{\clocktime',\clockshard} 
+            | \lbCLOCKEnd{\clocktime''} ->
+    \clocksi'' | \clocktime'' |  \stk
+            | \pskip }
+}
+\end{mathpar}
+
+\caption{The semantics of \( \pclockcommit \)}
+\label{fig:clock-commit}
+\end{subfigure}
+
+\hrulefill
+
+\caption{Clock-SI: transaction commit}
+\label{fig:clock-si-commit}
+\end{figure}

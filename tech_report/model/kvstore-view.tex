@@ -1,0 +1,223 @@
+We formally define the abstract states of our semantics in this section,
+which consists of a global, centralised key-value store (kv-store) and several independent partial client views.
+A kv-store comprises key-indexed lists of versions which record
+the history of the key with values and meta-data of the
+transactions that have accessed the version including the writer and readers.
+
+\begin{definition}[Client and transactional identifiers]
+    \label{def:client-id}
+    \label{def:transaction-id}
+    The set of \emph{client identifiers}, \( \Clients \ni \cl \), is a countably infinite set.
+    The set of \emph{transaction identifiers}, \(\TxIDs \ni \txid\), is defined by:
+    \( \TxIDs \TypeDef \Set{\txid_{0}} 
+    \uplus \Set{ \txid_{\cl}^{n} | \cl \in \Clients \land n \in \Nat \land n \geq 0 } \).
+    Let \(\TxIDZs \TypeDef \TxIDs \setminus \Set{\txidinit}\).
+\end{definition}
+
+Subsets of \(\TxIDs\)  are ranged over by \(\txidset, \txidset', \txidset_1, \cdots\). 
+The transaction identifier \(\txidinit\) denotes the \emph{initialisation transaction}
+and \(\txid_{\cl}^{n}\) identifies a transaction committed by client
+\(\cl\) with \(n\) being used to determine the client session order.
+
+\begin{definition}[Session order]
+\label{def:session-order}
+The session order, \( \SO \), is defined by:
+\[
+    \SO \TypeDef \Set{ (\txid[\cl](n), \txid[\cl](n')) | \cl \in \Clients 
+        \land \txid[\cl](n), \txid[\cl](n') \in \TxIDs \land n < n'}. 
+\]
+\end{definition}
+
+Each version has the form \(\ver = (\val, \txid, \txidset)$,
+where \(\val\) is a value, 
+the \emph{writer} \(\txid\) identifies the transaction that wrote \(\val\), 
+and the \emph{reader set} \(\txidset\) identifies the transactions that read \(\val\). 
+
+\begin{definition}[Keys, values and versions]
+    \label{def:keys}
+    \label{def:values}
+    \label{def:versions}
+    Assume a countably infinite set of \emph{keys}, \(\Keys \ni \key\), 
+    and a countably infinite set of \emph{values}, \(\Values \ni \val\),
+    such that 
+    \( \begin{Bracketed} \Keys \cup \valinit \end{Bracketed} \subseteq \Values, \)
+    where \(\valinit\) is the \emph{initialisation value}.
+    The set of \emph{versions}, \(\Versions \ni \ver\), is defined by:
+    \(\Versions \TypeDef \Values \times \TxIDs \times \PowerSet(\TxIDZs)\). 
+    Let \(\ValOf(\ver)\), \(\WtOf(\ver)\) and \(\RsOf(\ver)\) 
+    return the first, second and third components of \(\ver\).
+    Given a transaction identifier \( \txid \in \TxIDs \), 
+    the notation \( \txid \in \ver \) is defined by: \( \txid \in \Set{\WtOf(\ver)} \cup \RsOf(\ver)\).
+\end{definition}
+
+Our global centralised key-value stores (kv-stores) keep track of all the history versions for each key.
+These stores model the overall global state of a system.
+They provide an abstraction to real world distributed systems where versions are stored in distributed sites.
+For example, the COPS replicated database  can be abstracted to centralised kv-stores.
+
+\begin{definition}[Kv-stores]
+\label{def:kv-store}
+A \emph{kv-store} is a function \(\kvs \in \Keys \ToTFunc \List{\Versions}\), 
+where \(\List{\Versions} \ni \verlist\) denotes the set of lists of versions.
+Given an index \( \idx \in \Indexs \), 
+let \(\kvs(\key, i)\) denote \Th{i} element of the list of versions of \(\key\), defined by:
+\( \kvs(\key,\idx) \FuncDef \kvs(\key)\Proj{\idx}.  \)
+Given a transaction \(\txid\) and a kv-store \( \kvs \),
+the transaction is included in \( \kvs \), written \(\txid \in \kvs\),
+if and only if \(\txid\) is either the writer 
+or one of the readers of a version in \(\kvs\):
+\( 
+    \txid \in \kvs \PredDef 
+    \Exists{\key,\idx} \txid \in \kvs(\key,\idx).
+\)
+The \emph{initial kv-store}, \(\kvsinit\), is defined by:
+\(\kvsinit(\key) \TypeDef \List{(\valinit, \txidinit, \emptyset)}\) for
+all \(\key \in \Keys\). 
+\end{definition}
+
+
+
+\begin{definition}[Well-formed kv-store]
+\label{def:well-formed-kv-store}
+A kv-store \( \kvs \) is well-formed, written \( \WfKvs(\kvs)\),
+if and only if, for any \( \key \in \Keys\) and \( \idx,\idx' \in \Indexs \),
+\begin{Formulae}
+    & \begin{Formula}
+        \RsOf(\kvs(\key,\idx)) \cap \RsOf(\kvs(\key,\idx')) \neq \emptyset
+        \\ {} \lor \WtOf({\kvs(\key,\idx)}) = \WtOf({\kvs(\key,\idx')}) 
+        \implies \idx = \idx'
+        \label{equ:kvs-wf-txid-snapshot-property} 
+    \end{Formula}  
+    \\ & \begin{Formula}
+        \ValOf(\kvs(\key,0)) = \valinit
+        \label{equ:kvs-wf-init-version}
+    \end{Formula} 
+    \\ & \begin{Formula}
+        \Forall{\txid,\txid' \in \TxIDs}
+        \txid = \WtOf(\kvs(\key,\idx))
+        \land \txid' \in \RsOf(\kvs(\key,\idx))
+        \implies (\txid', \txid) \notin \Refl(\SO)
+        \label{equ:kvs-wf-so-wr}
+    \end{Formula} 
+    \\ & \begin{Formula}
+        \Forall{\txid,\txid' \in \TxIDs}
+        \txid = \WtOf(\kvs(\key,\idx))
+        \land \txid' = \WtOf(\kvs(\key,\idx'))
+        \land \idx < \idx'
+        \implies (\txid', \txid) \notin \Refl(\SO)
+        \label{equ:kvs-wf-so-ww}
+    \end{Formula} 
+\end{Formulae}
+where \( \Refl(\rel) \) denotes the reflexive closure of \( \rel \).
+Let \(\KVSs \ni \kvs\) denotes the set of \emph{well-formed kv-stores}.
+\end{definition}
+
+We focus on kv-stores whose consistency model satisfies the \emph{snapshot property}, 
+ensuring that a transaction reads and writes at most one version for each key (\cref{equ:kvs-wf-txid-snapshot-property}).
+Snapshot property is a common assumption for distributed databases.
+We also assume that the version list for each key \(\key\) has the initial version (the left-most version)
+carrying the initialisation value \(\valinit\), written by the initialisation transaction \txidinit (\cref{equ:kvs-wf-init-version}).
+Finally, we assume that the kv-store agrees with the session order of clients: 
+\begin{enumerate*}
+\item a client cannot read a version of a key that 
+has been written by a future transaction within the same session (\cref{equ:kvs-wf-so-wr}); and 
+\item the order in which versions are written by a client must agree with its session order (\cref{equ:kvs-wf-so-ww}).
+\end{enumerate*}
+
+
+A global kv-store provides an abstract centralised description of
+updates associated with distributed kv-stores that is \emph{complete} in 
+that no update has been lost in the description.
+By contrast, in both replicated and partitioned distributed databases, 
+a client may have incomplete information about updates distributed between machines. 
+For example, a COPS client \( \cl \) 
+only tracks versions that \( \cl \) has accessed in its client context.
+We model this \emph{incomplete} information using
+a \emph{view} of the kv-store which provides 
+a \emph{partial} record of the updates observed by a client. 
+
+\begin{definition}[Views]
+\label{def:views}
+Given a well-formed kv-store \(\kvs \in \KVSs\), 
+the set of \emph{views on a kv-store}, \( \Views(\kvs) \ni \vi\), is defined by:
+\[
+    \Views(\kvs) \TypeDef \Set{ \vi \in \Keys \ToTFunc \PowerSet(\Nat) | \WfView(\kvs,\vi) },
+\]
+where \( \WfView(\kvs,\vi) \) is defined by:
+for any \( \key, \key' \in \Keys \) and \( \idx, \idx' \in \Indexs\),
+\begin{Formulae}
+    & \begin{Formula}
+    0 \in \vi(\key),
+    \label{equ:view-wf-initial}
+    \end{Formula} 
+    \\ & \begin{Formula}
+    i \in \vi(\key) \implies 0 \leq i < \Abs{ \kvs(\key) },
+    \label{equ:view-wf-with-in-range}
+    \end{Formula} 
+    \\ & \begin{Formula}
+	i \in \vi(\key)  
+  	\land \WtOf(\kvs(\key, i)) = \WtOf(\kvs(\key', i'))  
+  	\implies i' \in \vi(\key').
+	\label{equ:view-wf-atomic}
+    \end{Formula}
+\end{Formulae}
+Given two views \(\vi, \vi' \in \Views(\kvs)\), 
+the order between them is defined by: \(\vi \vileq \vi' \PredDef \Forall{\key \in \Dom(\kvs)} \vi(k) \subseteq \vi'(\key)\).
+The set of \emph{views} is \(\Views \TypeDef \bigcup_{\kvs \in \KVSs} \Views(\kvs)\).
+The \emph{initial view}, \(\viinit\), is defined by:
+\(\viinit = \lambda \key \in \Keys \ldotp \Set{0}\). 
+\end{definition}
+
+A well-formed view \( \vi \) on a kv-store \( \kvs \)
+must contain the initial version of each key (\cref{equ:view-wf-initial})
+and the indexes  in \( \vi \) must be in range (\cref{equ:view-wf-with-in-range}).
+We require that a client view be \emph{atomic} in that it can
+see either all or none of the updates of a transaction (\cref{equ:view-wf-atomic}).
+
+A view provides an abstraction to client local information.
+In COPS protocol, each client maintains a context that contains all the version it has accessed.
+This information in the context can be captured by our view.
+
+\begin{definition}[Configurations]
+\label{def:configurations}
+A \emph{configuration}, \(\conf \in \Confs\),  is a pair \((\kvs, \vienv)\)
+with a kv-store \(\kvs \in \KVSs\),
+and a \emph{view environment} on the kv-store \( \kvs \),
+defined by: \(\vienv \in \ViewEnvs(\kvs) \TypeDef \Clients \ToPFFunc \Views(\kvs)\). 
+Let \( \ViewEnvs \TypeDef \bigcup_{\kvs \in \KVSs} \ViewEnvs(\kvs)\).
+The set of \emph{initial configurations}, \(\ConfInits \subseteq \Confs\),
+contains configurations of the form \( (\kvsinit, \vienvinit)\),
+where \( \kvsinit \) is the initial kv-store 
+and \( \vienvinit \) is an initial view environment 
+defined by: for any client \( \cl \in \Dom(\vienv)\), \( \vienv(\cl) = \viinit \).
+\end{definition}
+
+An \emph{configuration} is a pair comprising a kv-store and a function describing the
+views of a finite set of clients. 
+Given a configuration \((\kvs, \vienv)\) and a client \(\cl\), 
+if \(\vi = \vienv(\cl)\) is defined then, for each \(\key\), 
+the configuration determines the sublist of versions in \(\kvs\) that \(\cl\) observes.
+If \(\idx, \idx' \in \vi(\key)\) and \(\idx < \idx'\), then \(\cl\) observes the values 
+carried by versions \(\kvs(\key, \idx)\) and  \(\kvs(\key, \idx')\), 
+and it also sees that the version \(\kvs(\key, \idx')\) is more up-to-date than \(\kvs(\key, \idx)\). 
+It is therefore possible to associate a \emph{snapshot} with the view \(\vi\), 
+which identifies, for each key \(\key\), the last version included in the view. 
+This definition assumes that the database satisfies the \emph{last-write-wins}
+resolution policy, employed by many distributed key-value stores.
+However, our formalism can be adapted to capture other resolution policies. 
+
+\begin{definition}[View snapshots]
+\label{def:view-snapshot}
+Given \(\kvs \in \KVSs\) and \(\vi \in \Views(\kvs)\),
+the \emph{snapshot} of \(\vi\) on \(\kvs\) is a function, 
+\(\Snapshot(\kvs, \vi) : \Keys \to \Values\),
+defined by:
+\[
+    \Snapshot(\kvs, \vi) \FuncDef \lambda \key \ldotp \ValOf(\kvs(\key, \Max[<](\vi(\key)))),
+\]
+where \(\Max[<](\vi(\key))\) is the maximum element in \(\vi(\key)\) with respect to the natural 
+order \(<\) over \Nat.
+\end{definition}
+
+In the COPS protocol, a multi-read transaction constructs a snapshot step by step.
+In our semantics, the construction steps are captured by \( \Snapshot \).

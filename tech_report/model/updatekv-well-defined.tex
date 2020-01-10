@@ -1,0 +1,142 @@
+\begin{toappendix} 
+\label{sec:proof-well-formed-updatekv}
+\end{toappendix} 
+\begin{theoremrep}[Well-defined \UpdateKV]
+\label{thm:well-deifned-updatekv}
+Given a well-formed kv-store \( \kvs \in \KVSs \), a view on the kv-store \( \vi \in \Views(\kvs) \),
+a well-formed fingerprint \( \fp \in \Fingerprints \) and 
+a fresh transaction identifier \( \txid \in \NextTxid(\kvs,\cl) \) for a client \( \cl \),
+the new kv-store \( \kvs' = \UpdateKV(\kvs,\vi,\fp,\txid)\) 
+is a uniquely defined and well-formed kv-store.
+\end{theoremrep}
+\begin{proof}
+It is easy to see that  \(\UpdateKV(\kvs,\vi,\fp,\txid) \) is always defined 
+as \( \fp \) contains finite number of operations.
+To prove the uniqueness of \( \kvs' \), it suffice to prove that the order 
+in which the effect of operations is propagated to \( \kvs \) is irrelevant,
+that is, two operations can swap.
+Suppose \( \fp = (\fp' \uplus \Set{\op}) \uplus \Set{\op'} \) 
+for a fingerprint \( \fp' \) and two operations \( \op, \op' \).
+We prove  the following result
+\begin{Formulae}
+\begin{Formula}
+    \UpdateKV(\kvs,\vi,(\fp' \uplus \Set{\op}) \uplus \Set{\op'},\txid) 
+    = \UpdateKV(\kvs,\vi,(\fp' \uplus \Set{\op'}) \uplus \Set{\op},\txid)   
+\end{Formula}
+\label{equ:updatekv-unique}
+\end{Formulae}
+\begin{enumerate}
+\Case{\( \op = \opR(\key,\val)\) and \( \op' = \opR(\key',\val')\) }
+    \label{item:updatekv-unique-opr-opr}
+    Because \( \fp \) contains at most one read per key, then \( \key \neq \key' \).
+    Let indexes \( \idx = \Max[<](\vi(\key)) \) and 
+    \(\idx' = \Max[<](\vi(\key')) \), 
+    versions \( (\val,\txid',\txidset) = \kvs(\key,\idx) \) and
+    \( (\val',\txid'',\txidset') = \kvs(\key',\idx') \).
+    Let the new version lists 
+    \( \verlist = \kvs(\key)\UpdateFunc{\idx -> (\val, \txid', \txidset \cup \Set{\txid})} \) and
+    \( \verlist' = \kvs(\key')\UpdateFunc{\idx -> (\val', \txid'', \txidset' \cup \Set{\txid})} \).
+    Because \( \key \neq \key' \) and \( \txid \notin \kvs \), it is easy to see 
+    \(\kvs\UpdateFunc{ \key -> \verlist | \key' -> \verlist' } 
+    = \kvs\UpdateFunc{ \key' -> \verlist' | \key -> \verlist }\),
+    which implies \cref{equ:updatekv-unique}.
+\Case{\( \op = \opW(\key,\val)\) and \( \op' = \opW(\key',\val')\) }
+    Because \( \fp \) contains at most one write per key, then \( \key \neq \key' \).
+    The proof for \cref{equ:updatekv-unique}
+    is similar to \cref{item:updatekv-unique-opr-opr}.
+\Case{\( \op = \opR(\key,\val)\) and \( \op' = \opW(\key',\val')\) } \label{item:opr-and-opw}
+    Noting \( \key\) and \( \key' \) may be the same key.
+    If \( \key \neq \key' \), 
+        the proof for \cref{equ:updatekv-unique} is similar to \cref{item:updatekv-unique-opr-opr}.
+    Consider \( \key = \key' \).
+        Let index \( \idx = \Max[<](\vi(\key)) \), version list \( \verlist = \kvs(\key)\)
+        and version \( (\val,\txid',\txidset) = \verlist(\idx) \).
+        Since \( \vi \in \Views(\kvs) \), the index \( idx \) must be in bound, that is, \(  0 \leq \idx < \Abs{\kvs(\key)} \),
+        therefore \( \begin{Bracketed}
+            \verlist\UpdateFunc{\idx -> (\val,\txid',\txidset \cup \Set{\txid}) } 
+            \end{Bracketed} \ListConcat \List{(\val',\txid,\emptyset)}
+            = \begin{Bracketed}
+            \verlist  \ListConcat \List{(\val',\txid,\emptyset)}
+            \end{Bracketed} \UpdateFunc{\idx -> (\val,\txid',\txidset \cup \Set{\txid}) } \),
+        which implies \cref{equ:updatekv-unique}.
+\Case{\( \op = \opW(\key,\val)\) and \( \op' = \opR(\key',\val')\) }
+    It is similar to \cref{item:opr-and-opw}.
+\end{enumerate}
+We now prove the kv-store \( \kvs' = \UpdateKV(\kvs,\vi,\fp,\txid) \) is well-formed
+by showing the following result,
+\begin{Formulae}
+\begin{Formula}
+    \WfKvs(\kvs) \land
+    \Forall{ \txid' \in \kvs } (\txid, \txid') \notin \SO \land {} 
+    \Forall{ \key \in \Keys | \val \in \Values | \cl \in \Clients }
+        \\ \begin{Bracketed}
+        \opR(\key,\val) \in \fp 
+        \implies \Forall{\idx'} \txid \notin \RsOf(\kvs(\key,\idx'))
+        \end{Bracketed}
+        \\ {} \land \begin{Bracketed}
+        \opW(\key,\val) \in \fp 
+        \implies \Forall{\idx'} \txid \neq \WtOf(\kvs(\key,\idx'))
+        \end{Bracketed}
+        \\ {} \land \Forall{\idx \in \vi(\key)} \txid \neq \WtOf(\kvs(\key,\idx))
+        \implies \WfKvs(\kvs')
+\end{Formula}
+\label{equ:update-inv}
+\end{Formulae}
+Note that for any fresh transaction identifier \( \txid \) picked by \( \txid \in \NextTxid(\kvs,\cl) \),
+it implies the hypothesis of \cref{equ:update-inv}.
+We prove \cref{equ:update-inv} by induction on the size of \( \fp \).
+\begin{enumerate}
+\CaseBase{\Abs{\fp} = 0}
+    In this case, we know \( \kvs' = \UpdateKV(\kvs,\vi,\emptyset,\txid) = \kvs \), 
+    therefore \( \WfKvs(\kvs') \).
+\CaseInd{\(\Abs{\fp} > 0\)}
+    The next operation may be a read or a write operation.
+    \begin{enumerate}
+    \Case{\(\fp = \fp' \uplus \opR(\key,\val)\)}
+        Let index \( \idx = \Max[<](\vi(\key)) \), 
+        old version \( (\val,\txid',\txidset) = \kvs(\key,\idx) \),
+        and new version list \( \verlist = \kvs(\key)\UpdateFunc{i -> (\val, \txid', \txidset \uplus \Set{\txid})} \).
+        The intermediate kv-store \( \kvs^* \) is defined by \( \kvs^* = \kvs\UpdateFunc{\key -> \verlist} \).
+        Since the original kv-store \( \kvs \) satisfies \cref{equ:update-inv},
+        the fresh transaction identifier \( \txid \not\in \RsOf(\kvs(\key,\idx'))\) 
+        for all \( \idx' \) such that \( 0 \leq \idx' < \Abs{\kvs(\key)} \),
+        and therefore  \(\kvs^*\) satisfies  the well-formed condition 
+        \cref{{equ:kvs-wf-txid-snapshot-property}} in \cref{def:well-formed-kv-store}; 
+        because \( (\txid, \txid') \not\in \SO \) for any \( \txid' \in \kvs \), 
+        (It is only possible \( (\txid', \txid) \in \SO \) 
+        for some \( \txid' = \kvs(\key,\idx')\) where \( \idx' \in \vi(\key) \)), 
+        and \( \txid \neq \WtOf(\kvs(\key'',\idx'')) \) for \( \key'',\idx'' \) such that \( \idx'' \in \vi(\key'')\),
+        therefore \( \kvs^* \) satisfies \cref{equ:kvs-wf-so-wr}.
+        \Cref{equ:kvs-wf-init-version,equ:kvs-wf-so-ww} are trivially true for \( \kvs^* \).
+        We proved the intermediate kv-store \( \kvs^*\) is well-formed, \( \WfKvs(\kvs^*)\).
+        As \( \fp \) is well-formed, it follows that \( \opR(\key,\val') \not\in \fp' \),
+        which means that \( \kvs^*, \fp',\vi,\txid \) satisfy the invariant \cref{equ:update-inv}.
+        By \ih the final kv-store \( \kvs' = \UpdateKV(\kvs^*,\vi,\fp',\txid)\)  is a well-formed kv-store.
+    \Case{\(\fp = \fp' \uplus \opW(\key,\val)\)}
+        Let new version list \( \verlist = \kvs(\key)\ListConcat \List{ (\val, \txid, \emptyset)} \).
+        The intermediate kv-store \( \kvs^* \) is defined by \( \kvs^* = \kvs\UpdateFunc{\key -> \verlist} \).
+        Since the original kv-store \( \kvs \) satisfies \cref{equ:update-inv},
+        the fresh identifier \( \txid \neq \WtOf(\kvs(\key,\idx'))\)
+        for all \( \idx' \) such that \( 0 \leq \idx' < \Abs{\kvs(\key)} \),
+        therefore \( \kvs^*\) satisfies \cref{{equ:kvs-wf-txid-snapshot-property}}; 
+        because \( (\txid, \txid') \not\in \SO \) for any \( \txid' \in \kvs \) 
+        (It is only possible \( (\txid', \txid) \in \SO \) for some \( \txid' \) in \(\kvs(\key) \)), 
+        and \( \txid \) wrote the last version for \( \key \) in \( \kvs^*\),
+        therefore \( \kvs^* \) satisfies \cref{equ:kvs-wf-so-ww}
+        \Cref{equ:kvs-wf-init-version,equ:kvs-wf-so-wr} are trivially true for \( \kvs^* \).
+        We proved the intermediate kv-store is well-fumed, \( \WfKvs(\kvs^*) \).
+        As \( \fp \) is well-formed, it follows \( \opW(\key,\val') \not\in \fp' \),
+        which means that \( \kvs^*, \fp',\vi,\txid \) satisfy the invariant \cref{equ:update-inv}.
+        By \ih the final kv-store \( \kvs' = \UpdateKV(\kvs^*,\vi,\fp',\txid)\) is a well-formed kv-store. \qedhere
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+\begin{proofsketch}
+Intuitively, the fingerprint \( \fp \) contains at most one read and one write per key,
+therefore the resulting kv-store must be unique defined.
+The fresh transaction identifier \( \txid \) is strictly greater than any existing
+identifiers in \( \kvs \) for the same client \( \cl \),
+and the view is a well-formed view on the kv-store \( \kvs \),
+therefore the resulting kv-store must be well-formed.
+The full detail is given in \cref{sec:proof-well-formed-updatekv} on page \pageref{sec:proof-well-formed-updatekv}.
+\end{proofsketch}
