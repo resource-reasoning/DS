@@ -1,0 +1,146 @@
+A dependency graph \(\dgraph\) is a directed labelled graph,
+where the nodes denote transactions, 
+and the edges denote \emph{dependencies} between transactions,
+including session order \( \SO \), \emph{write-read} dependency \( \WR \),
+\emph{write-write} dependency \( \WW \) and \emph{read-write} anti-dependency \(\RW \).
+
+\begin{definition}[Dependency graph]
+\label{def:dgraph}
+Given the session order defined in \cref{def:session-order},
+the set of \emph{dependency graphs}, \( \DependencyGraphs \ni \dgraph \), is defined by:
+\[
+    \DependencyGraphs \TypeDef \Set{(\txidop, \SO, \WR, \WW, \RW) | \WfDGraph(\txidop, \WR, \WW, \RW)  }.
+\]
+where the well-formed condition for a dependency graph, \( \WfDGraph \), is defined by:
+\begin{align*}
+\WfDGraph(\txidop, \WR, \WW, \RW) & \PredDef \begin{multlined}[t]
+        \txidop \in \begin{Bracketed} \begin{Bracketed} \TxIDZs \ToPFFunc \Fingerprints 
+            \end{Bracketed} \uplus \Mapping{\txidinit -> \Set{\opW(\key,\valinit) 
+                        | \key \in \Keys }} \end{Bracketed} \land {}
+        \\ {} \Forall{\key \in \Keys} \left( \begin{array}{@{}l@{}}
+            \Pred{wfwr}(\WR,\txidop,\key) 
+            \land \Pred{wfww}(\WW,\txidop,\key)
+            \\ \qquad {} \land \Pred{wfrw}(\WR,\WW,\RW,\key)
+         \end{array} \right)
+        \end{multlined}
+\end{align*}
+and the well-formed conditions, \( \Pred{wfwr} \), \( \Pred{wfww} \) and \( \Pred{wfrw} \),
+for the three dependency relations are defined by:
+\begin{Formulae}
+\Pred{wfwr}(\WR,\txidop,\key) \PredDef 
+& \begin{Formula}
+\Forall{\txid, \txid', \txid''} 
+(\txid,\txid') \in \WR
+\implies \opW(\key,\stub) \in \txidop(\txid) \land
+\opR(\key,\stub) \in \txidop(\txid')
+\label{equ:dgraph-wr-minimum}
+\end{Formula}
+\\ & \begin{Formula}
+\opR(\key,\stub) \in \txidop(\txid') 
+\land \Exists{\txid^*} \opW(\key,\stub) \in \txidop(\txid^*) 
+\implies (\txid^*,\txid') \in \WR
+\label{equ:dgraph-wr-def}
+\end{Formula}
+\\ & \begin{Formula}
+(\txid,\txid') \in \WR \implies (\txid',\txid) \notin \Refl(\SO)
+\label{equ:dgraph-wr-so}
+\end{Formula}
+\\ & \begin{Formula}
+(\txid',\txid) \in \WR \land (\txid'',\txid) \in \WR(\txidop,\key)  \implies \txid' = \txid''
+\label{equ:dgraph-wr-unique}
+\end{Formula}
+\\ \Pred{wfww}(\WR,\txidop,\key) \PredDef & \begin{Formula}
+\Forall{\txid,\txid'}
+\opW(\key,\stub) \in \txidop(\txid) 
+\land \opW(\key,\stub) \in \txidop(\txid')  \nonumber
+\end{Formula}
+\\ & \begin{Formula}
+\quad {} \implies \txid = \txid' \lor (\txid,\txid') \in \WW \lor (\txid',\txid) \in \WW
+\end{Formula}
+\label{equ:dgraph-ww-def}
+\\ & \begin{Formula}
+(\txid,\txid') \in \WW
+\implies \opW(\key,\stub) \in \txidop(\txid) \land
+\opW(\key,\stub) \in \txidop(\txid') 
+\label{equ:dgraph-ww-minimum}
+\end{Formula}
+\\ & \begin{Formula}
+(\txid,\txid') \in \WW \implies \txid' \neq \txid
+\label{equ:dgraph-ww-irreflexive}
+\end{Formula}
+\\ & \begin{Formula}
+\WW = \Trasi(\WW)
+\label{equ:dgraph-ww-transitive}
+\end{Formula}
+\\ & \begin{Formula}
+(\txid,\txid') \in \WW \implies \txid' \neq \txidinit
+\label{equ:dgraph-ww-init}
+\end{Formula}
+\\ & \begin{Formula}
+(\txid,\txid') \in \WW \implies (\txid',\txid) \notin \SO
+\label{equ:dgraph-ww-so}
+\end{Formula}
+\\ \Pred{wfrw}(\WR,\WW,\RW,\key) \PredDef 
+& \begin{Formula}
+{
+\RW = \left\{ \begin{array}{@{} c | c @{}}
+    (\txid, \txid')
+    & 
+    \begin{array}{@{}l@{}}
+        \Exists{\txid''} (\txid'', \txid) \in \WR
+        \\ \quad {} \land (\txid'', \txid') \in \WW
+        \land \txid \neq \txid' 
+    \end{array}
+    \end{array} \right\} .
+}
+\label{equ:dgraph-rw}
+\end{Formula}
+\end{Formulae}
+Given a \emph{dependency graph} \( \dgraph \),
+let \( \txidop[\dgraph], \WR[\dgraph], \WW[\dgraph]\) and \( \RW[\dgraph]\) return the first, the third to fifth projection respectively,
+and \( \WR[\dgraph](\key), \WW[\dgraph](\key)\) and \( \RW[\dgraph](\key)\) be the relations on the key \( \key \).
+Let notations \( \txid \in \dgraph \) and \( \op \in \dgraph(\txid) \) denote
+\( \txid \in \Dom(\txidop) \) and \( \op \in \txidop(\txid) \) respectively.
+\end{definition}
+
+\Cref{fig:dependency-graph} gives an example dependency graph.
+Each node in a dependency graph is a fingerprint labelled with the unique transaction identifier.
+The special initialisation transaction \( \txidinit \) initialises all keys,
+with a set of \emph{infinite} write operations.
+Except the initialisation transaction, other transactions must be finite.
+Edges are labelled with dependency relations \(\SO, \WR, \WW \) and \(\RW\).
+Session order \( \SO \) is defined in \cref{def:session-order}.
+The write-read dependency, \( (\txid, \txid') \in \WR(\key) \), means that 
+a transaction \( \txid' \) read from a value of \( \key \) 
+written by another transaction \( \txid' \) (\cref{equ:dgraph-wr-minimum}).
+Note that any read operation must read from a transaction (\cref{equ:dgraph-wr-def,equ:dgraph-wr-unique}).
+The write-read dependency must agree with session order (\cref{equ:dgraph-wr-so}).
+Given a key \( \key \), the write-write dependency on \( \key \) is a total order,
+that is, a connexive (\cref{equ:dgraph-ww-def,equ:dgraph-ww-minimum}), 
+irreflexive (\cref{equ:dgraph-ww-irreflexive}) and transitive (\cref{equ:dgraph-ww-transitive}) relation.
+Intuitively, if \( (\txid, \txid') \in \WW(\key) \), 
+then \( \txid' \) overwrites a value of \( \key \) previously written by \( \txid \).
+This relation \( \WW(\key) \) is a total order,
+The initial transaction \( \txidinit \) writes the initial value of \( \key \),
+hence \( (\txidinit, \txid) \in \WW(\key) \) for any transaction \( \txid \) that writes \( \key \)
+(\cref{equ:dgraph-ww-init}).
+Similarly, write-write dependency must agree on session order (\cref{equ:dgraph-ww-so}).
+Last, read-write anti-dependency \( \RW \) is derived from \( \WR \) and \( \WW \).
+Intuitively, if \( (\txid, \txid')  \in \RW(\key) \), the transaction \( \txid \) read 
+a value \( \val \) on the key \( \key \) written by some transaction \( \txid'' \)
+that is later overwritten by \( \txid' \).
+
+\input{dependency-graph/fig}
+
+In dependency graphs, consistency models are specified using
+axioms that rule out invalid graphs that contain certain cycles.
+For example, snapshot isolation require that graphs only contain cycles with 
+at least \emph{two adjacent read-write anti-dependency edges}, that is,
+relation \( (\SO \cup \WR[\dgraph] \cup \WW[\dgraph]) ; \RWInv[\dgraph] \) is acyclic \cite{adya,SIanalysis}.
+
+In our kv-store semantics, 
+we adopt the same names for the dependency relations between transactions.
+This is to emphasis the similarity between the dependency relations on kv-stores 
+and the dependency relations on dependency graphs.
+In fact, there is a bijection between our global kv-stores and dependency graphs.
+We first show how to extract a dependency graph from a kv-store.

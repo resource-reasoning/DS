@@ -1,0 +1,226 @@
+Recall that in the abstract execution operational semantics,
+a client \( \cl \) loses information of the visible transactions immediately after it commits a transaction.
+Yet such information is embedded in the next transaction from the same client.
+We introduce a notation of \emph{abtract execution invariant} in \cref{def:aexec-invariant-for-clients})
+to track constraints on the visible transactions of clients after each commit.
+
+\begin{definition}[Abstract execution invariants for clients]
+\label{def:aexec-invariant-for-clients}
+An \emph{abstract execution invariant for clients} or just an \emph{invariant} is a 
+function \( \aexecinv \IsTyped \AbstractExecutions \times \Clients \ToTFunc \PowerSet(\TxIDs)\) 
+such that for any clients \(\cl, \cl'\),
+\begin{Formulae}
+& \begin{Formula}
+    \aexecinv(\aexec,\cl) \subseteq \aexec ,
+    \label{equ:aexec-inv-existence}
+\end{Formula}
+\\ & \begin{Formula}
+    \Forall{ \txidset \subseteq \aexec | \fp \in \Fingerprints
+                | \idx \in \Indexs | \txid[\cl'](\idx) \in \TxIDs }
+    \cl \neq \cl' 
+    \\ \implies
+    \aexecinv(\UpdateAExec(\aexec,\txidset, \fp, \txid[\cl'](\idx)),\cl) = \aexecinv(\aexec,\cl) .
+    \label{equ:aexec-inv-local}
+\end{Formula}
+\end{Formulae}
+\end{definition}
+
+A well-formed invariant satisfies that the set of visible transactions associated with a client:
+\begin{enumerate*}
+\item must exist in the abstract execution (\cref{equ:aexec-inv-existence}); and
+\item must be local in the sense that the set does not modify by transactions from different clients (\cref{equ:aexec-inv-local}).
+\end{enumerate*}
+Give the invariant, we define the \emph{soundness constructor}:
+that is, the notion of the soundness of an execution test \( \et \) 
+with respect to a set visibility axioms \( \visaxioms \).
+
+\begin{definition}[Soundness constructor]
+\label{def:et-sound-constructor}
+An execution test \(\et\) is \emph{sound} with respect to a set of visibility axioms \(\visaxioms\),
+if and only if there exists an invariant \(\aexecinv\) such that:
+for any client \( \cl \), views \( \vi, \vi' \), 
+transaction identifier \( \txid \), fingerprint \( \fp \), kv-stores \( \kvs, \kvs' \),
+abstract execution \( \aexec \) and set of transactions \( \txidset \),
+\begin{Formulae}
+\MoveEqLeft \begin{Formula}
+    \ToET{\kvs | \vi | \fp | \kvs' | \vi' }
+    \land \txid \in \NextTxid(\kvs,\cl)
+    \land \kvs' = \UpdateKV(\kvs,\vi,\fp,\txid)
+    \\ {} \land \kvs = \XToK(\aexec)
+    \land \txidset = \VisTrans(\kvs,\vi)
+    \land \aexecinv(\aexec,\cl) \subseteq \txidset
+    \implies 
+    \Exists{\txidsetrd \subseteq \aexec | \aexec' \in \AbstractExecutions }
+    \\ \txidsetrd \subseteq \Set{\txidrd |                                                      
+            \Forall{l,\key, \val} (l,\key,\val) \in \aexec(\txidrd) 
+                            \implies l = \opR }
+    \\ {} \land \aexec' = \UpdateAExec(\aexec,\txidset \cup \txidsetrd, \fp, \txid)
+\end{Formula} \nonumber
+\\ & \begin{Formula}
+    {} \land \Forall{\visaxiom \in \visaxioms }
+            \Inv(\visaxiom(\aexec'))(\txid) \subseteq \txidset \cup \txidsetrd
+\label{equ:et-to-visaxioms}
+\end{Formula}
+\\ & \begin{Formula}
+    \land \aexecinv(\aexec',\cl) \subseteq \VisTrans(\XToK(\aexec'),\vi') 
+\label{equ:aexecinv-preserve}
+\end{Formula}
+\end{Formulae}
+where \( \NextTxid, \UpdateKV,\VisTrans,\UpdateAExec, \XToK \) are defined in \cref{def:next-txid,def:update-kvstore,def:vis-transactions-function,def:update-aexec,def:aexec-kvstore} respectively.
+\end{definition} 
+
+The soundness constructor states that:
+given an execution test \( \et \), there exists an invariant such that
+for any tuple in \( \et \) such as \( \ToET{\kvs | \vi | \fp | \kvs' | \vi' } \),
+and any abstract execution \( \aexec \) which can be extracted to \( \kvs \) 
+in the sense that \( \kvs = \XToK(\aexec) \),
+then there exists a set of read-only transactions \( \txidsetrd \),
+together with the visible set of transactions 
+induced by the view, \( \txidset = \VisTrans(\kvs,\vi) \), such that
+the abstract execution \( \aexec \) is updated to \( \aexec' \)
+by the fingerprint \( \fp \) and with the visible set of tarnsactions being \( \txidsetrd \cup \txidset \),
+and:
+\begin{enumerate*}
+\item this update is allowed by the set of visibility axioms (\cref{equ:et-to-visaxioms}); and 
+\item the invariant holds on the new graph \( \aexec' \) (\cref{equ:aexecinv-preserve}).
+\end{enumerate*}
+This soundness constructor can be lifted to the level of traces.
+
+\begin{toappendix}
+\label{sec:proof-et-soundness}
+\end{toappendix}
+\begin{theoremrep}[Soundness of execution tests]
+Given an execution test \( \et \) is sound with respect to a set of visibility axioms \( \visaxioms \), then 
+\[ 
+    \bigcup_{\prog \in \Programs} \EvalET{\prog} \subseteq \Set{ \XToK(\aexec)
+                | \aexec \in \CMA(\visaxioms) } .
+\]
+\end{theoremrep}
+\begin{proof}
+    By \cref{thm:ettrc-et-prog} stating that \( \bigcup_{\prog \in \Programs} = \CMET(\et)\),
+    it suffices to prove the following result:
+    \[
+        \CMET(\et) \subseteq \Set{ \XToK(\aexec) | \aexec \in \CMA(\visaxioms) } .
+    \]
+    Let \( \aexecinv \) be the invariant that gives rise of soundness constructor.
+    We prove a stronger result that: for any \( \et\)-trace \( \ettrc \),
+    there exists an abstract execution \( \aexec \) that satisfies \( \visaxioms \) 
+    and preserves \( \aexecinv \), that is,
+    \begin{Formulae}
+    \begin{Formula}
+        \ettrc = \ToRed{ \kvsinit | \vienvinit | \stub | * -> \kvs | \vienv }
+        \land \kvs = \XToK(\aexec) \land \aexec \in \CMA(\visaxioms) 
+        \\ {} \land \Forall{ \cl \in \Dom(\vienv) }
+        \aexecinv(\aexec,\cl) \subseteq \VisTrans(\kvs,\vienv(\cl))
+        \label{equ:ettrc-to-cma}
+    \end{Formula}
+    \end{Formulae}
+    First, the trace \( \ettrc \) must be a \( \et[\TOP]\)-trace,
+    and by \cref{prop:et-trace-to-well-formed-aexec} for any \( \aexec' \in \TraceToX(\ettrc)\),
+    it satisfies that \( \kvs = \XToK(\aexec') \).
+    We now show that we can always find an abstract execution \( \aexec \in \TraceToX(\ettrc) \)
+    such that \( \AExecSat(\aexec,\visaxioms) \) and \( \aexecinv(\aexec,\cl) \subseteq \txidset_\cl \)
+    for any client \( \cl \) and set of transactions 
+    \( \txidset_\cl = \VisTrans(\kvs,\vienv(\cl)) \cup \txidsetrd \) 
+    and read-only transactions \( \txidsetrd\) in \( \aexec \).
+    We prove it by induction on the length of \( \ettrc \).
+    Note that by \cref{thm:normal-trace}, it is safe to assume that \( \ettrc \) is a normal trace,
+    that is, \( \NormalTrace(\ettrc) \).
+    \begin{enumerate}
+    \CaseBase{\(\ettrc = \ToRed{ \kvsinit | \vienvinit }\)}
+        By definition of \( \TraceToX \), the initial abstract execution \( \aexecinit \)
+        satisfies that \( \kvsinit = \XToK(\aexecinit) \) and \( \aexecinit \in \CMA(\visaxioms) \).
+        For any client \( \cl \), by the definition \( \vienvinit \), we know that 
+        \( \VisTrans(\kvs,\vienv(\cl)) = \Set{\txid | \txid \in \kvsinit} \),
+        and by the well-formed condition of \( \aexecinv \), 
+        therefore \( \aexecinv(\aexec,\cl) \subseteq \VisTrans(\kvs,\vienv(\cl)) \).
+    \CaseInd{\(\ettrc = \ToRed{ \ettrc' | \lbView{\vi} -> \kvs | \vienv | \lbFp{\fp} 
+                -> \kvs'' | \vienv'' }\)}
+        Let configuration \( (\kvs',\vienv') = \LastConf(\ettrc') \).
+        By \ih, there exists \( \aexec' \in \CMA(\visaxioms) \) such that \( \kvs' \in \XToK(\aexec') \)
+        and \( \aexecinv(\aexec,\cl') \subseteq \VisTrans(\kvs',\vienv(\cl')) \cup \txidsetrd \) 
+        for any client \( \cl' \in \Dom(\vienv) \) and some read only transaction set \( \txidsetrd \).
+        Now consider the next two steps, \( \lbView{\vi} \) and \( \lbFp{\fp} \), for respectively.
+        \begin{enumerate}
+        \Case{\( \lbView{\vi} \)}
+            By the definition of view-shift, \( \kvs = \kvs' \) and thus \( \kvs = \XToK(\aexec)\).
+            Again, by the definition of view-shift 
+            \( \vienv = \vienv'\UpdateFunc{\cl -> \vi}\) and \( \vienv(\cl) \vileq \vi \).
+            Since \( \aexecinv(\aexec,\cl) \subseteq \VisTrans(\kvs,\vienv(\cl)) \cup \txidsetrd \)
+            for some read-only transaction set \( \txidsetrd \),
+            then \( \aexecinv(\aexec,\cl) \subseteq \VisTrans(\kvs,\vi) \cup \txidsetrd \).
+            Last, the invariant for client \( \cl' \) other than \( \cl \) is trivially preserved.
+        \Case{\( \lbFp{\fp} \)}
+            Let the new view \( \vi'' = \vienv''(\cl) \) and 
+            a set of transactions \( \txidset = \VisTrans(\kvs, \vi) \).
+            By the definition of \( \lbFp{\fp} \),
+            the new kv-store \( \kvs'' = \UpdateKV(\kvs,\vi,\fp,\txid) \)
+            for some \( \txid \in \NextTxid(\kvs,\cl) \),
+            and this update satisfies \( \et \),
+            that is, \( \ToET{ \kvs | \vi | \fp | \kvs'' | \vi'' }\).
+            Since \( \et \) is sound with respect to \( \visaxioms \),
+            by \cref{def:et-sound-constructor},
+            there must exists a set of read-only transactions \( \txidsetrd \)
+            and a new abstract execution 
+            \( \aexec' = \UpdateAExec(\aexec,\txidset \cup \txidsetrd, \fp, \txid) \)
+            such that \cref{equ:et-to-visaxioms,equ:aexecinv-preserve} hold.
+            Note that \( \ettrc \) is also a \( \et[\TOP]\)-trace and 
+            \( \aexec' in \TraceToX(\ettrc) \);
+            then by \cref{prop:et-trace-to-well-formed-aexec}, we know that 
+            \( \aexec' \) is a well-formed abstract execution and \( \kvs'' = \XToK(\aexec') \).
+
+            Now we prove that \( \aexec' \in \CMA(\visaxioms) \).
+            Fix a visibility axiom \( \visaxiom \in \visaxioms \).
+            Assume two transactions \( \txid',\txid''\) such that 
+            \( (\txid',\txid'') \in \visaxiom(\aexec') \).
+            Note that \( \txid' \neq \txid \) since \( \VIS[\aexec'] \subseteq \AR[\aexec']\).
+            \begin{enumerate*}
+            \Case{\(\txid'' \neq \txid\)}
+                For this case, we know \( \txid',\txid'' \in \aexec \).
+                By \ih that \( \aexec \in \CMA(\visaxioms)\) 
+                and the well-formed condition for  \( \visaxioms \),
+                it follows that \( (\txid',\txid'') \in \VIS[\aexec'] \).
+            \Case{\(\txid'' = \txid\)}
+                By \cref{equ:et-to-visaxioms} and definition of \( \UpdateAExec \),
+                then \( (\txid',\txid'') \in \VIS[\aexec'] \).
+            \end{enumerate*}
+
+            Last, we prove that 
+            \( \aexecinv(\aexec',\cl') \subseteq \VisTrans(\kvs'',\vienv''(\cl')) \)
+            for any client \( \cl' \in \Dom(\vienv'') \).
+            If \( \cl' \neq \cl \), by \ih, the invariant holds.
+            Otherwise, \( \cl' = \cl \) and by \cref{equ:aexecinv-preserve} the invariant holds. \qedhere
+        \end{enumerate}
+    \end{enumerate}
+\end{proof} 
+\begin{proofsketch}
+    By \cref{thm:ettrc-et-prog} stating that \( \bigcup_{\prog \in \Programs} = \CMET(\et)\),
+    it suffices to prove the following result
+    \[
+        \CMET(\et) \subseteq \Set{ \XToK(\aexec) | \aexec \in \CMA(\visaxioms) } .
+    \]
+    Let \( \aexecinv \) be the invariant that gives rise of soundness.
+    We prove a stronger result that, for any \( \et\)-trace \( \ettrc \),
+    there exists an abstract execution \( \aexec \) that satisfies \( \visaxioms \) 
+    and preserves \( \aexecinv \), that is,
+    \begin{Formulae}*
+    \begin{Formula}
+        \ettrc = \ToRed{ \kvsinit | \vienvinit | \stub | * -> \kvs | \vienv }
+        \land \kvs = \XToK(\aexec) \land \aexec \in \CMA(\visaxioms) 
+        \\ {} \land \Forall{ \cl \in \Dom(\vienv) }
+        \aexecinv(\aexec,\cl) \subseteq \VisTrans(\kvs,\vienv(\cl))
+    \end{Formula}
+    \end{Formulae}
+    First, the trace \( \ettrc \) must be a \( \et[\TOP]\)-trace,
+    and by \cref{prop:et-trace-to-well-formed-aexec} for any \( \aexec' \in \TraceToX(\ettrc)\),
+    it satisfies that \( \kvs = \XToK(\aexec') \).
+    We now show that we can always find an abstract execution \( \aexec \in \TraceToX(\ettrc) \)
+    such that \( \AExecSat(\aexec,\visaxioms) \) and \( \aexecinv(\aexec,\cl) \subseteq \txidset_\cl \)
+    for a client \( \cl \), a set of transactions 
+    \( \txidset_\cl = \VisTrans(\kvs,\vienv(\cl)) \cup \txidsetrd \) 
+    and a set of read-only transactions \( \txidsetrd\) in \( \aexec \).
+    We prove it by induction on the length of \( \ettrc \).
+    Note that by \cref{thm:normal-trace}, it is safe to assume that \( \ettrc \) is a normalised trace.
+    The inductive case can be derived by the definition of the soundness constructor.
+    The full proof is given in \cref{sec:proof-et-soundness} on page \pageref{sec:proof-et-soundness}.
+\end{proofsketch}

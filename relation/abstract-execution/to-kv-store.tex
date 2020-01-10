@@ -1,0 +1,318 @@
+We explain the connection between abstract executions and kv-stores,
+bridging by dependency graphs.
+We show the connection between views on the kv-stores
+and visibility relations on the abstract executions.
+We then show how to construct an \( \ET[\top] \)-trace from an abstract execution, and vice versa.
+This means that \( \ET[\top] \)-traces and abstract executions are equally expressive,
+which is a key result for proving the correctness of our definitions of consistency models.
+In this section, we only consider the traces that do not involve \( \prog \) but only committing fingerprint.
+In \cref{sec:et-sound-complete-constructor}, we will go further and discuss the trace installed with \( \prog \).
+
+%Note that abstract executions themselves can be seen as traces 
+%where transactions are committed in the order of \( \AR \).
+
+We show how to convert an abstract execution to a dependency graph.
+The definition of \( \XToD \) is adapted from \citep{framework-concur,SIanalysis}.
+By the definition of \( \DToK \) defined in \cref{def:dependency-graph-kv-store},
+we therefore can convert an abstract execution to a kv-store.
+
+\begin{definition}[Abstract executions to dependency graphs, {\( \XToD \)},  and kv-stores, {\( \XToK \)}]
+\label{def:aexec-dgraph}
+\label{def:aexec-kvstore}
+Given an abstract execution \(\aexec \in \AbstractExecutions \),
+the dependency graph is defined by
+\(\XToD(\aexec) \FuncDef (\txidset[\aexec], \WR[\aexec], \WW[\aexec], \RW[\aexec])\) 
+where the dependency relations on abstract execution are defined by:
+\begin{enumerate}
+\item write-read dependency relation on abstract execution is defined by:
+    \( \WR[\aexec] \FuncDef \bigcup_{\key \in \Keys } \WR[\aexec](\key)\) where 
+    \[
+    \WR[\aexec](\key) \FuncDef \Set{(\txid,\txid') |  
+                    \txid = \MaxVisTrans(\aexec, \VISInv[\aexec](\txid'),\key)
+                    \\ {} \land \Exists{\val \in \Values} 
+                    \opW(\key,\val) \in \aexec(\txid)
+                    \land \opR(\key,\val) \in \aexec(\txid') } ,
+    \]
+\item write-write dependency relation on abstract execution is defined by:
+    \( \WW[\aexec] \FuncDef \bigcup_{\key \in \Keys } \WW[\aexec](\key)\) where 
+    \[
+    \WW[\aexec](\key) \FuncDef \Set{(\txid,\txid') | (\txid,\txid') \in \AR[\aexec] 
+                    \land \Exists{\val, \val' \in \Values} 
+                    \opW(\key,\val) \in \aexec(\txid)
+                    \land \opW(\key,\val') \in \aexec(\txid') } , 
+    \]
+\item read-write anti-dependency relation on abstract execution is defined by:
+    \( \RW[\aexec] \FuncDef \bigcup_{\key \in \Keys } \RW[\aexec](\key)\) where 
+    \[
+    \RW[\aexec](\key) \FuncDef \Set{(\txid,\txid') |  
+                    \Tuple{\MaxVisTrans(\aexec,\VISInv[\aexec](\txid),\key),\txid'} \in \AR[\aexec]
+                    \\ {} \land \Exists{\val, \val' \in \Values} 
+                    \opR(\key,\val) \in \aexec(\txid)
+                    \land \opW(\key,\val') \in \aexec(\txid') } .
+    \]
+\end{enumerate}
+Given \( \DToK \) in \cref{def:dependency-graph-kv-store},
+the kv-store induced by the abstract execution \( \aexec \) is defined by:
+\[ \XToK(\aexec) = \DToK(\XToD(\aexec)). \] 
+\end{definition}
+
+
+\begin{toappendix}
+\label{sec:proof-well-form-xtod}
+\begin{proposition}[Well-defined \( \XToD \)]
+\label{prop:well-defined-xtod}
+Given an abstract execution \( \aexec \in \AbstractExecutions \),
+the dependency graph \( \XToD(\aexec)\) is well-formed.
+\end{proposition}
+\begin{proof}
+Given the definition of \( \XToD \), if the dependency graph \( \dgraph = \XToD(\aexec)\) 
+for some abstract execution \( \aexec \), then \( \WR[\dgraph] = \WR[\aexec] \),
+\( \WW[\dgraph] = \WW[\aexec] \) and  \( \RW[\dgraph] = \RW[\aexec]\)  .
+Consider all the well-formed conditions for relations \( \WR,\WW,\RW \) defined in \cref{def:dgraph}.
+\begin{enumerate}
+\Case{write-read dependency \( \WR \)}
+    By the definition of \( \WR[\aexec] \), it is trivial for \cref{equ:dgraph-wr-def,equ:dgraph-wr-minimum}.
+    Because visibility relation cannot violate session order by \cref{equ:aexec-vis-so},
+    it follows \cref{equ:dgraph-wr-so}.
+    Since \(\MaxVisTrans \) in the definition of \( \WR[\aexec] \) returns a unique transaction, it means that \cref{equ:dgraph-wr-unique} holds.
+\Case{write-write dependency \( \WW \)}
+    By the definition of \( \WW[\aexec] \), it is trivial for \cref{equ:dgraph-ww-def,equ:dgraph-ww-minimum}.
+    Because the initialisation transaction \( \txidinit \)
+    is \( \AR[\aexec]\)-before any other transactions by  \cref{equ:aexec-ar-init}, 
+    this implies \cref{equ:dgraph-ww-init}.
+    Since \(\AR[\aexec] \) is a total order and \( \SO \subseteq \AR[\aexec] \), 
+    by the definition of \( \WW[\aexec]\), the write-write dependency cannot violate the \( \SO \) 
+    and thus \cref{equ:dgraph-ww-so,equ:dgraph-ww-irreflexive} hold.
+    Last write-write dependency must be transitive,
+    because \( \AR[\aexec] \) is transitive and 
+    \( \ToEdge{\txid | \WW[\aexec](\key) -> \txid' | \WW[\aexec](\key) -> \txid'' }\) implies
+    \( \ToEdge{\txid | \AR[\aexec] -> \txid' | \AR[\aexec] -> \txid'' }\) and therefore
+    \( \ToEdge{\txid | \WW[\aexec](\key) -> \txid'' }\);
+    this implies \cref{equ:dgraph-ww-transitive}.
+\Case{read-write anti-dependency \( \RW \)}
+    Consider two transactions \( \txid, \txid'\) such that \( (\txid,\txid') \in \RW[\aexec](\key) \)
+    for some key \( \key \).
+    By definition of \( \RW[\aexec] \), \( \opR(\key,\val) \in \aexec(\txid )\) for some value \( \val \).
+    There exists a transition \( \txid'' \) such that \( \txid'' = \MaxVisTrans(\aexec,\VISInv[\aexec](\txid),\key) \),
+    and therefore \( (\txid'',\txid) \in \WR[\aexec](\key)\).
+    Again by definition of \( \RW[\aexec] \), it is must the case that \( (\txid'',\txid') \in \AR[\aexec] \)
+    and therefore \( (\txid'',\txid') \in \WW[\aexec](\key) \).
+
+    Now consider three transactions \( \txid, \txid', \txid'' \)
+    such that \( (\txid'',\txid) \in \WR[\aexec](\key) \) 
+    and \( (\txid'',\txid') \in \WW[\aexec](\key) \) for some key \( \key \).
+    First, \( (\txid'',\txid) \in \WR[\aexec](\key) \) implies
+    \( \txid'' = \MaxVisTrans(\aexec,\VISInv[\aexec](\txid),\key) \) and \( (\txid'',\txid) \in \AR[\aexec] \);
+    then because \( (\txid'',\txid') \in \WW[\aexec](\key) \), it means \( (\txid'',\txid') \in \AR[\aexec](\key) \)
+    and thus we have \( (\txid,\txid') \in \RW[\aexec] \) by the definition of \( \RW[\aexec]\). \qedhere
+\end{enumerate}
+\end{proof}
+%\begin{proofsketch}
+%Given an abstract execution \( \aexec \), by the definition of \( \dgraph = \XToD(\aexec)\),
+%we have \( \WR[\dgraph] = \WR[\aexec] \), \( \WW[\dgraph] = \WW[\aexec] \) and  \( \RW[\dgraph] = \RW[\aexec]\).
+%Because \( \aexec \) apply last-write-wins policy, 
+%\( \WR[\aexec] \) satisfies \cref{equ:dgraph-wr-minimum,equ:dgraph-wr-def,equ:dgraph-wr-so}.
+%Since \( \WW[\aexec] \subseteq \AR[\aexec]\), 
+%it is easy to prove 
+%\cref{equ:dgraph-ww-def,equ:dgraph-ww-minimum,equ:dgraph-ww-irreflexive,equ:dgraph-ww-transitive,equ:dgraph-ww-init,equ:dgraph-ww-so}.
+%Last, \( \RW[\aexec] \) can be derived from \( \WR[\aexec]\) and \( \WW[\aexec]\).
+%The full proof is given in \cref{sec:proof-well-form-xtod} on \pageref{sec:proof-well-form-xtod}.
+%\end{proofsketch}
+\end{toappendix}
+
+
+Each abstract execution \(\aexec\) determines a \emph{unique and well-formed dependency graph} \(\dgraph = \XToD(\aexec)\),
+because:
+\begin{enumerate*}
+\item \( \AR \) is a total order; and
+\item \( \aexec \) applies last-write-wins in the sense that a transaction always reads from 
+the latest visible transaction given by \( \MaxVisTrans \) defined in \cref{def:aexec}.
+\end{enumerate*}
+%It is easy to see that \( \XToD(\aexec) \) is a well-formed dependency graph and 
+%thus \( \XToK(\aexec) \) is a well-formed kv-store.
+The full proof is given in \cref{sec:proof-well-form-xtod} on \pageref{sec:proof-well-form-xtod}.
+Therefore, \( \XToK(\aexec) \) is a uniquely defined and well-formed kv-store, by \cref{prop:dtok-well-defined}.
+However, abstract executions are \emph{not} bijective to kv-stores
+in that \emph{several} abstract executions may be encoded to the same kv-store.
+Because: \begin{enumerate*} 
+\item kv-stores do not have the total arbitration order of transactions, and
+\item kv-stores only track the actually \( \WR \) dependency, 
+    in contrast to the \emph{potential write-read dependency} captured by visibility relation.
+\end{enumerate*}
+
+Apart from the correspondence between individual kv-stores and abstract executions,
+there is a correspondence between views on kv-stores and visibility relations on abstract executions.
+%It is a key step for comparing traces in kv-stores and abstract executions.
+Recall that snapshots in kv-stores are computed from views,
+while in abstract executions, these snapshots are computed from visibility relations.
+A kv-store \(\kvs\) is \emph{compatible} with an abstract execution \(\aexec\), 
+written \( \kvs \AKcomp \aexec \), if and only if 
+any snapshot made on \(\kvs\) can be obtained by an snapshot made on \(\aexec\), and vice versa. 
+
+\begin{definition}[Compatibility between kv-stores and abstract executions]
+\label{def:compatible}
+Given an abstract execution \( \aexec \), the view induced by a set of visible transactions \( \txidset \) 
+on \( \aexec \), written \( \GetView(\aexec,\txidset) \), is defined by:
+\(
+    \GetView(\aexec,\txidset) \FuncDef \lambda 
+    \key \in \Keys \ldotp \Set{0} \cup \Set{\idx | \WtOf({\XToK(\aexec)(\key,\idx)}) \in \txidset} .
+\)
+A kv-store \(\kvs\) and an abstract execution \(\aexec\) are compatible, written 
+\(\kvs \AKcomp \aexec\), if and only if:
+\begin{enumerate}
+\item for any transaction \( \txid\),
+\begin{align}
+\txid \in \kvs \iff \txid \in \aexec \label{equ:ak-compatible-transactions}
+\end{align}
+\item for any subset of transactions \( \txidset \subseteq \aexec \) such that \( \txidinit \in \txidset \),
+\begin{align}
+\AexecSnapshot(\aexec,\txidset) = \Snapshot(\kvs,\GetView(\aexec,\txidset)) \label{equ:ak-compatible-vis-to-view}
+\end{align}
+\item given the definition of \( \VisTrans \), defined in \cref{def:vis-transactions-function},
+    for any view \( \vi \in \Views(\kvs) \) on kv-store \( \kvs \),
+\begin{align}
+    \Snapshot(\kvs,\vi) = \AexecSnapshot(\aexec,\VisTrans(\kvs,\vi)) . \label{equ:ak-compatible-view-to-vis}
+\end{align}
+\end{enumerate}
+\end{definition}
+
+Given a set of transactions \( \txidset \), the  \( \GetView \) function extracts a view 
+that includes all versions written by any transaction in \( \txidset \).
+A kv-store \( \kvs \) is compatible with an abstract execution \(\aexec \),
+if and only if: 
+\begin{enumerate*}
+\item they contain the same set of transactions (\cref{equ:ak-compatible-transactions}); and 
+\item the snapshot induced by a set of transactions \( \txidset \) on \( \aexec \), 
+is the same as the snapshot induced by the view \( \GetView(\aexec,\txidset) \) on \( \kvs \) (\cref{equ:ak-compatible-vis-to-view})
+and \item vice versa (\cref{equ:ak-compatible-view-to-vis}).
+\end{enumerate*}
+
+\begin{toappendix}
+\label{sec:proof-xtod-compatibility}
+\end{toappendix}
+\begin{theoremrep}[Compatibility of \( \aexec \) and \( \XToK(\aexec)\)]
+\label{thm:xtod-compatibility}
+For any abstract execution \(\aexec\), \(\aexec \AKcomp \XToK(\aexec)\).
+\end{theoremrep}
+\begin{proof}
+Let kv-store \( \kvs = \XToK(\aexec) \).
+\Case{\( \AexecSnapshot(\aexec,\txidset) = \Snapshot(\kvs,\GetView(\aexec,\txidset)) \) 
+            for all \( \txidset \subseteq \aexec \) such that \( \txidinit \in \txidset \)}
+    By the \cref{prop:getview-valid}, the view \( \vi = \GetView(\aexec, \txidset)\) 
+    is a valid view on \( \kvs \), that is, \( \vi \in \Views(\kvs) \).
+    Given that \( \vi \) is a valid view,
+    it is sufficient to prove that for all keys \( \key \),
+    \[
+        \AexecSnapshot(\aexec,\txidset)(\key) = \Snapshot(\kvs,\GetView(\aexec,\txidset))(\key) .
+    \]
+    Let transaction \( \txid = \MaxVisTrans(\aexec,\txidset,\key)\).
+    Therefore operation \( \opW{\key,\val} \in \aexec(\txid)\) for some \(\val \in \Values \).
+    By definition of \(\AexecSnapshot\), it follows that \( \AexecSnapshot(\aexec,\txidset)(\key) \).
+    By definition of \( \MaxVisTrans \), any other transaction \( \txid' \in \txidset \setminus \Set{\txid} \) 
+    that also wrote the key \( \key \) with \( \opW(\key,\stub) \in \aexec(\txid') \),
+    must be \( \AR[\aexec] \)-before \( \txid \), that is \( (\txid',\txid) \in \AR[\aexec] \);
+    this means that \( (\txid',\txid) \in \WW[\dgraph] \) for \( \dgraph = \XToD(\aexec) \).
+    Since transactions \( \txid, \txid' \) both wrote key \( \key \),
+    there must exists two indexes \( \idx, \idx' \) such that \( \txid = \WtOf(\kvs(\key,\idx)) \),
+    \( \txid' = \WtOf(\kvs(\key,\idx'))\).
+    Because \( \kvs = \DToK(\dgraph)\) and \( (\txid',\txid) \in \WW[\dgraph] \),
+    then \( \idx > \idx' \);
+    therefore by definition of \( \Snapshot \), the value matches as \( \Snapshot(\kvs,\vi)(\key) = \val \).
+\Case{\( \Snapshot(\kvs,\vi) = \AexecSnapshot(\aexec,\VisTrans(\kvs,\vi)) \) 
+            for all \( \vi \subseteq \Views(\kvs) \)}
+    %This case is non-trivial as \( \txidset \) contains \emph{read-only} transactions.
+    %By \cref{prop:erase-read-only}, it is safe to erase read only transactions from \( \txidset \),
+    %when calculating the view \( \GetView(\aexec, \txidset) \).
+    Let transaction sets \( \txidset = \VisTrans(\kvs,\vi) \).
+    It is sufficient to prove that for all keys \( \key \),
+    \[
+        \Snapshot(\kvs,\vi)(\key) = \AexecSnapshot(\aexec,\VisTrans(\kvs,\vi))(\key) .
+    \]
+    Let \( \val = \Snapshot(\kvs,\vi)(\key) \)
+    By definition of \( \VisTrans \), for versions included in \( vi \) for key \( \key \),
+    their writer must be included in \( \txidset \), that is
+    \[
+        \Forall{\idx \in \vi(\key)} \WtOf(\kvs(\key,\idx)) \in \txidset .
+    \]
+    Let \( \txid \) be the transaction that wrote the newest version for key \( \key \) in \( \vi \)
+    as \( \txid = \WtOf(\kvs(\key,\Max[<](\vi(\key)))) \) and 
+    \[
+        \Forall{\idx \in \vi(\key)} \ToEdge{ \WtOf(\kvs(\key,\idx)) | \Inv(\WW[\kvs]) -> \txid }.
+    \]
+    By definition of \( \Snapshot \), the snapshot must include \(\txid \)
+    \[
+        \ValOf(\kvs(\key,\Max[<](\vi(\key)))) = \val ,
+    \]
+    which means \( \val = \AexecSnapshot(\aexec,\VisTrans(\kvs,\vi))(\key) \) 
+    by definition of \( \AexecSnapshot \).
+    Note that the initial version is always included in the view \( 0 \in \vi(\key) \), 
+    therefore \( \txidinit \in \txidset \) and the function 
+    \( \AexecSnapshot(\aexec,\VisTrans(\kvs,\vi)) \)
+    must be defined by \cref{prop:well-defined-aexec-snapshot}.
+\end{proof}
+\begin{proofsketch}
+It can be derived from the definition of \( \XToK \).
+Given \( \aexec \), let \( \kvs = \XToK(\aexec)\).
+\Cref{equ:ak-compatible-transactions} trivial holds.
+Note that, given an abstract execution \( \aexec \)
+and a set of transactions \( \txidset \), the view \( \GetView(\aexec, \txidset) \) is well-formed on \( \XToD(\aexec) \)
+(detail is given in \cref{prop:getview-valid} on page \pageref{sec:proof-well-formed-get-view}).
+For \cref{equ:ak-compatible-vis-to-view}, it is sufficient to prove
+\[
+    \AexecSnapshot(\aexec,\txidset)(\key) = \Snapshot(\kvs,\GetView(\aexec,\txidset))(\key) .
+\]
+Note that \( \WW[\kvs] = \WW[\aexec] \subseteq \AR[\aexec] \).
+%and therefore \( (\txid,\txid') \in \WW[\kvs](\key) \implies (\txid,\txid') \in \AR[\aexec](\key) \).
+This means if two transactions \( \txid, \txid' \) both write to key \( \key \),
+and if \( \txid, \txid' \in \txidset \), then the \( \AexecSnapshot(\aexec,\txidset)(\key) \) may include the value written by \( \txid' \) but not \( \txid \).
+Similarly by definition of \( \GetView \) and \( \Snapshot \),
+the snapshot \( \Snapshot(\kvs,\GetView(\aexec,\txidset))(\key) \) may contain the value of version written by \( \txid' \) but not \( \txid \).
+Therefore, we have the prove for \cref{equ:ak-compatible-vis-to-view}.
+Similarly,  \cref{equ:ak-compatible-view-to-vis} can be derived by  \( \WW[\kvs] = \WW[\aexec] \subseteq \AR[\aexec] \).
+The full proof is given in \cref{sec:proof-xtod-compatibility} on page \pageref{sec:proof-xtod-compatibility}.
+\end{proofsketch}
+
+\begin{toappendix}
+\label{sec:proof-well-formed-get-view}
+\begin{proposition}[Well-formed views of \( \GetView \)]
+\label{prop:getview-valid}
+For any abstract execution \(\aexec\), and \(\txidset \subseteq \aexec\), 
+\(\GetView(\aexec, \txidset) \in \Views(\XToK(\aexec))\).
+\end{proposition}
+\begin{proof}
+Let \( \vi = \GetView(\aexec, \txidset)\) and \( \kvs = \XToK(\aexec) \).
+By the definition of \(\GetView\),
+the initial version must be included in the view \(0 \in \vi(\key)\) for any key \( \key \) (\cref{equ:view-wf-initial}).
+For any index \( \idx \) included in the view for key \( \key \) such that \( \idx \in \vi(\key) \), 
+it must be the case that \(0 \leq \idx < \Abs{ \kvs(\key) }\) (\cref{equ:view-wf-with-in-range}).
+Now consider two versions \( \kvs(\key,\idx) \) and \( \kvs(\key',\idx') \) such that
+\( \idx \in \vi(\key)\) and \( \WtOf(\kvs(\key,\idx)) = \WtOf(\kvs(\key',\idx')) \),
+it must the case that \( \WtOf(\kvs(\key,\idx)) \in \txidset \) thus \( \idx' \in \vi(\key')\) (\cref{equ:view-wf-atomic}).
+\end{proof}
+\end{toappendix}
+
+%\begin{proposition}[erasing read-only transactions]
+%\label{prop:erase-read-only}
+%Let \(\vi \in \Views(\mkvs_{\aexec})\), and let \(\txidset \subseteq \txidset_{\aexec}\) be a 
+%set of read-only transactions in \(\aexec\). Then 
+%\(\getView[\aexec, \txidset \cup \Tx[\mkvs_{\aexec}, \vi]] = \vi\). 
+%\end{proposition}
+
+%\begin{proof}
+%Fix a key \(\key\). Suppose that \(i \in \getView[\aexec, \txidset \cup \Tx[\mkvs_{\aexec}, \vi]](\key)\). 
+%By definition, \(\mkvs_{\aexec}(\key, j) = (\stub, \txid, \stub)\) for some \(\txid \in \txidset \cup \Tx[\mkvs_{\aexec}, \vi]\). 
+%Because \(\txidset\) only contains read-only transactions, by definition of \(\mkvs_{\aexec}\) there exists 
+%no index \(j\) such that \(\mkvs_{\aexec}(\key, j) = (\stub, \txid', \stub)\) for some \(\txid' \in \txidset\), 
+%hence it must be the case that \(\txid \in \Tx[\mkvs_{\aexec}, \vi]\). By definition of \(\Tx\), 
+%this is possible only if there exist a key \(\key'\) and an index \(j\) such that \(\mkvs_{\aexec}(\key', \vi) = (\stub, \txid, \stub)\). 
+%Because \(\vi\) is atomic by definition, and because \(\mkvs_{\aexec}(\key, i) = (\stub, \txid, \stub)\), then we have that \(i \in \vi(\key)\). 
+
+%Now suppose that \(i \in \vi(\key)\), and let \(\mkvs_{\aexec}(\key, i) = (\stub, \txid, \stub)\) for some \(\txid\). 
+%This implies that \((\otW, \key, \stub) \in_{\aexec} \txid\).
+%By definition \(\txid \in \Tx[\mkvs_{\aexec}, \vi]\), hence \(\txid \in \txidset \cup \Tx[\mkvs_{\aexec}, \vi)]\). 
+%Because \(\txid \in \txidset \cup \Tx[\mkvs_{\aexec}, \vi]\), then for any key \(\key'\) such that 
+%\((\otW, \key', \stub) \in_{\aexec} \txid\), there exists an index \(j \in \getView[\aexec, \txidset \cup \Tx[\mkvs_{\aexec}, \vi]]\) 
+%\(\mkvs(\key', j) = (\stub, \txid, \stub)\); because kv-stores only allow a transaction to write at most one version 
+%per key, then the index \(j\) is uniquely determined. In particular, we know that \((\otW, \key, \stub) \in_{\aexec} \txid\), 
+%and \(\mkvs_{\aexec}(\key, i) = (\stub, \txid, \stub)\), from which it follows that \(i \in \getView[\aexec, \txidset \cup \Tx[\mkvs_{\aexec}, \vi]](\key)\).
+%\end{proof}

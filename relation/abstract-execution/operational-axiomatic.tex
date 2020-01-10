@@ -1,0 +1,180 @@
+This operational semantics on abstract executions are equally expressive as the axiomatic definitions
+in that, given a set of axioms \( \visaxioms\), both formalisms yields the same set of abstract executions.
+We first define the notion of reachable abstract executions of a program \( \prog \),
+written \( \EvalAExec{\prog} \).
+
+\begin{definition}[Abstract executions induced by programs]
+Given a program \( \prog \), the set of abstract executions obtained by 
+executing the program under a set of axioms \( \visaxioms \) is defined by:
+\[
+\EvalAExec{\prog} \FuncDef \Set{ \aexec | \Exists{n} (\aexec,\stub,\stub) = \Last(\AProgTraces(\visaxioms,\prog,n))  }
+\]
+where \( \AProgTraces \) is defined by:
+\begin{align*}
+\AProgTraces(\visaxioms,\prog,0) & \FuncDef \Set{\ToAexecProg{\aexecinit | \clenv | \prog} 
+                | \Dom(\prog) \subseteq \Dom(\clenv) }
+\\ \AProgTraces(\visaxioms,\prog,n+1) & \FuncDef \Set{\ToAexecProg{\aexectrc | \lb 
+                    -> \aexec | \clenv | \prog'}  
+                    |  \aexectrc \in \AProgTraces(\prog,n)
+                    \land \Dom(\prog') \subseteq \Dom(\clenv)} .
+\end{align*}
+\end{definition}
+
+We now introduce \emph{cuts} of an abstract execution \( \aexec \), 
+which are used to construct traces where the final state \( \aexec \).
+This means that an individual abstract execution contains all the history information.
+
+\begin{definition}[Cuts of abstract executions]
+\label{def:aexec-cut}
+The cut of first \( n \) transactions of an abstract execution \( \aexec \), 
+written \( \AexecCut(\aexec,n) \),  is defined by:
+\[
+    \AexecCut(\aexec,n) \FuncDef 
+    \begin{multlined}[t]
+    \CodeFont{let} \ \txidset = \ARClose(\aexec,\idx) \ 
+    \CodeFont{in} \
+    \\ \Tuple{\lambda \txid \in \txidset \ldotp \aexec(\txid)
+                , \VIS[\aexec] \cap \Set{(\txid,\txid') | \txid,\txid' \in \txidset }
+                , \AR[\aexec] \cap \Set{(\txid,\txid') | \txid,\txid' \in \txidset } }
+    \end{multlined}
+\]
+where \( \ARClose(\aexec,\idx) \) is defined by:
+\(
+    \ARClose(\aexec,\idx) \FuncDef \Set{\txid_0, \cdots, \txid_\idx}
+\)
+for transactions \( \txid_0, \cdots, \txid_\idx \) such that
+\( \ToEdge{\txid_0 | \AR[\aexec] -> \cdots | \AR[\aexec] 
+                -> \txid_\idx | \AR[\aexec] -> \cdots | \AR[\aexec] -> \txid_{\Abs{\aexec} - 1} } \).
+\end{definition}
+
+Given an abstract execution \( \aexec \),
+we call \(  \AexecCut(\aexec,\idx) \) as the \Th{(\idx + 1)} cut of \( \aexec \).
+It is easy to see that the \Th{(\idx + 1)} cut is the result of 
+committing next transaction (with respect to \( \AR \)) to the \Th{\idx} cut.
+Note that the zero-cut is the graph that only contains the initialisation transaction.
+The detail is given in \cref{prop:aexec-cut-to-update} on page \pageref{sec:proof-aexec-cut-to-trace}.
+
+\begin{toappendix}
+\label{sec:proof-equal-axiom-semantics}
+\end{toappendix}
+\begin{theoremrep}[Equal expressibility between declarative and operational semantics on abstract executions]
+\label{thm:equivalence-aexec-trace-visaxioms}
+For any \( \visaxioms \subseteq \VisAxioms \),
+the operational semantics capture the same set of abstract executions as 
+direct axiomatic definitions on abstract definitions,
+that is, \( \bigcup_{\prog \in \Programs} \EvalAExec{\prog} = \CMA(\visaxioms)\).
+\end{theoremrep}
+\begin{proof}
+This prove is similar to the one in \cref{thm:ettrc-et-prog}.
+We prove the set closure for both sides respectively.
+\begin{enumerate}
+\Case{\( \bigcup_{\prog \in \Programs} \EvalAExec{\prog} \subseteq \CMA(\visaxioms) \)}
+    By the definition of \( \bigcup_{\prog \in \Programs}\EvalAExec{\prog}\),
+    It suffices to prove that for every trace \( \aexectrc \), 
+    initial state \( (\aexecinit,\clenv_0) \) with program \( \prog \)
+    and final state \( (\aexec,\clenv) \) with program \( \prog' \),
+    \begin{Formulae}
+    \begin{Formula}
+        \Dom(\prog) \subseteq \Dom(\clenv_0)
+        \land \aexectrc = \ToAexecProg{\aexecinit | \clenv_0 | \prog | \lb | * -> \aexec | \clenv | \prog' }
+        \\ \aexec \in \CMA(\visaxioms) .
+        \label{equ:aexec-prog-to-consistency-model}
+    \end{Formula}
+    \end{Formulae}
+    We prove \cref{equ:aexec-prog-to-consistency-model} by induction on the length of \( \aexectrc \).
+    \begin{enumerate*}
+    \CaseBase{\(\aexectrc = \ToAexecProg{\aexecinit | \clenv_0 | \prog }\)}
+        It is trivial that \( \AExecSat(\aexecinit,\visaxioms)\) and thus \( \aexecinit \in \CMA(\visaxioms)\).
+    \CaseInd{\(\aexectrc = \ToAexecProg{ \aexectrc' | \lb -> \aexec | \clenv | \prog' }\)}
+        Let \( \LastConf(\aexectrc) =  (\aexec',\clenv'), \prog'' \).
+        If \( \lb = \lbPri\), then \( \aexec = \aexec' \);
+        therefore by \ih, \cref{equ:aexec-prog-to-consistency-model} holds.
+        Consider \( \lb = \lbTrans{\txidset,\fp}  \).
+        By the \rAAtomicTrans rule, \( \aexec = \UpdateAExec(\aexec',\txidset,\fp,\txid) \)
+        for some \( \txid \in \NextAExecTxid(\aexec,\cl) \).
+        Note that the new abstract execution \( \aexec \) contains all transactions and edges in \( \aexec' \),
+        and thus \( \aexec \aexeceq[\aexec'\Proj{0}] \aexec' \).
+        This means that first by the \ih, \( \AExecSat(\aexec',\visaxioms) \),
+        and by the definition of well-formed visibility axioms that every axiom must be local,
+        we only need to consider the new visibility edges.
+        By the last premise of the \rAAtomicTrans rule,
+        for any \( \visaxiom \in \visaxioms \), it must be the case that \( \Inv(\visaxiom)(\aexec')(\txid) \subseteq \txidset \),
+        and thus \( \aexec \in \CMA(\visaxioms) \).
+    \end{enumerate*}
+\Case{\( \bigcup_{\prog \in \Programs} \EvalAExec{\prog} \supseteq \CMA(\visaxioms) \)}
+    Assume an abstract execution \( \aexec \in \CMA(\visaxioms) \).
+    Let \( (\txidop,\VIS,\AR) =  \aexec \) .
+    We prove a stronger result that 
+    there is an abstract execution trace \( \aexectrc \) corresponding to the cut of abstract execution, 
+    that is, for any number \( \idx \) and cut of abstract execution \( \aexec' \)
+    \begin{Formulae}
+    \begin{Formula}
+        \aexec' = \AexecCut(\aexec,\idx) \implies 
+                \Exists{\aexectrc | \prog \in \Programs | \clenv \in \ClientEnvs } 
+                \\ \LastConf(\aexectrc) = (\aexec', \clenv), \prog 
+                \land \prog = \lambda \cl \in \Dom(\prog) \ldotp \pskip
+    \label{equ:aexec-to-aexec-trace}
+    \end{Formula}
+    \end{Formulae}
+    We prove by induction on the number of transactions.
+    The key here is to construct a program \( \prog \) and this is done in similar way as in \cref{thm:ettrc-et-prog}.
+    \begin{enumerate}
+    \CaseBase{\(\AexecCut(\aexec,0)\)}
+        We know \( \aexecinit = \AexecCut(\aexec,0) \) by the definition of \( \aexecinit \).
+        Let the client set \( C  = \Set{\cl | \Exists{n \in \Indexs} \txid[\cl](n) \in \aexec }\).
+        We pick a program \( \prog = \lambda \cl \in C \ldotp \pskip \)
+        a client environment \( \clenv_0 = \lambda \cl \in C \ldotp \stk  \) for some stack \( \stk \), 
+        and therefore \( \aexectrc = \ToAexecProg{ \aexecinit | \clenv_0 | \prog }\)
+        which implies \cref{equ:aexec-to-aexec-trace}.
+    \CaseBase{\(\AexecCut(\aexec,\idx)\)}
+        Let \( \aexec' = \AexecCut(\aexec,\idx-1) \) and \( \aexec'' = \AexecCut(\aexec,\idx) \).
+        Suppose that there is a trace \( \aexectrc' \) for \( \AexecCut(\aexec,\idx-1) \),
+        such that
+        \[
+        \begin{multlined}[t]
+            \aexectrc' = \ToAexecProg{\aexecinit | \clenv_0 | \prog | \stub | * -> \aexec' | \clenv' | \prog' }
+            \\ {} \land \prog' = \lambda \cl \in \Dom(\prog') \ldotp \pskip .
+        \end{multlined}
+        \]
+        Let the transaction \( \txid = \aexec'' \setminus \aexec' \), 
+        fingerprint \( \fp = \aexec(\txid) \), transaction set \( \txidset = \VISInv(\txid) \).
+        By \cref{prop:aexec-cut-to-update}, it follows that \( \aexec'' = \UpdateAExec(\aexec',\txidset,\fp,\txid) \).
+        Let the transactional command \( \trans = \TransFp(\fp) \) (\TransFp is defined in \cref{thm:ettrc-et-prog})
+        and the new initial program \( \prog'' = \ExtendProgram(\prog,\cl,\ptrans{\trans}) \).
+        It is easy to see there exists a new trace \( \aexectrc \) such that
+        \[
+            \aexectrc = \ToAexecProg{ \aexecinit | \clenv_0 | \prog'' | \stub | * 
+                -> \aexec' | \clenv' | \prog'\UpdateFunc{\cl -> \ptrans{\trans} } | stub -> \aexec'' | \clenv'' | \prog^* } ,
+        \]
+        for some client environment \( \clenv'' \) and finial program \( \prog^* \) 
+        with \( \prog^* = \lambda \cl \in \Dom(\prog^*) \ldotp \pskip \). \qedhere
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+\begin{proofsketch}
+It is easy to see that \( \bigcup_{\prog \in \Programs} \EvalAExec{\prog} \subseteq \CMA(\visaxioms)\)
+since each step in the traces from the program \( \prog \) is constrained by \( \visaxioms \).
+The opposite way,  \( \bigcup_{\prog \in \Programs} \EvalAExec{\prog} \supseteq \CMA(\visaxioms)\),
+can be derived from the following result: for all \( n \),
+\[ \AexecCut(\aexec,n) = \UpdateAExec(\aexec',\VISInv[\aexec](\txid),\txid,\aexec(\txid)) \]
+where \( \txid \notin \AexecCut(\aexec,n) \) and \(  \txid \in \AexecCut(\aexec,n+1) \).
+The full detail is given in \cref{sec:proof-equal-axiom-semantics} 
+on page \pageref{sec:proof-equal-axiom-semantics}.
+\end{proofsketch}
+
+\begin{toappendix}
+\label{sec:proof-aexec-cut-to-trace}
+\begin{proposition}[Abstract execution cut to update]
+\label{prop:aexec-cut-to-update}
+Given an abstract execution \( \aexec \) and the cut \( \aexec' = \AexecCut(\aexec,n) \),
+assume that the transaction \( \txid \) is the next transaction in the arbitration order,
+that is, \( \ToEdge{ \Max[\AR[\aexec]](\aexec') | \AR[\aexec] -> \txid }\),
+assume there exists no transaction \( \txid' \) such that 
+\( \ToEdge{ \Max[\AR[\aexec]](\aexec') | \AR[\aexec] -> \txid' | \AR[\aexec] -> \txid  }\),
+and then
+\[ \AexecCut(\aexec,n+1) = \UpdateAExec(\aexec',\VISInv[\aexec](\txid),\txid,\aexec(\txid)) . \]
+\end{proposition}
+\begin{proof}
+    It is trivial by the definitions of \( \AexecCut\) and \( \UpdateAExec \).
+\end{proof}
+\end{toappendix}
