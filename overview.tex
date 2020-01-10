@@ -2,7 +2,7 @@
 \label{sec:overview}
 
 We introduce our centralised operational semantics for describing the
-client-observable behaviour of atomic transactions updating  distributed
+client-observable behaviours of atomic transactions updating  distributed
 kv-stores.  We show that our
 interleaving semantics provides an ideal mid-point for both verifying
 distributed protocols and proving invariant properties of client
@@ -11,7 +11,7 @@ programs.
 
 \mypar{Example} We use a simple transactional library, \(\CodeFont{Counter}(\key)\), to
  introduce our operational semantics.  Clients of this counter library can manipulate the
-value of key \(\key\) via two transactions:
+value of counter \(\key\) via two transactional operations:
 \( 
 \ctrinc(\key) \defeq 
 \begin{transaction}
@@ -26,35 +26,35 @@ and
 \plookup{\pv{x}}{\key}
 \end{transaction}
 \).
-The command \( \plookup{\pv{x}}{\key} \) reads the value of key \( \key \) to
-local variable \( \vx \), and the command \( \pmutate{\key}{\pv{x}{+}1} \)
-writes the value of \( \pv{x}{+}1 \) to key \( \key \).  The code of each
+The \( \plookup{\pv{x}}{\key} \) reads the value of \( \key \) in
+local variable \( \vx \); and \( \pmutate{\key}{\pv{x}{+}1} \)
+writes \( \pv{x}{+}1 \) to \( \key \).  The code of each
 operation is wrapped in square brackets, denoting a transaction that 
-must be executed \emph{atomically}.  
+executes \emph{atomically}.  
 
 Consider a replicated database where a client only interacts with one replica.
 For such a database, the behaviour of the atomic transactions is subtle, 
 depending heavily on the particular consistency model under consideration.  
-Consider the client program defined by:
+Consider the client program $\prog_{\CodeFont{LU}}$ below:
 \[ 
 \prog_{\CodeFont{LU}} \defeq \left(\cl_1 : \ctrinc(\key) \;|| \; \cl_2: \ctrinc(\key) \right)
 \]
-where we assume that the clients \( \cl_1 \) and \( \cl_2 \) work on different replicas and
-the \(\key\) initially holds value \(0\) in all replicas.
-Intuitively, since transactions are executed atomically, after both
-calls to \(\ctrinc(\key)\) have terminated, the counter should hold the value \(2\).
-Indeed, this is the only outcome allowed under the consistency model
-called {\em serialisability} (\(\SER\)), 
-where transactions appear to execute in a sequential (serial) order, one after another.
+where we assume that clients \( \cl_1 \) and \( \cl_2 \) work on different replicas, and
+that \(\key\) initially holds value \(0\) in all replicas.
+Intuitively, as transactions are executed atomically, after both
+calls to \(\ctrinc(\key)\) have terminated, the counter should hold value \(2\).
+Indeed, this is the only outcome allowed under the 
+{\em serialisability} (\(\SER\)) consistency model, 
+where transactions appear to execute in a sequential order, one after another.
 The implementation of \(\SER\) in distributed kv-stores comes at a
 significant performance cost. Therefore, implementers are content with
-{weaker} consistency models \cite{tango,CORFU,ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi,PSI-RA,si}. 
-For example, if the replicas provide no synchronisation mechanism for transactions,
-then it is possible for both clients to read the same initial value \(0\) for \(\key\) at their
-distinct replicas, update them to \(1\), and eventually propagate the absolute value of \( \key \) to other replicas. 
-Thus, both sites are unchanged with value  \(1\) for \(\key\).
+{\em weaker} consistency models \cite{tango,CORFU,ramp,rola,cops,wren,redblue,PSI,NMSI,gdur,clocksi,distrsi,PSI-RA,si}. 
+For example, if replicas provide no synchronisation mechanism for transactions,
+it is possible for both clients to read the same initial value \(0\) for \(\key\) at their
+distinct replicas, update it to \(1\), and eventually propagate their updates of \( \key \) to other replicas. 
+Thus, both replicas remain unchanged with value  \(1\) for \(\key\).
 This weak behaviour is known as the \emph{lost update} anomaly, which
-is  allowed under  \emph{causal consistency},
+is allowed under \emph{causal consistency},
 but not \emph{parallel snapshot isolation} and \emph{snapshot isolation}.
 
 \input{lu-kvstores.tex}
@@ -76,31 +76,29 @@ but not \emph{parallel snapshot isolation} and \emph{snapshot isolation}.
 %state of a kv-store evolves throughout the execution of a program.
 %}
 
-Our operational semantics comprises centralised abstract states
- and
-execution steps parametrised by an execution test for a particular
+Our operational semantics is defined as transitions over centralised \emph{abstract states}, where each transition 
+step is parametrised by an \emph{execution test} associated with a particular
 consistency model.
 % which determines if a client  is
 %able to commit a transaction.
-An abstract  state is a
-centralised, multi-versioned kv-store, which is {\em global} in the
-sense that it contains all the versions written by clients, with
-client views associated with the  store 
-which are {\em partial} in the sense that clients may see different 
-subsets of the versions in the kv-store. Each update is given by either
-a primitive command which does not affect the kv-store or an atomic
-transaction which does affect the store. These atomic
-transaction steps are subject to an {\em execution test} which
-analyses the state to determine if the update is allowed by 
-the associated consistency model. 
+An abstract state is a centralised, multi-versioned kv-store, which is {\em global}:
+it contains all versions written by all its clients. 
+Moreover, each client is associated with a \emph{partial view} allowing it to observe a subset of 
+the versions in the kv-store. 
+Each transition of our operational semantics is either
+a (local) primitive command that updates the kv-store, 
+or an atomic transaction which does affect the store. 
+These atomic transaction steps are subject to an execution test, which
+analyses the state to determine if the associated update is allowed under  
+the given consistency model. 
 
 
-We demonstrate that we can reproduce the lost update anomaly given by
-\(\prog_{\CodeFont{LU}}\) using our operational semantics.  A
-centralised kv-store provides an abstraction of the real-world
+We next show how we produce the lost update anomaly in
+\(\prog_{\CodeFont{LU}}\) using our operational semantics.  
+A centralised kv-store provides an abstraction of the real-world
 replicated key-value store of our example.  It is a function mapping
-keys to lists of {versions}.  Each list records {\em all} the values
-written to a key together with information about the transactions that
+keys to a {\em version} list, recording {\em all} the values written to the key
+together with information about the transactions that
 accessed it. The total order of versions on a key $k$ is always known
 due to the resolution policy of the distributed database. 
 %One widely
@@ -135,8 +133,9 @@ the end of the list.
 Now suppose that client \(\cl_2\) invokes \(\ctrinc(\key)\)  on
 \cref{fig:counter_kv_first_inc}.  As there are now two versions
 available for \(\key\), we must determine the version from which
-\(\cl_2\) fetches its value, before running \(\ctrinc(\key)\).  This is
-where the partial \emph{client views} come into play.  Intuitively, a view of
+\(\cl_2\) fetches its value.
+%, before running \(\ctrinc(\key)\).  
+This is where the partial \emph{client views} come into play.  Intuitively, a view of
 client \(\cl_2\) comprises those versions in the kv-store that are
 \emph{visible} to \(\cl_2\), \ie those that can be read by
 \(\cl_2\).  If more than one version is visible, then the newest
@@ -158,25 +157,24 @@ new version with value \(1\), as depicted in \cref{fig:counter_kv_final}.
 Such a kv-store does not contain a
 version with value \(2\), despite two increments on \(\key\), producing
 the lost update anomaly. 
-Given the view in \cref{fig:counter_kv_view_all},
-client \(cl_2\) reads the newest
-value \(1\) and writes a new version with value \(2\).
+Had we used the the view in \cref{fig:counter_kv_view_all} instead,
+client \(cl_2\) would have read the newest
+value \(1\) and written a new version with value \(2\).
 
 
 The lost update anomaly is disallowed under consistency models such as
 serialisability (\(\SER\)), snapshot isolation (\(\SI\)) and parallel
-snapshot isolation (\(\PSI\)).  It is allowed under causal consistency
-(\(\CC\)). To remove the behaviour given by the long fork anomaly, we
+snapshot isolation (\(\PSI\)).  It is, however, allowed under causal consistency
+(\(\CC\)). To disallow the lost update anomaly, we
 use an \emph{execution test} which directly restricts the updates that
-are possible at the point of the transaction commits.  One simple test
+are possible at the point where the transaction commits.  One simple test
 is to enforce a client to commit a transaction writing to \(\key\) if
 and only if its view contains {\em all} versions available in the
-global state for \(\key\).  This test directly prevents the situation
+global state for \(\key\), thus preventing the situation
 where the view of $cl_2$ is the one given in \cref{fig:counter_kv_view}. 
-It corresponds to what is known in the
-literature as \emph{write-conflict freedom} \cite{framework-concur}: the condition
-ensures that one concurrent transaction can write to a key at any one
-time.
+This test corresponds to what is known in the 
+literature as \emph{write-conflict freedom} \cite{framework-concur}, 
+ensuring that at most one concurrent transaction can write to a key at any one time. 
 
 
 %\pg{This doesn't work, there are too many concepts not defined. I've
@@ -224,36 +222,64 @@ For instance, consider the following client:
 \]
 For simplicity, we assume that the initial centralised kv-store contains two keys (\cref{fig:overview-sec-long-fork-init}).
 Suppose that \(\cl_1\) executes both transactions first,  
-updating \(\key_1\) and \(\key_2\) to values \(1\) using
- fresh transaction 
-identifiers \( \txid \) and \( \txid' \) respectively. 
+writing $1$ to \(\key_1\) and \(\key_2\) using fresh transaction 
+identifiers \( \txid \) and \( \txid' \), respectively. 
 This results in \(\key_1\) and \(\key_2\) having two versions with
-values \(0\) and \(1\) each, as illustrated in Figure~{1b}. Now 
-client \(\cl_2\) executes its transaction, identified by \( \txid_2 \), using a view that 
+values \(0\) and \(1\) each, as illustrated in \cref{fig:overview-sec-long-fork}. 
+Client \(\cl_2\) next executes its transaction, identified by \( \txid_2 \), using a view that 
 contains both versions of \(\key_1\) but only the initial version of
-\(\key_2\). This means that 
-client \(\cl_2\) reads \(1\) for \(\key_1\) and \(0\) for \(\key_2\): that is, 
-\(\cl_2\) observes the update of \(\key_1\) happening but not the 
-increment of \(\key_2\). 
-Finally, \(\cl_3\) executes its transaction, identified by \( \txid_3
-\),  using a view that contains both versions for \(\key_2\)
+\(\key_2\). This means that \(\cl_2\) reads \(1\) for \(\key_1\) and \(0\) for \(\key_2\);
+\ie \(\cl_2\) observes the increment of \(\key_1\) happening before that of \(\key_2\). 
+Symmetrically, \(\cl_3\) executes its transaction, identified by \( \txid_3
+\), using a view that contains both versions for \(\key_2\)
 but only the initial version of \(\key_1\). 
-This means that 
-client \(\cl_3\) reads \(0\) for \(\key_1\) and \(1\) for \(\key_2\):
-that is, \(\cl_3\) observes the increment of \(\key_2\) happening
-before the  increment of \(\key_1\). 
-This is known as the \emph{long fork} anomaly (\cref{fig:overview-sec-long-fork}). 
+%<<<<<<< HEAD
+%This means that 
+%client \(\cl_3\) reads \(0\) for \(\key_1\) and \(1\) for \(\key_2\):
+%that is, \(\cl_3\) observes the increment of \(\key_2\) happening
+%before the  increment of \(\key_1\). 
+%This is known as the \emph{long fork} anomaly (\cref{fig:overview-sec-long-fork}). 
+%=======
+As such, \(\cl_3\) reads \(0\) for \(\key_1\) and \(1\) for \(\key_2\);
+\ie \(\cl_3\) observes the increment of \(\key_2\) happening before that of  \(\key_1\). 
+This behaviour is known as the \emph{long fork} anomaly (\cref{fig:overview-sec-long-fork}). 
+%>>>>>>> f9a0e1029272866fad28f842d4eff4dc07f91b39
 
 \input{multi-counter-fig}
 
 The long fork anomaly is disallowed under strong models 
 such as serialisability (\(\SER\)) and snapshot isolation (\(\SI\)), 
 but is allowed under weaker models such as parallel snapshot isolation (\(\PSI\)), causal consistency (\(\CC\)) and update atomic (\( \UA \)).
-To capture such consistency models and rule out the long fork anomaly as a possible result 
+To capture such consistency models and disallow the long fork anomaly in
 of \(\prog_{\CodeFont{LF}}\), we must strengthen the execution test associated with the kv-store.
 For \(\SER\), we simply strengthen the execution test by ensuring that a client can execute a transaction 
 only if its view contains all versions available in the global state.
-For \(\SI\), the execution test is more subtle,  recovering  the order in which 
+%<<<<<<< HEAD
+%=======
+%For \(\SI\), the execution test is more subtle, recovering the order in which 
+%updates of versions have been observed by different clients. 
+%\pg{Above: After last sentence, now we need to capture the intuition
+  %of how this is done without going into technical detail. I found
+  %myself drawing history diagrams to explain, then thought that was
+  %too much to explain. It should be two or three sentences. Azalea,
+  %please have a go if you can. If you can't, don't worry, Shale is
+  %very good at this now. Shale: I will Skype with you this evening at
+  %6, and we can sort out then. I am only free from 6-8 at the max
+  %(giving up one social event but not the other).} 
+
+%\pg{Again, too much technical information. I've adapted. Please note
+  %that t'' does not exist, I think you probably mean t2. The long fork anomaly is disallowed under strong models 
+%such as serialisability (\(\SER\)) and snapshot isolation (\(\SI\)), 
+%but is allowed under weaker models such as parallel snapshot isolation (\(\PSI\)), causal consistency (\(\CC\)) and update atomic (\( \UA \)).
+%To capture such consistency models and rule out the long fork anomaly as a possible result 
+%of \(\prog_{\CodeFont{LF}}\), we must strengthen the execution test associated with the kv-store.
+%For \(\SER\), we strengthen the execution test by ensuring that a client can execute a transaction 
+%only if its view contains all versions available in the global state, 
+%captured by the following predicate \( \closed[\kvs,\vi,{\WWInv[\kvs]}]  \),
+%which means the view \( \vi \) before commit the transaction must contains all versions in \( \kvs \).
+%For \(\SI\), the execution test recovers the order in which 
+%>>>>>>> f9a0e1029272866fad28f842d4eff4dc07f91b39
+For \(\SI\), the execution test is more subtle, recovering the order in which 
 updates of versions have been observed by different clients:
 we strengthen the execution test by ensuring that a client view must contain versions 
 that are \emph{close} with respect to their commit order.
@@ -351,7 +377,7 @@ using trace refinement. Thus, a distributed protocol
 satisfies  the particular consistency model associated with the
 particular execution
 test of our representation. 
-We demonstrate ththat the COPS protocol \citep{cops} for implementing
+We demonstrate that the COPS protocol \citep{cops} for implementing
 a replicated database satisfies our definition of causal consistency (%
 \ifTechRepEdits%
 in \cref{sec:verify-impl} and the technical report%
@@ -367,31 +393,42 @@ in the technical report%
 \fi%
 ).  Since our definitions of consistency model are equivalent to those
 in the literature, we have demonstrated that COPS and Clock-SI satisfy
-the accepted general definitions of consistency model. This contrasts
+the accepted general definitions of consistency models. This contrasts
 with 
 previous results which showed that these protocols satisfy specific
 consistency models  defined for those
 particular implementations.
 
 \pg{below: I'm out of time. This paragraph below needs adapting now
-  that we have made 5.2 so much stronger. Azalea, please do.} 
+  that we have made 5.2 so much stronger. Azalea, please do.
+\azalea{I've had a go below.}  
+  } 
 
 \mypar{Proving Invariant Properties of Client Programs} 
 The second application of our operational semantics is to prove
-invariant properties of client programs (\cref{sec:robustness}).
-One property is the robustness for client programs.
-A program \(\prog\) is robust if any kv-stores obtained 
-by executing \(\prog\) under a weak consistency model can also be obtained under serialisability.
+invariant properties of transactional libraries (\cref{sec:robustness}).
+One such property is \emph{robustness}.
+A library is robust if for all its client programs \(\prog\) and all kv-stores $\kvs$, if $\kvs$ is obtained by executing \(\prog\) under a weak model, then $\kvs$ can also be obtained under the stronger model serialisability.
+That is, the library clients have no observable weak behaviours. 
+
 To demonstrate this, we prove the robustness of the single
 counter library discussed above against \(\PSI\), 
 and the robustness of a multi-counter library and the banking library of \citet{bank-example-wsi}
 against \(\SI\).
-The latter is done through general conditions on invariant
-which guarantees robustness against our new proposed model \( \WSI \),
-and hence implies robustness of nay stronger models such as  \( \SI \).
-Apart from robustness,
-we show that a lock paradigm is correct under \( \UA \), 
-although it is not robust.
-Thanks to our operational semantics, 
-our invariant-based approaches only need to work with single program steps 
-rather than whole program traces.
+We do the latter by proving general invariants that guarantee robustness against our new proposed model \( \WSI \) which is weaker than $\SI$; hence our robustness proof against $\WSI$ implies robustness against stronger models such as  \( \SI \).
+As we discuss in \cref{sec:applications}, although existing techniques in the literature can verify such robustness properties, they typically do so by examining \emph{full traces}.
+By contrast, we establish invariant properties at each execution step of our operational semantics, thus allowing a simpler, more compositional proof. 
+
+
+As well as such robustness properties, we further use our operational semantics to prove \emph{library-specific} properties. 
+In particular, we show that a lock library is correct under \( \UA \), in that it satisfies the \emph{mutual exclusion guarantee}, 
+even though it is not robust.
+To do this, we simply encode such library-specific guarantees as invariants of the library, and establish them at each step, as described above. 
+By contras, establishing such library-specific properties using the existing techniques is more difficult. 
+This is because unlike the kv-stores in our operational semantics, existing techniques do not record the library \emph{state}; rather, they record full execution traces, making them less amenable for reasoning about such properties.
+
+
+%
+%Thanks to our operational semantics, 
+%our invariant-based approaches only need to work with single program steps 
+%rather than whole program traces.
