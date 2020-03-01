@@ -1,0 +1,271 @@
+In Clock-SI, each shard only guarantees that individual write and read operations be atomic.
+Several transactions can execute in the shard in a fine-grained way.
+
+As explained in \cref{sec:clock-si-protocol-description},
+a client commits a transaction to an \emph{arbitrary} shard and then awaiting the confirmation.
+Upon receiving the request, 
+the shard acts as the coordinator of the transaction in that 
+it is responsible for fetching value of keys locally or remotely,
+and committing any new values to the appropriate shards using a two-phase commits protocol.
+The coordinator initialises the transaction runtime, by calling \( \pclockstart \).
+The reference implementation for \(  \pclockstart  \) is given in \cref{fig:clock-si-transaction-start}:
+\begin{enumerate}
+\item the coordinator assigns the shard local time as the \emph{snapshot time} for this transaction (\CodeFont{trans}),
+if the coordinator local time is greater than the minimum snapshot time (\CodeFont{clientTime}),
+otherwise, the shard postpones the transaction;
+\item the coordinator initialises the read-write set (\verb|read-write-set|) 
+of the transaction as the empty set;
+and \item transaction state is set to be \( \clocksiactive\).
+\end{enumerate}
+
+Rule\( \rCLOCKStart\) in \cref{fig:clock-si-transaction-start} captures the semantics of \(  \pclockstart  \).
+The runtime transaction, of the form \( \pruntrans{\trans}{\fp,\clockbuffer}{\clocktime,\clockshard} \),
+tracks the runtime information of this transaction, 
+comprising a snapshot time \( \clocktime \), a coordinator \( \clockshard \),
+a fingerprint \( \fp \) and a \emph{preparation buffer} \( \clockbuffer \).
+
+\begin{definition}[Clock-SI runtime commands]
+The set of \emph{preparation buffers}, \( \CLOCKBuffers \ni \clockbuffer \),
+is defined by \( \CLOCKBuffers \TypeDef \List{\Keys \times \Nat \times \CLOCKtimes } \).
+Given the set of commands, \( \cmd \) (\cref{def:command}),
+the set of \emph{Clock-SI runtime commands}, \( \CLOCKCommands \ni \clockruncmd \),
+is defined:
+\[
+\clockruncmd ::= \pruntrans{\trans}{\fp,\clockbuffer}{\clocktime,\clockshard} \ | \ \cmd \ | \ \clockruncmd \pseq \cmd 
+\]
+for some fingerprint \( \fp \), Clock-SI time \( \clocktime \) and shard \( \clockshard \). 
+The set of \emph{Clock-SI runtime programs}, \( \CLOCKProgs \ni \clockrunprog\),
+is defined by: \( \CLOCKProgs \TypeDef \Clients \ToPFFunc \CLOCKCommands\).
+\end{definition}
+
+Each runtime transaction, \( \pruntrans{\trans}{\fp,\clockbuffer}{\clocktime,\clockshard} \), has the following phases:
+\begin{enumerate}
+    \item the coordinator executes the command of the transaction \( \trans \),
+            reading keys locally or remotely and accumulating the effect to the read-write set \( \fp \);
+            %where \( \fp \) tracks the read and write operations and \( \clockbuffer \) remains an empty set;
+    \item when \( \trans \) is reduced to \( \pskip \),
+            the coordinator sends the new values of keys in \( \fp \) to the shards \( R \) that contains these keys,
+            and collects the replies that contains receiving times, storing them in \( \clockbuffer \); and
+    \item Upon receiving all replies, the coordinator picks the maximum time in \( \clockbuffer \)
+            as the actual commit time, and sends the time to \( R \), hence committing the transaction.
+\end{enumerate}
+Note that, in the Clock-SI protocol,
+shards will reject new values of keys if there are conflict writes to these keys.
+Although the rejected transaction might restart, it is not observable by clients.
+Hence, our operational semantics of Clock-SI focuses on the successful transactions.
+
+Transition in the operational semantics of Clock-SI are annotated with labels.
+These labels are useful for manipulating traces in the verification.
+
+\begin{definition}[Clock-SI semantics labels]
+The set of \emph{Clock-SI semantics labels}, \( \CLOCKLabels \ni \lb \),
+is defined by
+\[
+    \CLOCKLabels \supseteq \bigcup_{\substack{
+                \cl \in \Clients, \clockshard \in \CLOCKShards,
+                \\ l \in \Set{\opW, \opR, \opP}, \key \in \Keys,
+                \\ \val \in \Values, \clocktime \in \CLOCKTimes
+                }}
+                \Set{\lbCLOCKStart{\clocktime},\lbCLOCKOp{(l,\key,\val),\clocktime},\\ \lbCLOCKEnd{\clocktime},\lbCLOCKTick{\clocktime}}
+\]
+\end{definition}
+
+We already see the snapshot label, \( \lbCLOCKStart{\clocktime} \), in \( \rCLOCKStart \),
+stating that the client \( \cl \) starts a transaction at time \( \clocktime \) in the coordinator \( \clockshard \).
+We give an intuition for the rest labels here and explain them in detail later.
+A label of the form \( \lbCLOCKOp{(l,\key,\val),\clocktime} \) means an transaction step:
+a transaction with  client \( \cl \) and coordinator \( \clockshard \)
+writes \( l = \opW \), reads \( l = \opR \) or prepares \( l = \opP \)
+key \( \key \) with value \( \val \).
+For write and read label, the time \( \clocktime \) is the snapshot time of the transaction.
+For preparation label, the time \( \clocktime \) is the preparation time.
+Label \( \lbCLOCKEnd{\clocktime}\) corresponds the final commit transition of a transaction.
+Label  \( \lbCLOCKTick{\clocktime} \) corresponds time tick transition 
+in which the shard \( \clockshard \) advances its local time.
+
+We now explain how the coordinator executes the command of a transaction.
+For any mutation command of the form \( \pmutate{\key}{\expr}\), 
+the coordinator calls \( \pclockwrite \) defined in \cref{fig:clock-write-rule}.
+The function erase any preview write entry of the key and
+adds the new value of the key to the read-write set.
+Rule \( \rCLOCKWrite \) in\cref{fig:clock-read-rule} captures the semantics of this function.
+The new write operation is added into \( \fp \) via \( \AddOp \).
+Recall that the fingerprint combination operation \( \AddOp \) is defined in \cref{def:addop}.
+
+\input{clock/fig-start}
+
+\input{clock/fig-write-read}
+
+For any look-up command of the form \( \plookup{\var}{\expr}\),
+the coordinator calls \( \pclockread \) defined in \cref{lst:clock-si-read-value}.
+If the key has been updated or read in the transaction, 
+the coordinator directly reads from the read-write set of the transaction,
+that is, \cref{line:clock-read-from-write,line:clock-read-from-read} respectively in \cref{lst:clock-si-read-value}.
+Rule \( \rCLOCKReadLocal \) in \cref{fig:clock-read-rule} captures the semantics of local read.
+Otherwise, the transaction reads from the shard that contains the key via function call \( \CodeFont{readFromShard}\) defined in \cref{lst:clock-si-read-value}.
+Once receiving the read request,
+the remote shard, first, will wait until the local time is greater than the transaction snapshot time (\cref{line:clock-remote-read-wait}),
+and then wait until all the versions with time-stamps smaller than the snapshot time are committed successfully (\cref{line:clock-remote-read-wait-commit}).
+If both conditions are satisfied,
+the transaction replies with the latest version before the snapshot time (\cref{line:clock-remote-latest-version}).
+The coordinator then will add the version into the read-write set (\cref{line:clock-read-write-remote}).
+Rule \( \rCLOCKReadShard \) rule in \cref{fig:clock-read-rule} captures the semantics or remote read.
+The premise \(\clocktime'' > \clocktime'\) states that the snapshot time precedes the local shard time.
+The premise \( \StateOf(\clockver) = \clocksicommitted  \) states that
+any version \( \clockver \in \clockverlist \) that has time-stamp smaller than the snapshot time \( \clocktime' \) have committed successfully.
+The last premise fetches the version with the maximum time-stamp in \( \clockverlist\),
+that is, \( (\key,\val,\stub) = \Max(\clockverlist) \).
+This version is then added into the fingerprint \( \fp \).
+Note that, both read and write steps do not change the client local time.
+
+\input{clock/fig-commit}
+
+When the transactional command reaches the end, that is, \( \pskip \),
+the coordinator commits all the write operations in the final read-write set 
+to the appropriate shards using a two-phase commit protocol.
+The reference implementation is given in \cref{lst:clock-si-commit}.
+In the first phase, 
+for every write operation, \verb|(w,k,v)|, in the write-read set, \verb|trans.read-write-set|,
+the coordinator asynchronously sends the new value \( \CodeFont{\val} \),
+and the snapshot time \( \CodeFont{snapshotTime} \) of the transaction,
+that is, a message of the form ``\(\CodeFont{prepare} \ (\key,\val,\clocktime)\)''
+to the shard that contains \( \CodeFont{\key} \) (\cref{line:asyn-send-prepare}), 
+and awaiting a reply (\cref{line:asyn-wait-prepare}).
+Upon receiving the preparation request, 
+the remote shard checks if there is concurrent write since the snapshot time \( \CodeFont{snapshotTime} \).
+if there is no conflict write (\cref{line:clock-no-conflict-write}),
+the shard assigns the shard local time as the \emph{prepared time} (\cref{line:clock-assign-prepare-time}),
+adds the new value \( \CodeFont{\val} \) of \( \CodeFont{\key} \) together with the prepared time to the preparation set (\cref{line:clock-log-prepare-time}), 
+and echoes the message but modifies the time to be the prepared time (\cref{line:clock-echo-prepare-time}).
+Note that versions in the preparation set are visible to other.
+If a transaction \( \txid\) wants to read a key, and 
+if there is a prepared version for the key of which the preparation time is smaller 
+than the snapshot time of the transaction,
+the transaction \( \txid\) must wait until this entry has been committed or aborted.
+Also, prepared versions will stop other transactions committing to the same key.
+
+Rule \( \rCLOCKPrepare \) in \cref{fig:clock-commit} captures that
+the shard \( \clockshard \) receives a new value \( \val \) of a key \( \key \).
+The premise \(\clocktime' < \clocktime'' \) requires 
+that the local time of the shard \( \clockshard \) 
+be greater than the snapshot time \( \clocktime' \).
+The second last premise, \( \TimeOf(\clockverlist(\idx)) < \clocktime' \), states no conflict write: that is, 
+existing versions of key \( \key \) must have smaller time-stamp than the snapshot time \( \clocktime' \).
+In our semantics of Clock-SI, we do not explicitly have preparation set,
+but labels versions with their states.
+Hence, we add the version into the store and 
+labelled them with the preparation time \( \clocktime'' \) and state tag \( \clocksiprepared \) 
+(the last premise of \( \rCLOCKPrepare \)).
+Finally, this new version is erased from the fingerprint \( \fp \),
+and added into the buffer, updating the buffer to \( \clockbuffer \uplus \Set{(\key,\Abs{\clockverlist},\clocktime'') } \).
+Note that the label of this transition tracks the preparation time of this version, 
+instead of the snapshot time.
+
+In the second phase of commit,
+the coordinator collects all the replies (\cref{line:clock-collect-reply}),
+assigns the final commit time \( \CodeFont{commitTime} \) of this transaction 
+as the maximum of all the preparation times (\cref{line:clock-final-commit-time}).
+The coordinator, then, send a message of the form \verb|commit (k,v,commitTime)| 
+to the shards that contain versions of this transaction.
+Upon receiving the commit time \(\clocktime'\), 
+the shard insert the versions at \(\clocktime'\) to their local stores (\cref{line:clock-insert-version}).
+For brevity, the entire second phase 
+is captures by one step transition, rule \( \rCLOCKCommit \), in the semantics.
+The actual commit time is given by \( \CLOCKMaxTime \) function in the premise of \( \rCLOCKCommit \).
+
+\begin{definition}[\(\CLOCKMaxTime\) function]
+Given a set of preparation buffer \( \clockbuffer \),
+\( \CLOCKMaxTime \) is defined by 
+\( \CLOCKMaxTime(\clockbuffer) \FuncDef 
+        \Max(\Set{\clocktime | (\stub,\stub,\clocktime) \in \clockbuffer})\).
+\end{definition}
+
+The last premise, \( \CLOCKUpdate(\clocksi,\clockbuffer,\clocktime'') \),
+inserts all the preparation versions.
+This function alters the time-stamp of versions included in the buffer \( \clockbuffer \)
+to the actual commit time \( \clocktime'' \), 
+and changes the state tag to  \( \clocksicommitted \).
+
+\begin{definition}[\(\CLOCKUpdate\) function]
+Given a Clock-SI machine state \( \clocksi \),
+a set of preparation buffer \( \clockbuffer \),
+and a time \( \clocktime \),
+\( \CLOCKUpdate \) is defined by:
+\begin{align*}
+\CLOCKUpdate(\clocksi,\emptyset,\clocktime) & \FuncDef \clocksi
+\\ \CLOCKUpdate(\clockbuffer \uplus \Set{(\key,\idx,\stub),\clocktime}) 
+        & \FuncDef 
+        \begin{array}[t]{l}
+        \Let \clockshard = \ShardOf(\clocksi,\key), \quad
+        (\clockkvs,\clocktime') = \clocksi(\clockshard),
+        \\ \AND \clockkvs' = \CLOCKUpdateKVS(\clockkvs,\key,\idx,\clocktime) \In
+        \\ \CLOCKUpdate(\clocksi,\clockbuffer)\UpdateFunc{\clockshard -> (\clockkvs',\clocktime') }
+        \end{array}
+\end{align*}
+where \( \CLOCKUpdateKVS \) is defined by:
+\[
+\CLOCKUpdateKVS(\clockkvs,\key,\idx,\clocktime) 
+\FuncDef 
+    \begin{array}[t]{l}
+    \Let \clockver = \clockkvs(\key), \quad (\val,\stub,\stub) = \clockver(n)
+    \\ \AND \clockver' = \clockver\UpdateFunc{\idx -> (\val,\clocktime,\clocksicommitted) }
+    \In \clockkvs' = \clockkvs'\UpdateFunc{\key -> \clockver'}  .
+    \end{array}
+\]
+\end{definition}
+
+
+The operational semantics of Clock-SI is a standard interleaving semantics,
+depicted in \cref{fig:clock-si-prog},
+where a client takes a step in turn, captured by \( \rCLOCKTrans\).   
+In Clock-SI, the shard local times are the physical times.
+To model the physical time ticks, 
+a shard can arbitrarily advance its local time, captured by \( \rCLOCKShardTick\).
+
+\input{clock/fig-prog}
+
+Note that a commit may fail in the first phase due to conflict writes.
+However, our reference operational semantics only models the successful cases,
+given that we focus on client observable behaviour.
+Therefore the set of Clock-SI traces only contains successful traces 
+in that all clients reach the end.
+
+\begin{definition}[Clock-SI traces]
+The set of \emph{Clock-SI traces}, \( \CLOCKTraces \ni \clocktrc\),
+is defined by
+\[
+\CLOCKTraces \TypeDef 
+    \Set{\ToClockProg{ \Tuple{ \clockconfinit , \clenv_0 } | \prog | \stub | * 
+                -> \Tuple{ \clockconf , \clenv } | \prog' } 
+            | \Exists{\clockclientenvinit} \clockconfinit \in \CLOCKConfInits
+                (\stub,\clockclientenvinit) = \clockconfinit 
+                \\ {} \land \Forall{\cl \in \Dom(\prog) }
+                \cl \in 
+                            \Dom(\clockclientenvinit) \cap \Dom(\clenv) 
+                \\ {} \land \prog'(\cl) = \pskip} .
+\]
+Two traces, \( \clocktrc, \clocktrc'\), are equivalent,
+written \( \clocktrc \clocktrceq \clocktrc' \), if and only if
+\[
+    \clocktrc \clocktrceq \clocktrc' 
+    \PredDef 
+    \begin{multlined}[t]
+        \Forall{\clocksi,\clocksi'} 
+        (\clocksi,\stub) = \LastConf(\clocktrc)
+        \land (\clocksi',\stub) = \LastConf(\clocktrc') 
+        \\ \implies \Dom(\clocksi) = \Dom(\clocksi')
+        \land \Forall{\clockshard \in \Dom(\clocksi),\clockkvs,\clockkvs'}
+        \\ \left( 
+                \clocksi(\clockshard) = (\clockkvs,\stub) 
+                \land \clocksi(\clockshard') = (\clockkvs',\stub) 
+                \implies \clockkvs = \clockkvs'
+            \right) .
+    \end{multlined}
+\]
+\end{definition}
+
+Two machine states are equivalent if for each shard \( \clockshard \),
+the key-value stores of \( \clockshard \) have the same state.
+Two Clock-SI traces are equivalent if and only if
+the final machine states of the two traces are equivalent.
+This notation of \emph{trace equivalence} is important for the verification of Clock-SI protocol.

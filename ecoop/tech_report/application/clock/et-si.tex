@@ -1,0 +1,364 @@
+By the result of \cref{thm:well-formed-clock-trace},
+kv-store program traces induced by annotated normalised Clock-SI traces are valid traces:
+that is, there traces can be obtained under \( \et[\top] \).
+Now we prove that each transition in these kv-store traces satisfies \( \et[\SI]\).
+
+\begin{toappendix}
+\label{sec:proof-clock-si-sat-si}
+\end{toappendix}
+\begin{theoremrep}[Clock-SI traces satisfying snapshot isolation]
+Given an annotated normalise Clock-SI trace \( \clockexttrc \),
+the kv-store trace induced by the Clock-SI trace \( \progtrc = \ClockToKVTrace(\clockexttrc)\)
+is a trace that can be obtained with the execution test for \( \SI \).
+\end{theoremrep}
+\begin{proof}
+Given a normalised Clock-SI trace \( \clockexttrc \),
+by \cref{thm:well-formed-clock-trace}, 
+the induced kv-store trace \( \progtrc = \ClockToKVTrace(\clockexttrc) \) 
+is a trace that can be obtained under \( \et[\top]\).
+We prove that every transition in the trace \( \progtrc \) satisfies the constrains of \( \et[\PSI] \) by induction on \( \clockexttrc \).
+\begin{enumerate}
+\CaseBase{\clockexttrc = \ToClockProg{\clocksiinit | \clockclientenvinit | \clenv_0 | \prog_0 }}
+    By the definition of \( \ClockToKVTrace \),
+    \( \progtrc = \ToProg{ \kvsinit | \vienvinit | \clenv_0 | \prog_0 } \),
+    and there is nothing to prove since no transition has been made.
+\CaseInd{ \clockexttrc = \ToClockProg{\clockexttrc' | \lb -> \clockexttrc'' | \lb' 
+        -> \clocksi'' | \clockclientenv'' | \clenv'' | \clockrunprog'' } }
+    If \( \lb  = \lbCLOCKTick{\clocktime} \) or \(  \lb = \lbCLOCKStart{\clocktime} \),
+    by the definition of \( \ClockToKVTrace \),
+    we have \( \ClockToKVTrace(\clockexttrc) = \ClockToKVTrace(\clockexttrc') \),
+    and thus by \ih, we have the proof.
+    Now consider 
+    \begin{Formulae}*
+    \begin{Formula}
+    \clockexttrc = \ToClockProg{\clockexttrc' | \lb -> \clockexttrc'' | \lb'
+                -> \clocksi'' | \clockclientenv'' | \clenv'' | \clockrunprog'' }
+    \\ {} 
+    \land \lb = \lbCLOCKOp{(l,\key,\val),m,n} \land l \in \Set{\opR,\opW}
+    \land \lb' = \lbCLOCKEnd{n} 
+    \end{Formula}
+    \end{Formulae}
+    Let \( \clockexttrc^* = 
+            \ToClockProg{\LastConf(\clockexttrc) | \lb 
+                        -> \clockexttrc' | \lb' 
+                        -> \clocksi'' | \clockclientenv'' | \clenv'' | \clockrunprog'' } \).
+    %In this case, we have \( \CLOCKAtomic(\clockexttrc^*) \).
+    Let \( \progtrc' = \ClockToKVTrace(\clockexttrc') \)
+    and \( (\kvs',\vienv', \allowbreak \stub,\stub)  = \LastConf(\progtrc') \).
+    By the definition of \( \ClockToKVTrace \), we have
+    \[
+    \ClockToKVTrace(\clockexttrc) = 
+        \ToProg[\top]{\progtrc' | \lbTrans{\vi,\fp} 
+                -> \kvs'' | \vienv'\UpdateFunc{\cl -> \vi'} | \clenv'' | \prog''  } ,
+    \]
+    where
+    \begin{Formulae}*
+    \begin{Formula}
+        \fp = \ClockFp(\emptyset, \clockexttrc^*)
+        \land \vi = \ClockView(\kvs',\clocktime)  
+        \\ {} \land \kvs'' =  \UpdateKV(\kvs',\vi,\fp,\clocktxid[\cl](n,m) )
+        \land \vi' = \ClockView(\kvs'',n) 
+        \land \prog' = \ClockStaticProg(\clockrunprog) .
+    \end{Formula}
+    \end{Formulae}
+    Note that in the proof we call \( \clocktime \) as the snapshot time and 
+    \( n \) as the commit time.
+    By the definition of \( \PSI \),
+    we need to prove the following results:
+    \begin{Formulae}
+    & \begin{Formula}
+    \vi \vileq \vi'
+    \label{equ:clock-vi-increase}
+    \end{Formula}
+    \\ & \begin{Formula}
+    \Forall{ \txid \in \kvs'' \setminus \kvs' | \key \in \Keys | \idx \in \Indexs } 
+    \ToEdge{ \WtOf(\kvs''(\key,\idx)) | \Refl(\SO) -> \txid }
+    \implies \idx \in \vi'(\key)
+    \label{equ:clock-vi-write}
+    \end{Formula}
+    \\ & \begin{Formula}
+    \PreClosed(\kvs',\vi,\TraRe(\left({\Trasi(( \WR[\kvs'] \cup \SO \cup \WW[\kvs']))} ; \Refl(\RW[\kvs']) \right)))
+    \label{equ:clock-vi-cloce-cycle}
+    \end{Formula}
+    \\ & \begin{Formula}
+    \PreClosed(\kvs,\vi,\bigcup_{\opW(\key,\stub) \in \fp}\WWInv[\kvs'](\key))
+    \label{equ:clock-vi-ua}
+    \end{Formula}
+    \end{Formulae}
+    We prove \cref{equ:clock-vi-increase,equ:clock-vi-write,equ:clock-vi-cloce-cycle,equ:clock-vi-ua} separately.
+    \begin{enumerate}
+    \Case{{\cref{equ:clock-vi-increase}}}
+        By \cref{lem:clock-si-local-time-mono}, we have the commit time \( n \) is greater or equal to the snapshot time \( m \).
+        This means that \( m \leq n \) and thus 
+                \( \vi = \ClockView(\kvs',m) \vileq \ClockView(\kvs'',n) = \vi' \).
+    \Case{{\cref{equ:clock-vi-write}}}
+        Consider any write operation \( \opW(\key,\val) \in \fp \).
+        By \( \rCLOCKPrepare \), \( \rCLOCKCommit\) and the definition of annotated Clock-SI traces, \(\CLOCKExtTraces\), 
+        there must exist a write step in the Clock-SI trace segment \( \clockexttrc' \)
+        of the form \( \lbCLOCKOp{\opW(\key, \allowbreak \val),m,n}\) such that \( m \leq n \).
+        Recall that \( \kvs'' =  \UpdateKV(\kvs',\vi,\fp,\txid[\cl](n,m) ) \),
+        thus we know that 
+        \[
+            \kvs''(\key,\Abs{\kvs'(\key)} - 1) = (\val,\txid[\cl](n,m),\emptyset) .
+        \]
+        By the definition of \( \vi' = \ClockView(\kvs'',n) \),
+        we have \( \left( \Abs{\kvs''(\key)} - 1 \right) \in \vi'(\key) \).
+    \Case{\cref{equ:clock-vi-cloce-cycle}}
+        We prove the correspondence between the four relations, \( \WR, \allowbreak \WW, \allowbreak \RW \) and \( \SO\),
+        with respect to the snapshot and commit times.
+        Let consider two transactions \( \txid[\cl'](n',m'),\txid[\cl''](n'',m'') \) that accessed key \(key\) in \( \kvs' \).
+        Note that \( \txid[\cl'](n',m'),\txid[\cl''](n'',m'') \) might be the writers or the readers of some versions.
+        By \cref{thm:well-formed-clock-trace},
+        there must exist read or write steps 
+        that corresponds to \( \txid[\cl'](n',m'),\txid[\cl''](n'',m'') \) in the trace \( \clockexttrc' \).  
+        Without losing generality, we assume the steps for \( \txid[\cl'](n',m') \) 
+        appear before the steps for \( \txid[\cl''](n'',m'') \):
+        \[
+            \clockexttrc' = \ToClockProg{\cdots | \lbCLOCKOp{(l',\key,\val'),m',n'} 
+                        -> \cdots | \lbCLOCKOp{(l'',\key,\val''),m'',n''} -> \cdots }
+            \land l',l'' \in \Set{\opW,\opR}
+        \]
+        Given that the snapshot time \( m\) of the new transaction \( \txid[\cl](n,m) \),
+        assume that \( n'' < m \).
+        This means that \( \txid[\cl](n,m) \) observes \( \txid[\cl''](n'',m'') \).
+        Now we prove that \( \txid[\cl](n,m) \) also observes \( \txid[\cl'](n',m') \)
+        for the following cases.
+        \begin{enumerate}
+        \Case{\( (\txid[\cl'](n',m'),\txid[\cl''](n'',m'')) \in \WR[\kvs'](\key) \)}
+            This means \( \cl'' \) read a version written by \( \cl' \):
+            there exists an index \( \idx \) such that
+            \[
+                \txid[\cl'](n',m')  = \WtOf(\kvs'(\key,\idx))
+                \land \txid[\cl''](n'',m'')  \in \RsOf(\kvs'(\key,\idx)) .
+            \]
+            We then have \( l' = \opW \) and \( \l'' = \opR \).
+            By \cref{lem:clock-si-wr}
+            \( \cl'' \) must have a snapshot time \( m'' \) greater or equal to the commit time \( n' \),
+            and then by \cref{lem:clock-si-local-time-mono}, we have \( n' < n'' \).
+            In other words,
+            \begin{Formulae}
+            \begin{Formula}
+                (\txid[\cl'](n',m'),\txid[\cl''](n'',m'')) \in \WR[\kvs'] \implies n' < m'' \leq n'' .
+                \label{equ:clock-wr-commit-time}
+            \end{Formula}
+            \end{Formulae}
+        \Case{\( (\txid[\cl'](n',m'),\txid[\cl''](n'',m'')) \in \WW[\kvs'](\key) \)}
+            This means \( \cl'' \) write a new version for \( \key \) after the version written by \( \cl' \):
+            \[
+                \txid[\cl'](n',m')  = \WtOf(\kvs'(\key,\idx))
+                \land \txid[\cl''](n'',m'')  \in \WtOf(\kvs'(\key,\idx')) 
+                \idx < \idx'
+            \]
+            The transaction \( \txid[\cl''](n'',m'') \) commits after  \( \txid[\cl'](n',m') \) 
+            in the kv-store trace \( \progtrc' \),
+            thus in the Clock-SI trace \( \clockexttrc' \).
+            By \( \rCLOCKPrepare \) rule, when \( \cl'' \) prepares the new version, 
+            there must be no version that commit after the snapshot time of \( \cl'' \),
+            which means
+            \begin{Formulae}
+            \begin{Formula}
+                (\txid[\cl'](n',m'),\txid[\cl''](n'',m'')) \in \WW[\kvs] \implies n' < m'' \leq n''.
+                \label{equ:clock-ww-commit-time}
+            \end{Formula}
+            \end{Formulae}
+        \Case{\( (\txid[\cl'](n',m'),\txid[\cl'](n'',m'')) \in \SO \)}
+            Because the local times for Clock-SI clients monotonically increase,
+            we know that
+            \begin{Formulae}
+            \begin{Formula}
+                (\txid[\cl'](n',m'),\txid[\cl'](n'',m'')) \in \SO \implies n' < m'' \leq n'' .
+                \label{equ:clock-so-commit-time}
+            \end{Formula}
+            \end{Formulae}
+        \Case{\( \ToEdge{\txid[\cl'](n',m') | \rel
+                        -> \txid[\cl^*](n^*,m^*) | \RW[\kvs'](\key) -> \txid[\cl''](n'',m'') } \) with \( \rel \in \Set{\WR[\kvs'],\WW[\kvs'],\SO}\)}
+            This means there exist two indexes \( \idx, \idx' \) such that
+            \[
+                \idx < \idx'
+                \land \Exists{\txidset}
+                \kvs(\key,\idx) = (\stub, \stub, \txidset)
+                \land \txid[\cl^*](n^*) \in \txidset 
+                \land \kvs(\key,\idx') = (\stub, \txid[\cl''](n'',m''), \stub)
+            \]
+            Consider the transaction \( \txid[\cl^*](n^*,m^*) \) in the Clock-SI trace.
+            By \cref{lem:clock-si-wr},
+            %the snapshot time \( m^* \) of this transaction must be strictly smaller than the commit time \( n^* \).
+            The snapshot time \( m^* \)  must be strictly smaller than than \( n'' \) (otherwise it contradict to \cref{lem:clock-si-wr}),
+            that is, \(m^{*} < n'' \).
+            By \ToEdge{\txid[\cl'](n',m') | \rel -> \txid[\cl^*](n^*,m^*) } for \( \rel \in \Set{\WR[\kvs'],\WW[\kvs'],\SO} \)
+            and \cref{equ:clock-wr-commit-time,equ:clock-ww-commit-time,equ:clock-so-commit-time},
+            we then have \(  n' < m^* < n^* \), that is,
+            \begin{Formulae}
+            \begin{Formula}
+                \ToEdge{\txid[\cl'](n',m') | \rel -> \txid[\cl^*](n^*,m^*)| \RW[\kvs'](\key) -> \txid[\cl''](n'',m'') }
+                \implies n' < n''
+                \label{equ:clock-rw-commit-time}
+            \end{Formula}
+            \end{Formulae}
+        \end{enumerate}
+        Combine \cref{equ:clock-wr-commit-time,equ:clock-ww-commit-time,equ:clock-so-commit-time,equ:clock-rw-commit-time},
+        we have
+            \begin{Formulae}
+            \begin{Formula}
+                (\txid[\cl'](n',m'),\txid[\cl''](n'',m'')) \in 
+                    \TraRe(\left({\Trasi(( \WR[\kvs] \cup \SO \cup \WW[\kvs]))} ; (\RWRelf[\kvs']) \right))
+                \implies n' < n'' .
+                \label{equ:clock-si-commit-time}
+            \end{Formula}
+            \end{Formulae}
+        This means, by the definition of \( \vi = \ClockView(\kvs,\clocktime) \),
+        if the view \( \vi \) includes version written by  \( \txid[\cl''](n'',m'') \),
+        then the view also includes version written by \( \txid[\cl'](n',m') \),
+        thus we prove \cref{equ:clock-vi-cloce-cycle}.
+    \Case{\cref{equ:clock-vi-ua}}
+        Recall that the new transaction \( \txid[\cl](n,m) \).
+        Consider any write operation \( \opW(\key,\val) \in \fp \).
+        Let \( \clockshard = \ShardOf(\clocksi,\key) \) be the shard that contains \( \key \),
+        and \( (\clockkvs,\stub) = \clocksi(\clockshard) \) be the local key-value store.
+        By \( \rCLOCKPrepare \), 
+        there must be no version for the key \( \key \) 
+        with the committed or preparation time greater than \( m \),
+        that is,
+        \[
+            \Forall{\idx,n'} \clockkvs(\key,\idx) = (\stub,n',\stub) \implies n' < m .
+        \] 
+        By the definition of \( \vi = \ClockView(\kvs,\clocktime) \),
+        we prove \cref{equ:clock-vi-ua}. \qedhere
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+\begin{proofsketch}
+    Consider a step in the trace \( \progtrc \):
+    \[
+        \ToProg{\kvs | \vienv | \clenv | \prog | \lbTrans{\vi,\fp}
+                -> \kvs' | \vienv\UpdateFunc{\cl -> \vi} | \clenv' | \prog' } .
+    \]
+    By the definition of \( \et[\SI] \),
+    we need to prove \( \et[\MR]\), \( \et[\RYW] \) and
+    \begin{Formulae}
+    & \begin{Formula}
+    \PreClosed(\kvs',\vi,\TraRe(\left({\Trasi(( \WR[\kvs'] \cup \SO \cup \WW[\kvs']))} ; \RWInv[\kvs'] \right)))
+    \label{equ:proof-sketch-clock-vi-cloce-cycle}
+    \end{Formula}
+    \\ & \begin{Formula}
+    \PreClosed(\kvs,\vi,\bigcup_{\opW(\key,\stub) \in \fp}\WWInv[\kvs'](\key))
+    \label{equ:proof-sketch-clock-vi-ua}
+    \end{Formula}
+    \end{Formulae}
+    \( \et[\MR]\) can be derived by \cref{lem:clock-si-local-time-mono} 
+    that client local time monotonically increases,
+    and the definition of \( \ClockView \).
+    \( \et[\RYW]\) can be derived by \( \rCLOCKCommit \), 
+    where the client local time is set to be the commit time,
+    and  then by the definition of \( \ClockView \):
+    all the versions committed by the client must be included in the new view.
+    Given the property of normalised traces:
+    \begin{enumerate}
+    \item if two transaction \( \Tuple{\clocktxid[\cl](n,m), \clocktxid[\cl'](n',m')} \in \rel \)
+    for \( \rel \in \Set{\WR,\WW,\SO} \),
+    we have the commit time of the first transaction \( n \) is smaller than the snapshot time of the second transaction \( m' \),
+    thus \( n < m' < n'\); and
+    \item if two transaction \( Tuple{\clocktxid[\cl](n,m), \clocktxid[\cl'](n',m')} \in \RW \),
+    we have the snapshot time of the first transaction \( m \) is smaller than the commit time of the second transaction \( n' \),
+    that is \( m < n'\).
+    \end{enumerate}
+    Recall that the snapshot time is always smaller than commit time.
+    If \( \Tuple{\clocktxid[\cl](n,m), \clocktxid[\cl'](n',m')} \in \TraRe(\left({\Trasi(( \WR[\kvs'] \cup \SO \cup \WW[\kvs']))} ; \RWInv[\kvs'] \right)) \)
+    then \( n < n' \).
+    Then by the definition of \( \ClockView \), we prove \cref{equ:proof-sketch-clock-vi-cloce-cycle}.
+    Last, by the \( \rCLOCKPrepare \), when a version is set to preparation stage, there is no conflict write,
+    then \cref{equ:proof-sketch-clock-vi-ua} holds.
+    The full detail is given in \cref{sec:proof-clock-si-sat-si}
+    on page \pageref{sec:proof-clock-si-sat-si}.
+\end{proofsketch}
+
+\begin{toappendix}
+\begin{lemma}[Clock-SI \texorpdfstring{\(\WR\)}{\texttt{WR}}]
+\label{lem:clock-si-wr}
+Assume an annotated normalised  Clock-SI trace \( \clockexttrc \),
+and the kv-store trace induced by the Clock-SI trace \( \progtrc = \ClockToKVTrace(\clockexttrc)\).
+Given final kv-store \( \kvs \) in \( \progtrc \), 
+that is, \( (\kvs,\stub,\stub,\stub) = \LastConf(\progtrc) \),
+and a write-read edge, \( \Tuple{ \clocktxid[\cl](n,m) , \clocktxid[\cl'](n',m') } \in \WR[\kvs](\key) \),
+then \( \clocktxid[\cl](n,m) \) is the latest transaction that
+write to key \( \key \) and commits before \( \txid[\cl'](n',m') \) starts,
+that is, 
+\begin{Formulae}*
+& \begin{Formula}
+    n = \Max(\Set{n'' | \Exists{\idx,\cl'',m''} \clocktxid[\cl''](n'',m'') = \WtOf(\kvs(\key,\idx))} )
+    \land n < m' .
+\end{Formula}
+\end{Formulae}
+\end{lemma}
+\begin{proof}
+By the definition of \( \ClockToKVTrace \)
+and \( \Tuple{ \clocktxid[\cl](n,m) , \clocktxid[\cl'](n',m') } \in \WR[\kvs](\key) \),
+the transaction  \( \clocktxid[\cl'](n',m')  \) 
+commits after the commit of \( \clocktxid[\cl](n,m) \), that is, \( m < m'\).
+This means that there exists a prefix of \( \clockexttrc \) and a corresponding prefix of \( \progtrc \),
+in which the last transaction is \(  \clocktxid[\cl'](n',m') \).
+Let \( \clockexttrc' \) denote the prefix of \( \clockexttrc \),
+and \( \progtrc' \) denote the prefix of \( \progtrc \).
+We have \( \progtrc' = \ClockToKVTrace(\clockexttrc') \).
+Since \( \clockexttrc' \) is a normalised trace, then
+\[
+    \clockexttrc' = \ToClockProg {\clockexttrc'' | \lb -> \clockexttrc^* } 
+    \land \CLOCKAtomic(\clockexttrc^*,\cl',\clockshard,n') .
+\]
+Let \( (\clocksi,\clockclientenv,\clenv,\clockrunprog) = \clockexttrc^*\Proj{0} \).
+Let \( \progtrc'' = \ClockToKVTrace(\ToClockProg{\clockexttrc'' | \lb -> \clocksi | \clockclientenv  | \clenv | \clockrunprog } ) \)
+and \( (\kvs'',\vienv'',\clenv'',\prog'') = \Last(\progtrc'') \).
+By the definition of \( \ClockToKVTrace \), we have
+\[
+ \progtrc' = \ToProg{ \progtrc'' | \lbTrans{\vi,\fp} -> \kvs^* | \vienv''\UpdateFunc{\cl' -> \vi'} | \clenv^* | \prog^*}
+\]
+where 
+\begin{Formulae}*
+\begin{Formula}
+\vi = \ClockView(\kvs'',m') \land \fp = \ClockFp(\emptyset,\clockexttrc^*) 
+\\ {} \land \kvs^* = \UpdateKV(\kvs'',\vi,\fp,\clocktxid[\cl'](n',m')) \land \vi' = \ClockView(\kvs^*,m')
+\end{Formula}
+\end{Formulae}
+Because \( \clocktxid[\cl'](n',m') \) read the key \( \key \) in \( \kvs^* \),
+then \( \opR(\key,\val) \in \fp \).
+By the definition of  \( \fp = \ClockFp(\emptyset,\clockexttrc^*) \) and \cref{prop:well-formed-clock-fp},
+there exists a read step that read from the shard \( \clockshard \) in  \( \clockexttrc^* \):
+\begin{Formulae}*
+\begin{Formula}
+\clockexttrc^* = \ToClockProg{\cdots | \stub 
+                            -> \clocksi | \stub | \stub | \clockrunprog\UpdateFunc{\cl' -> 
+                                                        \pruntrans{\plookup{\var}{\expr}; \trans}%
+                                                        {\fp',\emptyset}%
+                                                        {m',\clockshard} } 
+                                        | \lbCLOCKOp[\cl'](\clockshard){\opR(\key,\val),m',n'} -> \ }
+                \\ \ToClockProg{ \clocksi | \stub | \stub | \clockrunprog\UpdateFunc{\cl' -> 
+                                                        \pruntrans{\trans}%
+                                                        {\fp' \AddOp \opR(\key,\val),\emptyset}%
+                                                        {m',\clockshard} } 
+                            | \stub -> \cdots }
+\end{Formula}
+\end{Formulae}
+where the free variables are existentially quantified.
+By the \( \rCLOCKReadShard \) rule, 
+step \( \lbCLOCKOp[\cl'](\clockshard){\opR(\key,\val),m',n'}  \) read the version of \( \key \)
+with time \( \clocktime \)
+such that
+\begin{Formulae}
+\begin{Formula}
+    \Exists{\clockkvs} (\clockkvs,\stub) = \clocksi(\clockshard)
+    \land \clocktime = \Max(\Set{\clocktime' | \Exists{\idx} \clockkvs(\key,\idx) = (\stub,\clocktime') \land \clocktime' < m'}) .
+    \label{equ:read-max-in-kvs-match-in-clock-si}
+\end{Formula}
+\end{Formulae}
+Note that the state of \( \clocksi \) has not changed until the read step, 
+because of \( \CLOCKAtomic(\clockexttrc^*,\cl',\clockshard,n') \).
+Thus, by the definition of \( \progtrc'' = \ClockToKVTrace(\ToClockProg{\clockexttrc'' | \lb
+            -> \clocksi | \clockclientenv  | \clenv | \clockrunprog } ) \)
+and \( (\kvs'',\vienv'',\clenv'',\prog'') = \Last(\progtrc'') \),
+we have \( \kvs''(\key,\idx) = (\val,\clocktxid[\cl](n,m),\stub)\) for some \( \idx \),
+By the definition of \( \vi = \ClockView(\kvs'',m') \), we have \( \idx \in \vi(\key) \).
+Then by \cref{equ:read-max-in-kvs-match-in-clock-si},
+and the definition of \( \kvs^* = \UpdateKV(\kvs'',\vi,\fp,\clocktxid[\cl'](n',m'))  \),
+we have the proof.
+\end{proof}
+\end{toappendix}

@@ -1,0 +1,354 @@
+We define consistency models for our kv-stores,
+by introducing the notion of \emph{execution test} 
+that specifies  whether a client is allowed to commit a transaction in a given kv-store. 
+Each execution test induces a consistency model as the set of kv-stores obtained 
+by having clients non-deterministically commit transactions so long as the constraints 
+imposed by the execution test are satisfied.
+We explore a range of execution tests  associated with well-known consistency models in the literature. 
+In this section we formally define execution tests and traces induced by them.
+In \cref{sec:consistency-model-on-kv}, 
+we give examples of execution tests for several well-known consistency models
+and, in \cref{sec:sound-complete}, we demonstrate that our definitions of consistency models
+are equivalent to the established axiomatic definitions over abstract executions 
+\citep{ev_transactions,framework-concur} and dependency graphs \citep{adya}.
+
+An execution test \( \et \) is a set of tuples of the form \( (\kvs,\vi,\fp,\kvs',\vi') \),
+stating that, under \( \et \), a transaction with the fingerprint \( \fp \) and the given view \( \vi \)
+is allowed to commit to the kv-store \( \kvs \),
+and resulting in the new kv-store \( \kvs' \) and the new view \( \vi' \).
+
+\begin{definition}[Execution tests]
+\label{def:execution-test}
+Given a \( \CanCommit \) and a \( \ViewShift \) predicate,
+an \emph{execution test} \( \et \) is a subset of 
+\(\KVSs \times \Views \times \Fingerprints \times \KVSs \times \Views\),
+such that: for all \( (\kvs,\vi,\fp,\kvs',\vi') \in \et \),
+\begin{Formulae}
+& \begin{Formula}
+    \vi \in \Views(\kvs) \land \vi' \in \Views(\kvs') 
+\end{Formula}
+\\ & \begin{Formula}
+    \Forall{\key \in \kvs | \val \in \Values}
+    \opR(\key, \val) \in \fp \implies \kvs(\key, \Max[<](\vi(\key))) = \val
+\end{Formula}
+\\ & \begin{Formula}
+    \CanCommit[\et](\kvs,\vi,\fp) \land \ViewShift[\et](\kvs,\vi,\kvs',\vi').
+\end{Formula}
+\end{Formulae}
+Let \( \CanCommit[\et] \) and \( \ViewShift[\et] \) denote 
+the \( \CanCommit \) and \( \ViewShift \) predicates for \( \et \) respectively.
+Let \( \ExTests \ni \et\) denote the set of all execution tests.
+\end{definition}
+
+We use the notation \( \ToET{\kvs | \vi | \fp | \kvs' | \vi' } \) as 
+we can think of the \( \et \) tuple as a transition on kv-stores and views. 
+Note that the well-formed conditions enforce \emph{last-write-wins policy}
+as the value \( \val \) read in the fingerprint for any key \( \key \) 
+must match with the value in the last version for the key \( \key \) in the view \( \vi \).
+An execution test \( \et \)  is defined using two predicates \( \CanCommit[\et] \) and \( \ViewShift[\et] \)
+that used in the rule \( \rCAtomicTrans \) in \cref{fig:command-semantics}.
+We give several examples of execution tests which give rise to consistency models on kv-stores in \cref{sec:consistency-model-on-kv}.
+
+%We conceptually separate \( \et \) into two predicates for readability.
+%The use of \( \et \) and the two predicates are interchangeable.
+
+%An execution test \(\et\) gives raise of a \(\et\)-trace.
+%The trace is useful for connecting our definitions of consistency models 
+%to the well-know axiomatic definitions over declarative semantics.
+%We also use the trace to verify implementations of specific consistency models.
+
+Given an execution test \( \et \),
+an \emph{\(\et\)-reduction} of the form \( \ToRed{\kvs | \vienv | \lb -> \kvs' | \vienv' }\)
+is a labelled transition relation over configurations,
+where the label describes either an arbitrary view shift for a client or the commitment of a fingerprint.
+The set of \emph{\(\et\)-traces} contains all finite sequences of \(\et\)-reductions starting from an
+initial configuration.
+
+\begin{definition}[\(\et\)-reduction and \(\et\)-traces]
+\label{def:et-reduction}
+The set of \emph{\et-reduction labels}, \( \ETLabels \ni \lb\), is defined by:
+\[
+ \ETLabels \TypeDef \Set{\lbView{\vi} | \cl \in \Clients \land \vi \in \Views } 
+    \uplus \Set{\lbFp{\fp} | \cl \in \Clients \land \fp \in \Fingerprints} .
+\]
+Given an execution test \( \et \),
+the \emph{\(\et\)-reduction} is a labelled transition over configurations, \( \ToRed{\kvs | \vienv | \lb -> \kvs' | \vienv' }\),
+defined by:
+\begin{enumerate}
+\item if \(\lb = \lbView{\vi}\) for a client \( \cl \in \Clients \) and a view \( \vi \in \Views(\kvs) \), then
+\[
+    \ToRed{ \kvs | \vienv | \lbView{\vi} -> \kvs  | \vienv\UpdateFunc{\cl -> \vi} }
+\]
+and \( \vienv(\cl) \vileq \vi\); or
+\item if \(\lb = \lbFp{\fp}\) for a fingerprint \(\fp\), then
+\[
+    \ToRed{ \kvs | \vienv | \lbFp{\fp} -> \kvs' |\vienv\UpdateFunc{\cl -> \vi} }
+\] 
+where \( \ToET{\kvs | \vienv(\cl) | \fp | \kvs'| \vi} \)
+and \(\kvs' = \UpdateKV(\kvs,\vienv(\cl),\fp,\txid)\) defined in \cref{def:update-kvstore}
+for \(\txid \in \NextTxid(\cl, \kvs)\) defined in \cref{def:next-txid}.
+\end{enumerate}
+The set of \emph{\(\et\)-traces}, \(\ETTraces(\et) \ni \ettrc \), is defined by:
+\begin{align*}
+    \ETTraces(\et) & \TypeDef \bigcup_{n \in \Nat} \ETTracesN(\et,n)
+    \\ \ETTracesN(\et,0) & \TypeDef \Set{ \confinit | \confinit \in \ConfInits} 
+    \\ \ETTracesN(\et,n+1) & \TypeDef \Set{ \ToRed { \ettrc | \lb -> \conf } | \lb \in \ETLabels } 
+\end{align*}
+and the set of all \emph{traces induced by execution tests} is then defined by:
+\[ \ETTraces \TypeDef \bigcup_{\et \in \ExTests} \ETTraces(\et). \]
+\end{definition}
+
+The \emph{consistency model} induced by an execution test \(\et\), 
+written \(\CMET(\et)\), is the set of all kv-stores in the \(\et\)-traces. 
+
+\begin{definition}[Consistency models on kv-stores]
+\label{def:consistency-model-et}
+The \emph{consistency model} induced by an execution test \(\et\), written \(\CMET(\et)\), is defined by
+\[
+\CMET(\et) \TypeDef 
+    \Set{\kvs | \Exists{\ettrc \in \ETTraces(\et)} (\kvs,\stub) = \LastConf(\ettrc) } .
+\]
+\end{definition}
+
+In this thesis, we mainly use our operational semantics defined in \cref{sec:operational-semantics} 
+and kv-store program traces defined in \cref{def:kv-store-prog-traces}.
+However, the definition of \(\et\)-trace is an important intermediate step 
+to show that our definition of consistency models using execution tests for kv-stores
+are equivalent to the declarative definitions on abstract executions (\cref{sec:sound-complete}).
+Note that in the definition of \(\et\)-traces, the view-shifts and transaction commits are decoupled.
+In contrast, in our operational semantics (\(\rCAtomicTrans\) in \cref{fig:command-semantics}), 
+view-shifts (the first premise in \(\rCAtomicTrans\)) 
+and transaction commits are combined in a single step.
+Despite this difference, \(\et\)-traces and operational semantics are equally expressive
+in the sense that any kv-store \(\kvs \in \CMET(\et)\) can be obtained as a result of 
+executing some program \(\prog\) under the execution test \(\et\), and vice versa.
+This is because there every \( \et \)-trace \( \ettrc \) has an \emph{equivalent normalised} \( \et \)-trace \( \ettrc' \)
+and we can construct a program and a trace of this program from the normalised \( \et \)-trace and vice versa.
+Two traces \( \ettrc \) and \( \ettrc' \) are equivalent, written \( \ettrc \ettrceq \ettrc' \)
+if the kv-stores in the final states of the two traces are the same.
+A normalised \(\et\)-trace \( \ettrc \) is a trace where updates and view-shifts for a client must appear together.
+
+\begin{definition}[\(\et\)-trace equivalence]
+\label{def:equiv-et-trace}
+Two \et-traces \( \ettrc, \ettrc \in \ETTraces\) are equivalent, written \( \ettrc \ettrceq \ettrc'\), 
+if and only if,
+\( 
+    \Exists{\kvs \in \KVSs} \LastConf(\ettrc) = (\kvs,\stub) \land \LastConf(\ettrc') = (\kvs,\stub).
+\)
+\end{definition}
+
+\begin{definition}[Normalised \et-trace]
+\label{def:et-normal-trace}
+A \(\et\)-trace \( \ettrc \in \ETTraces \) is \emph{normalised}, 
+written \( \NormalTrace(\ettrc) \), is defined by:
+\begin{align*}
+\NormalTrace(\confinit) & \PredDef \true
+\\ \NormalTrace(\ToRed{ \ettrc | \lb -> \conf | \lb' -> \conf' } ) & \PredDef
+\begin{multlined}[t]
+    \NormalTrace(\ettrc)  
+    \\ {} \land \Exists{\cl \in \Clients | \vi \in \Views | \fp \in \Fingerprints} 
+    \\ (\lb = \lbView{\vi} \iff \lb'=\lbFp{\fp}) .
+\end{multlined}
+\end{align*}
+\end{definition}
+
+\begin{toappendix}
+\label{sec:proof-equivalent-normal-trace}
+\end{toappendix}
+\begin{theoremrep}[Equivalent normal \et-traces]
+\label{thm:normal-trace}
+For any \( \ettrc \in \ETTraces \), there exists an equivalent normalised trace \( \ettrc^* \),
+that is,
+\( \ettrc \ettrceq \ettrc^* \) and \( \NormalTrace(\ettrc^*) \).
+\end{theoremrep}
+\begin{proof}
+Let initially \( \ettrc^* = \ettrc \);
+we alters the trace until \( \ettrc^*\) is a normal trace.
+\begin{enumerate}
+\item \label{item:delete-last-view} 
+    Consider the last step \lb for each client \( \cl \) such that
+    \begin{Formulae}*
+    \begin{Formula}
+    \ettrc^* =  \ToRed{\ettrc' | \lb -> \ettrc'' }  \land \lb = \lbCl{\alpha} 
+    \land \Forall{\cl'} \ettrc'' = \ToRed{\cdots | \lbCl[\cl']{\stub} -> \cdots } 
+    \implies \cl \neq \cl'
+    \end{Formula}
+    \end{Formulae}
+    for two trace segments \( \ettrc',\ettrc'' \).
+    Let view \( \vi = \LastConf(\ettrc')\Proj{2}(\cl)\).
+    If \( \lb \) is a view shift step,
+    \ie \( \alpha = \vi' \) for some view \( \vi' \) such that \( \vi \vileq \vi' \), 
+    we delete this step and re-assign the configurations
+    in \( \ettrc'' \) resulting a new segment \( \ettrc^\dagger \) such that
+    \[
+        \Forall{\idx \in \Indexs | \kvs \in \KVSs | \vienv \in \ViewEnvs(\kvs) }  
+        \ettrc''\Proj{\idx} = (\kvs,\vienv) \iff \ettrc^\dagger\Proj{\idx} = (\kvs,\vienv\UpdateFunc{ \cl -> \vi}).
+    \]
+    We rename the new trace as \( \ettrc^* \) and go back \cref{item:delete-last-view}.
+    Because trace \( \ettrc^* \)  has finite steps, \cref{item:delete-last-view} must terminate 
+    with trace \( \ettrc^* \) that satisfies:
+    \begin{Formulae}
+    \begin{Formula}
+    \Forall{\lb \in \Labels | \cl, \cl' \in \Clients | \alpha | \ettrc',\ettrc''}
+    \\ 
+    \begin{Bracketed}
+    \ettrc^* =  \ToRed{\ettrc' | \lb -> \ettrc'' }  \land \lb = \lbCl{\alpha} 
+    \land \ettrc''  =  \ToRed{\cdots | \lbCl[\cl']{\stub} -> \cdots}
+    \implies \cl \neq \cl'
+    \end{Bracketed}
+    \implies \alpha \in \Fingerprints. \label{equ:last-step-must-be-update}
+    \end{Formula}
+    \end{Formulae}
+\item \label{item:view-shift-move-right}
+    Given a trace \( \ettrc^* \) satisfying \cref{equ:last-step-must-be-update},
+    consider the first view-shift step \lb for a client \( \cl \)
+    that is not followed by a step for the same client \( \cl \):
+    \( \ettrc^* =  \ToRed{\ettrc' | \lb -> \conf | \lb' -> \ettrc'' } \) 
+    such that \( \lb = \lbView{\vi} \) and \( \lb' = \lbCl[\cl']{\alpha} \)
+    for some \( \alpha\), 
+    view \( \vi \) and some clients \( \cl, \cl' \) with \( \cl \neq \cl' \).
+    By \cref{lem:view-shift-right-move} we can move step \( \lb \) to the right resulting
+    \(  \ToRed{\ettrc' | \lb' ->  \conf^* | \lb -> \ettrc''} \) for some \( \conf^* \),
+    until the immediate next step is for the same client \( \cl \).
+    Note that there must be a step for the same client \( \cl \) in \( \ettrc'' \) 
+    by \cref{equ:last-step-must-be-update}.
+    We rename the new trace as \( \ettrc^* \) and go back to \cref{item:view-shift-move-right}.
+    Because there are only finite steps 
+    and the number of out-of-order view-shifts decreases after each iteration,
+    \cref{item:view-shift-move-right} must terminate with trace \( \ettrc^* \) such that
+    \begin{Formulae}
+    \begin{Formula}
+    \Forall{\lb,\lb' \in \Labels | \cl \in \Clients | \vi \in \Views | \ettrc',\ettrc''}
+    \\ \ettrc^* =  \ToRed{\ettrc' | \lb -> \conf | \lb' -> \ettrc''}
+    \land \lb = \lbView{\vi}
+    \implies \lb' = \lbCl[\cl]{\stub}.
+    \label{equ:view-shift-followed-same-client-step}
+    \end{Formula}
+    \end{Formulae}
+\item \label{item:view-shift-absorb}
+    Given a trace \( \ettrc^* \) satisfying 
+    \cref{equ:last-step-must-be-update,equ:view-shift-followed-same-client-step},
+    consider the two adjacent view-shifts steps \(\lb, \lb'\) such that
+    \( \ettrc^* =  \ToRed{\ettrc' | \lb -> \conf | \lb' -> \ettrc''} \) 
+    where \( \lb = \lbView{\vi} \) and \( \lb' = \lbCl{\vi'} \) for two views \( \vi,\vi'\).
+    By \cref{lem:view-shift-absorb}, we can merge these two steps resulting
+    \(  \ToRed{\ettrc' | \lb' -> \ettrc'' }  \) and go back to \cref{item:view-shift-absorb}.
+    Because there are only finite steps 
+    and the number of two adjacent view-shifts decreases after each iteration,
+    \cref{item:view-shift-absorb} must terminate with trace \( \ettrc^* \) such that
+    \begin{Formulae}
+    \begin{Formula}
+    \Forall{\lb,\lb' \in \Labels | \cl \in \Clients | \vi \in \Views | \ettrc',\ettrc''}
+    \\ \ettrc^* =  \ToRed{\ettrc' | \lb -> \conf | \lb' -> \ettrc'' }
+    \land \lb = \lbView{\vi}
+    \implies \Exists{\fp \in \Fingerprints}
+    \lb' = \lbFp{\fp}.
+    \label{equ:view-shift-followed-update}
+    \end{Formula}
+    \end{Formulae}
+\item \label{item:add-view-shift} 
+    Last, given a trace \( \ettrc^* \) satisfying 
+    \cref{equ:last-step-must-be-update,equ:view-shift-followed-same-client-step,equ:view-shift-followed-update},
+    consider an update step \( \lb' \) without a view-shift predecessor,
+    that is, \( \ettrc^* =  \ToRed{\ettrc' | \lb -> \conf | \lb' -> \ettrc''} \) 
+    such that \( \lb = \lbView{\fp} \) and \( \lb' = \lbCl[\cl']{\fp'} \)
+    for some fingerprints \( \fp,\fp'\) and 
+    clients \( \cl, \cl' \) with \( \cl \neq \cl' \).
+    We inject an identity view shift in between resulting 
+    \(  \ToRed{\ettrc' | \lb -> \conf | \lbView{\conf\Proj{2}(\cl)} -> \conf | \lb' -> \ettrc''} \).
+    Rename the new trace as \( \ettrc^* \) and go back to \cref{item:add-view-shift}.
+    Because there are only finite steps, \cref{item:add-view-shift} must 
+    terminate with trace \( \ettrc^* \) satisfying 
+    \begin{Formulae}
+    \begin{Formula}
+    \Forall{\lb,\lb' \in \Labels | \cl \in \Clients | \fp \in \Fingerprints | \ettrc',\ettrc''}
+    \\ \ettrc^* =  \ToRed{\ettrc' | \lb -> \conf | \lb' -> \ettrc''}
+    \land \lb' = \lbFp{\fp}
+    \implies \Exists{\vi \in \Views}
+    \lb' = \lbView{\vi}.
+    \label{equ:update-impede-view}
+    \end{Formula}
+    \end{Formulae}
+\end{enumerate}
+Now we have an equivalent trace \( \ettrc^* \) such that \( \ettrc \ettrceq \ettrc^* \) 
+and \Cref{equ:view-shift-followed-update,equ:update-impede-view} imply \( \NormalTrace(\ettrc^*) \).
+\end{proof}
+\begin{proofsketch}
+We perform the following transformations over the trace \( \ettrc \) until it is normalised:
+for any client \( \cl \),
+\begin{enumerate}
+\item we eliminate the last view-shift(s), if there is no more commit steps from \( \cl \) afterwards;
+\item we move any intermediate view-shift to the right until 
+    it is immediately followed by a commit or another view-shift from \( \cl \);
+\item we combine any adjacent view-shifts from \( \cl \) into one view-shift; and
+\item for any commit step that does not follow a view-shift,
+    we insert an identical view-shift before.
+\end{enumerate}
+All steps are guaranteed to terminate since there only are finite steps in the trace, 
+and after each transformation the new trace is one step closer to become a normalised trace.
+The full proofs is in \cref{sec:proof-equivalent-normal-trace} on page \pageref{sec:proof-equivalent-normal-trace}.
+\end{proofsketch}
+
+\begin{toappendix}
+\begin{lemma}[View-shift right move]
+\label{lem:view-shift-right-move}
+Given a trace \( \ettrc \in \ETTraces(\et) \) for some \( \et \),
+and a view-shift step \( \lbView{\vi} \) for a client \( \cl \) in the trace \( \ettrc \),
+if the view-shift is not followed by a step for the same client \( \cl \),
+this view-shift can be moved right without changing the final configuration.
+\begin{Formulae}
+\begin{Formula}
+    \Forall{ \cl' \in \Clients | \lb,\lb' \in \Labels | \alpha, \ettrc',\ettrc'' } 
+    \\ \ettrc =  \ToRed{\ettrc' | \lb -> \conf | \lbView{\vi} -> \conf' | \lbCl[\cl']{\alpha} 
+                    -> \conf'' | \lb' -> \ettrc''}
+    \land \cl \neq \cl'
+    \\ \implies \Exists{\conf^* \in \Confs }
+    \ToRed{\ettrc' | \lb -> \conf | \lbCl[\cl']{\alpha} 
+        -> \conf^* | \lbView{\vi} -> \conf'' | \lb' -> \ettrc''}.
+    \label{equ:view-left-move}
+\end{Formula}
+\end{Formulae}
+\end{lemma}
+\begin{proof}
+Let configuration \( (\kvs, \vienv) = \conf \); we preform case analysis on \( \alpha \).
+\begin{enumerate}
+    \Case{\(\alpha=\vi'\)}
+    Given the two view-shifts for clients \( \cl \) and \( \cl' \) respectively,
+    we know the configuration \( \conf'' \)  is given by 
+    \( \conf'' = \Tuple{\kvs, \vienv\UpdateFunc{\cl -> \vi | \cl' -> \vi' }} \).
+    Since two clients are distinct \( \cl \neq \cl' \), 
+    then we have \( \conf'' = \Tuple{\kvs, \vienv\UpdateFunc{ \cl' -> \vi' | \cl -> \vi }} \);
+    therefore we prove \cref{equ:view-left-move} by picking \( \conf^* = \Tuple{\kvs, \vienv\UpdateFunc{\cl' -> \vi' }}\).
+    \Case{\(\alpha=\fp\)}
+    Since \( \cl \neq \cl' \),
+    we know \( \conf' = \Tuple{\kvs, \vienv\UpdateFunc{\cl -> \vi }} \) 
+    and \( \conf'' = \Tuple{\kvs', \vienv\UpdateFunc{ \cl -> \vi | \cl' -> \vi' }} \)
+    for some view \( \vi' \),
+    kv-store \( \kvs' = \UpdateKV(\kvs,\vienv(\cl'),\fp,\txid) \) with a fresh transition identifier \( \txid \),
+    and \( \ToET{ \kvs | \vienv(\cl') | \fp | \kvs' | \vi' } \).
+    Let \( \conf^* = \Tuple{\kvs', \vienv\UpdateFunc{ \cl' -> \vi' }}\) which gives us \cref{equ:view-left-move}. \qedhere
+\end{enumerate}
+\end{proof}
+
+
+\begin{lemma}[View-shift absorption]
+\label{lem:view-shift-absorb}
+Given a trace \( \ettrc \in \ETTraces(\et) \) under \et,
+two adjacent view-shifts \( \lbView{\vi},\lbView{\vi'} \) for a client \( \cl \) in the trace can be merged,
+\begin{Formulae}
+\begin{Formula}
+    \Forall{ \ettrc',\ettrc'' | \lb,\lb' \in \Labels} 
+    \\ \ettrc = \ToRed{\ettrc' | \lb -> \conf | \lbView{\vi} -> \conf' | \lbView{\vi'} 
+        -> \conf'' | \lb' -> \ettrc''}
+    \implies  \ToRed{\ettrc' | \lb -> \conf | \lbView{\vi'} -> \conf'' | \lb' ->  \ettrc''}.
+    \label{equ:view-absorb}
+\end{Formula}
+\end{Formulae}
+\end{lemma}
+\begin{proof}
+Let configuration \( (\kvs, \vienv ) = \conf \);
+it is easy to see \( \conf = (\kvs, \vienv\UpdateFunc{\cl -> \vi})\), \( \conf = (\kvs, \vienv\UpdateFunc{\cl -> \vi'}) \)
+and \( \vienv(\cl) \vileq \vi \vileq \vi' \), which implies \cref{equ:view-absorb}.
+\end{proof}
+\end{toappendix}
+

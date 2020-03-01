@@ -1,0 +1,154 @@
+We introduce an alternative operational semantics on abstract executions.
+As such, we can compare the resulting kv-stores and abstract executions with a given program.
+The operational semantics on abstract executions is given in \cref{fig:aexec-semantics}.
+Each labelled transition is of the form 
+\( \ToAexecCmd{\aexec | \clenv | \prog | \lb -> \aexec' | \clenv' | \prog' } \).
+The label is either a primitive command, \( \lbPri \),
+or a transaction commit step, \( \lbTrans{\txidset, \fp} \),
+with the given visible set of transactions \( \txidset \).
+The semantics is parametrised by the set of visibility axioms \( \visaxioms \).
+
+\begin{definition}[Abstract execution labels]
+The set of abstract execution labels, \( \AexecLabels \ni \lb \), is defined by 
+\[
+\AexecLabels \TypeDef \Set{ \lbPri | \cl \in \Clients } 
+        \cup \Set{ \lbTrans{\txidset, \fp} | \cl \in \Clients 
+                        \land \txidset \subseteq \TxIDs \land \fp \in \Fingerprints } .
+\]
+\end{definition}
+
+\input{abstract-execution/fig-semantics}
+
+In \cref{fig:aexec-semantics}, except the rule \(\rAAtomicTrans\), other rules are standard 
+and mimic the counterparts in \cref{fig:command-semantics,fig:program-semantics}.
+The rule \(\rAAtomicTrans\) describes how a client \( \cl \) with the set of visible transactions \( \txidset \),
+commits a transaction \( \ptrans{\trans} \), in a similar way as the rule \( \rCAtomicTrans \) in \cref{fig:command-semantics}.
+Prior to executing the transactional command \( \trans\),
+the client \( \cl \) picks the set of visible transactions \( \txidset \)
+(the second and third premises \(\txidinit \in \txidset \land \txidset \subseteq \Dom(\txidop) \)).
+This set of transactions determines an initial snapshot
+that contains the latest visible value of each key,
+captured by the fourth premise \( \snap \in \AexecSnapshot(\aexec, \txidset)\) in \( \rAAtomicTrans \).
+The function \( \AexecSnapshot \) models the \emph{last-write-win} policy.
+It is straightforward that \( \AexecSnapshot \) is a valid snapshot,
+since \( \txidinit \in \txidset \) and \( \txidinit \) initialise all the keys in a well-formed abstract execution.
+%in the sense that
+%the initial snapshot given by \( \AexecSnapshot(\aexec, \txidset) \)
+%contains the last visible value (with respect to \( \AR \)) for each key.
+
+\begin{definition}[Last-write-win resolution policy on abstract executions]
+The function,
+\( \AexecSnapshot : \AbstractExecutions \times \PowerSet(\TxIDs) \ToTFunc \Snapshots \),
+is defined by: for all keys \( \key \in \Keys \),
+\[
+    \AexecSnapshot(\aexec, \txidset) \FuncDef \lambda \key \ldotp
+    \begin{multlined}[t]
+        \CodeFont{let} \ \txid = \MaxVisTrans(\aexec,\txidset,\key)
+        \CodeFont{and} \ \opW(\key,\val) \in \aexec(\txid) \ \CodeFont{in} \ \val
+    \end{multlined}
+\]
+\end{definition}
+
+\begin{toappendix}
+\begin{proposition}[Well-defined last-write-win resolution policy]
+\label{prop:well-defined-aexec-snapshot}
+Given a well-formed abstract execution \( \aexec \) and a set of transactions \( \txidset \)
+that includes the initialisation transaction \( \txidinit \),
+the function \( \AexecSnapshot(\aexec, \txidset) \) is defined.
+\end{proposition}
+\begin{proof}
+It is straightforward since transaction \( \txidinit \) initialise all the keys in a well-formed abstract execution.
+\end{proof}
+\end{toappendix}
+
+The transaction command \( \trans \) is executed with the initial snapshot \( \snap \),
+resulting a final fingerprint \( \fp \) where the final snapshot \( \snap' \) is ignored (the fifth premise in \( \rAAtomicTrans\)).
+As with \( \rCAtomicTrans \), 
+the client \( \cl \) is now ready to commit the transaction with the fingerprint \( \fp \):
+\begin{enumerate}
+\item pick the next fresh transaction identifier \( \txid \in \NextAExecTxid(\kvs,\cl) \);
+\item compute the new abstract execution via \(\aexec' = \UpdateAExec(\aexec, \txidset, \fp, \txid) \); and 
+\item check if the \emph{new visibility edges} satisfy the axioms \( \visaxioms \):
+    that is, \( \Inv(\visaxiom)(\aexec')(\txid) \subseteq \txidset\) for all \( \visaxiom \in \visaxioms\).
+\end{enumerate}
+
+\begin{definition}[Fresh transaction identifiers and abstract execution update]
+\label{def:update-aexec}
+Given an abstract execution \( \aexec \) and a client \( \cl \),
+the set of \emph{next available transaction identifiers}, written \( \NextAExecTxid(\aexec,\cl) \),
+is defined by:
+\[
+    \NextAExecTxid(\aexec,\cl) \FuncDef \Set{ \txid[\cl](n) | \txid[\cl](n) \in \TxIDs 
+                \land \Forall{ m \in \Indexs | \txid[\cl](m) \in \aexec } m < n } .
+\]
+Given a set of visible transactions \( \txidset \subseteq \TxIDs \), a fingerprint \( \fp \in \Fingerprints \),
+and a fresh transaction \( \txid \in \NextAExecTxid(\aexec,\cl) \),
+the new abstract execution, written \( \UpdateAExec(\aexec,\txidset,\fp,\txid) \),
+is defined by:
+\[
+    \UpdateAExec(\aexec,\txidset,\fp,\txid) \FuncDef 
+    \begin{multlined}[t]
+    \CodeFont{let} \ (\txidop,\VIS,\AR) = \aexec \ \CodeFont{in} 
+    \\ \Tuple{\txidop \cup \Mapping{\txid -> \fp }
+            , \VIS \cup \Set{(\txid',\txid) | \txid' \in \txidset }
+            , \AR \cup \Set{(\txid',\txid) | \txid' \in \aexec } } .
+    \end{multlined}
+\]
+\end{definition}
+
+\begin{toappendix}
+\label{sec:proof-well-defined-update-aexec}
+\end{toappendix}
+\begin{propositionrep}[Well-defined \(\UpdateAExec\) function]
+Given an abstract execution \( \aexec \in \AbstractExecutions \), 
+a set of transactions \( \txidset \subseteq \aexec \) with \( \txidinit \in \txidset \),
+a fresh transaction identifier \( \txid \in \NextAExecTxid(\kvs,\cl) \) for some client \( \cl \),
+and a fingerprint \( \fp \in \Fingerprints \) such that 
+\begin{Formulae}
+\begin{Formula}
+\Forall{\key \in \Keys | \val \in \Values } \opR(\key,\val) \in \fp 
+    \implies \MaxVisTrans(\aexec,\txidset,\key) , 
+\label{equ:aexec-fp-constrain}
+\end{Formula}
+\end{Formulae}
+the new abstract execution \( \UpdateAExec(\aexec,\txidset,\fp,\txid) \) is a well-formed abstract execution.
+\end{propositionrep}
+\begin{proof}
+Let new abstract execution \( \aexec' = \UpdateAExec(\aexec,\txidset,\fp,\txid) \).
+\begin{enumerate}
+\Case{well-formed arbitration order \(\AR[\aexec']\)}
+    It suffices to only consider the edges related to the new transaction \( \txid \).
+    Since the new arbitration order \( \AR[\aexec'] = \AR[\aexec] \cup \Set{(\txid',\txid) | \txid' \in \aexec'} \)
+    and \( \txidinit \in \aexec\),
+    it is straightforward for \cref{equ:aexec-ar-init,equ:aexec-ar-total}.
+    Because \( \txid \) is a fresh transaction such that \( \txid \notin \aexec \), therefore \cref{equ:aexec-ar-irreflexive} holds.
+    By the definition of \( \AR[\aexec'] \) that contains edges from any transaction \( \txid'\) from the old abstract execution \( \aexec \) to the new transaction \( \txid \), it follows \cref{equ:aexec-ar-transitive}.
+    Last, by definition of \( \NextAExecTxid \),
+    the fresh transaction \( \txid =  \txid[\cl](n) \) should be annotated with a bigger number \( n \) than 
+    transactions for the same client \( \cl \) in \( \aexec \), that is,
+    \( \Forall{m \in \Indexs | \txid[\cl](m) \in \aexec } n > m \);
+    this means that \( \SO \subseteq \AR[\aexec'] \) which implies \cref{equ:aexec-ar-so}.
+\Case{well-formed visibility relation \(\VIS[\aexec']\)}
+    It suffices to only consider the edges related to the new transaction \( \txid \).
+    By the definition of \( \VIS[\aexec'] = \VIS[\aexec] \cup \Set{(\txid',\txid) | \txid' \in \txidset}  \) that 
+    contains edges from any transaction \( \txid' \) from \( \txidset \) to the new transaction \( \txid \) 
+    and \( \txidinit \in \txidset \), 
+    it follows \cref{equ:aexec-vis-init}.
+    The \cref{equ:aexec-fp-constrain} immediately implies \cref{equ:aexec-vis-external}.
+    Since the fresh transaction identifier are pick by  \( \txid \in \NextAExecTxid(\aexec,\cl) \), 
+    it is straightforward for \cref{equ:aexec-vis-so}.
+    Last, by \( \txidset \subseteq \aexec \), it follows \cref{equ:aexec-ar-vis}. \qedhere
+\end{enumerate}
+\end{proof}
+\begin{proofsketch}
+This is straightforward since \(  \txid \in \NextAExecTxid(\aexec,\cl) \) is a fresh transition identifier 
+annotated with a greater number than any previous transaction identifiers in the same session.
+Therefore the \( \AR \) of the new abstract execution is well-formed.
+The fingerprint contains the maximum visible value of each key \( \key \),
+if there is a read operation for \( \key \).
+Therefore the \( \VIS \) of the new abstract execution is well-formed.
+The full proof is given in \cref{sec:proof-well-defined-update-aexec} 
+on page \pageref{sec:proof-well-defined-update-aexec}.
+\end{proofsketch}
+
+

@@ -1,0 +1,241 @@
+Inversely, we show to construct, given an abstract execution \(\aexec\), 
+a set of \(\et[\TOP]\)-traces in its normal form such that any such trace
+\(\ettrc\) satisfies \(\LastConf(\ettrc)\Proj{0} = \XToK(\aexec)\). 
+%We first define the \( \AexecCut(\aexec,n) \) that
+%gives the prefix of the first \( n \) transactions of the abstract execution \( \aexec \).
+
+\begin{definition}[Abstract Executions to {\( \et[\TOP]\)}-traces]
+\label{def:aexec-to-et-top-trace}
+Given an abstract execution \( \aexec \in \AbstractExecutions \) 
+and an index \( \idx \in \Indexs \),
+the set of \( \et[\TOP] \)-traces induced by the abstract execution, \( \XToTrace(\aexec) \),
+is defined by:
+\[
+    \XToTrace(\aexec) = \XToTraceN(\aexec,\Abs{\aexec} - 1) ,
+\]
+where, given definition of \( \AexecCut \) in \cref{def:aexec-cut},
+\( \XToTraceN(\aexec,\Abs{\aexec})  \) is defined by:
+\begin{align*}
+    \XToTraceN(\aexec, 0) 
+            & \FuncDef \Set{ \ToRed{\kvsinit | \vienvinit} |
+                            \Forall{\cl \in \Dom(\vienvinit) } \vienvinit(\cl) = \Set{0} }
+    \\  \XToTraceN(\aexec, \idx + 1) & 
+            \FuncDef \begin{array}[t]{@{}l@{}}
+                \Let 
+                    \aexec' = \AexecCut(\aexec,\idx), \aexec'' = \AexecCut(\aexec,\idx + 1) ,
+                \\ \LetQuad 
+                    \txid[\cl](n) = \aexec'' \setminus \aexec' ,
+                    \ettrc \in \XToTraceN(\aexec, \idx) ,
+                    (\kvs,\vienv) = \LastConf(\ettrc) ,
+                \\ \LetQuad \fp = \aexec(\txid[\cl](n)) ,
+                   \kvs' = \UpdateKV(\kvs,\vi,\fp,\txid[\cl](n)) ,
+                \\ \AND \vi = \GetView(\aexec,\VISInv(\txid[\cl](n))) \ \In
+                \\  {\Set{ \ToRed{\ettrc | \lbView{\vi} 
+                            -> \kvs | \vienv\UpdateFunc{\cl -> \vi}  } 
+                          \\[-15pt] \qquad \ToRed{ | \lbFp{\fp} -> \kvs' | \vienv\UpdateFunc{\cl -> \vi'} } 
+                                    | \vi' \in \ApproxView(\aexec,\idx+1,\txid[\cl](n)) }}
+            \end{array}
+    \\ \ApproxView(\aexec,\idx,\txid[\cl](n)) 
+    & \FuncDef 
+    \begin{multlined}[t]
+    \Let \aexec' = \AexecCut(\aexec,\idx) \In \
+    \\ \begin{cases}
+        \Set{\GetView(\aexec', \txidset) | 
+                \txidset \subseteq \VISInv[\aexec](\txid[\cl](m)) \cap \Refl((\ARInv[\aexec]))(\txid[\cl](n))} \\
+                        \multicolumn{2}{r}{\If \txid[\cl](m) \in \aexec \land m > n \land 
+                        \Forall{\txid} \neg\left(\ToEdge{\txid[\cl](n) | \SO 
+                                -> \txid | \SO -> \txid[\cl](m) }\right)}
+        \\ \Views(\XToK(\aexec')) & \ow
+    \end{cases}
+    \end{multlined}
+\end{align*}
+\end{definition}
+
+Given an abstract execution \( \aexec \), we can construct an \( \ET[\top] \)-trace inductively in the order of \( \AR \).
+For each transaction \( \txid = \txid[\cl](n) \) from a client \( \cl \) in the abstract execution \( \aexec \),
+there is an view-shift transition and a fingerprint transition in the trace \( \ettrc \).
+Note that in the inductively case \Th{(i+1)}, 
+the next transaction is given by the \( \aexec'' \setminus \aexec' \), 
+where \( \aexec'' \) and \( \aexec' \) are the \Th{(i+1)} and \Th{i} cuts respectively.
+The corresponding view-shift transition advances the view of \( \cl \) to 
+a new view \( \vi \) that extracts from the set of visible transactions of \( \txid \), 
+that is, \( \vi = \GetView(\aexec,\VISInv(\txid[\cl](n))) \).
+The fingerprint transition simply commits the fingerprint \( \aexec(\txid[\cl](n)) \) in the sense that
+it updates the kv-store to \( \kvs' \) and shift the view to a new view \( \vi' \) afterwards.
+The abstract execution does not contains the precise information about the view \( \vi' \) after commit, 
+but we can approximate this view using \( \ApproxView \) function,
+that is:
+\begin{enumerate*}
+\item if there is more transactions from the same client \( \cl \),
+the view after commit can be extracted from the intersection of 
+the visible set of the immediate next transaction of \( \cl \), that is, \( \VISInv[\aexec](\txid[\cl](m)) \),
+and the set of transactions committed before \( \txid[\cl](n) \), 
+that is, \( \Refl((\ARInv[\aexec]))(\txid[\cl](n)) \); and
+\item otherwise, the view after commit can be any valid view on \( \kvs' \).
+\end{enumerate*}
+It is easy to see that \( \ApproxView \) always returns a set of valid view.
+The detail is given in  \cref{prop:well-defined-approx-view}  on page \pageref{sec:proof-approx-view}.
+Given an abstract execution, any trace \(\ettrc \) in \( \XToTrace(\aexec) \) is a valid \( \et[\TOP] \)-trace,
+and the kv-store \(\kvs \)  in the final configuration can be directly extracted from \( \aexec \) 
+in the sense that \( \kvs = \XToK(\aexec) \).
+
+\begin{toappendix}
+\label{sec:proof-approx-view}
+\begin{proposition}[Well-defined {\(\ApproxView\)}]
+\label{prop:well-defined-approx-view}
+Given an abstract execution \( \aexec \),
+let \( \aexec' = \AexecCut(\aexec,\idx) \) and 
+\( \vi = \ApproxView(\aexec,\idx,\txid) \) for some number \( \idx \) and transaction \( \txid \).
+If \( \txid \) is the last transaction with respect to arbitration order, \( \txid = \Max[\AR[\aexec']](\aexec')\),
+then the view \( \vi \in \Views(\XToK(\aexec')) \).
+\end{proposition}
+\begin{proof}
+It is trivial from the defintion of \(\ApproxView\).
+\end{proof}
+\end{toappendix}
+
+\begin{toappendix}
+\label{sec:proof-well-formed-aexec-to-et-trace}
+\end{toappendix}
+\begin{theoremrep}[Abstract executions to well-formed {\( \et[\TOP]\)}-traces]
+\label{thm:aexec-to-et-top-trace}
+Given an abstract execution \( \aexec \),
+any trace \( \ettrc \in \XToTrace(\aexec) \) is a valid {\( \et[\TOP]\)}-trace
+and the finial kv-store \( \kvs \) such that \( (\kvs,\stub) = \LastConf(\ettrc) \) satisfies
+that \( \kvs = \XToK(\aexec) \).
+\end{theoremrep}
+\begin{proof}
+Given the defintion of \( \XToTrace \), we prove a stronger result that,
+for any number \( \idx \), kv-store \( \kvs \), view environment \( \vienv \) and trace \( \ettrc \),
+\begin{Formulae}
+\begin{Formula}
+\ettrc = \XToTraceN(\aexec,\idx) \land (\kvs,\vienv) = \LastConf(\ettrc) 
+        \land \kvs = \XToK(\AexecCut(\aexec,\idx))
+\label{equ:inv-aexec-to-et-trace}
+\end{Formula}
+\end{Formulae}
+We prove by induction on the number \( \idx \).
+\begin{enumerate}
+\CaseBase{\( \idx = 0 \)}
+    Any trace \( \ettrc \in \XToTraceN(\aexec,0) \) is of the form \( (\kvsinit, \vienvinit) \).
+    By defintion of \( \AexecCut \), it follows \( \kvsinit = \XToK(\AexecCut(\aexec,0)) \).
+\CaseBase{\( \idx > 0 \)}
+    Suppose that \cref{equ:inv-aexec-to-et-trace} holds for \( \idx - 1 \) and consider \( \idx \).
+    Let \( \aexec' = \AexecCut(\aexec,\idx-1) \) and \( \aexec'' = \AexecCut(\aexec,\idx) \).
+    Assume the new transaction \( \txid[\cl](n) = \aexec'' \setminus \aexec' \) 
+    and its fingerprint \( \fp = \aexec(\txid[\cl](n)) \).
+    By \ih, assume a valid \(\et[\TOP] \)-trace \( \ettrc \in \XToTraceN(\aexec,\idx) \)
+    and its last configuration \( (\kvs,\vienv) = \LastConf(\ettrc)  \).
+    Let the view \( \vi  = \GetView(\aexec,\VISInv(\txid[\cl](n))) \),
+    the new kv-store \( \kvs' = \UpdateKV(\kvs,\vi,\fp,\txid[\cl](n)) \),
+    and the new view \( \vi' = \ApproxView(\aexec,\idx, \txid[\cl](n)) \).
+    Therefore the new trace \( \ettrc' \) is of the form
+    \[
+        \ettrc' = \ToRed{\ettrc | \lbView{\vi} 
+                -> \kvs | \vienv\UpdateFunc{\cl -> \vi} | \lbFp{\fp}
+                -> \kvs' | \vienv\UpdateFunc{\cl -> \vi'} }
+    \]
+    We now prove the two new steps, \( \lbView{\vi}\) and \( \lbFp{\fp} \), satisfy
+    the definition of \( \et[\TOP]\)-trace in \cref{def:et-reduction}.
+    \begin{enumerate}
+    \Case{\( \lbView{\vi} \)}
+        By the definition of \( \XToTraceN\), there must exist a transaction \( \txid[\cl](l)\)
+        for the client \( \cl \) such that
+        \[
+            \begin{multlined}[t]
+            \ettrc = \ToRed{\cdots | \stub
+                            -> \kvs^* | \vienv^* }
+                \\ \ToRed{ {} |  \lbFp{\fp^*} -> \UpdateKV(\kvs^*, \vienv^*(\cl), \fp^*, \txid[\cl](l))
+                                        | \vienv^*\UpdateFunc{\cl -> \vi^*} | \stub 
+                            -> \ettrc^{**} }
+            \\ {} \land \Forall{ j } 0 \leq j < \Abs{\ettrc^{**}} \land (\ettrc'\Proj{j})\Proj{1}(\cl) = \vi^* ,
+            \end{multlined}
+        \]
+        which means that \( \txid[\cl](m)\) is the last transaction for \( \cl \) in the trace \( \ettrc \).
+        Again, by the definitions of \( \XToTraceN \) and \( \ApproxView \), 
+        for the view \( \vi \), there exists a set of transactions \( \txidset \) such that,
+        \[
+            \vi^* = \GetView(\aexec,\txidset) 
+            \land \txidset \subseteq \VISInv[\aexec](\txid[\cl](n)) \cap \Refl((\ARInv[\aexec]))(\txid[\cl](j)) .
+        \]
+        Note that \(\vi^*\) must be a valid view because of \cref{prop:well-defined-approx-view}.
+        Last, by definition of \( \GetView \),
+        \[
+            \vi^* = \GetView(\aexec,\txidset) \subseteq \GetView(\aexec,\VISInv[\aexec](\txid[\cl](n))) = \vi
+        \]
+    \Case{\( \lbFp{\fp} \) and \( \kvs = \XToK(\AexecCut(\aexec,\idx)) \)}
+        We prove that the new kv-store \( \kvs' \) is well-formed,
+        \( \kvs = \XToK(\aexec'') \) and 
+        \( \ToET[\TOP]{\kvs | \vi | \fp | \kvs' | \vi' } \).
+        The first and third sub-goals imply that \( \lbFp{\fp} \) is a valid \( \et[\TOP]\) step.
+        \begin{enumerate}
+        \Case{Well-formed \( \kvs' \)} 
+            Consider view \( \vi \) defined by \( \vi = \GetView(\aexec,\VISInv[\aexec](\txid[\cl](n)))\).
+            Since \( \txid[\cl](n) = \Max[\AR[\aexec'']](\aexec'')\) and \( \aexec'' \) is well-formed,
+            then \( \VISInv[\aexec](\txid[\cl](n)) \subseteq \aexec' \),
+            which means that 
+            all visible transactions must exist in \( \aexec' = \AexecCut(\aexec, \idx - 1) \).
+            By \ih, \( \kvs =  \XToK(\aexec')  \) and therefore \( \vi \in \Views(\vi) \).
+            It is easy to see that \( \txid[\cl](n) \notin \kvs \) and \( \fp \in \Fingerprints \);
+            thus by \cref{thm:well-deifned-updatekv}, the new kv-store \( \kvs' \) is well-formed.
+        \Case{\( \kvs' = \XToK(\aexec'') \)}
+            Let \( \txidset =  \VISInv[\aexec](\txid[\cl](n)) \).
+            Previously, 
+            we known that \( \vi = \GetView(\aexec,\txidset) \) and \( \txidset \subseteq \aexec' \);
+            therefore \( \vi = \GetView(\aexec',\txidset) \).
+            By \cref{prop:aexec-cut-to-update}, \( \aexec'' = \UpdateAExec(\aexec',\txidset, \fp,\txid[\cl](n))\).
+            By \ih, \( \kvs = \XToK(\aexec') \).
+            Then by \cref{prop:update-aexec-to-udpate-kv}, \( \kvs' = \XToK(\aexec'') \).
+        \Case{\( \ToET[\TOP]{\kvs | \vi | \fp | \kvs' | \vi' } \)}
+            Previously, we proved \( \vi \in \Views(\kvs)\) and \( \kvs' = \XToK(\aexec'')\).
+            Then by \cref{prop:well-defined-approx-view}, we know that \( \vi' \in \Views(\kvs')\).
+            Because \( \CanCommit[\TOP] \) and \( \ViewShift[\TOP]\) are simply true,
+            it remains to prove that every read operation \( \opR(\key,\val) \) agrees with the view \( \vi \).
+            Note that by \cref{prop:aexec-cut-to-update}, 
+            \( \aexec'' = \UpdateAExec(\aexec',\VISInv[\aexec](\txid[\cl](n)),\fp,\txid[\cl](n))\).
+            Given the definition of \(\UpdateAExec \),
+            \[
+                \begin{multlined}[t]
+                    \opR(\key,\val) \in \aexec''(\txid[\cl](n)) \iff 
+                    \\ \Exists{\txid \in \aexec'}
+                    \txid = \MaxVisTrans(\aexec',\VISInv[\aexec](\txid[\cl](n)),\key)
+                    \land \opW(\key,\val) \in \aexec'(\txid) .
+                \end{multlined}
+            \]
+            Because \( \vi = \GetView(\aexec,\VISInv[\aexec](\txid[\cl](n))) \), then
+            \[
+                \begin{multlined}[t]
+                    \opR(\key,\val) \in \aexec''(\txid[\cl](n)) \iff 
+                    \ValOf(\kvs(\key,\Max[<](\vi(\key)))) = \val .
+                \end{multlined}
+            \] 
+            Given above we proved \( \ToET[\TOP]{\kvs | \vi | \fp | \kvs' | \vi' } \). \qedhere
+        \end{enumerate}
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+\begin{proofsketch}
+Given the definition of \( \XToTrace \), we prove a stronger result that,
+for any number \( \idx \), kv-store \( \kvs \), view environment \( \vienv \) and trace \( \ettrc \),
+\begin{Formulae}*
+\begin{Formula}
+\ettrc = \XToTraceN(\aexec,\idx) \land (\kvs,\vienv) = \LastConf(\ettrc) 
+        \land \kvs = \XToK(\AexecCut(\aexec,\idx)) .
+\end{Formula}
+\end{Formulae}
+This result can be proved by induction on the number \( \idx \).
+Note that in each inductive step,
+there are two more transitions, a view-shift transition and a fingerprint transition.
+Assume the next transaction is identified by \( \txid \), from a client \( \cl \).
+For the view-shift transition, we prove that the new view,
+which is the view induced by the visible transactions of \( \txid \),
+contains more versions than the view of \( \cl \).
+This can be derived from the definition of \( \ApproxView \).
+For the fingerprint transition,
+we prove the new kv-store \( \kvs \) by committing \( \txid \) 
+is equivalent to the \Th{\idx} cut of \( \aexec \), 
+that is,   \( \kvs = \XToK(\AexecCut(\aexec,\idx)) \).
+This can be proven by the inductive case of the definition of  \( \XToTrace \).
+The full proof is given in \cref{sec:proof-well-formed-aexec-to-et-trace} 
+on page \pageref{sec:proof-well-formed-aexec-to-et-trace}.
+\end{proofsketch}

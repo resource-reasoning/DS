@@ -1,0 +1,126 @@
+In the COPS protocol, 
+each replica tracks all the history versions, depicted in \cref{fig:app-cops-digraph}.
+There is no explicit transactional identifier.
+Instead, there is the \emph{COPS version identifier},
+which consists of the replica identifier which initially accepted the version 
+and the local time when the version was accepted.
+%can be seen as the transactional identifier who wrote the version.
+
+\input{cops/fig-cops}
+
+\begin{definition}[COPS replica and version identifiers]
+\label{fig:cops-ver-id}
+The set of \emph{COPS replica identifiers}, \( \COPSReplicas \ni \repl \), 
+is a countably infinite set that is totally ordered by a relation \( < \).
+The set of local time, \( \Times \ni \ts\), is defined by \( \Times \TypeDef \Nat \).
+The set of \emph{COPS version identifiers}, \( \COPSVerIDs \ni \copsverid \),
+is defined by: \( \COPSVerIDs \TypeDef \Times \times \COPSReplicas .  \)
+The order over versions identifiers is defined by:
+\[ 
+\copsverid \copsveridleq \copsverid'
+\PredDef 
+\copsverid = (n,\repl)
+\land \copsverid' = (n',\repl')
+\land n < n' \lor ( n = n' \land ( \repl < \repl' ) .
+\]
+\end{definition}
+
+As explained in \cref{sec:overall-cops},
+a COPS version \( \copsver \) consists of a value, a identifier 
+and a dependency set that contains the versions on which \( \copsver \) depends.
+
+\begin{definition}[COPS versions and dependency sets]
+The set of \emph{dependency sets}, \( \COPSDependencies \ni \copsdep \) 
+is defined by: \( \COPSDependencies \TypeDef \PowerSet(\copsdep \subseteq \Keys \times \COPSVerIDs) \).
+The set of \emph{COPS versions}, \( \COPSVersions \ni \copsver \), is defined by: 
+\( \COPSVersions \TypeDef \Values \times \COPSVerIDs  \times \COPSDependencies \).
+Let \(\ValOf(\copsver)\), \(\IdOf(\copsver)\)  
+and \( \DepOf(\copsver)\) denote the first, second and third projections of \( \copsver \) respectively.
+\end{definition}
+
+A COPS database comprises a finite number of replicas.
+Each replica \( \repl \) consists of a local multi-version key-value store and a local time.
+A COPS replica tracks all the history versions that are uniquely identified and ordered by their writers.
+Without losing generality, versions for a key are organised as a list in the key-value store.
+However, the relative position of versions does not affect the semantics, since all versions are ordered by their writers.
+
+\begin{definition}[COPS key-value stores and databases]
+\label{def:cops-kv-store}
+The set of \emph{COPS local key-value stores} or just \emph{COPS local stores},
+is defined by
+\( \COPSKVSs \FuncDef \Set{\copskvs \in \Keys \ToTFunc \List{\COPSVersions} | \WfCOPSKvs(\copskvs)} \)
+where \( \WfCOPSKvs \) is defined by: for any keys \( \key, \key' \in \Keys \),
+indexes \( \idx, \idx' \in \Indexs \) and the initial value \( \valinit \),
+\begin{Formulae}
+    & \begin{Formula}
+        \copskvs(\key,0) = (\valinit,(\repl_0,0),\emptyset),
+        \label{equ:cops-kvs-init}
+    \end{Formula}
+    \\ & \begin{Formula}
+        \IdOf(\copskvs(\key,\idx)) = \IdOf(\copskvs(\key',\idx')) 
+            \implies \key = \key' \land \idx = \idx',
+        \label{equ:cops-version-unique}
+    \end{Formula}
+    \\ & \begin{Formula}
+        \IdOf(\copskvs(\key,\idx)) \copsveridleq \IdOf(\copskvs(\key,\idx')) 
+            \iff \idx < \idx'.
+        \label{equ:cops-version-order}
+    \end{Formula}
+\end{Formulae}
+Given two COPS local stores, 
+the order, written \( \copskvs \copskvsleq \copskvs' \), is defined by:
+\[
+    \copskvs \copskvsleq \copskvs' \PredDef \Forall{\key \in \Keys | \idx \in \Indexs }
+    \copsver = \copskvs(\key, \idx) \implies \Exists{\idx' \in \Indexs} \copsver = \copskvs'(\key, \idx').
+\]
+The set of \emph{COPS databases}, \( \COPSs \ni \cops \), is defined by:
+\[
+    \COPSs \FuncDef \Set{\cops \in \COPSReplicas \ToPFFunc 
+        \\  ( \COPSKVSs \times \Times ) | 
+        \Forall{\repl, \repl' \in \Dom(\cops) | \copskvs, \copskvs' \in \COPSKVSs }
+        \\ \Forall{ \key, \key' \in \Keys | \idx, \idx' \in \Indexs }
+            \\ \cops(\repl) = (\copskvs,\stub) \land \cops(\repl') = (\copskvs',\stub) 
+            \\ \left( \begin{array}{@{}r@{}}\IdOf(\copskvs(\key,\idx)) = \IdOf(\copskvs'(\key',\idx')) \iff
+            \\ \qquad \key = \key' \land \copskvs(\key,\idx) = \copskvs'(\key',\idx') \end{array} \right)  }.
+\]
+\end{definition}
+
+%Because versions will be eventually delivered to all sites,
+A COPS version will be eventually replicated to all replica.
+This means that versions with the same identifier in different replicas must be the same version.
+This is captured by the well-formed condition for \( \COPSs \).
+
+Each COPS client \( \cl \) maintains a local context that tracks versions \( \cl \) read or wrote before.
+When a client commits a new version, 
+the client context becomes the dependency set of the new version.
+Hence, we model both dependency sets and client contexts as sets of pairs comprising keys and replica identifiers.
+Each client \( \cl \) also tracks the replica identifier with which \( \cl \) interacts.
+
+\begin{definition}[COPS client contexts and environments]
+The set of \emph{COPS client contexts}, \( \COPSContexts \in \copsctx \), is defined by
+\(
+    \COPSContexts \TypeDef \PowerSet(\Keys \times \COPSVerIDs)
+\).
+The set of \emph{COPS client context environments}, \( \COPSContextEnvs \ni \copsctxenv \), is defined by:
+\( \COPSContextEnvs \TypeDef \Clients \ToPFFunc (\COPSContexts \times \COPSReplicas ) \).
+\end{definition}
+
+A COPS configuration \( \copsconf \) comprises a COPS database  \( \cops \) and a COPS client environment \( \copsctxenv \).
+Any client from the environment \( \copsctxenv \) must be served by a replica in \( \cops \).
+%
+\begin{definition}[COPS configurations]
+\label{def:cops-conf}
+The set of \emph{COPS configurations}, \( \COPSConfs \ni \copsconf \), is defined by:
+\[ 
+    \COPSConfs \TypeDef \Set{ (\cops, \copsctxenv) \in \\ \COPSs \times \COPSContextEnvs |
+        \Forall{\cl \in \Dom(\copsctxenv) | \repl \in \COPSReplicas} 
+        \\ \copsctxenv(\cl) = (\stub, \repl) \implies \repl \in \Dom(\cops) }.
+\]
+The set of \emph{initial COPS configurations}, \( \COPSConfInits \ni \copsconfinit\),
+is defined by: 
+\[ \COPSConfInits \TypeDef \Set{ (\cops, \copsctxenv) \in \\ \COPSConfs | 
+        \Forall{\repl \in \COPSReplicas | \cl \in \Clients } 
+        \\ \cops(\repl) = ((\lambda \key \in \Keys \ldotp  \List{(\valinit, \txidinit, \emptyset)}), 0 )
+        \land \copsctxenv(\cl) = (\emptyset, \stub) }. 
+\]
+\end{definition}

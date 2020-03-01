@@ -1,0 +1,138 @@
+Several libraries in the literature that are robust against \(\SI\) 
+\citep{giovanni_concur16,bank-example-wsi} are also robust against \(\WSI\).
+Recall that \( \WSI \) is a new consistency model between \( \SI \) and \( \PSI \).
+The operations of these libraries all yield kv-stores that 
+adhere to a particular pattern captured by the following definition.
+
+\begin{definition}[\(\WSI\)-safe]
+\label{def:wsi-safe}
+    A kv-store \( \kvs \) is \emph{\(\WSI\)-safe}, written \( \WSISafe(\kvs) \), if and only if
+    \begin{align}
+        & \Exists{\prog \in \Programs} \kvs \in \EvalET{\prog}[\WSI]
+        \land \Forall{\txid \in \TxIDs | \key \in \Keys | \idx \in \Indexs} \nonumber
+        \\ & \left( \begin{array}{@{}l@{}}
+            \txid \in \RsOf(\kvs(\key,\idx)) \land \txid \neq \WtOf(\kvs(\key,\idx)) 
+            \\ \quad \implies \Forall{\key' \in \Keys | \idx' \in \Indexs} 
+            \txid \neq \WtOf(\kvs(\key',\idx')) 
+        \end{array} \right) \label{equ:wsi-safe-read-only} 
+        \\ & \land \left( 
+            \txid \neq \txidinit \land \txid = \WtOf(\kvs(\key,\idx)) 
+            \implies \Exists{\idx' \in \Indexs} 
+            \txid \in \RsOf(\kvs(\key,\idx')) 
+        \right) \label{equ:wsi-safe-write-must-read} 
+        \\ & \land \left( \begin{array}{@{}l@{}} 
+            \txid \neq \txidinit \land \txid = \WtOf(\kvs(\key,\idx)) \land 
+            \Exists{\key' \in \Keys | \idx' \in \Indexs}
+            \\ \quad \txid \in \RsOf(\kvs(\key',\idx')) 
+            \implies \txid = \WtOf(\kvs(\key',\idx'))
+        \end{array} \right) \label{equ:wsi-safe-all-write}
+    \end{align}
+\end{definition}
+
+This definition states that a kv-store \(\kvs\) is \WSI-safe 
+if it is reachable by executing a program under \( \WSI \) 
+and for each transaction \(\txid\): 
+\begin{enumerate*} 
+    \item if \(\txid\) reads from \(\key\) without writing to it then \(\txid\) must be a read-only transaction (\cref{equ:wsi-safe-read-only}); 
+    \item \label{item:no-blind-write} if \( \txid \) writes to \(\key\), then it must also read from it (\cref{equ:wsi-safe-write-must-read}), 
+            a property known as \emph{no-blind-write}; and
+	\item \label{item:strict-write} if \( \txid \) writes to \(\key\), then it must also write to all keys it reads (\cref{equ:wsi-safe-all-write}).
+\end{enumerate*}
+We call (2) and (3) as \emph{strict no-blind-writes}.
+When a kv-store satisfies \( \WSI \)-safe, it must be robust against \( \WSI \).
+
+\begin{theorem}[Robustness of \( \WSI \)]
+    If a kv-store \( \kvs \) satisfies \(\WSI\)-safe,
+    then kv-store \( \kvs \) is robust against \(\WSI\): that is,
+    \(\WSISafe(\kvs) \implies \kvs \in \CMET(\SER) \).
+\end{theorem}
+\begin{proof}
+    Assume a kv-store \( \kvs \) that is \(\WSI\) safe.
+    By \cref{def:wsi-safe} it is known that \( \kvs \in \EvalET{\prog}[\WSI]\) for some \( \prog \).
+    Then by \cref{def:robustness,thm:serialisable-nocycle} it is sufficient to prove acyclicity of
+    the relation \( \Trasi((\WR[\kvs] \cup \SO \cup \WW[\kvs] \cup \RW[\kvs] )) \).
+    Since \( \EvalET{\prog}[\CC] \subseteq \EvalET{\prog}[\WSI] \), 
+    the relation \( \Trasi((\WR[\kvs] \cup \SO)) \) must be acyclic.
+    Now consider the relation \( \Trasi((\WR[\kvs] \cup \SO \cup \WW[\kvs])) \).
+    Assume two transactions \( \txid, \txid' \) such that \( (\txid,\txid') \in \WW[\kvs] \).
+    By \cref{equ:wsi-safe-all-write} and \( \EvalET{\prog}[\UA] \subseteq \EvalET{\prog}[\WSI] \),
+    if transaction \( \txid \) writes a version, it must read the immediate previous version,
+    \begin{Formulae}
+    \begin{Formula}
+        \Forall{\key \in \Keys | \idx, \idx' \in \Indexs}
+        \txid = \WtOf(\kvs(\key,\idx + 1)) \implies \txid \in \RsOf(\kvs(\key,\idx)) .
+        \label{equ:wsi-sat-ua} 
+    \end{Formula}
+    \end{Formulae}
+    By the definition of \( \WW[\kvs] \), there exists two versions, 
+    \Th{\idx} and \Th{j} versions of a key \( \key \),
+    \[
+        \txid = \WtOf(\kvs(\key,\idx)) \land \txid' = \WtOf(\kvs(\key,j)) \land \idx < j .
+    \]
+    Therefore, by \cref{equ:wsi-safe-all-write}, we have \( ( \txid, \txid' ) \in \Trasi(\WR[\kvs]) \).
+    This means that the relation \( \Trasi((\WR[\kvs] \cup \SO \cup \WW[\kvs])) \) is irreflexive.
+
+    We prove acyclicity of
+    the relation \( \Trasi((\WR[\kvs] \cup \SO \cup \WW[\kvs] \cup \RW[\kvs] )) \) by contradiction.
+    Assume transactions \( \txid \) and \( \txid' \) such that
+    \[
+        \ToEdge{\txid | \Trasi((\WR[\kvs] \cup \SO \cup \WW[\kvs] \cup \RW[\kvs] )) -> \txid'}
+    \]
+    Since \( \Trasi((\WR[\kvs] \cup \SO \cup \WW[\kvs])) \) cannot have cycle,
+    it must be the case that the cycle contains \( \RW[\kvs] \).
+    There exists \( \txid_1 \) to \( \txid_n \) such that
+    \[
+        \txid = \txid_1 \land \txid' = \txid_n 
+        \land \ToEdge{\txid_1 | \TraRe(\rel) -> \txid_2 | \RW[\kvs] 
+                        -> \txid_3 | \TraRe(\rel) -> \cdots | \RW[\kvs] 
+                        -> \txid_{n-1} | \TraRe(\rel) -> \txid_n} 
+    \]
+    where \( \rel  = \WR[\kvs] \cup \SO \cup \WW[\kvs] \).
+    We now replace some edges from the cycle.
+    \begin{enumerate}
+    \Case{\( \ToEdge{ \txid_\idx | \RW[\kvs] ->\txid_{\idx+1} }\) for \( \txid_\idx \) writing a key \( \key \)} 
+        By the definition of \( \RW[\kvs] \),
+        transaction \( \txid_\idx \) must read a key \( \key' \) that is overwritten by \( \txid_{\idx+1} \), 
+        that is, \( \txid_\idx \in \RsOf(\kvs(\key', j))\) for some index \( j \).
+        Since \(\txid_\idx \) wrote the key \( \key \), by \cref{equ:wsi-safe-all-write},
+        transaction \(\txid_\idx\) must also write the key \( \key' \).
+        Then by \cref{equ:wsi-safe-all-write} and \( \EvalET{\prog}[\UA] \subseteq \EvalET{\prog}[\WSI] \),
+        transaction \(\txid_\idx\) must also write the \Th{(j+1)} version of the key \( \key' \):
+        that is, \( \txid_\idx \in \WtOf(\kvs(\key', j+1)) \),
+        and therefore \( \ToEdge{ \txid_\idx | \WW[\kvs] ->\txid_{\idx+1} } \).
+
+        After replace all the possible \( \RW[\kvs] \) edges to \( \WW[\kvs] \), 
+        the rest \( \RW[\kvs] \) edges must start from a read only transaction:
+        that is, for any transactions \( \txid'',\txid^* \)
+        \begin{Formulae}
+        \begin{Formula}
+            \ToEdge{ \txid'' | \RW[\kvs] -> \txid^* } \implies 
+            \Forall{\key^* \in \Keys | z \in \Indexs} \txid'' \neq \WtOf(\kvs(\key^*,z)) .
+            \label{equ:wsi-rw-start-read-only}
+        \end{Formula}
+        \end{Formulae}
+    \Case{\( \ToEdge{ \cdots | \RW -> \txid_i | \TraRe(\rel) -> \txid_{i+1} | \RW -> \cdots }\)}
+        Transaction \( \txid_i \) at least wrote a key 
+        but by \cref{equ:wsi-rw-start-read-only} \( \txid_{i+1}\) is a read-only transaction,
+        thus \( \txid_i \neq \txid_{i+1}\).
+        This means \( \ToEdge{ \cdots | \RW -> \txid_i | \Trasi(\rel) -> \txid_{i+1} | \RW -> \cdots } \).
+
+    \Case{\( \ToEdge{ \txid_\idx | \WW[\kvs] ->\txid_{\idx+1} } \)}
+        By \cref{equ:wsi-safe-write-must-read} and \( \EvalET{\prog}[\UA] \subseteq \EvalET{\prog}[\WSI] \),
+        we know that \( \ToEdge{ \txid_\idx | \Trasi(\WR[\kvs]) -> \txid_{\idx+1} }\).
+    \end{enumerate}
+
+    Let \( \rel' = \WR \cup \SO \) be a relation.
+    Now we have cycle in the following form:
+    \[
+        \txid = \txid_1 =  \txid'_1 \land \txid' = \txid_n  = \txid'_m
+        \land \ToEdge{\txid'_1 | \TraRe({\rel'}) -> \txid'_2 | \RW 
+                        -> \txid'_3 | \Trasi({\rel'}) -> \cdots | \RW 
+                        -> \txid'_{m-1} | \TraRe({\rel'}) -> \txid'_m} 
+    \]
+    for some transactions \( \txid'_1 \) to \( \txid'_m \).
+    This means \( \ToEdge{ \txid | \TraRe(((\WR \cup \SO); \Refl(\RW))) -> \txid' } \).
+    Because \( \EvalET{\prog}[\CP] \subseteq \EvalET{\prog}[\WSI] \), 
+    it must the case that \( \txid \neq \txid' \), which contradicts with the assumption.
+    Therefore, the relation \( \Trasi((\WR[\kvs] \cup \SO \cup \WW[\kvs] \cup \RW[\kvs] )) \) is irreflexive.
+\end{proof}

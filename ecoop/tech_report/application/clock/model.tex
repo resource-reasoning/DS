@@ -1,0 +1,154 @@
+A shard in Clock-SI comprises a local time and all the history versions of a partition of keys.
+Each version consists of a value, a time when the version committed
+and a version state, which is \( \clocksiprepared \) or \( \clocksicommitted \).
+In the semantics of Clock-SI, the shard do not explicitly have the preparation set, 
+instead, annotates versions with their states.
+
+\begin{definition}[Clock-SI local times and versions]
+The set of \emph{Clock-SI local times}, \( \CLOCKtimes \ni \clocktime \),
+is defined by: \( \CLOCKtimes \TypeDef \Nat \).
+%Let \( \clocktimeinit = 0\) be the initialisation time.
+Assume a set of \emph{version states} \( \CLOCKStates \TypeDef \{\clocksiprepared, \allowbreak \clocksicommitted\}\).
+Given the set of values (\cref{def:values}),
+the set of \emph{Clock-SI versions}, \( \CLOCKVersions \ni \clockver \),
+is defined by: \( \CLOCKVersions \TypeDef \Values \times \CLOCKtimes\times \CLOCKStates  \).
+Given a version \( \clockver \), let \( \ValOf(\clockver)\), \( \TimeOf(\clockver) \)
+and  \( \StateOf(\clockver)\)
+return the first, second and third projections of \( \clockver \) respectively.
+Given two versions \( \clockver, \clockver' \),
+the order between them, written \(\clockver \clockverleq \clockver' \), is defined by:
+\begin{align*}
+    \clockver \clockverleq \clockver' 
+    \begin{multlined}[t]
+    \PredDef
+    \Exists{\val,\clocktime,\clocktime',l,l'}
+    \clockver = (\val,\clocktime,l)
+    \land \clockver = (\val,\clocktime',l')
+    \\ {} \land 
+    \left( (\clocktime = \clocktime' \land l = l')
+    \lor
+    (l = \clocksiprepared \land l' = \clocksicommitted \land \clocktime \leq \clocktime') \right).
+    \end{multlined}
+\end{align*}
+\end{definition}
+ 
+The \emph{local key-value store}, \( \clockkvs \), of a shard contains all the history versions,
+which is a \emph{partial function} from keys to lists of Clock-SI versions.
+
+\begin{definition}[Clock-SI key-value stores]
+The set of \emph{Clock-SI local key-value  stores} or \emph{Clock-SI local store} is defined by:
+\[ \CLOCKKVS \TypeDef \Set{\clockkvs \in \Keys \ToPFunc \List{\CLOCKVersions} | \WfCLOCKKvs(\clockkvs)} , \]
+where \( \WfCLOCKKvs \) is defined by: for any key \( \key \in \Dom(\clockkvs) \) and indexes \( \idx, \idx'\),
+\begin{Formulae}
+& \begin{Formula} \clockkvs(\key, 0) = (\valinit,\clocktimeinit,\clocksicommitted) , \label{equ:clock-si-kv-init}
+\end{Formula}
+\\ & \begin{Formula} 
+\Forall{\val, \val' \in \Values | \clocktime, \clocktime' \in \CLOCKtimes | l,l' \in \CLOCKStates}
+\\ \clockkvs(\key, \idx) = (\val,\clocktime,l) 
+\land \clockkvs(\key, \idx') = (\val',\clocktime',l')
+\land \idx < \idx'
+\implies \clocktime < \clocktime' . \label{equ:clock-si-kv-mono}
+\end{Formula}
+\end{Formulae}
+The set of \emph{initial Clock-SI key-value stores}, 
+\( \CLOCKKVSInit \ni \clockkvsinit \), is defined by:
+\[ 
+\CLOCKKVSInit \TypeDef
+    \Set{\clockkvsinit | \Forall{\key \in \Dom(\clockkvsinit) } 
+                    \clockkvsinit(\key) = \List{(\valinit,0,\clocksicommitted)}} .
+\]
+The order \( \clockkvs \clockkvsleq \clockkvs' \) is defined by:
+\[
+    \clockkvs \clockkvsleq \clockkvs' \PredDef
+    \Forall{\key \in \Keys | \idx \in \Indexs }
+    \clockkvs(\key,\idx) \clockverleq \clockkvs'(\key,\idx) .
+\]
+\end{definition} 
+
+The versions in a Clock-SI key-value store are ordered over their commit times,
+captured by the well-formed condition, \( \WfCLOCKKvs \).
+In the initial Clock-SI, each key only contains the initial version,
+with the initial value \( \valinit \) and time \( 0 \).
+
+Clock-SI is a fully \emph{partitioned},
+which means that versions associated with a key are stored in a distinct shard.
+This is captured by the definition of Clock-SI machine states, \( \clocksi \),
+comprising a function mapping shard identifiers, \( \clockshard \), to their key-value stores and local times.
+
+\begin{definition}[Clock-SI machine states]
+Assume a set of \emph{shards identifiers}, \( \CLOCKShards \ni \clockshard \).
+The set of \emph{Clock-SI machine states}, \( \CLOCKSI \ni \clocksi \), is defined by:
+\[
+\CLOCKSI \TypeDef \Set{\clocksi \in \CLOCKShards \ToPFFunc {} 
+                    \\ \CLOCKKVS \times \CLOCKtimes |
+            \Forall{\clockshard, \clockshard' \in \Dom(\clocksi) 
+                        | \clockkvs,\clockkvs' \in \CLOCKKVS} 
+            \\ \clockshard \neq \clockshard' 
+            \land (\clockkvs,\stub) = \clocksi(\clockshard)
+            \land (\clockkvs',\stub) = \clocksi(\clockshard')
+            \\ {} \implies \Dom(\clockkvs) \cap \Dom(\clockkvs') = \emptyset } .
+\]
+The set of \emph{initial Clock-SI machine states}, \( \CLOCKSIInit \ni \clocksiinit\), is defined by:
+\[
+\CLOCKSIInit \TypeDef \Set{\clocksiinit 
+        | \Forall{\clockshard \in \Dom(\clocksiinit)}
+                \Exists{\clockkvsinit \in \CLOCKKVSInit}
+                \clocksiinit(\clockshard) = \Tuple{\clockkvsinit,0}} .
+\]
+Given \( \clocksi \), let \( \ShardOf(\clocksi,\key) \) denote the shard containing the key \( \key \).
+Let \( \clocksi(\key)\) denote the list of versions associated with the key \( \key \),
+defined by:
+\(
+    \clocksi(\key) \FuncDef \clocksi(\ShardOf(\clocksi,\key))\Proj{0}(\key) .
+\)
+The order, \( \clocksi \clocksileq \clocksi' \), is defined by:
+\begin{multline*}
+    \clocksi \clocksileq \clocksi' \PredDef
+    \Forall{ \clockshard \in \Dom(\clocksi) | \clockkvs,\clockkvs' \in \CLOCKKVS 
+                | \clocktime,\clocktime \in \CLOCKTimes }
+    \\ \clocksi(\clockshard) = (\clockkvs,\clocktime) 
+       \implies \clocksi'(\clockshard) = (\clockkvs',\clocktime')
+       \land \clockkvs \clockkvsleq \clockkvs' 
+       \land \clocktime \leq \clocktime' .
+\end{multline*}
+\end{definition} 
+
+Transactions in a client session are executed sequentially,
+yet they might commit to different shards.
+Each client maintains a local time, 
+initially being zero, that determines the session order between transactions from this client.
+
+\begin{definition}[Clock-SI client environments]
+Given the set of client identifiers defined in \cref{def:client-id},
+the set of \emph{Clock-SI client environments}, \( \CLOCKClientEnvs \ni \clockclientenv\),
+is defined by:
+\[
+\CLOCKClientEnvs \TypeDef \Set{\clockclientenv \in \Clients \ToPFFunc \CLOCKtimes } .
+\]
+The set of \emph{initial Clock-SI client environments}, 
+\( \CLOCKClientEnvInits \ni \clockclientenvinit\),
+is defined by:
+\[
+    \CLOCKClientEnvInits \TypeDef \Set{\clockclientenvinit 
+                | \Forall{\cl \in \Dom(\clockclientenvinit)} \clockclientenvinit(\cl) = 0}.
+\]
+Given two Clock-SI environment \( \clockclientenv,\clockclientenv'\),
+the order, \( \clockclientenv \clockclientenvleq \clockclientenv'\), is defined by:
+\[
+\clockclientenv \clockclientenvleq \clockclientenv' \PredDef
+\Forall{\cl \in \Dom(\clockclientenv)} \clockclientenv(\cl) \leq \clockclientenv'(\cl) .
+\]
+\end{definition}
+
+The abstract states of Clock-SI semantics comprise the machine states of Clock-SI and client environments.
+
+\begin{definition}[Clock-SI configurations]
+the set of \emph{Clock-SI configurations}, \( \CLOCKConfs \ni \clockconf \), is defined by:
+\(
+\CLOCKConfs \TypeDef \CLOCKSI \times \CLOCKClientEnvs .
+\)
+and the set of \emph{initial Clock-SI configurations}, \( \CLOCKConfInits \ni \clockconfinit \),
+\( 
+\CLOCKConfInits \TypeDef \CLOCKSIInit \times \CLOCKClientEnvInits .
+\)
+\end{definition}

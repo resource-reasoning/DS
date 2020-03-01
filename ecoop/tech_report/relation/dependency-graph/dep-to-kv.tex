@@ -1,0 +1,169 @@
+Next, we show how to convert a dependency graph \(\dgraph\) to a kv-store via function \( \DToK\).
+%Given a key \(\key\), each write operation, \(\opW(\key,\val) \), of a transaction, \( \txid \),
+%corresponds to a version comprising a value \(\val \) and the writer being \( \txid \)
+%and the reader set containing all transactions, \( \txid' \), that read the version,
+%that is, \( (\txid,\txid') \in \WR(\key) \).
+%The write-write relation \(\WW[\dgraph](\key)\) determines the order of versions of \( \key \).
+
+\begin{definition}[Dependency graphs to kv-stores]
+\label{def:dependency-graph-kv-store}
+Given a dependency graph \(\dgraph\), and a transaction \( \txid \) that writes a key \(\key\),
+the \emph{version} for \( \key \) written by \( \txid \) is defined by:
+\[ 
+\VerOf(\dgraph, \key, \txid) \FuncDef 
+    \CodeFont{let} \ \opW(\val,\key) \in \dgraph(\txid) 
+        \ \CodeFont{in} \ \Tuple{\val,\txid,\Set{\txid' | (\txid, \txid') \in \WR[\dgraph](\key) }}.
+\]
+The \emph{version list} for \( \key \), written \VerListOf(\dgraph,\key), is defined by:
+\begin{align*}
+\VerListOf(\dgraph,\key) & \FuncDef
+\begin{multlined}[t]
+\Let \txidset = \Set{\txid,\txid' | (\txid,\txid') \in \WW[\dgraph] } \In 
+    \\ \List{\VerOf(\dgraph, \key, {\Func{WWnth}(\dgraph,\txidset,0)}), \cdots, \VerOf(\dgraph, \key, {\Func{WWnth}(\dgraph,\txidset,\Abs{\txidset} - 1)})}
+\end{multlined}
+\\ \Func{WWnth}(\dgraph,\txidset,0) & \FuncDef \txid \ \text{where} \ 
+            \Forall{\txid' \in \txidset} \txid = \txid' \lor (\txid,\txid') \in \WW[\dgraph]
+\\ \Func{WWnth}(\dgraph,\txidset,n + 1) & \FuncDef \Func{WWnth}(\dgraph,\txidset \setminus \Set{\txid} ,n) \ \text{where} \ 
+            \Forall{\txid' \in \txidset} \txid = \txid' \lor (\txid,\txid') \in \WW[\dgraph]
+\end{align*}
+The kv-store induced by \( \dgraph \), written \( \DToK(\dgraph) \), is defined by:
+\(
+    \DToK(\dgraph) = \lambda \key \in \Keys \ldotp \VerListOf(\dgraph,\key).
+\)
+\end{definition}
+
+Given a key \( \key \) and a transaction \( \txid \) that writes \( \key \),
+the version \( \VerOf(\dgraph,\key,\txid) \) comprises the value of \( \key \) written by \( \txid \),
+the writer being \( \txid \), and the reader set that contains all transactions \( \txid' \)
+that read from \( \txid \), that is, \( (\txid,\txid') \in \WR \).
+Given all versions of \( \key \), function \( \VerListOf(\dgraph,\key) \)
+determines the order over the versions with respect to \( \WW(\key) \) relation.
+Recall that if \( (\txid,\txid') \in \WW[\dgraph](\key) \), then \( \txid'\) committed after \( \txid \).
+This means that the version written by \( \txid' \) 
+precedes the version written by \( \txid \) in the list of \( \VerListOf(\dgraph,\key) \).
+It is straightforward that \( \DToK(\dgraph) \) satisfies 
+the well-formed conditions for kv-store in \cref{def:well-formed-kv-store}.
+More detail is given in \cref{prop:dtok-well-defined} on page \pageref{sec:proof-dep-graph-to-kvs}.
+
+\begin{toappendix}
+\label{sec:proof-dep-graph-to-kvs}
+\begin{proposition}[Well-defined \(\DToK\)]
+\label{prop:dtok-well-defined}
+Given a dependency graph \( \dgraph \in \DependencyGraphs \), 
+the kv-store induced by dependency graph, \( \DToK(\dgraph) \), is well-formed,
+that is, \( \DToK(\dgraph) \in \KVSs\).
+\end{proposition}
+\begin{proof}
+Let \( \kvs = \DToK(\dgraph) \).
+Given a key \( \key \), by the well-formedness definition for kv-store,
+it is sufficient to prove the following cases.
+\begin{enumerate}
+\item \label{item:well-form-dtok-read-read} Suppose two indexes \( \idx, \idx' \) 
+    such that \( \RsOf(\kvs(\key,\idx)) \cup \RsOf(\kvs(\key,\idx')) \neq \emptyset \).
+    Assume \( \txid \in \RsOf(\kvs(\key,\idx)) \cup \RsOf(\kvs(\key,\idx)) \).
+    There must exist edges
+    \[ (\WtOf(\kvs(\key,\idx)),\txid), (\WtOf(\kvs(\key,\idx')),\txid) \in \WR[\dgraph]. \]
+    Because \dgraph is well-formed (\cref{equ:dgraph-wr-unique}), 
+    \( \WtOf(\kvs(\key,\idx)) = \WtOf(\kvs(\key,\idx')) \) thus \( \idx = \idx' \).
+\item Suppose two indexes \( \idx, \idx' \) 
+    such that \( \WtOf(\kvs(\key,\idx)) = \WtOf(\kvs(\key,\idx')) \).
+    We prove \( \idx = \idx' \) by contradiction.
+    Assume \( \idx \neq \idx' \).
+    Without losing generality, this means that \( (\WtOf(\kvs(\key,\idx)),\WtOf(\kvs(\key,\idx'))) \in \WW[\dgraph]\);
+    By well-formedness of \dgraph (\cref{equ:dgraph-ww-irreflexive}), it cannot be true.
+    Thus we have \( \idx = \idx' \).
+    Combine \cref{item:well-form-dtok-read-read}, we prove \cref{equ:kvs-wf-txid-snapshot-property}.
+\item Given \cref{equ:dgraph-ww-init} we know that \( (\txidinit, \txid) \in \WW[\dgraph]\) 
+    for all \( \txid \in \dgraph \land \txid \neq \txidinit \);
+    and \( \opW(\key,\valinit) \in \dgraph(\txidinit) \).
+    By the definition of \( \VerListOf \), \( \kvs(\key,0) = (\valinit,\txidinit,\stub) \),
+    which implies \cref{equ:kvs-wf-init-version}.
+\item Suppose an index \( \txid, \txid' \) such that 
+    such that \( \txid = \WtOf(\kvs(\key,\idx)) \) and \( \txid' \in \RsOf(\kvs(\key,\idx)) \)
+    for some index \( \idx \).
+    This means \( (\txid,\txid') \in \WR[\dgraph] \).
+    By \cref{equ:dgraph-wr-so}, it follows \( (\txid,\txid') \notin \Refl(\SO)\) 
+    which implies \cref{equ:kvs-wf-so-wr}.
+\item Suppose an index \( \txid, \txid' \) such that 
+    such that \( \txid = \WtOf(\kvs(\key,\idx)) \) and \( \txid' = \WtOf(\kvs(\key,\idx')) \)
+    for some indexes \( \idx, \idx' \) with \( \idx < \idx' \).
+    This means \( (\txid,\txid') \in \WW[\dgraph] \).
+    By \cref{equ:dgraph-ww-so}, it follows \( (\txid,\txid') \notin \SO\) 
+    which implies \cref{equ:kvs-wf-so-ww}. \qedhere
+\end{enumerate}
+\end{proof}
+%\begin{proofsketch}
+%It is straightforward that \( \DToK(\dgraph) \) satisfies 
+%the well-formed conditions for kv-store in \cref{def:well-formed-kv-store}.
+%The full proof is given in \cref{sec:proof-dep-graph-to-kvs} on page \pageref{sec:proof-dep-graph-to-kvs}.
+%\end{proofsketch}
+\end{toappendix}
+
+We now show the bijection between our kv-stores and dependency graphs.
+This is a key intermediate step to link our global kv-stores to abstract executions.
+
+\begin{theorem}[Bijection between kv-stores and dependency graphs]
+\label{thm:isomorphism-kvstore-dgraph}
+There is a bijection between kv-stores and dependency graphs.
+\end{theorem}
+\begin{proof}
+Because \KToD(\kvs) and \DToK(\dgraph) are well-defined respectively 
+(detail is given in \cref{prop:ktod-well-defined,prop:dtok-well-defined}).
+It remains to prove \( \kvs = \DToK(\KToD(\kvs)) \) and \( \dgraph = \KToD(\DToK(\dgraph)) \).
+\begin{enumerate}
+\Case{\kvs = \DToK(\KToD(\kvs))}
+    Let \( \dgraph  = \KToD(\kvs) \).
+    Fix a key \( \key \) and 
+    \[ \kvs(\key) = \List{(\valinit,\txidinit,\txidset_0), \cdots,(\val_n,\txid_n,\txidset_n) }. \]
+    By the definition of \(\KToD\), it follows that:
+    \begin{enumerate*} \item \( \opW(\key,\val_i) \in \dgraph(\txid_i) \);
+    \item for all \( \txid \in \txidset_i \), \( \opR(\key,\val_i) \in \dgraph(\txid) \); and
+    \item \( \WW[\dgraph] = \WW[\kvs] \) and \( \WR[\dgraph] = \WR[\kvs] \).
+    \end{enumerate*}
+    Then by definition of \DToK, specifically \( \VerListOf \), 
+    it is easy to see \( \DToK(\dgraph)(\key) = \VerListOf(\dgraph,\key) = \kvs(\key) \).
+\Case{\dgraph = \KToD(\DToK(\dgraph))}
+    Let \( \kvs  = \DToK(\dgraph) \).
+    First, we prove \( \txidop[\dgraph] = \txidop[\KToD(\kvs)] \).
+    Consider a transaction \( \txid \) and an operation \( \op \) such that \( \op \in \dgraph(\txid)\).
+    \begin{enumerate}
+    \Case{\(\op = \opR(\key,\val)\)}
+        Because \dgraph is well-formed, there exists a transaction \( \txid' \) such that
+        \( (\txid',\txid) \in \WR[\dgraph](\key) \).
+        By definition of \DToK,
+        there exists an index \( \idx \) and a reader set \( \txidset \) such that 
+        \( 
+        \op \in \dgraph(\txid) \iff \kvs(\key,\idx) = (\val,\txid',\txidset) \land \txid \in \txidset .
+        \)
+        Then by definition of \KToD, we have \( \op \in \KToD(\kvs)(\txid)\).
+        This means that \( \op \in \dgraph(\txid) \iff \op \in \KToD(\kvs)(\txid)\).
+    \Case{\(\op = \opW(\key,\val)\)}
+        Because \dgraph is well-formed, that is, \WW[\dgraph](\key) is 
+        a total order on all transactions that wrote \( key \);
+        by definition of \DToK,
+        there exists an index \( \idx \) and a reader set \( \txidset \)  such that 
+        \( 
+        \op \in \dgraph(\txid) \iff \kvs(\key,\idx) = (\val,\txid',\txidset) .
+        \)
+        By definition of \KToD, we have \( \op \in \KToD(\kvs)(\txid)\).
+        This means that \( \op \in \dgraph(\txid) \iff \op \in \KToD(\kvs)(\txid)\).
+    \end{enumerate}
+    Second, we prove \( \WR[\dgraph] = \WR[\KToD(\kvs)]\) and  \( \WW[\dgraph] = \WW[\KToD(\kvs)]\).
+    consider a key \( \key \) and the write-write relation 
+    on all transactions \( \txid_0, \cdots, \txid_n \) that write \( \key \),
+    \( \ToEdge{\txid_0 | \WW[\dgraph](\key) -> \cdots | \WW[\dgraph](\key) -> \txid_n } \).
+    Consider \( \txidset_i \) for \( 0 \leq i < n\) such that
+    \( \Forall{\txid \in \txidset_i} (\txid_i,\txid) \in \WR[\dgraph] \).
+    By the definition of \DToK,
+    \( \kvs(\key) = \DToK(\dgraph)(\key) = 
+        \List{(\valinit,\txidinit,\txidset_0), \cdots,(\val_n,\txid_n,\txidset_n) } \).
+    Now by the definition of \( \WW[\kvs] \) and \( \WR[\kvs] \), 
+    we have \( \WR[\dgraph](\key) = \in \WR[\kvs](\key) \)
+    and \( \WW[\dgraph](\key)  = \WW[\kvs](\key). \)
+    %for \( \idx < \idx'\) and \( \txid \in \txidset_i\);
+    By definition of \KToD, then we have \( \WW[\kvs] = \WW[\KToD(\kvs)]\) and \(  \WR[\kvs] = \WR[\KToD(\kvs)] \),
+    it follows \(  \WW[\dgraph] = \WW[\KToD(\DToK(\dgraph))]\) and \(  \WR[\dgraph] = \WR[\KToD(\DToK(\dgraph))] \).
+    Last, because \( \RW[\dgraph] \) relation can be derived from \( \WW[\dgraph] \) and \( \WR[\dgraph] \),
+    it is easy to see \( \RW[\dgraph] = \RW[\KToD(\kvs)] \). \qedhere
+\end{enumerate}
+\end{proof}

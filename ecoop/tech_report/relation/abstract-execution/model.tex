@@ -1,0 +1,141 @@
+\emph{Abstract executions} \citep{ev_transactions,framework-concur} 
+are an alternative formalism for defining consistency models. 
+As with dependency graphs, an abstract execution \(\aexec\)
+is a directed graph where nodes representing transactions,
+%(with each node labelled with a transaction identifier and a fingerprint), 
+and edges representing certain relations between transactions: that is
+\begin{enumerate}
+\item \emph{visibility relation} which means that,
+if \( (\txid,\txid') \in \VIS \), 
+then transaction \( \txid' \) \emph{observes} \( \txid \),
+or in other words, \( \txid \) is \emph{visible} to \( \txid \); and
+\item \emph{arbitration relation}, also known as \emph{arbitration order},
+which means that
+if \( (\txid,\txid') \in \AR \),
+then the update of the \( \txid' \) \emph{overwrite} the update of \( \txid \),
+or in other words, \( \txid \) \emph{happens before} \( \txid' \).
+\end{enumerate}
+An example abstract execution graph is given in \cref{fig:abstract-execution}. 
+
+\input{abstract-execution/fig-example}
+
+\begin{definition}[Abstract executions]
+\label{def:aexec}
+Given the definition of \( \SO \) (\cref{def:session-order}),
+the set of \emph{abstract executions}, \( \AbstractExecutions \ni \aexec \), 
+is defined by:
+\(
+\AbstractExecutions \TypeDef \Set{(\txidop, \SO, \VIS, \AR) | \WfAExec(\txidop, \VIS, \AR) }
+\)
+where the well-formed condition, \( \WfAExec \), is defined by:
+\begin{align*}
+\MoveEqLeft \WfAExec(\txidop, \VIS, \AR) \PredDef 
+\\ & \begin{multlined}[t]
+    \txidop \in \begin{Bracketed} \begin{Bracketed} \TxIDZs \ToPFFunc \Fingerprints 
+            \end{Bracketed} \uplus \Mapping{\txidinit -> \Set{\opW(\key,\valinit) 
+                    | \key \in \Keys \land \valinit \in \InitVal(\key) }} \end{Bracketed}
+            \\ \TotalRelation(\AR,\txidop) \land \WfVIS(\VIS,\txidop,\AR) .
+        \end{multlined}
+\end{align*}
+The well-formed conditions on visibility and arbitration relations, 
+\( \TotalRelation \) and \( \WfVIS \), are defined:
+\begin{align}
+    \TotalRelation(\AR,\txidop) & \PredDef \Forall{\txid,\txid' \in \Dom(\txidop)} \nonumber
+    \\ & \txid = \txid' \lor (\txid,\txid') \in \AR \lor (\txid',\txid) \in \AR \label{equ:aexec-ar-total}
+    \\ & \land (\txid,\txid) \notin \AR \label{equ:aexec-ar-irreflexive}
+    \\ & \land \AR = \Trasi(\AR) \label{equ:aexec-ar-transitive}
+    \\ & (\txidinit,\txid) \in \AR \label{equ:aexec-ar-init}
+    \\ & \land \SO \subseteq \AR \label{equ:aexec-ar-so}
+    \\ \WfVIS(\VIS,\txidop, \AR) & \PredDef \Forall{\txid,\txid' \in \Dom(\txidop) | \key \in \Keys | \val \in \Values} \nonumber
+    \\ & \begin{Bracketed} (\txid,\txid') \in \VIS \implies (\txid',\txid) \notin \SO \end{Bracketed} \label{equ:aexec-vis-so}
+    \\ & \land \VIS \subseteq \AR \label{equ:aexec-ar-vis}
+    \\ & \land (\txidinit, \txid) \in \VIS  \label{equ:aexec-vis-init}
+    \\ & \left( \begin{array}{@{}l@{}} \opR(\key,\val) \in \txidop(\txid) 
+                    \\ \implies \opW(\key,\val) \in \txidop(\MaxVisTrans((\txidop,\VIS,\AR),\Inv(\VIS)(\txid),\key)) 
+         \end{array} \right) \label{equ:aexec-vis-external}
+\end{align}
+where \( \MaxVisTrans((\txidop,\VIS,\AR),\txidset,\key) \) defined by:
+\[
+\MaxVisTrans((\txidop,\VIS,\AR),\txidset,\key) \FuncDef 
+            \Max[\AR](\Set{ \txid | \Exists{\val \in \Values } 
+                \txid \in \txidset \land \opW(\key,\val) \in \txidop(\txid) }) 
+\]
+with \( \Max[\AR](\txidset') \) returning the maximum transaction in \( \txidset' \)
+with respect to \( \AR \).
+Given an abstract execution \( \aexec \),
+let \( \txidop[\aexec]\), \( \VIS[\aexec] \) and \( \AR[\dgraph]\) be the first, third and fourth projections.
+Notation \( \txid \in \dgraph \) and \( \op \in \dgraph(\txid) \) denotes
+\( \txid \in \Dom(\txidop) \) and \( \op \in \txidop(\txid) \) respectively.
+Let the initial abstract execution 
+\( \aexecinit = \Tuple{\Mapping{\txidinit -> \Set{\opW(\key,\valinit) 
+                    | \key \in \Keys \land \valinit \in \InitVal(\key) }},\emptyset, \emptyset} \).
+\end{definition}
+
+For a well-formed abstract execution, 
+the arbitration relation \(\AR\) is a total order over all the transactions 
+(\cref{equ:aexec-ar-total,equ:aexec-ar-irreflexive,equ:aexec-ar-transitive})
+starting from the initialisation transaction (\cref{equ:aexec-ar-init}),
+and agrees with the session order \( \SO \) (\cref{equ:aexec-ar-so}).
+The visibility relation \( \VIS \) agrees with the session order (\cref{equ:aexec-vis-so}) 
+and arbitrary order (\cref{equ:aexec-ar-vis}) 
+Transactions always see the initialisation transaction \( \txidinit \) (\cref{equ:aexec-vis-init}).
+Lastly, we only consider abstract executions that apply the \emph{last-write-wins} policy,
+that is, a transaction reading \(\key\) always fetches 
+the latest visible write (\(\VIS\)-predecessor) on \(\key\) (\cref{equ:aexec-vis-external}).
+
+%Abstract executions are known as declarative models.
+Consistent models are specified by \emph{visibility axioms}
+that constrain the shape of visibility relation.
+Note that we focus on the consistency model satisfying 
+\emph{snapshot property} and \emph{last-write-win} policy%
+\footnote{A more general approach than \emph{last-write-win} policy 
+would be parametrised how each transaction \( \txid \) picks values for keys,
+from its visible transactions \( \Refl(\VIS)(\txid)\).}.
+
+\begin{definition}[Visibility axioms]
+\label{def:aexec-axioms}
+Two abstract executions \(\aexec, \aexec'\) \emph{agree} on a subset of transaction \( \txidset \),
+written \( \aexec \aexeceq[\txidset] \aexec' \), if and only if
+\[
+    \Forall{\txid,\txid' \in \txidset } \aexec(\txid) = \aexec(\txid')
+    \land \begin{Bracketed} \ToEdge{\txid | \VIS[\aexec] -> \txid' } 
+                \iff \ToEdge{\txid | \VIS[\aexec'] -> \txid' } \end{Bracketed}
+    \land \begin{Bracketed} \ToEdge{\txid | \AR[\aexec] -> \txid' } 
+                \iff \ToEdge{\txid | \AR[\aexec'] -> \txid' } \end{Bracketed} .
+\]
+The set of \emph{visibility relation axioms} or just \emph{axioms}, 
+\( \VisAxioms \ni \visaxiom \), is defined by:
+\( \VisAxioms \TypeDef \AbstractExecutions \ToTFunc \PowerSet(\TxIDs \times \TxIDs)\)
+such that whenever two abstract executions \(\aexec, \aexec'\) agree on a subset of 
+transactions \(\txidset\), 
+then \(\visaxiom(\aexec) \cap (\txidset \times \txidset) \subseteq \visaxiom(\aexec')\).
+The subsets of \( \VisAxioms \) are ranged over 
+\( \visaxioms, \visaxioms[0], \visaxioms', \cdots \).
+\end{definition}
+
+Given an abstract execution \( \aexec \), a visibility relation axiom \( \visaxiom \) 
+specifies the \emph{minimum visibility relation} in \( \aexec \):
+that is, the visibility relation \( \VIS[\aexec]\)
+satisfies \( \visaxiom(\aexec) \subseteq \VIS[\aexec] \).
+The well-formed condition requires an axiom be local in the sense that
+given two abstract executions \( \aexec, \aexec' \), 
+the minimum visibility relation must be 
+the same for the any sub-graph on which \( \aexec, \aexec' \) agree.
+Note that, for two abstract executions \( \aexec \aexeceq[\txidset] \aexec' \),
+the condition, \(\visaxiom(\aexec) \cap (\txidset \times \txidset) 
+            \subseteq \visaxiom(\aexec')\),
+implies that \( \visaxiom(\aexec) \cap (\txidset \times \txidset) 
+        = \visaxiom(\aexec') \cap (\txidset \times \txidset) \).
+
+\begin{definition}[Consistent models on abstract executions]
+An abstract execution \( \aexec \) satisfies a set of axioms \( \visaxioms \), 
+written \( \AExecSat(\aexec,\visaxioms) \), if and only if
+\(
+\Forall{\visaxiom \in \visaxioms} \visaxiom(\aexec) \subseteq \VIS[\aexec] .
+\)
+The set of abstract executions induced by a set of axioms \( \visaxioms \) is defined by:
+\[
+    \CMA(\visaxioms) \FuncDef \Set{\aexec | \AExecSat(\aexec,\visaxioms) } .
+\]
+\end{definition}
+

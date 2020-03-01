@@ -1,0 +1,119 @@
+\begin{figure}[!p]
+
+\begin{subfigure}{\textwidth}
+\begin{lstlisting}
+transWrite( trans, k, v )
+    trans.read-write-set = trans.read-write-set \ (w,k,-);
+    trans.read-write-set = trans.read-write-set + (w,k,v);
+\end{lstlisting}
+
+\caption{The reference implementation of transactional write}
+\label{lst:clock-si-write-value}
+\end{subfigure}
+
+\hrulefill
+
+
+\begin{subfigure}{\textwidth}
+\begin{mathpar}
+\inferrule[\rCLOCKWrite]{
+    \key = \EvalE{\expr_1}
+    \\ 
+    \val = \EvalE{\expr_2}
+}{%
+    \ToClockCmd{
+    \clocksi | \clocktime | \stk
+            | \pruntrans{\pmutate{\expr_1}{\expr_2}; \trans}{\fp,\emptyset}{\clocktime',\clockshard} 
+            | \lbCLOCKOp{\opW(\key,\val),\clocktime'} ->
+    \clocksi | \clocktime |  \stk
+            | \pruntrans{\trans}{\fp \AddOp \opW(\key,\val),\emptyset}{\clocktime',\clockshard} }
+}
+\end{mathpar}
+
+\caption{The semantics of \( \pclockwrite \)}
+\label{fig:clock-write-rule}
+\end{subfigure}
+
+\hrulefill
+
+\begin{subfigure}{\textwidth}
+\begin{lstlisting}
+transRead( trans, k )
+    if ( (w,k,v) in trans.read-write-set ) return v; (* \label{line:clock-read-from-write} *)
+    else if ( (r,k,v) in trans.read-write-set ) return v; (* \label{line:clock-read-from-read} *)
+    else {
+        v = readFromShard(shard, trans.snapshotTime);
+        trans.read-write-set = trans.read-write-set + (r,k,v); (* \label{line:clock-read-write-remote} *)
+        return v;
+    }
+
+readFromShard(shard, snapshotTime, k)
+    wait snapshotTime < getShardClockTime(); (* \label{line:clock-remote-read-wait} *)
+    i = 0;
+    for ver of getStore() 
+        if (ver.key = k and ver.time <= snapshotTime) { 
+            wait until ver.state == committed; (* \label{line:clock-remote-read-wait-commit} *)
+            if(i <= ver.time) i = ver.time; (* \label{line:clock-remote-latest-version} *)
+        }
+    return getValue(k,i); (* \label{line:clock-remote-latest-version} *)
+\end{lstlisting}
+
+\caption{The reference implementation of transactional read}
+\label{lst:clock-si-read-value}
+\end{subfigure}
+
+\hrulefill
+
+\begin{subfigure}{\textwidth}
+\begin{mathpar}
+\inferrule[\rCLOCKReadLocal]{ 
+    \key = \EvalE{\expr} 
+    \\
+    \opW(\key,\val) \in \fp \lor (\opW(\key,\val) \notin \fp \land \opR(\key,\val) \in \fp)
+}{%
+    \ToClockCmd{
+    \clocksi | \clocktime | \stk
+            | \pruntrans{\plookup{\var}{\expr}; \trans}{\fp,\emptyset}{\clocktime',\clockshard} 
+            | \lbCLOCKOp{\opR(\key,\val),\clocktime'} ->
+    \clocksi | \clocktime |  \stk\UpdateFunc{\var -> \val}
+            | \pruntrans{\trans}{\fp,\emptyset}{\clocktime',\clockshard} }
+}
+\and
+\inferrule[\rCLOCKReadShard]{ 
+    \key = \EvalE{\expr} 
+    \\
+    \Forall{l,\val} (l,\key,\val) \notin \fp
+    \\
+    \clockshard' = \ShardOf(\clocksi,\key)
+    \\
+    (\clockkvs,\clocktime'') = \clocksi(\clockshard')
+    \\
+    \clocktime'' > \clocktime'
+    \\
+    \clockverlist = \Set{\clockver' | \Exists{\idx} 
+                \clockkvs(\key,\idx) = \clockver'
+                \land \TimeOf(\clockver') \leq \clocktime'  }
+    \\
+    \Forall{\clockver \in \clockverlist} \StateOf(\clockver) = \clocksicommitted
+    \\
+    (\key,\val,\stub) = \Max(\clockverlist)
+}{%
+    \ToClockCmd{
+    \clocksi | \clocktime | \stk
+            | \pruntrans{\plookup{\var}{\expr}; \trans}{\fp,\emptyset}{\clocktime',\clockshard} 
+            | \lbCLOCKOp(\clockshard'){\opR(\key,\val),\clocktime'} ->
+    \clocksi | \clocktime |  \stk\UpdateFunc{\var -> \val}
+            | \pruntrans{\trans}{\fp \AddOp \opR(\key,\val),\emptyset}{\clocktime',\clockshard} }
+}
+\end{mathpar}
+
+\caption{The semantics of \( \pclockread \)}
+\label{fig:clock-read-rule}
+\end{subfigure}
+
+\hrulefill
+
+\caption{Clock-SI: transactional write and read}
+\label{fig:clock-si-write-value}
+\label{fig:clock-si-read-value}
+\end{figure}

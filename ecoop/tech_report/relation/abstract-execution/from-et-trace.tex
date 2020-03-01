@@ -1,0 +1,274 @@
+We now show how to construct an abstract execution from an \( \ET[\top] \)-trace, via \( \TraceToX(\ettrc) \).
+Recall that \( \et[\TOP]\) is defined by \( \CanCommit[\TOP] \PredDef \true \) and  \( \ViewShift[\TOP] \PredDef \true \).
+%Recall that, given an abstract execution \( \aexec \), we can recover the trace with the final state being \(\aexec \).
+
+\begin{definition}[{\( \et[\TOP] \)}-traces to abstract executions]
+\label{def:kvtrace-aexec}
+Given an \( \et[\TOP] \) trace \(\ettrc\),
+the set of abstract executions, written \(\TraceToX(\ettrc)\), is defined by:
+\begin{align*}
+    \TraceToX(\ToRed{\kvsinit | \vienvinit})  
+            & \FuncDef \Tuple{\Mapping{\txidinit
+                                -> \Set{(\key,\valinit) | \key \in \Keys \land  \valinit \in \InitVal(\key) } }
+                        , \emptyset, \emptyset}
+    \\ \TraceToX(\ToRed[\TOP]{\ettrc | \lbView{\vi} -> \kvs | \vienv })  
+            & \FuncDef \TraceToX(\ettrc)
+    \\ \TraceToX(\ToRed[\TOP]{\ettrc | \lbTrans{\fp} -> \kvs | \vienv })
+            & \FuncDef \begin{array}[t]{@{}l@{}}
+                \CodeFont{let} \ (\kvs',\vienv') = \LastConf(\ettrc),
+                \txid = \kvs \setminus \kvs'
+                \\ \phantom{\CodeFont{and}} \ 
+                    \txidsetrd \subseteq 
+                    \Set{ \txid' | \Forall{, \key, \val} 
+                            (l,\key,\val) \in \aexec(\txid') \implies l = \opR } , 
+                \\ \phantom{\CodeFont{and}} \ \txidset = \VisTrans(\kvs',\vienv(\cl)) \cup \txidsetrd
+                \ \AND \aexec \in \TraceToX(\ettrc) 
+                \\ \qquad \CodeFont{in} \Set{\UpdateAExec(\aexec, \txidset, \fp, \txid)} .
+            \end{array}
+\end{align*}
+where \( \VisTrans \) is defined in \cref{def:vis-transactions-function}.
+\end{definition}
+
+Given an \( \ET[\top] \)-trace \( \ettrc \), function \( \TraceToX \) inductively constructs 
+a set of possible abstract executions \( \aexec \):
+\begin{enumerate*}
+\item a view-shift transition in the trace \( \ettrc \) does not affect \( \aexec \);
+and \item a fingerprint transition with a given view \( \vi \)
+corresponds to a node of which the visible transactions 
+are either the writer of the versions include in the view  \( \vi \),
+that is \(  \VisTrans(\kvs',\vienv(\cl)) \), 
+or read-only transactions \( \txidsetrd \).
+\end{enumerate*}
+It is safe to include any numbers of read-only transactions,
+because the read-only transactions do not affect the snapshots.
+By the construction, the arbitrary order 
+in the abstract executions \( \aexec \in \TraceToX(\ettrc) \)  matches 
+the commit order in the trace \( \ettrc \).
+
+\begin{toappendix}
+\label{sec:et-trace-aexec-well-formed}
+\end{toappendix}
+\begin{theoremrep}[Well-formed abstract executions of {\( \XToTrace \)}]
+\label{prop:et-trace-to-well-formed-aexec}
+\label{thm:et-trace-to-well-formed-aexec}
+Given an {\(\et[\TOP]\)}-trace \( \ettrc \), an abstract execution \( \aexec \) 
+such that \( \aexec \in \TraceToX(\ettrc) \), is a well-formed abstract execution
+and \( \LastConf(\ettrc)\Proj{0} = \XToK(\aexec) \).
+\end{theoremrep}
+\begin{proof}
+We prove by induction on the length of the trace \( \ettrc \).
+\begin{enumerate}
+\CaseBase{\( \ettrc = \ToRed{\kvsinit | \vienvinit } \)}
+    By definition of \( \TraceToX \), the only abstract execution \( \Set{\aexec} = \TraceToX(\ettrc) \)
+    is defined by \( \aexec = \Tuple{\Mapping{\txidinit
+                        -> \Set{(\key,\valinit) | \key \in \Keys \land  \valinit \in \InitVal(\key) } }
+        , \emptyset, \emptyset} \);
+    it is trivially a well-formed abstract execution and \( \kvsinit = \XToK(\aexec)\).
+\CaseInd{\( \ettrc = \ToRed[\TOP]{\ettrc' | \lb -> \kvs | \vienv } \)}
+    Consider the label \( \lb \).
+    \begin{enumerate}
+    \Case{\( \lb = \lbView{\vi}\)}
+        By definition of \(\TraceToX\), \( \TraceToX(\ettrc) = \TraceToX(\ettrc') \);
+        by \ih, every abstract execution in \TraceToX(\ettrc) is well-formed.
+    \Case{\( \lb = \lbTrans{\fp}\)}
+        Let configuration \( (\kvs',\vienv') = \LastConf(\ettrc') \) 
+        and view \( \vi = \vienv'(\cl)\).
+        By \ih, suppose a well-formed abstract execution \( (\txidop',\VIS',\AR') \in \TraceToX(\ettrc') \).
+        Let a set of read only transactions \( \txidsetrd \) such that 
+        \[
+            \txidsetrd \subseteq 
+            \Set{ \txid' | \Forall{l | \key \in \Keys | \val \in \Values } 
+                    (l,\key,\val) \in \txidop'(\txid') \implies l = \opR } .
+        \]
+        Let the set of visible transactions \( \txidset = \GetView(\kvs',\vi') \cup \txidsetrd \).
+        Assume new transaction \( \txid' = \kvs \setminus \kvs' \).
+        By definitions of \( \TraceToX \) and \( \UpdateAExec \), the new abstract execution is defined by
+        \[
+            \aexec = \Tuple{\txidop \cup \Mapping{\txid' -> \fp }
+            , \VIS' \cup \Set{(\txid',\txid) | \txid' \in \txidset }
+            , \AR' \cup \Set{(\txid',\txid) | \txid' \in \aexec } } .
+        \]
+        Let \( \VIS = \VIS' \cup \Set{(\txid',\txid) | \txid' \in \txidset } \)
+        and \( \AR = \AR' \cup \Set{(\txid',\txid) | \txid' \in \aexec } \).
+        By \ih, we only need to consider 
+        the arbitration and visibility edges related to the new transaction \( \txid \).
+        It is trivial that the new arbitrary relation \( \AR \) satisfies 
+        \cref{equ:aexec-ar-init,equ:aexec-ar-total,equ:aexec-ar-irreflexive,equ:aexec-ar-transitive};
+        because the new transition is picked by \( \txid \in \NextTxid(\kvs',\cl)\), 
+        \cref{equ:aexec-ar-so} holds.
+        Consider the new visibility relation \( \VIS' \cup \Set{(\txid',\txid) | \txid' \in \txidset } \).
+        By the definition of \GetView, the initialisation transaction \( \txidinit \in \txidset \),
+        and thus \( (\txidinit, \txid) \in \VIS \) which implies \( \cref{equ:aexec-vis-init}\).
+        Consider a read operation \( \opR(\key,\val) \in \fp \) for some key \( \key \) and \( \val \).
+        By the \( \et[\TOP] \)-trace and \UpdateKV function, 
+        it is known that \( \kvs'(\key,\Max[<](\kvs,\vi)) = \val \);
+        therefore by the definition of \(\GetView\), the writer
+        \( \WtOf(\kvs'(\key,\Max[<](\kvs,\vi))) = \MaxVisTrans((\txidop',\VIS',\AR'),\txidset,\key)\),
+        which implies \cref{equ:aexec-vis-external}.
+        Because the new transition is picked by \( \txid \in \NextTxid(\kvs',\cl)\), 
+        \cref{equ:aexec-vis-so} holds.
+        Last, it is trivial that \( \VIS \subseteq \AR \).
+
+        Now we prove \( \kvs = \XToK(\aexec) \) for the new abstract execution \( \aexec \).
+        Note that \( \aexec = \UpdateAExec(\aexec,\txidset,\fp,\txid)\) 
+        for a fresh transaction identifier \( \txid in \NextAExecTxid(\aexec,\cl) \),
+        and \( \kvs = \UpdateKV(\kvs,\vi,\fp,\txid)\) for the view \( \vi = \GetView(\txidset,\kvs) \).
+        By \cref{prop:update-aexec-to-udpate-kv}, \(\kvs = \XToK(\aexec) \). \qedhere
+    \end{enumerate}
+\end{enumerate}
+\end{proof}
+\begin{proofsketch}
+It is trivial by induction on the length of the trace.
+For view-shift transition, we directly apply \ih.
+For fingerprint transition, the result can be derived from 
+the following result (\cref{prop:update-aexec-to-udpate-kv} on page \pageref{sec:update-aexec-kv-store}):
+Given:
+\begin{enumerate*}
+\item a kv-store \( \kvs \);
+\item an abstract execution \( \aexec \) such that \( \kvs = \XToK(\aexec)\);
+\item a view \( \vi = \GetView(\kvs,\txidset)\) for 
+transaction set \( \txidset \subseteq \aexec \) with \( \txidinit \in \txidset \);
+and 
+\item the next abstract execution 
+\( \aexec' = \UpdateAExec(\aexec, \txidset, \fp, \txid) \) for some fingerprint \( \fp \)
+and fresh transaction \( \txid \in \NextAExecTxid(\aexec,\cl) \), 
+\end{enumerate*}
+then \( \UpdateKV(\kvs,\vi,\fp,\txid) = \XToK(\aexec') \).
+The full detail is given in \cref{sec:et-trace-aexec-well-formed} on \pageref{sec:et-trace-aexec-well-formed}.
+\end{proofsketch}
+
+
+\begin{toappendix}
+\label{sec:update-aexec-kv-store}
+\begin{proposition}[Update of abstract execution matching update of kv-store]
+\label{prop:update-aexec-to-udpate-kv}
+Assume a kv-store \( \kvs \) and an abstract execution \( \aexec \) such that \( \kvs = \XToK(\aexec)\).
+Let \( \vi = \GetView(\kvs,\txidset)\) for some view \( \vi \) and 
+transaction set \( \txidset \subseteq \aexec \) with \( \txidinit \in \txidset \).
+Given the new abstract execution 
+\( \aexec' = \UpdateAExec(\aexec, \txidset, \fp, \txid) \) for some fingerprint \( \fp \)
+and fresh transaction \( \txid \in \NextAExecTxid(\aexec,\cl) \), 
+then \( \UpdateKV(\kvs,\vi,\fp,\txid) = \XToK(\aexec') \).
+\end{proposition}
+\begin{proof}
+Let \( \kvs' = \UpdateKV(\kvs,\vi,\fp,\txid)\).
+Note that if the fresh transaction \( \txid \in \NextAExecTxid(\aexec,\cl) \)
+then \( \txid \in \NextTxid(\kvs,\cl) \).
+By \cref{thm:isomorphism-kvstore-dgraph,def:aexec-dgraph},
+it suffice to prove that \( \KToD(\kvs') = \XToD(\aexec')\).
+By the definition of \( \KToD \) and \( \XToD \) 
+in \cref{def:aexec-dgraph,def:kv-store-to-dependency-graph} respectively,
+it is sufficient to prove that:
+\begin{multline}
+    \KToD(\kvs) = \XToD(\aexec) \implies 
+    \KToD(\kvs')\Proj{0} = \KToD(\kvs)\Proj{0}\Mapping{\txid -> \fp} = \XToD(\aexec')\Proj{0}
+    \\ {} \land \WR[\kvs'] = \WR[\aexec'] 
+    \land \WW[\kvs'] = \WW[\aexec'] .
+\end{multline}
+Recall that in dependency graphs, \( \RW \) can be derived from \( \WW \)  and \( \WW \).
+Consider the three conjunctions.
+\begin{enumerate}
+\Case{new transaction \( \txid \) and its fingerprint \( \fp \)}
+    By definition of \( \UpdateAExec \), it is known that, for any operation \( \op \in \fp\)
+    key  \( \key \) and value \( \val \),
+    \[
+        \begin{multlined}
+        ( \op = \opR(\key,\val) \iff \opR(\key,\val) \in \aexec'(\txid) ) 
+        \land ( \op = \opW(\key,\val) \iff  \opW(\key,\val) \in \aexec'(\txid) ) .
+        \end{multlined}
+    \]
+    then by definition of \( \XToD \), 
+    we know that \[ \XToD(\aexec)\Proj{0}\Mapping{\txid -> \fp} = \XToD(\aexec')\Proj{0} . \]
+    Now consider the another side.
+    By the definition of \( \UpdateKV \), 
+    for any operation \( \op \in \fp \),
+    we have the following result for some key \( \key \) and \( \val \):
+    \[
+        \begin{multlined}
+        ( \op = \opR(\key,\val) \iff  \Exists{\idx} \txid \in \RsOf(\kvs'(\key,\idx)) )
+        \\ {} \land ( \op = \opW(\key,\val) \iff  \txid = \WtOf(\kvs'(\key,\Abs{\kvs'(\key)} - 1)) ) .
+        \end{multlined}
+    \]
+    Therefore by definition of \( \KToD \),
+    \[
+        \begin{multlined}
+        ( \Exists{\idx} \txid \in \RsOf(\kvs'(\key,\idx)) \iff \opR(\key,\val) \in \KToD(\kvs') )
+        \\ {} \land ( \txid = \WtOf(\kvs'(\key,\Abs{\kvs'(\key)} - 1)) \iff \opW(\key,\val) \in \KToD(\kvs') ) ,
+        \end{multlined}
+    \]
+    which means that \( \KToD(\kvs')\Proj{0} = \KToD(\kvs)\Proj{0}\Mapping{\txid -> \fp} \).
+    Recall that \( \KToD(\kvs) = \XToD(\aexec)  \); this means \(  \KToD(\kvs') = \XToD(\aexec') \).
+\Case{write-read dependency \( \WR \)}
+    Because \( \KToD(\kvs) = \XToD(\aexec) \),
+    we only need to consider \( \WR \)-edges related to the new transaction \( \txid \).
+    Consider any key \( \key \) such that \( \opR(\key, \val) \in \fp \) for some value \(\val \).
+    By definition of \( \UpdateAExec \), transaction \( \txid \) must read from 
+    a transaction \( \txid' \in \txidset \) 
+    who wrote the key \( \key \) and is the latest transaction visible by \( \txid \),
+    and therefore by definition of \( \XToD \), 
+    \[
+        \txid' = \MaxVisTrans(\aexec,\txidset,\key) \iff (\txid',\txid) \in \WR[\aexec'] .
+    \]
+    By definition of the view \( \vi = \GetView(\aexec,\txidset) \),
+    the latest version of \( \key \) must be written by \( \txid \),
+    that is,
+    \[
+        \txid' = \WtOf(\kvs(\key,\Max[<](\vi(\key)) )) .
+    \]
+    By the definition of \( \UpdateKV \),
+    the transaction \( \txid \) must read the version \(\kvs(\key,\Max[<](\vi(\key)) )\),
+    and then by definition of \( \KToD \),
+    \[
+        ( \txid' = \WtOf(\kvs'(\key,\Max[<](\vi(\key)))) \land \txid \in \RsOf(\kvs'(\key,\Max[<](\vi(\key)))) )
+        \iff (\txid',\txid) \in \WR[\kvs'] .
+    \]
+    Given above, we know
+    \[
+        (\txid',\txid) \in \WR[\aexec'] \iff (\txid',\txid) \in \WR[\kvs']
+    \]
+    which means that for any new write-read dependency \( \WR[\aexec']\),
+    the same edge exists in \( \WR[\kvs']\) and vice versa.
+    Since \(\WR[\aexec] = \WR[\kvs]\), we know \( \WR[\aexec'] = \WR[\kvs'] \).
+\Case{write-write dependency \( \WW \)}
+    Because \( \KToD(\kvs) = \XToD(\aexec) \),
+    we only need to consider \( \WW \)-edges related to the new transaction \( \txid \).
+    Consider any key \( \key \) such that \( \opW(\key, \val) \in \fp \) for some value \( \val \).
+    By the definition of \( UpdateAExec \), the new transaction wrote the key \( \key \),
+    and then by definition of \( \XToD \),
+    \[
+        \opW(\key, \val) \in \aexec'(\txid) \iff 
+        \Forall{\txid' \in \aexec | \val' \in \Values}
+        (\opW(\key,\val') \in \aexec(\txid') \implies (\txid',\txid) \in \AR[\aexec']) .
+    \]
+    Since \( \kvs = \XToK(\aexec) \),
+    if a transaction wrote the key \( \key \) in \( \aexec \), 
+    it must wrote a version of the key \( \key \) in \( \kvs \),
+    that is, 
+    \[
+        \Forall{\txid' \in \aexec | \val' \in \Values }
+        \opW(\key,\val') \in \aexec(\txid') \iff  \Exists{\idx \in \Indexs} \txid' = \WtOf(\kvs(\key,\idx)) .
+    \]
+    By the definition of \( \UpdateKV \), 
+    the transaction \( \txid \) wrote the latest version of \( \key \) in the new kv-store \( \kvs \),
+    and by the definition of \( \KToD \),
+    \[
+    \begin{multlined}[t]
+        \txid  = \WtOf(\kvs'(\key, \Abs{\kvs'(\key)} - 1 )) \iff {}
+            \\ \Forall{\idx \in \Indexs} 
+            ( 0 \leq  \idx < \Abs{\kvs'(\key)} - 1 
+                        \implies \ToEdge{ \WtOf(\kvs'(\key,\idx)) | \WW[\kvs] -> \txid } )  .
+    \end{multlined}
+    \]
+    Note that \( \Abs{\kvs'(\key)} - 1 = \Abs{\kvs(\key)} \).
+    Therefore for any new write-write dependency \( \WW[\aexec']\),
+    the same edge exists in \( \WW[\kvs']\) and vice versa.
+    Since \(\WW[\aexec] = \WW[\kvs]\), we know \( \WW[\aexec'] = \WW[\kvs'] \). \qedhere
+\end{enumerate}
+\end{proof}
+%\begin{proofsketch}
+%We convert \( \UpdateKV(\kvs,\vi,\fp,\txid) \) and \( \XToK(\aexec') \) to dependency graphs, 
+%and prove the dependency graphs are the same.
+%The full proof is given in \cref{sec:update-aexec-kv-store} on page \pageref{sec:update-aexec-kv-store}.
+%\end{proofsketch}
+\end{toappendix}
+
