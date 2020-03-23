@@ -52,6 +52,10 @@ must see all updates from the transaction.
 ## Reviewer 3
 ### Fig 1.
 In our semantics, the views of clients are non-deterministic if they satisfy the execution test.
+### Line 243-244.
+Implementation protocols such as COPS and ClockSI informally 
+argued the correctness of the protocols in their paper.
+By contrast, we give formal proofs via trace refienemnts.
 ### Line 245.
 A library is a transactional application with fixed APIs.
 ### Line 338.
