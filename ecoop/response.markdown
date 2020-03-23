@@ -44,7 +44,12 @@ using our coarse-grained semantics on kv-stores.
 Our kv-stores can be directly seen as dependency graphs.
 -------HOW TO SAY OVER-APPROXIMATION of [35].-------
 
-# Details question from reviewer 3:
+# Detail questions:
+## Reviewer 1
+# Line 315.
+Atomic visibility means if a client observes an update from a transaction, the client 
+must see all updates from the transaction.
+## Reviewer 3
 ### Fig 1.
 In our semantics, the views of clients are non-deterministic if they satisfy the execution test.
 ### Line 245.
