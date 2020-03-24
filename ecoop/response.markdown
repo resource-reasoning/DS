@@ -1,40 +1,69 @@
 We thank the reviewers for their comments. We will work hard to
-improve the presentation of the paper. We will act on all detailed comments.
+improve the presentation of the paper and act on all the detailed
+comments. We answer the main comments first and some of the more
+detailed comments later.
 
-# Reviewer 1.
-Reviewer 1 asks about mechanisation and tools. We agree it is a big undertaking
-and can only be done now that theory has been achieved. In fact,
-we are working on implementing our semantics and use it to generate litmus tests and 
-verifying client programs.
+MAIN COMMENTS
 
-# Reviewer 2.
-We will answer the resolution policy question in the response to reviewer 3.
-Our framework can be easily extended to model aborted transactions and rollbacks: 
-this is as simple as augmenting values in key-value stores to with a flag indicating 
-whether a transaction, and tweaking the definition of update in execution tests to mark 
-versions accordingly when performing a transaction update. 
-While this approach would allow for expressing a greater range of consistency models, 
-e.g. opacity, we felt that this would have made the paper harder to read.
+# Reviewer 1: mechanisation and tools. This is a large undertaking
+that can only be done now that theory has been achieved. In fact, we
+are working on implementing our semantics, using it to generate litmus
+tests and prove robustness results for client programs.
 
-# Reviewer 3.
-The Reviewer asks for an in-depth comparison between our work, and [18,35].
-[18] is a trace-based semantics, [35] is a graph-based semantics
-and ours is state-based semantics.
-All assume last-write-wins. [35] and us assume snapshot properties,
-because both works focus on consistency models that are common in distributed kv-stores
-such as causal consistency, parallel snapshot isolation and snapshot isolation.
-[18] does not assume snapshot properties, because they want to cover weaker consistency models 
-such as Read Committed. We agree that [18] captures more consistency models than we do.
+# Reviewer 2: different resolution policies from last-write-wins.  Our
+framework can be easily adapted to model aborted transactions and
+rollbacks: this is as simple as augmenting values in key-value stores
+to with a flag indicating whether a transaction **missing some****,
+and tweaking the definition of update in execution tests to mark
+versions accordingly when performing a transaction update. **This does
+not answer their question about the local variable store***While this
+approach would allow for expressing a greater range of consistency
+models, e.g. opacity, we felt that this would have made the paper
+harder to read.
 
-In [18], the authors show that several notions of SI collapse into one.
-They do not verify any actual implementation of protocols, although we believe that this would be feasible 
-in their framework. 
-In contrast, it is not straightforward for us to see how the framework of [18] can be used 
-for client reasoning, due to their notion of trace embedding a total order of transaction 
-that cannot be easily recovered at compile time. Our concern is shared also by [26] **exact page number 
-should be here, I do not have access to the paper anymore**
-We would be happy to see examples of client reasoning in [18],
-which allows us to do a thorough comparison.
+***Above: we need to talk more about this answer****
+
+# Reviewer 3.  The Reviewer asks for an in-depth comparison between
+our work, and [18,35]: [18] is a trace-based semantics; [35] is a
+graph-based semantics; and ours is a state-based semantics. All
+approaches have their merits
+
+We all assume the last-write-wins policy. [35] and this paper assumes
+snapshot properties, because they both focus on consistency models for
+distributed databases. [18] does not assume snapshot properties,
+because they want to cover weaker consistency models such as Read
+Committed. **why, not convincing yet**** We agree that [18] captures
+more consistency models than we do.
+
+**Above para: we need to talk***
+
+In [18], the authors show that several definitions of SI collapse into
+one.  They do *not* verify protocol implementations and do *not* prove
+invariant properties of client programs. We have verified protocol
+implementations and invariant properties of client programs. We regard
+our operational semantics as an interface (or mid-point, we needn't
+use the word if confusing) between implementations and clients.  We
+believe [18] can be used to verify implementations. We believe it is
+difficult to use [18] to prove invariant properties of client
+programs.
+
+Now why....
+---we do minimal stuff, they work with whole trace?????
+
+**In contrast, it is not straightforward for us to see how the framework
+of [18] can be used for client reasoning, due to their notion of trace
+embedding a total order of transaction that cannot be easily recovered
+at compile time. ***I have no idea what this  sentence means. **
+
+
+Our concern is shared also by [26]: ``However, they do not consider
+verification (manual or automated) of client programs, and it is not
+immediately apparent if their specification formalism is amenable for
+use within a verification toolchain.''
+
+
+We would like to see examples of client reasoning using [18], which
+would enable us to compare,....thorough comparison.
 
 [35] proposed a fine-grained semantics on abstract exactions
 and developed a model-checking tool for violation of robustness,
@@ -60,7 +89,13 @@ by analysing the structure of kv-stores they generate. Because our definitions o
 consistency models are precise, in contrast with the dependency graph 
 approximations of [35], we would be able to verify a larger class of properties for 
 transactional libraries with respect to them.
-# Detail questions:
+
+
+# Reviewer 3: the WSI consistency model. The WSI consistency model in
+  this paper has been used as a proof technique to provide general results about client 
+
+DETAILED COMMENTS
+
 ## Reviewer 1
 # Line 315.
 Atomic visibility means if a client observes an update from a transaction, the client 
