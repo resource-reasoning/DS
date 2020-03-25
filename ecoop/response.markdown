@@ -69,37 +69,22 @@ toolchain.''
 [35] proposed a fine-grained operational semantics on abstract
 exactions and developed a model-checking tool for the violation of
 robustness. This was achieved by converting abstract executions to
-dependency graphs and checking the properties on the dependency
-graphs. The approach has two issues.
-
-First, despite [35] assuming atomic visibility of transactions, it
-presents a fine-grained semantics at the level of the individual
-transactional operations rather than whole transactions, which
-introduces unnecessary interleavings which complicates the client
-reasoning: for example, increasing the search space of model-checking
-tools. In contrast, our semantics on both kv-stores and abstract
-executions is coarse-grained in that interleaving is at the level of
-whole transactions.
-
-Second, all the literature that performs client analysis on abstract
-executions achieves this by over-approximating the consistency-model
-specifications using dependency graphs [9,14,15,16,35].  While the
-over-approximation used in [35] is suitable for tackling robustness,
-it would not be useful for proving other interesting properties of
-transactional libraries: for example, transaction chopping [14,15,42]
-requires a precise specification of consistency models in terms of
-dependency graphs. It is worth noting that the problem of finding such
-precise specifications in a general setting is till open [16].
-
-In contrast, in our work we  prove robustness results by direct analysis 
-on the structure of kv-stores, without over-approximation.
-
------maybe not needed-------
-Because our definitions of consistency models are precise,
-in contrast with the dependency graph approximations of [35], we would
-be able to verify a larger class of properties for transactional
-libraries.
-----------------------------
+dependency graphs and checking the violation of robustness on the
+dependency graphs. The approach has two issues. First, despite [35]
+assuming atomic visibility of transactions, it presents a fine-grained
+semantics at the level of the individual transactional operations
+rather than whole transactions, introducing unnecessary interleavings
+which complicates the client reasoning: for example, increasing the
+search space of model-checking tools. In contrast, our semantics is
+coarse-grained in that interleaving is at the level of whole
+transactions. Second, all the literature that performs client analysis
+on abstract executions achieves this indirectly by over-approximating
+the consistency-model specifications using dependency graphs
+[9,14,15,16,35]. It is not known how to do this precisely [16]. In
+contrast, in our work we prove robustness results directly by
+analysing the structure of kv-stores, without over-approximation.  We
+also give precise reasoning about the mutual exclusion of locks,
+which we believe will be difficult to prove using abstract executions.
 
 ### Reviewer 3: the WSI consistency model. 
 
@@ -121,33 +106,42 @@ updates.
 
 - Definition 5. This is a formal definition of a normal snapshot.
 
-- Availability. We believe this property is related to implementations. 
+- Availability. We are not sure if we can capture avalability in our
+operational semantics. This is worth investigation. 
+ 
 
 ### Reviewer 3.
 
 - Line 115. We regard our operational semantics as an interface, or
 mid-point, between implementations and clients. We will clarify.
 
-----not done from here--------
+- Fig 1. We mean that it is possible for the client to have either the
+  view in (1c) or the view in (1d) under CC. It can only have the view
+  (1d) under PSI and SI. We will clarify.
 
-- Fig 1. In our semantics, the views of clients are non-deterministic if
-they satisfy the execution test. 
+- Line 243-244. In [33] and [22], the correctness of the COPS and
+Clock-SI protocol implementations is given by appealing to specific
+definitions of consistency models that are dependent on these
+particular implementations.  In contrast, we have proved that the
+protocol implementations are correct by appealing to our general
+definitions of consistency models that are independent of the
+particular implementations.
 
-- Line 243-244. Implementation protocols such as COPS and ClockSI informally 
-argued the correctness of the protocols in their paper.
-By contrast, we give formal proofs via trace refinements.
-
-- Line 245. A library is a transactional application with fixed APIs.
+- Line 245. Yes, we are thinking of a library as an application that
+  an be used by client code.
 
 - Line 338. We will take out this claim about modelling resolution
-policies other than last-write-wins, since it needs more
-justification. We were thinking that, for example, clients
-non-deterministically picks the values in the views.
+policies other than last-write-wins. It needs better justification.
+(We were thinking of multi-value registers where clients is able to
+choose a value from the whole view.)
 
-- Line 481. We focus on distributed kv-store for now. Eventual
-consistency allows anomalous behaviours such as lost update and long
-fork. The lost update means an update cannot be observed by other
-clients, however the state is still converged.
+- Line 481. We mean the anomolous behaviour allowed by the weak
+  consistency models, such as the examples given in Figure 7. We will
+  clarify.
+
+- Line 503. The largest execution test means the largest execution
+test possible in our semantics: that is, the can_commit and vshift
+properties correspond to true.
 
 - Reliable causal order broadcast. Our framework abstracts from
 communication between replicas, hence it does not assume reliable
@@ -155,5 +149,5 @@ causal order broadcast (RCOB). However, the encoding of COPS into our
 framework is made easier by the fact that the protocol relies on RCOB.
 We agree that verifying a protocol that does not rely on RCOB in our
 framework would be a much more difficult task, and we will look to
-implementations of such protocols next.
+implementations of such protocols in futre. 
 
