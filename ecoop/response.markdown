@@ -27,7 +27,8 @@ probably not the state. We will clarify.
 We assume the reviewer is asking about aborts associated with an 
 execution test failing. This is straightforward, by adapting the update 
 to augment the values with abort information and using transaction-local 
-variable stores rather than thread-local variable stores.  We can capture 
+variable stores rather than thread-local variable stores, to prevent information 
+leaking outside aborted transactions.  We can capture 
 rollbacks by changing the update rule in the operational semantics.
 While these adaptations would enable us to express a greater range of 
 consistency models, e.g. opacity, we felt that this would have made the paper
@@ -80,15 +81,15 @@ this is also the approach followed in [35]. While the
 over-approximation used in [35] is suitable for tackling robustness,
 it would not be useful for proving other interesting properties of
 transactional libraries: for example, transaction chopping [14,15,42]
-requires a precise characterisation in terms of consistency models in
+requires a precise specification of consistency models in
 terms of dependency graphs. It is worth noting that the problem of
-finding such precise characterisations in a general setting is till
+finding such precise specifications in a general setting is till
 open [16].  In contrast, in our work we directly prove robustness of
 transactional applications by analysing the structure of kv-stores
 they generate. Because our definitions of consistency models are
 precise, in contrast with the dependency graph approximations of [35],
 we would be able to verify a larger class of properties for
-transactional libraries with respect to them.
+transactional libraries.
 
 ### Reviewer 3: the WSI consistency model
 
