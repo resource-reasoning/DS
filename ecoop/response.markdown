@@ -14,13 +14,13 @@ client programs.
 
 ### Reviewer 2: concurrent update with merge
 
-Our aim was to capture an interleaving operational semantics since a 
-large number of implementations of distributed systems, including 
-COPS and Clock-SI, are specifically designed to capture the atomic 
-visibility of transactions. We agree that it is interesting to look
-at concurrent updates with a merge strategy. This would require 
-changing the core programming language and update rule, but 
-probably not the state. We will clarify.
+Our aim was to capture an interleaving operational semantics 
+capturing atomic visibility, since a large number of implementations 
+of distributed systems, including COPS and Clock-SI, are specifically 
+designed to capture the atomic visibility of transactions. We agree 
+that it is interesting to look at concurrent updates with a merge 
+strategy. This would require changing the core programming language 
+and update rule, but probably not the state. We will clarify.
  
 ### Reviewer 2: aborts and rollbacks
 
@@ -29,7 +29,7 @@ execution test failing. This is straightforward, by adapting the
 update to augment the values with abort information and using
 transaction-local variable stores rather than thread-local variable
 stores, to prevent information leaking outside aborted transactions.
-We can capture rollbacks by changing the update rule in the
+We can capture rollbacks similarly by changing the update rule in the
 operational semantics.  While these adaptations would enable us to
 express a greater range of consistency models, e.g. opacity, we felt
 that this would have made the paper more difficult to read. We can
@@ -105,7 +105,6 @@ updates.
 ### Reviewer 2
 
 - Definition 5. This is a formal definition of a normal snapshot.
-
 - Availability. We are not sure if we can capture avalability in our
 operational semantics. This is worth investigation. 
  
@@ -114,11 +113,9 @@ operational semantics. This is worth investigation.
 
 - Line 115. We regard our operational semantics as an interface, or
 mid-point, between implementations and clients. We will clarify.
-
 - Fig 1. We mean that it is possible for the client to have either the
-  view in (1c) or the view in (1d) under CC. It can only have the view
-  (1d) under PSI and SI. We will clarify.
-
+view in (1c) or the view in (1d) under CC. It can only have the view
+(1d) under UA, PSI and SI. We will clarify.
 - Line 243-244. In [33] and [22], the correctness of the COPS and
 Clock-SI protocol implementations is given by appealing to specific
 definitions of consistency models that are dependent on these
@@ -126,27 +123,22 @@ particular implementations.  In contrast, we have proved that the
 protocol implementations are correct by appealing to our general
 definitions of consistency models that are independent of the
 particular implementations.
-
 - Line 245. Yes, we are thinking of a library as an application that
-  an be used by client code.
-
+an be used by client code.
 - Line 338. We will take out this claim about modelling resolution
 policies other than last-write-wins. It needs better justification.
 (We were thinking of multi-value registers where clients is able to
 choose a value from the whole view.)
-
-- Line 481. We mean the anomolous behaviour allowed by the weak
-  consistency models, such as the examples given in Figure 7. We will
-  clarify.
-
+- Line 481. We mean the anomalous behaviour allowed by the weak
+consistency models, such as the examples given in Figure 7. We will
+clarify.
 - Line 503. The largest execution test means the largest execution
-test possible in our semantics: that is, the can_commit and vshift
+test possible in our semantics: that is, the can-commit and vshift
 properties correspond to true.
-
 - Reliable causal order broadcast. Our framework abstracts from
 communication between replicas, hence it does not assume reliable
 causal order broadcast (RCOB). However, the encoding of COPS into our
 framework is made easier by the fact that the protocol relies on RCOB.
 We agree that verifying a protocol that does not rely on RCOB in our
 framework would be a much more difficult task, and we will look to
-implementations of such protocols in futre. 
+implementations of such protocols in future. 
