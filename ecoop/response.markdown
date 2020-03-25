@@ -105,7 +105,7 @@ updates.
 ### Reviewer 2
 
 - Definition 5. This is a formal definition of a normal snapshot.
-- Availability. We are not sure if we can capture avalability in our
+- Availability. We are not sure if we can capture availability in our
 operational semantics. This is worth investigation. 
  
 
