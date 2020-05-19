@@ -7,36 +7,38 @@ distributed databases often use weak transactional consistency
 guarantees known as \emph{consistency models}.  Many consistency
 models were originally invented by engineers using (some quite
 informal) definitions specific to particular real-world reference
-implementations
+implementations: for example,
 \cite{gdur,ramp,CORFU,tango,si,distrsi,clocksi,redblue,rola,cops,PSI-RA,NMSI,PSI,wren}.
-More recently, unified definitions of consistency models have been
+More recently, general definitions of consistency model have been
 defined independently of particular implementations, either
 declaratively using execution graphs \cite{adya,ev_transactions} or
-operationally using state-based semantics or graph-based \cite{seebelieve,alonetogether,sureshConcur}.
+operationally using abstract 
+states or execution graphs
+\cite{seebelieve,alonetogether,sureshConcur}. 
+Our challenge  is to define a general semantics for weak consistency
+models  with which to both 
+verify  reference  implementations {and} analyse 
+the behaviour of client programs with respect to a particular consistency
+model. 
 
-A key challenge is to define a unified semantics for consistency
-models which provides a \emph{mid-point}, an abtract interface, with which to 
-verify distributed implementations \emph{and} analyse the
-behaviour of client programs with respect to a particular consistency model. Current
-work tends to be suitable  either for verifying implementations or for reasoning
-about clients. As far as we are aware, there has been no
-previous work on distributed transactions that does both. 
-We introduce an operational semantics for directly describing the
-client-observable behaviour of atomic transactions 
-updating distributed key-value stores (kv-stores).
-With our semantics, we can verify distributed implementations and prove
-invariant properties of client programs.  
+
+
+
+
 
 The declarative approach for defining 
 consistency models using execution graphs has been substantially
 studied \cite{adya,ev_transactions,framework-concur,SIanalysis,laws}. 
-In such graphs,  nodes are atomic transactions and edges describe the
+In such graphs,  nodes  describe the read-write sets of  atomic transactions and edges describe the
 known dependencies between transactions.
-They capture different consistency models using  a two-step procedure:
+They capture different consistency models by:
 \begin{enumerate*}
-\item construct \emph{candidate executions} of the whole program comprising
+\item constructing  \emph{candidate executions} of the whole program comprising
 transactions in which reads may contain arbitrary values; and 
-\item apply a number of \emph{axioms} on such executions to rule out invalid executions. 
+\item applying  \emph{axioms}  on such executions to
+  rule out the invalid executions of 
+a consistency model described  by
+  these axioms. 
 Such axioms may state, for example, that every read is
 validated by a write that has written the read value. 
 \end{enumerate*}
@@ -61,35 +63,176 @@ abstract executions are the  standard by which many system engineers
 demonstrate that their protocols satisfies  certain
 consistency models \cite{cops,NMSI,PSI}. 
 Execution graphs provide little information about how the 
-state evolves throughout the execution of a program.
-They are therefore unsuitable for invariant-based program analysis 
-which requires reasoning about the step-wise execution of a program. 
+state evolves throughout the execution of a program, and 
+therefore seem  unsuitable for invariant-based program analysis 
+of client programs. 
 
 
-The operational approach for defining consistency models has been much less studied. 
-Crooks {\em et
-  al.}~\citet{seebelieve} provided a \emph{state-based} trace
-semantics over a global centralised store, where an execution step
-involves analysing the totally-ordered history of states and the
-read-write set of the transaction.
-Nagar and Jagannathan \citet{sureshConcur} introduced an
-compositional operational semantics for abstract execution graphs, 
-where each
-step involves adding the next transaction node by: \begin{enumerate*}
-\item constructing \emph{candidate executions};  and 
-\item ruling out executions using {axioms}. 
-\end{enumerate*}
+The operational approach for defining weak consistency models has been
+much less studied.  Crooks {\em et al.}~\citet{seebelieve} introduced
+a {state-based} trace semantics over an abstract centralised store for
+capturing consistency models associated with ANSI/SQL isolation levels.
+They demonstrated the equivalence of several implementation-specific
+definitions of consistency model in the literature, but their reliance
+on the total order of transactions suggests that it will be difficult
+to adapt their work to reason about client programs. 
+Kaki et al. \citet{alonetogether} provided an operational semantics
+over an abstract centralised store, again focusing on ANSI/SQL
+isolation levels. They developed a program logic and prototype tool for
+reasoning about client programs,
+but cannot express fundamental weak consistency models.
+Nagar and Jagannathan \cite{sureshConcur} introduced an operational
+semantics based on  
+abstract-execution graphs, focussing on consistency models for
+distributed transactions. They  provide
+robustness results for  client programs using model checking, 
+but their analysis is indirect in that they move back and forth
+between abstract executions and dependency graphs. All these approaches have their merits. However, none of them provide a direct
+state-based operational semantics for distributed atomic transactions
+with which to verify  distributed
+implementations and analyse  client programs using   the
+usual 
+weak
+consistency models. 
+Further details are given in \cref{sec:newrelated}.
+
+
+
+We introduce an interleaving operational semantics for directly describing the
+client-observable behaviour of atomic transactions 
+updating distributed key-value stores  (\cref{sec:model}). Our semantics is
+based on a notion of abstract state 
+comprising  a {centralised key-value store (kv-store) with
+{multi-versioning}, which is {\em global} in the sense that it
+records all the versions of a key, and
+{client views}, which are {\em partial} in the sense that  clients see only a subset of the
+versions. Our client views are partly inspired by the views in the specific C11
+operational semantics in~\cite{promises}, and are analogous to   the 
+read states of~\cite{seebelieve}. An execution step depends
+simply on the abstract state, the read-write set of the atomic transaction, and an \emph{execution test} which
+determines if a client with a given view is allowed to do the
+transaction commit. Different execution tests give rise to different
+consistency models, 
+which we show to be equivalent to well-known
+declarative definitions of consistency model on abstract executions 
+(reported here and proved in \cite{shale-phd}) and hence dependency graphs~\cite{laws}. 
+Our execution tests are analogous to the commit tests used in \cite{seebelieve},
+except that \cite{seebelieve}  requires an analysis of the whole
+trace rather than just the  current abstract state. 
+
+As in~\cite{seebelieve,alonetogether,sureshConcur}, we make the assumption that our transactions satisfy the
+\emph{last-write-wins} resolution policy, a widely-used policy used in many
+real-world distributed kv-stores.  This means that when a transaction
+observes several updates to a key, the atomic snapshot contains the
+value written by the last
+update. We also make the assumption that our
+transactions satisfy the \emph{snapshot property}.  This assumption is
+common in distributed transactional databases: for example, with on-line shopping
+application, a client only sees one snapshot of the database and only
+has knowledge that their transaction has successfully
+committed. The paper~\cite{sureshConcur} also assumes the snapshot
+policy,
+whereas~\cite{seebelieve} and~\cite{ alonetogether} do not  as their focus is on ANSI/SQL isolation
+levels.
+Our execution tests  uniformly capture  many well-known consistency
+models (\cref{sec:cm}) including 
+\emph{causal consistency} \((\CC)\) \citep{ev_transactions,cops,causal-def}, 
+\emph{parallel snapshot isolation} \( (\PSI) \) \citep{NMSI,PSI},
+\emph{snapshot isolation} \((\SI)\) \citep{si} 
+and \emph{serialisability} \((\SER)\) \citep{Papadimitriou-ser}.
+%Given these assumptions, we do not know of a consistency model that
+%we cannot represent. 
+The paper~\cite{sureshConcur} has the same expressivity. In contrast,~\cite{seebelieve}  is more expressive,  capturing for example the 
+{\em read committed} consistency model~\cite{.}, 
+and 
+~\cite{ alonetogether}  is less expressive, capturing SI but not 
+PSI. 
+
+Using our operational semantics, we verify 
+that database protocols satisfy their expected consistency models and
+prove that invariant properties of client programs hold with respect to such
+consistency models (\cref{sec:applications}).
+We establish the correctness of two database
+protocols: the COPS protocol for  fully replicated kv-stores \cite{cops} 
+which satisfies CC (reported in \cref{sec:verify-impl}
+and proven in  detail in \cite{shale-phd}); 
+and the Clock-SI protocol for partitioned kv-stores \cite{clocksi} 
+which satisfies SI  (given in \cite{shale-phd}). These results had previously been shown for
+definitions specific to the reference implementations in~\cite{cops}
+and~\cite{clocksi} respectively.
+We also prove invariant properties of client programs calling
+transactional libraries (\cref{sec:invariant-client-programs}): the robustness of the single-counter library
+against PSI;  the robustness of the multi-counter library and the
+well-known banking library \cite{bank-example-wsi} against SI; and the
+correctness of a program pattern using locks against PSI. 
+We believe our robustness results are the first to take into account client
+sessions: with sessions, we show that multiple counters {\em are not} robust against \(\PSI\);
+interestingly, without sessions, Bernardi and Gotsman~\citet{giovanni_concur16} show that multiple counters \emph{are}
+robust against \(\PSI\) using static-analysis techniques which are
+known not to be applicable to sessions.  
+These results indicate that  our operational semantics provides an interesting  abstract interface
+between distributed databases and clients.
+This was an important goal for us, resonating with recent work
+that does just this for standard shared-memory concurrency \cite{tada,cap,iris,fcsl}. 
+
+
+
+\subsection{Related Work} 
+\label{sec:newrelated}
+
+Operational semantics for defining weak consistency models for
+distributed atomic transactions have  hardly been
+studied. As far as we are aware, the key papers
+are~\cite{seebelieve,sureshConcur,alonetogether}. 
+We also mention the log-based semantics of Koskinen and Parkinson~\citet{push-pull},
+which only focusses on serialisability but has some resonance with our
+work. 
+
+
+
+%We first describe this work in
+%some detail, and then briefly mention additional work.
+
+
+
+Crooks et al. \citet{seebelieve} proposed a state-based trace
+semantics for describing weak consistency models that employs concepts
+similar to our client views and execution tests, called read states and
+commit tests respectively.  In their semantics, a one-step trace
+reduction is determined by the whole previous history of the trace.
+In contrast, our reduction step only depends on the current kv-store
+and view.  They capture more consistency models than us, such as {\em
+  read committed}, due to their focus on isolation levels which do not
+have the snapshot property. They use their semantics to 
+demonstrate that 
+several definitions of snapshot isolation  given in the
+literature~\cite{citations} in fact collapse into one.  They do not verify
+protocol implementations and do not prove invariant properties of
+client programs.  We believe~\cite{seebelieve} can be used to verify
+implementations. We believe it is difficult to use~\cite{seebelieve}
+to prove invariant properties of client programs.  Their notion of
+trace includes a large amount of information (for example, the total
+order on transactions) that just would not be observable by a
+client (for example, a client on one replica does not necessarily see
+a transaction on another replica).
+In contrast, our  approach focusses on the client-observable history
+which is not total. 
+
+
+%where each
+%step involves adding the next transaction node by: \begin{enumerate*}
+%\item constructing \emph{candidate executions};  and 
+%\item ruling out executions using {axioms}. 
+%\end{enumerate*}
 %They capture a wide range of
 %consistency model, and demonstrate the equivalence of several
 %mplementation-specific definitions.  However, their approach does not
 %lend itself to analysing client programs, since observations made by
 %clients require the total order in which transactions commit which the
 %clients do not have.
-Kaki et al. \citet{alonetogether} proposed an
-operational semantics for SQL transaction programs over an abstract
-centralised store, focussing on consistency models given by the standard
-ANSI/SQL isolation levels \cite{si} such as snapshot isolation but not
-weaker consistency models such as parallel snapshot isolation. 
+
+
+
 % incuding snapshot isolation,
 %rather than the 
 %weaker consistency
@@ -117,132 +260,21 @@ weaker consistency models such as parallel snapshot isolation.
 %abstract operational semantics for verifying several implementations
 %of serilisability but does not provide unified semantics for
 %defining weaker consistency models.
-All approaches have their merits. None of them provide a direct
-state-based operational semantics for weak consistency models. We give
-a detailed comparison with our work in the next subsection.
 
-
-We introduce an interleaving operational semantics for
-describing the client-observable behaviour of atomic transactions on
-distributed key-value stores (\cref{sec:model}). Our semantics is
-based on a notion of abstract state which 
-comprises a \emph{centralised key-value store} (kv-store) with
-\emph{multi-versioning}, which is {global} in the sense that it
-records all the versions of a key, and
-\emph{client views}, which are {partial} in the sense that  clients see only a subset of the
-versions. Our client views are partly inspired by the views in the specific C11
-operational semantics in~\cite{promises}. An execution step depends
-simply on the abstract state, the read-write set of the atomic transaction, and an \emph{execution test} which
-determines if a client with a given view is allowed to do the
-transaction commit. Different execution tests give rise to different consistency models, 
-which we show to be equivalent to well-known
-declarative definitions of consistency model on abstract executions 
-(reported here and proved in \cite{shale-phd}) and hence dependency graphs~\cite{laws}. 
-Our execution tests are analogous to the commit tests used in \cite{seebelieve},
-except that they require an analysis of the whole trace whereas we require the current abstract state. 
-
-We make the assumption that our transactions satisfy the \emph{snapshot property}.
-This assumption is common  in distributed databases: for example, with
-on-line shopping application, a client only sees one snapshot of the database and
-only has knowledge that their transaction has successfully committed.
-We also make the assumption that our transactions satisfy the \emph{last-write-wins} resolution policy,
-a widely-used policy in many real-world distributed kv-stores. 
-This means that when a transaction observes several updates to a key,
-the atomic snapshot contains the value written by the last update.
-Our execution tests  uniformly capture  many well-known consistency
-models (\cref{sec:cm}) including 
-\emph{causal consistency} \((\CC)\) \citep{ev_transactions,cops,causal-def}, 
-\emph{parallel snapshot isolation} \( (\PSI) \) \citep{NMSI,PSI},
-\emph{snapshot isolation} \((\SI)\) \citep{si} 
-and \emph{serialisability} \((\SER)\) \citep{Papadimitriou-ser}.
-%Given these assumptions, we do not know of a consistency model that we cannot represent. 
-
-Using our operational semantics, we demonstrate that we can verify
-that database protocols satisfy particular consistency models and
-prove invariant properties of client programs with respect to such
-consistency models (\cref{sec:applications}).
-We establish the correctness of two database
-protocols: the COPS protocol for  fully replicated kv-stores \cite{cops} 
-which satisfies causal consistency (reported in \cref{sec:verify-impl}
-and detail in \cite{shale-phd}); 
-and the Clock-SI protocol for partitioned kv-stores \cite{clocksi} 
-which satisfies snapshot isolation (given in \cite{shale-phd}). 
-We prove invariant properties of client programs calling
-transactional libraries (\cref{sec:invariant-client-programs}): the robustness of the single-counter library
-against PSI;  the robustness of the multi-counter library and the
-well-known banking library \cite{bank-example-wsi} against SI; and the
-correctness of a program pattern using locks against PSI. 
-We believe our robustness results are the first to take into account client
-sessions: with sessions, we show that multiple counters {\em are not} robust against \(\PSI\);
-interestingly, without sessions, \citet{giovanni_concur16} show that multiple counters \emph{are}
-robust against \(\PSI\) using static-analysis techniques which are
-known not to be applicable to sessions.  
-These results indicate that  our operational semantics provides an interesting \emph{mid-point},
-that is, an abtract interface,
-between distributed databases and clients.
-This was an important goal for us, resonating with recent work
-that does just this for standard shared-memory concurrency \cite{tada,cap,iris,fcsl}. 
-
-
-
-\subsection{Related Work} 
-\label{sec:newrelated}
-
-Operational semantics for defining weak consistency models for
-distributed atomic transactions has hardly been
-studied. As far as we are aware, the key papers are~\cite{seebelieve,sureshConcur,alonetogether}. These papers
-assume the last-write-wins policy, as does this paper. In addition,
-\cite{sureshConcur} and this paper assume the snapshot property, a
-common assumption for distributed databases. In contrast,
-\cite{seebelieve} and~\cite{ alonetogether} do not assume the
-snapshot property, because the focus is on ANSI/SQL isolation levels.
-
-
-
-%We first describe this work in
-%some detail, and then briefly mention additional work.
-
-
-
-Crooks et al. \citet{seebelieve} have proposed a state-based trace
-semantics for describing weak consistency models that employs concepts
-similar to our views and execution tests, called read states and
-commit tests respectively.  In their semantics, a one-step trace
-reduction is determined by the whole previous history of the trace.
-In contrast, our reduction step only depends on the current kv-store
-and view.  They capture more consistency models than us, such as {\em
-  read committed}, due to their focus on isolation levels which do not
-have the snapshot property. They use their semantics to 
-demonstrate that 
-several definitions of snapshot isolation  given in the
-literature~\cite{citations} in fact collapse into one.  They do not verify
-protocol implementations and do not prove invariant properties of
-client programs.  We believe~\cite{seebelieve} can be used to verify
-implementations. We believe it is difficult to use~\cite{seebelieve}
-to prove invariant properties of client programs.  Their notion of
-trace includes a large amount of information (for example, the total
-order on transactions) that just would not be observable by a
-client (for example, a client on one replica does not necessarily see
-a transaction on another replica).
-In contrast, our  approach focusses on the client-observable history
-which is not total.
-We demonstrate  that we can 
-prove invariant properties of
-client programs in \cref{sec:robustness}. 
-
-
-
-Nagar and Jagannathan \cite{sureshConcur} have proposed a fine-grained operational semantics on abstract exactions 
-and developed a model-checking tool for the violation of robustness. 
+Nagar and Jagannathan \cite{sureshConcur} proposed a fine-grained 
+interleaving operational semantics on abstract executions, and provide
+robustness results for client programs using 
+a prototype 
+model-checking tool. 
 They do this by converting abstract executions to
 dependency graphs and checking the violation of robustness on the
-dependency graphs. This approach has two issues. First, despite 
+dependency graphs. We have two concerns with this approach.  First, despite 
 assuming atomic visibility of transactions, they present a fine-grained
 semantics at the level of the individual transactional operations
 rather than whole transactions, introducing unnecessary interleavings
 which complicates the client reasoning and increases  the
 search space of model-checking tools. 
-In contrast, our semantics is coarse-grained in that interleaving is at the level of whole
+In contrast, our semantics is coarse-grained in that the  interleaving is at the level of whole
 transactions. 
 Second, all the literature that performs client analysis
 on abstract executions achieves this indirectly by over-approximating
@@ -255,24 +287,24 @@ We also give precise reasoning about the mutual exclusion of locks,
 which we believe will be difficult to prove using abstract executions.
 
 
-Kaki et al. \citet{alonetogether} have proposed an operational
+Kaki et al.~\citet{alonetogether} proposed an operational
 semantics for SQL transaction programs over an abstract centralised
 single-version 
 store, with consistency models given by the standard ANSI/SQL
 isolation levels \cite{si}. They develop a program logic and prototype
 tool for reasoning about client programs, and so can capture invariant
-properties of the state. They can express snapshot isolation, but the consensus is that they cannot capture the weaker
-consistency models such as parallel snapshot isolation \cite{PSI}
+properties of the state. They can express SI, but the consensus is that they cannot capture the weaker
+consistency models such as PSI~\cite{PSI}
 which is an important consistency model for distributed databases.
 
 
 
 
 Finally,  Koskinen and Parkinson
-\citet{push-pull} have proposed a log-based semantics for verifying
+\citet{push-pull} proposed a log-based semantics for verifying
 implementations that satisfy serialisability, based not only on
 kv-stores but also on other ADTs. Their work comprises a centralised
-global log and partial client local logs, which is a little similar to
+global log and partial client-local logs, similar to
 our kv-stores and views. Their model focusses on serialisability.
-There is no evidence thatit can be easily extended to tackle
+There is no evidence that it can be easily extended to tackle
 weaker consistency models.  
