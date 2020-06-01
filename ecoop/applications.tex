@@ -1,22 +1,22 @@
 \section{Applications}
 \label{sec:applications}
 
-To show the applications of our operational semantics, 
-we use it to verify several distributed protocols (\cref{sec:verify-impl}) and
-prove the invariants of transactional libraries (\cref{sec:robustness}).
+We use our operational semantics to 
+verify distributed protocols (\cref{sec:verify-impl}) and
+prove  invariants of transactional libraries (\cref{sec:robustness}).
 
 \subsection{Application: Verifying Database Protocols}
 \label{sec:verify-impl}
-Kv-stores and views faithfully abstract the state of geo-replicated and partitioned
+Kv-stores and client views faithfully abstract the state of geo-replicated and partitioned
 databases, and execution tests provide a powerful abstraction of the synchronisation mechanisms 
 enforced by these databases when committing a transaction. 
 This makes it possible to use our 
 semantics to verify the correctness of distributed database protocols. 
 We demonstrate this by showing that the replicated database,
-COPS \cite{cops}, satisfies causal consistency.
+COPS \cite{cops}, satisfies \(\CC\). 
 We refer the reader to \cite{shale-phd} for the full details.
-In \cite{shale-phd}, we apply the same method to verify that 
-Clock-SI \cite{clocksi}, a partitioned database, satisfies snapshot isolation.
+In \cite{shale-phd}, we also apply the same method to verify that 
+Clock-SI \cite{clocksi}, a partitioned database, satisfies\(\SI\).
 
 \mypar{COPS Protocol} 
 COPS is a fully replicated database, with each replica storing multiple versions of each key as shown in \cref{fig:cops-after-write-transaction}. 
@@ -41,13 +41,13 @@ The COPS API provides two operations:
 key $\key$; and 
 	\item \( \pcopsread(\keyset) \) for atomically reading from \emph{a set} of keys  $\keyset$.  
 \end{enumerate*}
-Operations from a client is processed by a single replica. 
+Operations from a client are  processed by a single replica. 
 Each client maintains a \emph{context}, which is a set of dependencies
 tracking the versions the client observes.  
 
 We demonstrate how a COPS client \( \cl \) interacts with a replica through the following example:
 \(
-    \prog_\CodeFont{cops-cl} \defeq \cl: \pcopsput(\key_1,\val_1) ; \ 
+    \prog_\CodeFont{cops} \defeq \cl: \pcopsput(\key_1,\val_1) ; \ 
     \pcopsread(\List{\key_1,\key_2})
 \).
 For brevity, we assume that there are two keys, $\key_1$ and $\key_2$, 
@@ -94,18 +94,20 @@ from the union of the re-fetch set and the versions from the first phase.
 For instance, in \cref{fig:cops-re-read-values}, replica $\repl_1$ re-fetches 
 the newer version \( ( \key_1, \val'_1, (\txid_1,\repl_2),\emptyset ) \) for \( \key_1 \).
 Finally, the snapshot obtained after the second phase 
-are sent to the client, and then added to the client context.
-For their specific setting, Lloyd \etal\citet{cops} \emph{informally} argue that the snapshot sent to the client is causally consistent.
-By contrast, in what follows we \emph{verify} the COPS protocol with our general definition of causal consistency.
+is sent to the client, where it bcomes the new  client
+context.\polish{Shale, please check I've got client context correct.}
+For their specific setting, Lloyd \etal\citet{cops} {informally} argue that the snapshot sent to the client is causally consistent.
+By contrast, in what follows we {verify} the COPS protocol with our
+general definition of \(\CC\).
 
 
 \mypar{COPS Verification} 
-We define an operational semantics for the COPS protocol, which allows fine-grained single reads and writes of a key.
+We define an operational semantics for the COPS protocol, which uses  fine-grained single reads and writes of a key.
 Using our semantics, we then show that COPS traces can be refined to traces in our semantics using \( \ET[\CC] \) in three steps:
 \begin{enumerate*}
-	\item every COPS trace can be transferred to a normalised COPS trace, 
+	\item every COPS trace can be transferred to an  equivalent normalised COPS trace, 
 in which multiple reads of a transaction are not interleaved by other transactions; and
-	\item the normalised COPS trace can be refined to traces in our semantics, in which 
+	\item the normalised COPS trace can be refined to a trace in our semantics, in which 
 	\item each step satisfies \( \ET[\CC] \).
 \end{enumerate*}
 
@@ -120,7 +122,7 @@ given client \(\cl\) and replica \( \repl_1 \),
 	\item \( \cl \) reads \( (\opR,\key_1, (\txid_1,\repl_1)) \) from $\repl_1$;
 	\item \( \repl_1 \) receives synchronisation messages (\(\mathtt{sync}\));
 	\item \( \cl \) reads \( (\opR,\key_2, (\txid_2,\repl_2)) \) from $\repl_1$;
-	\item \( \cl \) enters the second phase of the multi-read transaction (\(\mathtt{p}\));
+	\item \( \cl \) enters the second re-fetch phase of the multi-read transaction (\(\mathtt{p}\));
 	\item an arbitrary step \( \lb \) interferes;
 	\item \( \cl \) re-fetches version \( (\opR,\key_1, (\txid_1,\repl_2)) \) from \( \repl_2 \) and puts it in the snapshot;
 	\item an arbitrary step \( \lb' \) interferes;
@@ -149,21 +151,25 @@ the multi-read transaction of \( \cl \) can only read versions in \( \copsconf_5
 As such, normalising does not alter the returned versions of transactions.
 After normalisation, transactions in the resulting trace appear to execute atomically. 
 
-We next show that normalised COPS traces can be refined to traces in our semantics.
-To do this, we encode the abstract COPS states \(\copsconf \) as configurations
-in our operational semantics (\cref{fig:encode-mkvs}). 
-We map all COPS replicas to a single kv-store.
-The writer of a mapped version is uniquely
+We next show that a normalised COPS trace can be refined to a trace
+in our operational semantics.
+To do this, we encode an  abstract COPS state \(\copsconf \) as a configuration
+in our  semantics (\cref{fig:encode-mkvs}). 
+We map all the COPS replicas to a single kv-store.
+The writer of a  version in the kv-store  is uniquely
 determined by the time-stamp of the corresponding COPS version, 
-while its reader set 
-can be recovered by annotating read-only transactions in the traces such as \( \txidrd \) in \cref{fig:encode-mkvs}.
+while the  reader set 
+is given by  creating new transaction identifiers for the
+read-only transactions
+such as the identifier \( \txidrd \) in \cref{fig:encode-mkvs}.
+\polish{Please check Shale.} 
 For example, the COPS state in \cref{fig:cops-after-write-transaction}
 can be encoded as the kv-store depicted in \cref{fig:encode-mkvs}.
-Similarly, as the context of a client $\cl$ identifies the set of COPS versions that $\cl$ sees, 
+Since the context of a client $\cl$ identifies the set of COPS versions that $\cl$ sees, 
 we can project COPS client contexts to our client views over kv-stores. 
 For example, the contexts of \( \cl \) 
 before and after committing its second multi-read transaction in \( \prog_{\CodeFont{COPS}} \) 
-is encoded as the client view depicted in \cref{fig:encode-view}.
+is encoded as the client views depicted in \cref{fig:encode-view}.
 
 We finally show that every step in the kv-store trace satisfies \( \et[\CC] \).
 Note that existing verification techniques \cite{framework-concur,seebelieve} require examining 
@@ -178,7 +184,7 @@ corresponding client view always includes the versions $\cl$ has written, \ie $\
 	\item the $\cl$ context is always closed to the relation \( \DEP \), 
 which contains the relation $\SO \cup \WR[\mkvs]$, \ie $\closed[\mkvs, \vi, \rel[\CC]]$ holds.
 \end{enumerate*}
-We have thus demonstrated that COPS satisfies causal consistency (see \cite{shale-phd} for the full details).
+We have thus demonstrated that COPS satisfies \(\CC\) (see \cite{shale-phd} for the full details).
 
 \subsection{Application: Invariant Properties of Transactional Libraries}
 \label{sec:program-analysis}
